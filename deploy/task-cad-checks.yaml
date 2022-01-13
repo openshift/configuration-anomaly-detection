@@ -1,0 +1,45 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cad-checks
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+  - name: payload
+    type: string
+    description: Json string of the event data
+  steps:
+  - name: check-infrastructure
+    # this sha is broken, should fix when we onboard
+    image: quay.io/rogreen/cadctl-test@sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
+    command:
+    - "/bin/bash"
+    - "-c"
+    args:
+    - |-
+      # save the payload to a file
+      folder=$(mktemp -d)
+      file=${folder}/payload.json
+      echo '$(params.payload)' > $file
+      # run the cadctl command
+      RESULT=$(cadctl cluster-missing --payload $file )
+    # envFrom should pull all of the secret information as envvars, so key names should be uppercase
+    envFrom:
+    - secretRef:
+        name: cad-aws-credentials
+    env:
+    - name: CAD_PD
+      valueFrom:
+        secretKeyRef:
+          name: cad-pd-token
+          key: token
+    - name: CAD_OCM_FILE_PATH
+      # same value of volumeMounts[0].mountPath + the filename inside the secret
+      value: /tmp/test/cad-ocm-token/ocm.json
+    volumeMounts:
+    - name: cad-ocm-token-file
+      mountPath: /tmp/test/cad-ocm-token
+  volumes:
+  - name: cad-ocm-token-file
+    secret:
+      secretName: cad-ocm-token-file
