@@ -1,0 +1,22 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cad-send-servicelog
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+    - name: event
+      description: Json string of the event data
+    - name: configuration-anomaly
+      description: Cloud infrastructure anomaly type (f.e. None, HostsDown, ...)
+  steps:
+    - name: check-infrastructure
+      image: quay.io/app-sre/cad-cli:latest
+      command: ["/bin/bash", "-c"]
+      args:
+        - |-
+          cad send-servicelog --event '$(params.event)' --reason $(params.configuration-anomaly)
+  workspaces:
+    - name: pv
+      description: The path where logs are stored
+      mountPath: /logs/

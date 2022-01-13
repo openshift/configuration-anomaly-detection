@@ -1,0 +1,28 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cad-checks
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+    - name: event
+      type: string
+      description: Json string of the event data
+  results:
+    - name: configuration-anomaly
+      description: Cloud infrastructure anomaly type (f.e. None, HostsDown, ...)
+    - name: customer-caused
+      description: Configuration anomaly caused by customer detected
+  steps:
+    - name: check-infrastructure
+      image: quay.io/app-sre/cad-cli:latest
+      command: ["/bin/bash", "-c"]
+      args:
+        - |-
+          RESULT=$(cad test-infra --event '$(params.event)'
+          echo $RESULT | jq .configuration-anomaly | tee $(results.configuration-anomaly.path)
+          echo $RESULT | jq .customer-caused | tee $(results.customer-caused.path)
+  workspaces:
+    - name: pv
+      description: The path where logs are stored
+      mountPath: /logs/

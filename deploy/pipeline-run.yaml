@@ -1,0 +1,16 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: cad-checks-
+  namespace: configuration-anomaly-detection
+spec:
+  serviceAccountName: cad-sa
+  pipelineRef:
+    name: cad-checks-pipeline
+  params:
+    - name: event
+      value: '{"event": {"id": "test"}}'
+  workspaces:
+    - name: cad-persistant-storage
+      persistentVolumeClaim:
+        claimName: cad-pvc

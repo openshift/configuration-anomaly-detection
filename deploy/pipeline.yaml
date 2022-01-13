@@ -1,0 +1,78 @@
+# This pipeline definition will be used for automate checks as part of pagerduty webhooks.
+# It expects to receive a payload that contains information about the incident/event that triggered the webhook.
+# For more information about the type of the EVENT input parameter have a look a the pagerduty documentation:
+# https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload
+
+# The Pipeline will use a pvc for pesistent storage of logs and outputs inbetween PipelineRuns.
+# The logs will be accessable over a simple dashboards
+# Each step of the Pipeline will store in the following file structure:
+#   /logs/<clusterID>/<eventID>-<pipelineID>/<task>
+
+#  The CAD pipeline will perform the following steps:
+#
+#                         -- (perform-cad-update-pd) ----
+#                       /                                 \
+#  (perform-cad-checks)                                     (TODO: set-termination-criterium) --- (TODO: cleanup)
+#                       \                                 /
+#                        -- (perform-cad-send-servicelog)
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cad-checks-pipeline
+  namespace: configuration-anomaly-detection
+spec:
+  workspaces:
+    - name: cad-persistant-storage
+  params:
+    - name: event
+      type: string
+      description: Json string of the event data
+  tasks:
+    # ------ Step 1: check for Infrastructure problems
+    - name: perform-cad-checks
+      params:
+        - name: event
+          value: $(params.event)
+      taskRef:
+        name: cad-checks
+      workspaces:
+        - name: pv
+          workspace: cad-persistant-storage
+    # ------ Step 2: update Pagerduty accordingly
+    - name: perform-cad-update-pd
+      taskRef:
+        name: cad-update-pd
+      params:
+        - name: event
+          value: $(params.event)
+        - name: configuration-anomaly
+          value: $(tasks.perform-cad-checks.results.configuration-anomaly)
+        - name: customer-caused
+          value: $(tasks.perform-cad-checks.results.customer-caused)
+      runAfter:
+        - perform-cad-checks
+      retries: 3
+      workspaces:
+        - name: pv
+          workspace: cad-persistant-storage
+    # ------ Step 3: Send ServiceLog to customer when its customer caused
+    - name: perform-cad-send-servicelog
+      taskRef:
+        name: cad-send-servicelog
+      when:
+        - input: $(tasks.perform-cad-checks.results.customer-caused)
+          operator: in
+          values: ["true"]
+      params:
+        - name: event
+          value: $(params.event)
+        - name: configuration-anomaly
+          value: $(tasks.perform-cad-checks.results.configuration-anomaly)
+      runAfter:
+        - perform-cad-checks
+      retries: 3
+      workspaces:
+        - name: pv
+          workspace: cad-persistant-storage
+    # ------ Step 4: Set termination condition for reversing stuff
