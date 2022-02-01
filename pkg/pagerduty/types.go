@@ -4,8 +4,6 @@ package pagerduty
 type Incident struct {
 	// ID is the unique ID of the Incident
 	ID string
-	// EscalationPolicy is the Incident's EscalationPolicy
-	EscalationPolicy EscalationPolicy
 }
 
 // EscalationPolicy represents a PagerDuty Escalation Policy

@@ -14,35 +14,36 @@ import (
 )
 
 var _ = Describe("Pagerduty", func() {
+	var (
+		mux      *http.ServeMux
+		server   *httptest.Server
+		client   *sdk.Client
+		p        pagerduty.PagerDuty
+		incident pagerduty.Incident
+	)
+	BeforeEach(func() {
+		// Arrange
+		mux = http.NewServeMux()
+		server = httptest.NewServer(mux)
+		client = defaultTestClient(server.URL, "fakeauthtokenstring")
 
+		// each startup of PagerDuty we need to verify the user's email for future requests
+		mux.HandleFunc("/users/me", func(w http.ResponseWriter, r *http.Request) {
+			Expect(r.Method).To(Equal("GET"))
+			_, err := w.Write([]byte(`{"user":{"email":"example@example.example"}}`))
+			Expect(err).NotTo(HaveOccurred())
+		})
+		var err error // err is declared to make clear the p is not created here, but is global
+		p, err = pagerduty.New(client)
+		Expect(err).NotTo(HaveOccurred())
+		incident = pagerduty.Incident{}
+	})
 	Describe("MoveToEscalationPolicy", func() {
 		var (
-			mux              *http.ServeMux
-			server           *httptest.Server
-			client           *sdk.Client
-			p                pagerduty.PagerDuty
-			incident         pagerduty.Incident
 			escalationPolicy pagerduty.EscalationPolicy
 		)
 		BeforeEach(func() {
-			// Arrange
-			mux = http.NewServeMux()
-			server = httptest.NewServer(mux)
-			client = defaultTestClient(server.URL, "fakeauthtokenstring")
-
-			// each startup of PagerDuty we need to verify the user's email for future requests
-			mux.HandleFunc("/users/me", func(w http.ResponseWriter, r *http.Request) {
-				Expect(r.Method).To(Equal("GET"))
-				_, err := w.Write([]byte(`{"user":{"email":"example@example.example"}}`))
-				Expect(err).NotTo(HaveOccurred())
-			})
-			var err error // err is declared to make clear the p is not created here, but is global
-			p, err = pagerduty.New(client)
-			Expect(err).NotTo(HaveOccurred())
-
-			incident = pagerduty.Incident{}
 			escalationPolicy = pagerduty.EscalationPolicy{ID: "1234"}
-
 		})
 
 		When("The authentication token that is sent is invalid", func() {
@@ -80,7 +81,7 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 
-		When("The Escalation policy has succesfully changed", func() {
+		When("The Escalation policy has successfully changed", func() {
 			It("Doesn't trigger an error", func() {
 				//Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +91,61 @@ var _ = Describe("Pagerduty", func() {
 				})
 				// Act
 				err := p.MoveToEscalationPolicy(incident, escalationPolicy)
+				// Assert
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(err).Should(BeNil())
+			})
+		})
+	})
+	Describe("AcknowledgeIncident", func() {
+		BeforeEach(func() {
+		})
+
+		When("The authentication token that is sent is invalid", func() {
+			It("Should throw an error (401 unauthorized)", func() {
+				//Arrange
+				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).To(Equal("PUT"))
+					w.WriteHeader(http.StatusUnauthorized)
+				})
+				// Act
+				err := p.AcknowledgeIncident(incident)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+			})
+		})
+
+		When("If sent input parameters are invalid", func() {
+			It("Should throw an error (400 badRequest)", func() {
+				//Arrange
+				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).To(Equal("PUT"))
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					_, err := w.Write([]byte(fmt.Sprintf(`{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)))
+					Expect(err).NotTo(HaveOccurred())
+				})
+				// Act
+				err := p.AcknowledgeIncident(incident)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
+
+			})
+		})
+
+		When("The Escalation policy has successfully changed", func() {
+			It("Doesn't trigger an error", func() {
+				//Arrange
+				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).To(Equal("PUT"))
+					_, err := w.Write([]byte(`{"incidents": [{"title": "foo", "id": "1", "status": "acknowledged"}]}`))
+					Expect(err).ShouldNot(HaveOccurred())
+				})
+				// Act
+				err := p.AcknowledgeIncident(incident)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(err).Should(BeNil())

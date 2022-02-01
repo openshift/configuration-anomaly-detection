@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// InvalidInputParamsErrorCode is exposed from the pagerduties API error response, used to distinguish between different error codes.
+	// InvalidInputParamsErrorCode is exposed from the PagerDuty's API error response, used to distinguish between different error codes.
 	// for more details see https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTYz-errors#pagerduty-error-codes
 	InvalidInputParamsErrorCode = 2001
 	// pagerDutyTimeout is the chosen timeout for api requests, can be changed later
@@ -49,42 +49,43 @@ func New(client *sdk.Client) (PagerDuty, error) {
 	return resp, nil
 }
 
-// getCurrentUser retrieves the current pagerduty user
-func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
-	opts := sdk.GetCurrentUserOptions{}
-	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
-	defer cancel()
-	user, err := client.GetCurrentUserWithContext(ctx, opts)
-	if err != nil {
-		perr := sdk.APIError{}
-		if errors.As(err, &perr) {
-			if perr.StatusCode == http.StatusUnauthorized {
-				return nil, pkgerrors.Wrap(err, "the authToken that was provided is invalid")
-			}
-		}
-
-		return nil, pkgerrors.Wrap(err, "could not retrieve the current user")
-	}
-	return user, nil
-}
-
 // MoveToEscalationPolicy will move the alerts EscalationPolicy to the new EscalationPolicy
 func (p PagerDuty) MoveToEscalationPolicy(incident Incident, escalationPolicy EscalationPolicy) error {
-	if incident.EscalationPolicy == escalationPolicy {
-		return nil
-	}
-	incident.EscalationPolicy = escalationPolicy
-
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID: incident.ID,
 			EscalationPolicy: &sdk.APIReference{
 				Type: "escalation_policy_reference",
-				ID:   incident.EscalationPolicy.ID,
+				ID:   escalationPolicy.ID,
 			},
 		},
 	}
+	err := p.manageIncident(o)
+	if errors.Is(err, FailedToUpdateIncidentError{}) {
+		return pkgerrors.Wrap(err, "could not update the escalation policy")
+	}
+	return err
+}
 
+// AcknowledgeIncident will acknowledge an incident
+func (p PagerDuty) AcknowledgeIncident(incident Incident) error {
+	o := []sdk.ManageIncidentsOptions{
+		{
+			ID:     incident.ID,
+			Status: "acknowledged",
+		},
+	}
+	err := p.manageIncident(o)
+	if errors.Is(err, FailedToUpdateIncidentError{}) {
+		return pkgerrors.Wrap(err, "could not acknowledge the incident")
+	}
+	return err
+}
+
+// manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
+// the reason we send an array instead of a single item is to be compatible with the sdk
+// the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
+func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 	_, err := p.c.ManageIncidentsWithContext(ctx, p.userEmail, o)
@@ -103,8 +104,27 @@ func (p PagerDuty) MoveToEscalationPolicy(incident Incident, escalationPolicy Es
 				}
 			}
 		}
-		return pkgerrors.Wrap(err, "could not update the escalation policy")
+		return FailedToUpdateIncidentError{Err: err}
 	}
 
 	return nil
+}
+
+// getCurrentUser retrieves the current pagerduty user
+func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
+	opts := sdk.GetCurrentUserOptions{}
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+	user, err := client.GetCurrentUserWithContext(ctx, opts)
+	if err != nil {
+		perr := sdk.APIError{}
+		if errors.As(err, &perr) {
+			if perr.StatusCode == http.StatusUnauthorized {
+				return nil, InvalidTokenErr{Err: err}
+			}
+		}
+
+		return nil, pkgerrors.Wrap(err, "could not retrieve the current user")
+	}
+	return user, nil
 }
