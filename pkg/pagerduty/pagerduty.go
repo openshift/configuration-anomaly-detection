@@ -12,8 +12,11 @@ import (
 )
 
 const (
+	// InvalidInputParamsErrorCode is exposed from the pagerduties API error response, used to distinguish between different error codes.
+	// for more details see https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTYz-errors#pagerduty-error-codes
 	InvalidInputParamsErrorCode = 2001
-	pagerDutyTimeout            = time.Second * 30
+	// pagerDutyTimeout is the chosen timeout for api requests, can be changed later
+	pagerDutyTimeout = time.Second * 30
 )
 
 // PagerDuty will hold all of the required fields for any PagerDuty Operation
@@ -33,20 +36,8 @@ func NewWithToken(authToken string) (PagerDuty, error) {
 
 // New will create a PagerDuty struct with all of the required fields
 func New(client *sdk.Client) (PagerDuty, error) {
-	opts := sdk.GetCurrentUserOptions{
-		Includes: []string{},
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
-	defer cancel()
-	user, err := client.GetCurrentUserWithContext(ctx, opts)
+	user, err := getCurrentUser(client)
 	if err != nil {
-		perr := sdk.APIError{}
-		if errors.As(err, &perr) {
-			if perr.StatusCode == http.StatusUnauthorized {
-				return PagerDuty{}, pkgerrors.Wrap(err, "the authToken that was provided is invalid")
-			}
-		}
-
 		return PagerDuty{}, pkgerrors.Wrap(err, "could not retrieve the current user")
 	}
 
@@ -56,6 +47,25 @@ func New(client *sdk.Client) (PagerDuty, error) {
 	}
 
 	return resp, nil
+}
+
+// getCurrentUser retrieves the current pagerduty user
+func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
+	opts := sdk.GetCurrentUserOptions{}
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+	user, err := client.GetCurrentUserWithContext(ctx, opts)
+	if err != nil {
+		perr := sdk.APIError{}
+		if errors.As(err, &perr) {
+			if perr.StatusCode == http.StatusUnauthorized {
+				return nil, pkgerrors.Wrap(err, "the authToken that was provided is invalid")
+			}
+		}
+
+		return nil, pkgerrors.Wrap(err, "could not retrieve the current user")
+	}
+	return user, nil
 }
 
 // MoveToEscalationPolicy will move the alerts EscalationPolicy to the new EscalationPolicy
@@ -86,9 +96,9 @@ func (p PagerDuty) MoveToEscalationPolicy(incident Incident, escalationPolicy Es
 			case http.StatusUnauthorized:
 				return InvalidTokenErr{Err: err}
 			case http.StatusBadRequest:
-				isErrAnInvalidInputErr := perr.APIError.Valid &&
+				isAnInvalidInputErr := perr.APIError.Valid &&
 					perr.APIError.ErrorObject.Code == InvalidInputParamsErrorCode
-				if isErrAnInvalidInputErr {
+				if isAnInvalidInputErr {
 					return InvalidInputParamsErr{Err: err}
 				}
 			}
