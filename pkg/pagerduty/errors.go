@@ -37,20 +37,20 @@ func (i InvalidInputParamsErr) Is(target error) bool {
 	return ok
 }
 
-// FailedToUpdateIncidentError wraps the error so it can be handled by the parent function
-type FailedToUpdateIncidentError struct {
+// UnknownUpdateIncidentError wraps the error so it can be handled by the parent function
+type UnknownUpdateIncidentError struct {
 	Err error
 }
 
 // Error prints the wrapped error only
 // this is helpful to make this comply the the error interface
-func (i FailedToUpdateIncidentError) Error() string {
+func (i UnknownUpdateIncidentError) Error() string {
 	err := fmt.Errorf("an unknown error was triggered by the caller function: %w", i.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i FailedToUpdateIncidentError) Is(target error) bool {
-	_, ok := target.(FailedToUpdateIncidentError)
+func (i UnknownUpdateIncidentError) Is(target error) bool {
+	_, ok := target.(UnknownUpdateIncidentError)
 	return ok
 }

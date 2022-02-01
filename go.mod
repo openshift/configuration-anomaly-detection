@@ -6,7 +6,6 @@ require (
 	github.com/PagerDuty/go-pagerduty v1.5.0
 	github.com/onsi/ginkgo/v2 v2.1.0
 	github.com/onsi/gomega v1.18.0
-	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.3.0
 )
 

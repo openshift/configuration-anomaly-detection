@@ -1,8 +1,8 @@
 # Binaries used in Makefile
 bin/cobra:
-	GOBIN=$(PWD)/bin go install github.com/spf13/cobra/cobra@v1.3.0
+	GOBIN=$(PWD)/bin go install $(shell go list -m -f '{{ .Path}}/cobra@{{ .Version }}' github.com/spf13/cobra)
 
-cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
+cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum *.go
 	GOBIN=$(PWD)/cadctl go install $(PWD)/cadctl
 
 # Actions
@@ -18,8 +18,17 @@ build:
 test:
 	go test ./...
 
+.PHONY: test-with-coverage
+test-with-coverage:
+	go test -cover ./...
+
 .PHONY: cadctl-install-local
 cadctl-install-local: cadctl/cadctl
+
+.PHONY: cadctl-install-local-force
+cadctl-install-local-force: 
+	rm cadctl/cadctl >/dev/null 2>&1  || true
+	make cadctl-install-local
 
 ## CI actions 
 
