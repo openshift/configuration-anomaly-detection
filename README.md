@@ -16,7 +16,7 @@ CAD integrates with multiple third party tools, to read how they work and are de
 to install it use the command:
 
 ```shell
-make cadctl-install-local
+make cadctl-install-local-force
 ```
 
 and for more info on the matter see [the cadctl code tree](./cadctl/)
