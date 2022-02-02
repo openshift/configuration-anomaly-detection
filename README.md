@@ -2,8 +2,8 @@
 
 ## Purpose
 
-configuration-anomaly-detection (CAD) solves the issue of reacting to a clusters
-anomaly and inform the cluster owner of the next steps to do on his belalf.
+configuration-anomaly-detection (CAD) solves the issue of reacting to a cluster's
+anomaly and informing the cluster owner of the next steps to do on their behalf.
 
 ## Integrations
 
