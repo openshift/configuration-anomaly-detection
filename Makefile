@@ -28,6 +28,6 @@ cadctl-install-local: cadctl/cadctl
 isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true to nullify
 	@(test "$(ALLOW_DIRTY_CHECKOUT)" != "false" || test 0 -eq $$(git status --porcelain | wc -l)) || (echo "Local git checkout is not clean, commit changes and try again." >&2 && exit 1)
 
-# not using the 'all' target to make the target independant
+# not using the 'all' target to make the target independent
 .PHONY: ci-check
 ci-check: build test isclean
