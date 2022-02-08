@@ -2,7 +2,7 @@
 bin/cobra:
 	GOBIN=$(PWD)/bin go install $(shell go list -m -f '{{ .Path}}/cobra@{{ .Version }}' github.com/spf13/cobra)
 
-cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum *.go
+cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
 	GOBIN=$(PWD)/cadctl go install $(PWD)/cadctl
 
 # Actions

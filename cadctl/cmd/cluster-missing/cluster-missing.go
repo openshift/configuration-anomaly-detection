@@ -17,7 +17,9 @@ package clustermissing
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/spf13/cobra"
 )
 
@@ -26,7 +28,24 @@ var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
 	Short: "Will remediate the cluster-missing alert",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("cluster-missing called")
+		CAD_PD, ok := os.LookupEnv("CAD_PD")
+		if !ok {
+			return fmt.Errorf("could not load CAD_PD envvar")
+		}
+
+		_, err := pagerduty.NewWithToken(CAD_PD)
+		if err != nil {
+			return fmt.Errorf("could not start client: %w", err)
+		}
+
 		return nil
 	},
+}
+
+var (
+	incidentID string
+)
+
+func init() {
+	ClusterMissingCmd.Flags().StringVarP(&incidentID, "incident", "i", "", "the incident ID to do the operation on")
 }

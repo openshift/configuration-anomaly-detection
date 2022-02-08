@@ -99,6 +99,34 @@ func (p PagerDuty) AcknowledgeIncident(incidentID string) error {
 	return nil
 }
 
+// AddNote will add a note to an incident
+func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+	sdkNote := sdk.IncidentNote{
+		Content: noteContent,
+	}
+
+	_, err := p.c.CreateIncidentNoteWithContext(ctx, incidentID, sdkNote)
+
+	if err != nil {
+		sdkErr := sdk.APIError{}
+		if errors.As(err, &sdkErr) {
+			err := commonErrorHandling(err, sdkErr)
+			if err != nil {
+				return err
+			}
+			switch sdkErr.StatusCode {
+			case http.StatusNotFound:
+				// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
+				return IncidentNotFoundErr{Err: err}
+			}
+		}
+		return UnknownAddIncidentNoteError{Err: err}
+	}
+	return nil
+}
+
 // manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
 // the reason we send an array instead of a single item is to be compatible with the sdk
 // the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
@@ -108,17 +136,11 @@ func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 	_, err := p.c.ManageIncidentsWithContext(ctx, p.currentUserEmail, o)
 
 	if err != nil {
-		perr := sdk.APIError{}
-		if errors.As(err, &perr) {
-			switch perr.StatusCode {
-			case http.StatusUnauthorized:
-				return InvalidTokenErr{Err: err}
-			case http.StatusBadRequest:
-				isAnInvalidInputErr := perr.APIError.Valid &&
-					perr.APIError.ErrorObject.Code == InvalidInputParamsErrorCode
-				if isAnInvalidInputErr {
-					return InvalidInputParamsErr{Err: err}
-				}
+		sdkErr := sdk.APIError{}
+		if errors.As(err, &sdkErr) {
+			err := commonErrorHandling(err, sdkErr)
+			if err != nil {
+				return err
 			}
 		}
 		return UnknownUpdateIncidentError{Err: err}
@@ -134,9 +156,9 @@ func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
 	defer cancel()
 	user, err := client.GetCurrentUserWithContext(ctx, opts)
 	if err != nil {
-		perr := sdk.APIError{}
-		if errors.As(err, &perr) {
-			if perr.StatusCode == http.StatusUnauthorized {
+		sdkErr := sdk.APIError{}
+		if errors.As(err, &sdkErr) {
+			if sdkErr.StatusCode == http.StatusUnauthorized {
 				return nil, InvalidTokenErr{Err: err}
 			}
 		}
@@ -144,4 +166,20 @@ func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
 		return nil, fmt.Errorf("could not retrieve the current user: %w", err)
 	}
 	return user, nil
+}
+
+// commonErrorHandling will take a sdk.APIError and check it on common known errors.
+// if found the boolean will be false (not ok and should raise)
+func commonErrorHandling(err error, sdkErr sdk.APIError) error {
+	switch sdkErr.StatusCode {
+	case http.StatusUnauthorized:
+		return InvalidTokenErr{Err: err}
+	case http.StatusBadRequest:
+		isAnInvalidInputErr := sdkErr.APIError.Valid &&
+			sdkErr.APIError.ErrorObject.Code == InvalidInputParamsErrorCode
+		if isAnInvalidInputErr {
+			return InvalidInputParamsErr{Err: err}
+		}
+	}
+	return nil
 }
