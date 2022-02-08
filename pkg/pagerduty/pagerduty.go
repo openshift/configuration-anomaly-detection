@@ -3,10 +3,9 @@ package pagerduty
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
-
-	pkgerrors "github.com/pkg/errors"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
 )
@@ -23,8 +22,8 @@ const (
 type PagerDuty struct {
 	// c is the PagerDuty client
 	c *sdk.Client
-	// userEmail is the user that will run the commands
-	userEmail string
+	// currentUserEmail is the current logged in user's email
+	currentUserEmail string
 }
 
 // NewWithToken is similar to New but you only need to supply to authentication token to start
@@ -36,50 +35,68 @@ func NewWithToken(authToken string) (PagerDuty, error) {
 
 // New will create a PagerDuty struct with all of the required fields
 func New(client *sdk.Client) (PagerDuty, error) {
-	user, err := getCurrentUser(client)
+	sdkUser, err := getCurrentUser(client)
 	if err != nil {
-		return PagerDuty{}, pkgerrors.Wrap(err, "could not retrieve the current user")
+		return PagerDuty{}, fmt.Errorf("could not create a new client: %w", err)
 	}
 
 	resp := PagerDuty{
-		c:         client,
-		userEmail: user.Email,
+		c:                client,
+		currentUserEmail: sdkUser.Email,
 	}
 
 	return resp, nil
 }
 
 // MoveToEscalationPolicy will move the alerts EscalationPolicy to the new EscalationPolicy
-func (p PagerDuty) MoveToEscalationPolicy(incident Incident, escalationPolicy EscalationPolicy) error {
+func (p PagerDuty) MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
-			ID: incident.ID,
+			ID: incidentID,
 			EscalationPolicy: &sdk.APIReference{
 				Type: "escalation_policy_reference",
-				ID:   escalationPolicy.ID,
+				ID:   escalationPolicyID,
 			},
 		},
 	}
 	err := p.manageIncident(o)
-	if errors.Is(err, FailedToUpdateIncidentError{}) {
-		return pkgerrors.Wrap(err, "could not update the escalation policy")
+	if err != nil {
+		return fmt.Errorf("could not update the escalation policy: %w", err)
 	}
-	return err
+	return nil
+}
+
+// AssignToUser will assign the incident to the provided user
+func (p PagerDuty) AssignToUser(incidentID string, userID string) error {
+	o := []sdk.ManageIncidentsOptions{{
+		ID: incidentID,
+		Assignments: []sdk.Assignee{{
+			Assignee: sdk.APIObject{
+				Type: "user_reference",
+				ID:   userID,
+			},
+		}},
+	}}
+	err := p.manageIncident(o)
+	if err != nil {
+		return fmt.Errorf("could not assign to user: %w", err)
+	}
+	return nil
 }
 
 // AcknowledgeIncident will acknowledge an incident
-func (p PagerDuty) AcknowledgeIncident(incident Incident) error {
+func (p PagerDuty) AcknowledgeIncident(incidentID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
-			ID:     incident.ID,
+			ID:     incidentID,
 			Status: "acknowledged",
 		},
 	}
 	err := p.manageIncident(o)
-	if errors.Is(err, FailedToUpdateIncidentError{}) {
-		return pkgerrors.Wrap(err, "could not acknowledge the incident")
+	if err != nil {
+		return fmt.Errorf("could not acknowledge the incident: %w", err)
 	}
-	return err
+	return nil
 }
 
 // manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
@@ -88,7 +105,7 @@ func (p PagerDuty) AcknowledgeIncident(incident Incident) error {
 func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
-	_, err := p.c.ManageIncidentsWithContext(ctx, p.userEmail, o)
+	_, err := p.c.ManageIncidentsWithContext(ctx, p.currentUserEmail, o)
 
 	if err != nil {
 		perr := sdk.APIError{}
@@ -104,7 +121,7 @@ func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 				}
 			}
 		}
-		return FailedToUpdateIncidentError{Err: err}
+		return UnknownUpdateIncidentError{Err: err}
 	}
 
 	return nil
@@ -124,7 +141,7 @@ func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
 			}
 		}
 
-		return nil, pkgerrors.Wrap(err, "could not retrieve the current user")
+		return nil, fmt.Errorf("could not retrieve the current user: %w", err)
 	}
 	return user, nil
 }
