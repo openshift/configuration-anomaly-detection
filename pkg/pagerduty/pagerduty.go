@@ -116,8 +116,7 @@ func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
 			if err != nil {
 				return err
 			}
-			switch sdkErr.StatusCode {
-			case http.StatusNotFound:
+			if sdkErr.StatusCode == http.StatusNotFound {
 				// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
 				return IncidentNotFoundErr{Err: err}
 			}
