@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/cloudclient/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/spf13/cobra"
 )
@@ -28,6 +30,7 @@ var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
 	Short: "Will remediate the cluster-missing alert",
 	RunE: func(cmd *cobra.Command, args []string) error {
+
 		CAD_PD, ok := os.LookupEnv("CAD_PD")
 		if !ok {
 			return fmt.Errorf("could not load CAD_PD envvar")
@@ -37,6 +40,35 @@ var ClusterMissingCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("could not start client: %w", err)
 		}
+
+		// ---------------------------------------
+		// will be fetched from PD
+		clusterID := "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+		// requires credentials to be at a specific dir (~/.ocm.json)
+		ocmClient, err := ocm.NewOcmClient("")
+		if err != nil {
+			return fmt.Errorf("could not load OCM client: %v", err)
+		}
+
+		cd, err := ocmClient.GetClusterDeployment(clusterID)
+		if err != nil {
+			return fmt.Errorf("could not get cd: %v", err)
+		}
+		fmt.Printf("%+v\n", cd)
+
+		// requires credentials to be at a specific dir (~/.aws/aws_access*)
+		awsclient, err := aws.NewCloudClient(nil, ocmClient, cd)
+		if err != nil {
+			return fmt.Errorf("could not get client: %v", err)
+		}
+
+		// requires environment depenendend jumpRole was injected
+		stscred, err := awsclient.AssumeSupportRole()
+		if err != nil {
+			return fmt.Errorf("could not sts credential: %v", err)
+		}
+		fmt.Printf("%v\n", stscred)
 
 		return nil
 	},
