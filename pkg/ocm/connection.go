@@ -27,7 +27,7 @@ func (b *ConnectionBuilder) Build() (result *sdk.Connection, err error) {
 		// Load the configuration file:
 		b.cfg, err = ocmcfg.Load()
 		if err != nil {
-			err = fmt.Errorf("Failed to load config file: %v", err)
+			err = fmt.Errorf("Failed to load config file: %w", err)
 			return result, err
 		}
 		if b.cfg == nil {

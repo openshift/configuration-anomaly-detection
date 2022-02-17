@@ -8,9 +8,10 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
+	_ "github.com/golang/mock/mockgen/model"
 )
 
-//go:generate mockgen -destination=mocks/client.go -package=mocks gitlab.cee.redhat.com/service/backplane-api/pkg/cloudclient/aws/client AwsClient
+//go:generate mockgen -destination=./../../../utils/mocks/aws_client_mocks.go -package=mocks github.com/openshift/configuration-anomaly-detection/pkg/cloudclient/aws/client AwsClient,BuilderIface
 
 // AwsClient is a representation of the upstream AWS client, as opposed to the
 // internal representation used by the rest of backplane. This is included in

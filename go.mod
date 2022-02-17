@@ -6,6 +6,7 @@ require (
 	github.com/PagerDuty/go-pagerduty v1.5.0
 	github.com/aws/aws-sdk-go v1.42.51
 	github.com/golang/glog v1.0.0
+	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.1.1
 	github.com/onsi/gomega v1.18.1
 	github.com/openshift-online/ocm-cli v0.1.61
