@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"testing/fstest"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -35,6 +36,10 @@ var _ = Describe("Pagerduty", func() {
 		var err error // err is declared to make clear the p is not created here, but is global
 		p, err = pagerduty.New(client)
 		Expect(err).ShouldNot(HaveOccurred())
+	})
+	AfterEach(func() {
+		// close the server (httptest.NewServer requested this in the code)
+		server.Close()
 	})
 	Describe("MoveToEscalationPolicy", func() {
 		var (
@@ -458,6 +463,117 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(res).Should(Equal("12345"))
+			})
+		})
+	})
+	Describe("Receiver", func() {
+		Describe("ExtractExternalIDFromPayload", func() {
+			var (
+				fs fstest.MapFS
+			)
+			BeforeEach(func() {
+				// Arrange
+				fs = fstest.MapFS{}
+			})
+
+			When("the payload path is empty", func() {
+				It("should fail on FileNotFoundErr", func() {
+					// Arrange
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.FileNotFoundErr{}))
+				})
+			})
+
+			When("the payload path points to a file not on the filesystem", func() {
+				It("should fail on FileNotFoundErr", func() {
+					// Arrange
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("bla", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.FileNotFoundErr{}))
+				})
+			})
+
+			When("the payload path points to an empty file", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(""),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
+			})
+
+			When("the payload path points to an empty json struct", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte("{}"),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
+			})
+
+			When("the payload path points to a fake payload data (sent as a sample webhook data)", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(`{"event":{"id":"$ID","event_type":"pagey.ping","resource_type":"pagey","occurred_at":"DATE","agent":null,"client":null,"data":{"message":"Hello from your friend Pagey!","type":"ping"}}}`),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
+			})
+
+			When("the payload path points to a sanitized payload and the api does not have the alert + incident", func() {
+				It("should succeed and pull the externalid", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.pagerduty.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.pagerduty.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.pagerduty.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.pagerduty.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.pagerduty.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
+				})
+			})
+
+			When("the payload path points to a sanitized payload and the api does not have the alert + incident", func() {
+				It("should succeed and pull the externalid", func() {
+					// Arrange
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						// CHGM format of
+						fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"notes":"cluster_id: 654321"}}}]}`)
+					})
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.pagerduty.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.pagerduty.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.pagerduty.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.pagerduty.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.pagerduty.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
+						},
+					}
+					// Act
+					res, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(res).Should(Equal("654321"))
+				})
 			})
 		})
 	})

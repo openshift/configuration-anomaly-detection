@@ -1,0 +1,203 @@
+items:
+
+  - description: a PagerDuty incident created event
+    event:
+      id: $ID
+      event_type: incident.triggered
+      resource_type: incident
+      occurred_at: "DATE"
+      agent:
+        html_url: https://$PD_HOST/users/$USER_ID
+        id: $USER_ID
+        self: https://api.pagerduty.com/users/$USER_ID
+        summary: $USERNAME
+        type: user_reference
+      client: null
+      data:
+        id: $INCIDENT_ID
+        type: incident
+        self: https://api.pagerduty.com/incidents/$INCIDENT_ID
+        html_url: https://$PD_HOST/incidents/$INCIDENT_ID
+        number: ${INCIDENT_NUMBER}
+        status: triggered
+        incident_key: ${INCIDENT_KEY}
+        created_at: "DATE"
+        title: ${INCIDENT_TITLE}
+        service:
+          html_url: https://$PD_HOST/services/$SERVICE_ID
+          id: $SERVICE_ID
+          self: https://api.pagerduty.com/services/$SERVICE_ID
+          summary: $SERVICE_NAME
+          type: service_reference
+        assignees:
+          - html_url: https://$PD_HOST/users/$USER_ID_2
+            id: $USER_ID_2
+            self: https://api.pagerduty.com/users/$USER_ID_2
+            summary: $USER_NAME_2
+            type: user_reference
+        escalation_policy:
+          html_url: https://$PD_HOST/escalation_policies/$EP_ID
+          id: $EP_ID
+          self: https://api.pagerduty.com/escalation_policies/$EP_ID
+          summary: $EP_NAME
+          type: escalation_policy_reference
+        teams: []
+        priority: null
+        urgency: high
+        conference_bridge: null
+        resolve_reason: null
+
+  - description: a PagerDuty incident acknowledged event
+    event:
+      id: $ID
+      event_type: incident.acknowledged
+      resource_type: incident
+      occurred_at: "DATE"
+      agent:
+        html_url: https://$PD_HOST/users/$USER_ID
+        id: $USER_ID
+        self: https://api.pagerduty.com/users/$USER_ID
+        summary: $USER_NAME
+        type: user_reference
+      client: null
+      data:
+        id: $INCIDENT_ID
+        type: incident
+        self: https://api.pagerduty.com/incidents/$INCIDENT_ID
+        html_url: https://$PD_HOST/incidents/$INCIDENT_ID
+        number: $INCIDENT_NUMBER
+        status: acknowledged
+        incident_key: $INCIDENT_KEY
+        created_at: "DATE"
+        title: $INCIDENT_TITLE
+        service:
+          html_url: https://$PD_HOST/services/$SERVICE_ID
+          id: $SERVICE_ID
+          self: https://api.pagerduty.com/services/$SERVICE_ID
+          summary: $SERVICE_NAME
+          type: service_reference
+        assignees:
+          - html_url: https://$PD_HOST/users/$USER_ID
+            id: $USER_ID
+            self: https://api.pagerduty.com/users/$USER_ID
+            summary: $USER_NAME
+            type: user_reference
+        escalation_policy:
+          html_url: https://$PD_HOST/escalation_policies/$EP_ID
+          id: $EP_ID
+          self: https://api.pagerduty.com/escalation_policies/$EP_ID
+          summary: $EP_NAME
+          type: escalation_policy_reference
+        teams: []
+        priority: null
+        urgency: high
+        conference_bridge: null
+        resolve_reason: null
+
+  - description: a PagerDuty incident resolved event
+    event:
+      id: $ID
+      event_type: incident.resolved
+      resource_type: incident
+      occurred_at: "DATE"
+      agent:
+        html_url: https://$PD_HOST/users/$USER_ID
+        id: $USER_ID
+        self: https://api.pagerduty.com/users/$USER_ID
+        summary: $USER_NAME
+        type: user_reference
+      client: null
+      data:
+        id: $INCIDENT_ID
+        type: incident
+        self: https://api.pagerduty.com/incidents/$INCIDENT_ID
+        html_url: https://$PD_HOST/incidents/$INCIDENT_ID
+        number: $INCIDENT_NUMBER
+        status: resolved
+        incident_key: $INCIDENT_KEY
+        created_at: "DATE"
+        title: $INCIDENT_TITLE
+        service:
+          html_url: https://$PD_HOST/services/$SERVICE_ID
+          id: $SERVICE_ID
+          self: https://api.pagerduty.com/services/$SERVICE_ID
+          summary: $SERVICE_NAME
+          type: service_reference
+        assignees: []
+        escalation_policy:
+          html_url: https://$PD_HOST/escalation_policies/$EP_ID
+          id: $EP_ID
+          self: https://api.pagerduty.com/escalation_policies/$EP_ID
+          summary: $EP_NAME
+          type: escalation_policy_reference
+        teams: []
+        priority: null
+        urgency: high
+        conference_bridge: null
+        resolve_reason: null
+
+  - description: a PagerDuty test event
+    event:
+      id: $ID
+      event_type: pagey.ping
+      resource_type: pagey
+      occurred_at: "DATE"
+      agent: null
+      client: null
+      data:
+        message: Hello from your friend Pagey!
+        type: ping
+
+  - description: a local nc instance of PD
+    # this is the parsed data, not conformant with what I actually recieved from PD
+    id: 123abc
+    event: hi321
+    created_on: "0001-01-01T00:00:00Z"
+    incident:
+      incident_number: 1324
+      title: hello!
+      created_at: "0001-01-01T00:00:00Z"
+      status: ""
+      incident_key: null
+      pending_actions: null
+      service:
+        escalation_policy:
+          teams: null
+      assignments: null
+      acknowledgements: null
+      last_status_change_at: "0001-01-01T00:00:00Z"
+      last_status_change_by: {}
+      first_trigger_log_entry: {}
+      escalation_policy: {}
+      teams: null
+      priority: {}
+      urgency: ""
+      resolve_reason: null
+      alert_counts: {}
+      metadata: null
+      description: ""
+    log_entries:
+      - agent: {}
+        channel: {}
+        acknowledgement_timeout: 0
+        incident:
+          incident_number: 5678
+          title: goodbye?
+          service: {}
+          last_status_change_by: {}
+          first_trigger_log_entry:
+            agent: {}
+            channel: {}
+            acknowledgement_timeout: 0
+            incident: {}
+          escalation_policy: {}
+          resolve_reason:
+            incident: {}
+          alert_counts: {}
+          body: {}
+        service:
+          id: s123
+          type: service_reference
+        user:
+          id: u123
+          type: user_reference

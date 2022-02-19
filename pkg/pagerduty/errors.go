@@ -46,7 +46,7 @@ type IncidentNotFoundErr struct {
 
 // Error prints the wrapped error and the original one
 func (i IncidentNotFoundErr) Error() string {
-	err := fmt.Errorf("the given incident was not found, can not create note: %w", i.Err)
+	err := fmt.Errorf("the given incident was not found: %w", i.Err)
 	return err.Error()
 }
 
@@ -120,5 +120,40 @@ func (i NotesParseErr) Error() string {
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
 func (_ NotesParseErr) Is(target error) bool {
 	_, ok := target.(NotesParseErr)
+	return ok
+}
+
+// FileNotFoundErr wraps the filesystem NotFound Error
+type FileNotFoundErr struct {
+	Err      error
+	FilePath string
+}
+
+// Error prints the wrapped error and the original one
+func (f FileNotFoundErr) Error() string {
+	err := fmt.Errorf("the file '%s' was not found in the filesystem: %w", f.FilePath, f.Err)
+	return err.Error()
+}
+
+// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
+func (i FileNotFoundErr) Is(target error) bool {
+	_, ok := target.(FileNotFoundErr)
+	return ok
+}
+
+// UnmarshalErr wraps the json's json.SyntaxError
+type UnmarshalErr struct {
+	Err error
+}
+
+// Error prints the wrapped error and the original one
+func (u UnmarshalErr) Error() string {
+	err := fmt.Errorf("could not unmarshal the payloadFile: %w", u.Err)
+	return err.Error()
+}
+
+// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
+func (i UnmarshalErr) Is(target error) bool {
+	_, ok := target.(UnmarshalErr)
 	return ok
 }
