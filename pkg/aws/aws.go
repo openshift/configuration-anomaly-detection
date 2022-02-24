@@ -78,11 +78,11 @@ func NewClientFrmFileCredentials(dir string, region string) (AwsClient, error) {
 
 	accessKeyBytes, err := ioutil.ReadFile(path.Join(filepath, accessKeyIDFilename))
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("%s cannot be read from %s", accessKeyIDFilename, filepath)
+		return AwsClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, filepath)
 	}
 	secretKeyBytes, err := ioutil.ReadFile(path.Join(filepath, secretAccessKeyIDFilename))
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("%s cannot be read from %s", secretAccessKeyIDFilename, filepath)
+		return AwsClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, filepath)
 	}
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")

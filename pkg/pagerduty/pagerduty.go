@@ -50,7 +50,7 @@ func New(client *sdk.Client) (PagerDuty, error) {
 	return resp, nil
 }
 
-// MoveToEscalationPolicy will move the alerts EscalationPolicy to the new EscalationPolicy
+// MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
 func (p PagerDuty) MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
@@ -111,21 +111,58 @@ func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
 
 	_, err := p.c.CreateIncidentNoteWithContext(ctx, incidentID, sdkNote)
 
-	if err != nil {
-		sdkErr := sdk.APIError{}
-		if errors.As(err, &sdkErr) {
-			err := commonErrorHandling(err, sdkErr)
-			if err != nil {
-				return err
-			}
-			if sdkErr.StatusCode == http.StatusNotFound {
-				// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
-				return IncidentNotFoundErr{Err: err}
-			}
+	sdkErr := sdk.APIError{}
+	if errors.As(err, &sdkErr) {
+		err := commonErrorHandling(err, sdkErr)
+		if err != nil {
+			return err
 		}
-		return UnknownAddIncidentNoteError{Err: err}
+		if sdkErr.StatusCode == http.StatusNotFound {
+			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
+			return IncidentNotFoundErr{Err: err}
+		}
 	}
+
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// GetAlerts will retrieve the alerts for a specific incident
+func (p PagerDuty) GetAlerts(incidentID string) ([]Alert, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+
+	o := sdk.ListIncidentAlertsOptions{}
+
+	alerts, err := p.c.ListIncidentAlertsWithContext(ctx, incidentID, o)
+
+	sdkErr := sdk.APIError{}
+	if errors.As(err, &sdkErr) {
+		err := commonErrorHandling(err, sdkErr)
+		if err != nil {
+			return nil, err
+		}
+		if sdkErr.StatusCode == http.StatusNotFound {
+			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
+			return nil, IncidentNotFoundErr{Err: err}
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	res := []Alert{}
+	for _, alert := range alerts.Alerts {
+		localAlert, err := p.toLocalAlert(alert)
+		if err != nil {
+			return nil, fmt.Errorf("could not convert alert toLocalAlert: %w", err)
+		}
+		res = append(res, localAlert)
+	}
+	return res, nil
 }
 
 // ExtractIDFromCHGM extracts from an Alert body until an external ID
@@ -208,15 +245,16 @@ func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 	defer cancel()
 	_, err := p.c.ManageIncidentsWithContext(ctx, p.currentUserEmail, o)
 
-	if err != nil {
-		sdkErr := sdk.APIError{}
-		if errors.As(err, &sdkErr) {
-			err := commonErrorHandling(err, sdkErr)
-			if err != nil {
-				return err
-			}
+	sdkErr := sdk.APIError{}
+	if errors.As(err, &sdkErr) {
+		err := commonErrorHandling(err, sdkErr)
+		if err != nil {
+			return err
 		}
-		return UnknownUpdateIncidentError{Err: err}
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -228,13 +266,15 @@ func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 	user, err := client.GetCurrentUserWithContext(ctx, opts)
-	if err != nil {
-		sdkErr := sdk.APIError{}
-		if errors.As(err, &sdkErr) {
-			if sdkErr.StatusCode == http.StatusUnauthorized {
-				return nil, InvalidTokenErr{Err: err}
-			}
+
+	sdkErr := sdk.APIError{}
+	if errors.As(err, &sdkErr) {
+		if sdkErr.StatusCode == http.StatusUnauthorized {
+			return nil, InvalidTokenErr{Err: err}
 		}
+	}
+
+	if err != nil {
 
 		return nil, fmt.Errorf("could not retrieve the current user: %w", err)
 	}
@@ -255,4 +295,17 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 		}
 	}
 	return nil
+}
+
+// toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
+func (p PagerDuty) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
+	externalID, err := p.ExtractIDFromCHGM(sdkAlert.Body)
+	if err != nil {
+		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
+	}
+	alert := Alert{
+		ID:         sdkAlert.APIObject.ID,
+		ExternalID: externalID,
+	}
+	return alert, nil
 }
