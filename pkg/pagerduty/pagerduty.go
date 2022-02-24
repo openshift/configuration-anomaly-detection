@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"time"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
+	"gopkg.in/yaml.v2"
 )
 
 const (
@@ -124,6 +126,78 @@ func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
 		return UnknownAddIncidentNoteError{Err: err}
 	}
 	return nil
+}
+
+// ExtractIDFromCHGM extracts from an Alert body until an external ID
+// the function is a member function but doesn't use any of the other funcs / types in the PagerDuty struct
+func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
+	var err error
+
+	externalBody, err := extractNotesFromBody(data)
+	if err != nil {
+		return "", fmt.Errorf("cannot marshal externalCHGMAlertBody: %w", err)
+	}
+
+	if externalBody == "" {
+		return "", AlertBodyDoesNotHaveNotesFieldErr{}
+	}
+
+	internalBody := internalCHGMAlertBody{}
+	err = yaml.Unmarshal([]byte(externalBody), &internalBody)
+	if err != nil {
+		return "", NotesParseErr{Err: err}
+	}
+
+	if internalBody.ClusterID == "" {
+		return "", AlertNotesDoesNotHaveClusterIDFieldErr{}
+	}
+
+	return internalBody.ClusterID, nil
+}
+
+// extractNotesFromBody will extract from map[string]interface{} the '.details.notes' while doing type checks
+// this is better than a third party as it is better maintained and required less dependencies
+func extractNotesFromBody(body map[string]interface{}) (string, error) {
+	var ok bool
+	_, ok = body["details"]
+	if !ok {
+		return "", AlertBodyExternalParseErr{FailedProperty: ".details"}
+	}
+
+	details, ok := body["details"].(map[string]interface{})
+	if !ok {
+		err := AlertBodyExternalCastErr{
+			FailedProperty:     ".details",
+			ExpectedType:       "map[string]interface{}",
+			ActualType:         reflect.TypeOf(body["details"]).String(),
+			ActualBodyResource: fmt.Sprintf("%v", body["details"]),
+		}
+		return "", err
+	}
+
+	notesInterface, ok := details["notes"]
+	if !ok {
+		return "", AlertBodyExternalParseErr{FailedProperty: ".details.notes"}
+	}
+
+	notes, ok := notesInterface.(string)
+	if !ok {
+		err := AlertBodyExternalCastErr{
+			FailedProperty:     ".details.notes",
+			ExpectedType:       "string",
+			ActualType:         reflect.TypeOf(details["notes"]).String(),
+			ActualBodyResource: fmt.Sprintf("%v", details["notes"]),
+		}
+		return "", err
+	}
+
+	return notes, nil
+}
+
+// internalCHGMAlertBody is a struct for manipulating CHGM from the note until the ClusterID
+type internalCHGMAlertBody struct {
+	// ClusterID in the ExternalId that the notes holds
+	ClusterID string `yaml:"cluster_id"`
 }
 
 // manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise

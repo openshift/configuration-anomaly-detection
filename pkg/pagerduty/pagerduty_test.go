@@ -263,7 +263,6 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(incidentID, noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-
 				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
 
 			})
@@ -283,6 +282,106 @@ var _ = Describe("Pagerduty", func() {
 				Expect(err).Should(BeNil())
 			})
 		})
+	})
+	Describe("ExtractExternalIDFromCGHMAlertBody", func() {
+		var alertBody map[string]interface{}
+		BeforeEach(func() {
+			alertBody = map[string]interface{}{}
+		})
+
+		When("the input object does not have a 'notes' field", func() {
+			It("should raise an 'AlertBodyDoesNotHaveNotesFieldErr' error", func() {
+				// Arrange
+				alertBody = map[string]interface{}{
+					"describe": struct {
+						source string
+						price  float64
+					}{"chicken", 1.75},
+					"steak": true,
+				}
+				// Act
+				_, err := p.ExtractIDFromCHGM(alertBody)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(pagerduty.AlertBodyExternalParseErr{FailedProperty: ".details"}))
+			})
+		})
+
+		When("the '.details' field is of the wrong type", func() {
+			It("should raise a 'AlertBodyExternalCastErr' error", func() {
+				// Arrange
+				alertBody = map[string]interface{}{
+					"details": "bad details",
+				}
+				expectedErr := pagerduty.AlertBodyExternalCastErr{
+					FailedProperty:     ".details",
+					ExpectedType:       "map[string]interface{}",
+					ActualType:         "string",
+					ActualBodyResource: "bad details",
+				}
+				// Act
+				_, err := p.ExtractIDFromCHGM(alertBody)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(expectedErr))
+			})
+		})
+		When("the '.details.notes' field is of the wrong type", func() {
+			It("should raise a 'AlertBodyExternalCastErr' error", func() {
+				// Arrange
+				alertBody = map[string]interface{}{
+					"details": map[string]interface{}{
+						"notes": map[string]interface{}{
+							"hello": "world",
+						},
+					},
+				}
+				expectedErr := pagerduty.AlertBodyExternalCastErr{
+					FailedProperty:     ".details.notes",
+					ExpectedType:       "string",
+					ActualType:         "map[string]interface {}",
+					ActualBodyResource: "map[hello:world]",
+				}
+				// Act
+				_, err := p.ExtractIDFromCHGM(alertBody)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(expectedErr))
+			})
+		})
+
+		When("the notes field is improperly parsed by the 'yaml' package", func() {
+			It("should raise a 'NotesParseErr' error", func() {
+				// Arrange
+				alertBody = map[string]interface{}{
+					"details": map[string]interface{}{
+						"notes": "chicken",
+					},
+				}
+				// Act
+				_, err := p.ExtractIDFromCHGM(alertBody)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(pagerduty.NotesParseErr{}))
+			})
+		})
+
+		When("the notes field has a clusterid", func() {
+			It("should be returned correctly", func() {
+				// Arrange
+				alertBody = map[string]interface{}{
+					"details": map[string]interface{}{
+						"notes": `cluster_id: "12345"`,
+					},
+				}
+				// Act
+				res, err := p.ExtractIDFromCHGM(alertBody)
+				// Assert
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(res).Should(Equal("12345"))
+			})
+		})
+
 	})
 })
 
