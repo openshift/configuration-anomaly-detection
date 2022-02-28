@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 
+	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/spf13/cobra"
 )
@@ -28,12 +29,18 @@ var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
 	Short: "Will remediate the cluster-missing alert",
 	RunE: func(cmd *cobra.Command, args []string) error {
+
+		_, err := ocm.NewOcmClient("")
+		if err != nil {
+			return fmt.Errorf("could not create ocm client: %w", err)
+		}
+
 		CAD_PD, ok := os.LookupEnv("CAD_PD")
 		if !ok {
 			return fmt.Errorf("could not load CAD_PD envvar")
 		}
 
-		_, err := pagerduty.NewWithToken(CAD_PD)
+		_, err = pagerduty.NewWithToken(CAD_PD)
 		if err != nil {
 			return fmt.Errorf("could not start client: %w", err)
 		}
