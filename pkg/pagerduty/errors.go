@@ -39,42 +39,6 @@ func (_ InvalidInputParamsErr) Is(target error) bool {
 	return ok
 }
 
-// UnknownUpdateIncidentError wraps the error so it can be handled by the parent function
-type UnknownUpdateIncidentError struct {
-	Err error
-}
-
-// Error prints the wrapped error only
-// this is helpful to make this comply the error interface
-func (i UnknownUpdateIncidentError) Error() string {
-	err := fmt.Errorf("an unknown error was triggered while updating the incident: %w", i.Err)
-	return err.Error()
-}
-
-// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ UnknownUpdateIncidentError) Is(target error) bool {
-	_, ok := target.(UnknownUpdateIncidentError)
-	return ok
-}
-
-// UnknownAddIncidentNoteError wraps the error so it can be handled by the parent function
-type UnknownAddIncidentNoteError struct {
-	Err error
-}
-
-// Error prints the wrapped error only
-// this is helpful to make this comply the error interface
-func (i UnknownAddIncidentNoteError) Error() string {
-	err := fmt.Errorf("an unknown error was triggered while adding a note to the incident: %w", i.Err)
-	return err.Error()
-}
-
-// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ UnknownAddIncidentNoteError) Is(target error) bool {
-	_, ok := target.(UnknownAddIncidentNoteError)
-	return ok
-}
-
 // IncidentNotFoundErr wraps the PagerDuty not found error while adding notes to an incident
 type IncidentNotFoundErr struct {
 	Err error
@@ -102,7 +66,12 @@ type AlertBodyExternalCastErr struct {
 
 // Error prints data (to conform to the other errors in the package
 func (a AlertBodyExternalCastErr) Error() string {
-	err := fmt.Errorf("'%s' field is not '%s' it is '%s', the resource is '%s' ", a.FailedProperty, a.ExpectedType, a.ActualType, a.ActualBodyResource)
+	err := fmt.Errorf("'%s' field is not '%s' it is '%s', the resource is '%s' ",
+		a.FailedProperty,
+		a.ExpectedType,
+		a.ActualType,
+		a.ActualBodyResource,
+	)
 	return err.Error()
 }
 

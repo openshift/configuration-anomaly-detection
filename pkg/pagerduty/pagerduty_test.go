@@ -252,7 +252,7 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 
-		When("If the incident that needs to attach the note is doesn't exist", func() {
+		When("If the incident that is passed to the funcion doesn't exist", func() {
 			It("Should throw an error (404 notFound)", func() {
 				//Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
@@ -280,6 +280,85 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(err).Should(BeNil())
+			})
+		})
+	})
+
+	Describe("GetAlerts", func() {
+		BeforeEach(func() {
+			incidentID = "1234"
+		})
+
+		When("The authentication token that is sent is invalid", func() {
+			It("Should throw an error (401 unauthorized)", func() {
+				//Arrange
+				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).Should(Equal("GET"))
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					fmt.Fprint(w, `{}`)
+				})
+				// Act
+				_, err := p.GetAlerts(incidentID)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+			})
+		})
+
+		When("If sent input parameters are invalid", func() {
+			It("Should throw an error (400 badRequest)", func() {
+				//Arrange
+				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).Should(Equal("GET"))
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+				})
+				// Act
+				_, err := p.GetAlerts(incidentID)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
+
+			})
+		})
+
+		When("If the incident that is passed to the funcion doesn't exist", func() {
+			It("Should throw an error (404 notFound)", func() {
+				//Arrange
+				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+					Expect(r.Method).Should(Equal("GET"))
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusNotFound)
+					fmt.Fprint(w, `{}`)
+				})
+				// Act
+				_, err := p.GetAlerts(incidentID)
+				// Assert
+				Expect(err).Should(HaveOccurred())
+
+				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
+			})
+		})
+
+		When("The incident alerts (CHGM format) were successfully pulled", func() {
+			It("Doesn't trigger an error and extracts the correct data out", func() {
+				//Arrange
+				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+					// CHGM format of
+					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"notes":"cluster_id: 123456"}}}]}`)
+				})
+				// Act
+				res, err := p.GetAlerts(incidentID)
+				// Assert
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(err).Should(BeNil())
+				Expect(res).Should(HaveLen(1))
+				Expect(res[0].ID).Should(Equal("123456"))
+				Expect(res[0].ExternalID).Should(Equal("123456"))
+
 			})
 		})
 	})
@@ -381,7 +460,6 @@ var _ = Describe("Pagerduty", func() {
 				Expect(res).Should(Equal("12345"))
 			})
 		})
-
 	})
 })
 
