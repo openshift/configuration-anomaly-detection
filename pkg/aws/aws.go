@@ -11,6 +11,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/cloudtrail"
+	"github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/aws/aws-sdk-go/service/sts"
@@ -26,12 +28,14 @@ const (
 
 //go:generate mockgen -destination mock/stsmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
 //go:generate mockgen -destination mock/ec2mock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
+//go:generate mockgen -destination mock/cloudtrailmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
 
-// Client is a representation of the AWS Client
+// AwsClient is a representation of the AWS Client
 type AwsClient struct {
-	Region    string
-	StsClient stsiface.STSAPI
-	Ec2Client ec2iface.EC2API
+	Region           string
+	StsClient        stsiface.STSAPI
+	Ec2Client        ec2iface.EC2API
+	CloudTrailClient cloudtrailiface.CloudTrailAPI
 }
 
 // New creates a new client and is used when we already know the secrets and region,
@@ -52,23 +56,21 @@ func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) 
 		return AwsClient{}, err
 	}
 
-	ec2AwsConfig := &aws.Config{
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(accessID, accessSecret, token),
-		Retryer: client.DefaultRetryer{
-			NumMaxRetries:    maxRetries,
-			MinThrottleDelay: 2 * time.Second,
-		},
+	ec2Sess, err := session.NewSession(awsConfig)
+	if err != nil {
+		return AwsClient{}, err
 	}
-	ec2Sess, err := session.NewSession(ec2AwsConfig)
+
+	cloudTrailSess, err := session.NewSession(awsConfig)
 	if err != nil {
 		return AwsClient{}, err
 	}
 
 	return AwsClient{
-		Region:    *aws.String(region),
-		StsClient: sts.New(s),
-		Ec2Client: ec2.New(ec2Sess),
+		Region:           *aws.String(region),
+		StsClient:        sts.New(s),
+		Ec2Client:        ec2.New(ec2Sess),
+		CloudTrailClient: cloudtrail.New(cloudTrailSess),
 	}, nil
 }
 
@@ -169,4 +171,29 @@ func (a *AwsClient) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Insta
 		}
 	}
 	return instances, nil
+}
+
+// ListStopInstancesEvents lists StopInstances events from CloudTrail
+func (a AwsClient) ListStopInstancesEvents() ([]*cloudtrail.Event, error) {
+	in := &cloudtrail.LookupEventsInput{
+		LookupAttributes: []*cloudtrail.LookupAttribute{
+			{
+				AttributeKey:   aws.String("EventName"),
+				AttributeValue: aws.String("StopInstances"),
+			},
+		},
+	}
+	events := []*cloudtrail.Event{}
+	for {
+		out, err := a.CloudTrailClient.LookupEvents(in)
+		if err != nil {
+			return []*cloudtrail.Event{}, err
+		}
+		nextToken := out.NextToken
+		events = append(events, out.Events...)
+		if nextToken == nil {
+			break
+		}
+	}
+	return events, nil
 }

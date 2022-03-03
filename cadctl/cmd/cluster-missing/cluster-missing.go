@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/spf13/cobra"
@@ -29,8 +30,20 @@ var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
 	Short: "Will remediate the cluster-missing alert",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		AWS_ACCESS_KEY_ID, hasAWS_ACCESS_KEY_ID := os.LookupEnv("AWS_ACCESS_KEY_ID")
+		AWS_SECRET_ACCESS_KEY, hasAWS_SECRET_ACCESS_KEY := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
+		AWS_SESSION_TOKEN, hasAWS_SESSION_TOKEN := os.LookupEnv("AWS_SESSION_TOKEN")
+		AWS_DEFAULT_REGION, hasAWS_DEFAULT_REGION := os.LookupEnv("AWS_DEFAULT_REGION")
+		if !hasAWS_ACCESS_KEY_ID || !hasAWS_SECRET_ACCESS_KEY || !hasAWS_SESSION_TOKEN || !hasAWS_DEFAULT_REGION {
+			return fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
+		}
 
-		_, err := ocm.New("")
+		_, err := aws.NewClient(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION)
+		if err != nil {
+			return fmt.Errorf("could not start awsClient: %w", err)
+		}
+
+		_, err = ocm.New("")
 		if err != nil {
 			return fmt.Errorf("could not create ocm client: %w", err)
 		}
@@ -42,7 +55,7 @@ var ClusterMissingCmd = &cobra.Command{
 
 		_, err = pagerduty.NewWithToken(CAD_PD)
 		if err != nil {
-			return fmt.Errorf("could not start client: %w", err)
+			return fmt.Errorf("could not start pagerdutyClient: %w", err)
 		}
 
 		return nil
