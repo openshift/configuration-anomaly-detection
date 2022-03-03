@@ -30,7 +30,7 @@ const (
 //go:generate mockgen -destination mock/ec2mock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
 //go:generate mockgen -destination mock/cloudtrailmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
 
-// Client is a representation of the AWS Client
+// AwsClient is a representation of the AWS Client
 type AwsClient struct {
 	Region           string
 	StsClient        stsiface.STSAPI
