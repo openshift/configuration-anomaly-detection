@@ -18,9 +18,9 @@ type ocmClient struct {
 	cfg  *sdkcfg.Config
 }
 
-// NewOcmClient will create a new ocm client by using the path to a config file
+// New will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
-func NewOcmClient(ocmConfigFile string) (ocmClient, error) {
+func New(ocmConfigFile string) (ocmClient, error) {
 
 	client := ocmClient{}
 	cfg, err := newConfigFromFile(ocmConfigFile)

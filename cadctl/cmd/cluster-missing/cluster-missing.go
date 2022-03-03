@@ -30,7 +30,7 @@ var ClusterMissingCmd = &cobra.Command{
 	Short: "Will remediate the cluster-missing alert",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		_, err := ocm.NewOcmClient("")
+		_, err := ocm.New("")
 		if err != nil {
 			return fmt.Errorf("could not create ocm client: %w", err)
 		}
