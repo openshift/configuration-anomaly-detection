@@ -55,7 +55,6 @@ var _ = Describe("Aws", func() {
 		})
 		When("the client fails for arbitrary reason", func() {
 			It("the error is propagated and empty client returned", func() {
-				errOcc = fmt.Errorf("something happened")
 				mockSdkStsClient.EXPECT().AssumeRole(gomock.Any()).Return(
 					&sts.AssumeRoleOutput{}, errOcc).Times(1).Do(
 					func(input *sts.AssumeRoleInput) {
@@ -124,7 +123,6 @@ var _ = Describe("Aws", func() {
 		})
 		When("the client fails with an arbitrary error", func() {
 			It("the error is propagated and nothing is returned", func() {
-				errOcc = fmt.Errorf("something happened")
 				mockSdkEc2Client.EXPECT().DescribeInstances(gomock.Any()).Return(describeInstanceOut, errOcc).Times(1)
 				c, err := client.ListInstances("cluster-s3v21l")
 				Expect(err).Should(HaveOccurred())
@@ -185,7 +183,6 @@ var _ = Describe("Aws", func() {
 		})
 		When("the client fails with an arbitrary error", func() {
 			It("the error is propagated and nothing is returned", func() {
-				errOcc = fmt.Errorf("something happened")
 				mockCloudTrailClient.EXPECT().LookupEvents(gomock.Any()).Return(lookupEventOut, errOcc).Times(1)
 				c, err := client.ListStopInstancesEvents()
 				Expect(err).Should(HaveOccurred())

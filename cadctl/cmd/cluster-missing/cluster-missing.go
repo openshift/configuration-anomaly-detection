@@ -38,20 +38,12 @@ var ClusterMissingCmd = &cobra.Command{
 			return fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
 		}
 
-		a, err := aws.NewClient(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION)
+		_, err := aws.NewClient(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION)
 		if err != nil {
 			return fmt.Errorf("could not start awsClient: %w", err)
 		}
-		res, err := a.ListStopInstancesEvents()
-		if err != nil {
-			return fmt.Errorf("failed to ListStopInstancesEvents: %w", err)
-		}
-		fmt.Printf("the ListStopInstancesEvents result is %v", res)
 
-		if err != nil {
-			return fmt.Errorf("could not start awsClient: %w", err)
-
-		_, err := ocm.New("")
+		_, err = ocm.New("")
 		if err != nil {
 			return fmt.Errorf("could not create ocm client: %w", err)
 		}
