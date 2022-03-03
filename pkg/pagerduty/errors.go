@@ -1,6 +1,8 @@
 package pagerduty
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // InvalidTokenErr wraps the PagerDuty token invalid error
 type InvalidTokenErr struct {
@@ -14,7 +16,7 @@ func (i InvalidTokenErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i InvalidTokenErr) Is(target error) bool {
+func (_ InvalidTokenErr) Is(target error) bool {
 	_, ok := target.(InvalidTokenErr)
 	return ok
 }
@@ -32,44 +34,8 @@ func (i InvalidInputParamsErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i InvalidInputParamsErr) Is(target error) bool {
+func (_ InvalidInputParamsErr) Is(target error) bool {
 	_, ok := target.(InvalidInputParamsErr)
-	return ok
-}
-
-// UnknownUpdateIncidentError wraps the error so it can be handled by the parent function
-type UnknownUpdateIncidentError struct {
-	Err error
-}
-
-// Error prints the wrapped error only
-// this is helpful to make this comply the error interface
-func (i UnknownUpdateIncidentError) Error() string {
-	err := fmt.Errorf("an unknown error was triggered while updating the incident: %w", i.Err)
-	return err.Error()
-}
-
-// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i UnknownUpdateIncidentError) Is(target error) bool {
-	_, ok := target.(UnknownUpdateIncidentError)
-	return ok
-}
-
-// UnknownAddIncidentNoteError wraps the error so it can be handled by the parent function
-type UnknownAddIncidentNoteError struct {
-	Err error
-}
-
-// Error prints the wrapped error only
-// this is helpful to make this comply the error interface
-func (i UnknownAddIncidentNoteError) Error() string {
-	err := fmt.Errorf("an unknown error was triggered while adding a note to the incident: %w", i.Err)
-	return err.Error()
-}
-
-// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i UnknownAddIncidentNoteError) Is(target error) bool {
-	_, ok := target.(UnknownAddIncidentNoteError)
 	return ok
 }
 
@@ -85,7 +51,74 @@ func (i IncidentNotFoundErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i IncidentNotFoundErr) Is(target error) bool {
+func (_ IncidentNotFoundErr) Is(target error) bool {
 	_, ok := target.(IncidentNotFoundErr)
+	return ok
+}
+
+// AlertBodyExternalCastErr denotes the fact the alert's body field could not be converted correctly
+type AlertBodyExternalCastErr struct {
+	FailedProperty     string
+	ExpectedType       string
+	ActualType         string
+	ActualBodyResource string
+}
+
+// Error prints data (to conform to the other errors in the package
+func (a AlertBodyExternalCastErr) Error() string {
+	err := fmt.Errorf("'%s' field is not '%s' it is '%s', the resource is '%s' ",
+		a.FailedProperty,
+		a.ExpectedType,
+		a.ActualType,
+		a.ActualBodyResource,
+	)
+	return err.Error()
+}
+
+// AlertBodyExternalParseErr denotes the fact the alert's body could not be parsed correctly
+type AlertBodyExternalParseErr struct {
+	FailedProperty string
+}
+
+// Error prints data (to conform to the other errors in the package
+func (a AlertBodyExternalParseErr) Error() string {
+	err := fmt.Errorf("cannot find '%s' in body", a.FailedProperty)
+	return err.Error()
+}
+
+// AlertBodyDoesNotHaveNotesFieldErr denotes the fact the alert's body does not have a notes field
+// this is needed as the extracted notes body is a map[string]interface{} so marshalling it will
+// not always populate the field
+type AlertBodyDoesNotHaveNotesFieldErr struct{}
+
+// Error prints data (to conform to the other errors in the package
+func (_ AlertBodyDoesNotHaveNotesFieldErr) Error() string {
+	err := fmt.Errorf("decoded resource does not have a .details.notes field, stopping")
+	return err.Error()
+}
+
+// AlertNotesDoesNotHaveClusterIDFieldErr denotes the fact the alert's notes does not have a '.cluster_id' field
+type AlertNotesDoesNotHaveClusterIDFieldErr struct{}
+
+// Error prints data (to conform to the other errors in the package
+func (_ AlertNotesDoesNotHaveClusterIDFieldErr) Error() string {
+	err := fmt.Errorf("decoded internal resource does not have '.cluster_id' field , stopping")
+	return err.Error()
+}
+
+// NotesParseErr wraps the yaml parse errors
+type NotesParseErr struct {
+	Err error
+}
+
+// Error prints the wrapped error and the original one
+func (i NotesParseErr) Error() string {
+	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBodyd: %w", i.Err)
+	return err.Error()
+}
+
+// Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
+func (_ NotesParseErr) Is(target error) bool {
+	_, ok := target.(NotesParseErr)
 	return ok
 }

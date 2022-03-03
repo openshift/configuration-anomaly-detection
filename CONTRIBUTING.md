@@ -10,7 +10,7 @@ target.
 ## verify error messages are unique
 in order to grep any part of an error message and see the exact location is was created in, use the following command:
 ```shell
-grep -Ir  'fmt.Errorf("' . | grep -v ./CONTRIBUTING.md | sed 's/\(.*\)\(fmt.Errorf.*\)/\2/'  | sort
+grep -Ir 'fmt.Errorf("' . | grep -v './.git' -v ./CONTRIBUTING.md | sed 's/\(.*\)\(fmt.Errorf.*\)/\2/' | sort
 ```
 and verify there are no two entries with the same string
 

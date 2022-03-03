@@ -20,6 +20,7 @@ import (
 	"os"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +50,10 @@ var ClusterMissingCmd = &cobra.Command{
 
 		if err != nil {
 			return fmt.Errorf("could not start awsClient: %w", err)
+
+		_, err := ocm.New("")
+		if err != nil {
+			return fmt.Errorf("could not create ocm client: %w", err)
 		}
 
 		CAD_PD, ok := os.LookupEnv("CAD_PD")
