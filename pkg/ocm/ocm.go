@@ -3,14 +3,22 @@ package ocm
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 
 	_ "github.com/golang/mock/mockgen/model"
 	sdkcfg "github.com/openshift-online/ocm-cli/pkg/config"
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
+	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsv1alpha1 "github.com/openshift/aws-account-operator/pkg/apis/aws/v1alpha1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+)
+
+var (
+	sl_clusterHasGoneMissing = "https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json"
 )
 
 type ocmClient struct {
@@ -57,13 +65,30 @@ func (client ocmClient) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.Accou
 	ac := &awsv1alpha1.AccountClaim{}
 	acString, err := client.getClusterResource(clusterID, "aws_account_claim")
 	if err != nil {
-		return ac, fmt.Errorf("client failed to load GetAWSAccountClaim: %w", err)
+		return ac, fmt.Errorf("client failed to load AWS AccountClaim: %w", err)
 	}
 	err = json.Unmarshal([]byte(acString), ac)
 	if err != nil {
 		return ac, fmt.Errorf("failed to unmarshal client response (%s) with error: %w", acString, err)
 	}
 	return ac, err
+}
+
+// GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name 
+// Returns a v1.Cluster object or an error
+func (client ocmClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+	q := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", identifier)
+	resp, err := client.conn.ClustersMgmt().V1().Clusters().List().Search(q).Send()
+	if err != nil || resp.Error() != nil || resp.Status() != http.StatusOK {
+		return nil, fmt.Errorf("received error while fetch ClusterInfo from ocm: %w with resp %#v", err, resp)
+	}
+	if resp.Total() > 1 {
+		return nil, fmt.Errorf("the provided cluster identifier is ambiguous: %s", identifier)
+	}
+	if resp.Total() == 0 {
+		return nil, fmt.Errorf("no cluster found for %s", identifier)
+	}
+	return resp.Items().Get(0), nil
 }
 
 // GetClusterDeployment gets the ClusterDeployment object for a given cluster
@@ -88,6 +113,58 @@ func (client ocmClient) getClusterResource(clusterID string, resourceKey string)
 		return "", err
 	}
 	return response.Body().Resources()[resourceKey], nil
+}
+
+// SendCHGMServiceLog allows to send a cluster has gone missing servicelog
+func (client ocmClient) SendCHGMServiceLog(cluster *v1.Cluster) error {
+	json, err := getServiceLogTemplate(sl_clusterHasGoneMissing)
+	if err != nil {
+		return fmt.Errorf("failed to get CHGM-SL template: %w", err)
+	}
+	le, err := servicelog.UnmarshalLogEntry(json)
+	if err != nil {
+		return fmt.Errorf("failed to create SL message from json (%s): %w", json, err)
+	}
+	return client.sendServiceLog(le, cluster)
+}
+
+// sendServiceLog allows to send a generic servicelog to a cluster
+func (client ocmClient) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Cluster) error {
+
+	builder := servicelog.NewLogEntry()
+	builder.Copy(le)
+	builder.ClusterUUID(cluster.ExternalID())
+	builder.ClusterID(cluster.ID())
+	builder.SubscriptionID(cluster.Subscription().ID())
+	le, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("could not create post request: %w", err)
+	}
+
+	request := client.conn.ServiceLogs().V1().ClusterLogs().Add()
+	request = request.Body(le)
+	resp, err := request.Send()
+	if err != nil {
+		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
+	}
+	return nil
+}
+
+// getServiceLogTemplate fetches a servicelog template from a url
+func getServiceLogTemplate(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("HTTP protocol error: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("received bad http status code: %#v", resp)
+	}
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read body: %w", err)
+	}
+	return string(bodyBytes), nil
 }
 
 // newConfigFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
