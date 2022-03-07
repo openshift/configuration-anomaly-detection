@@ -21,15 +21,17 @@ var (
 	sl_clusterHasGoneMissing = "https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json"
 )
 
-type ocmClient struct {
+// Client is the ocm client with which we can run the commands
+// currently we do not need to export the connection or the config, as we create the Client using the New func
+type Client struct {
 	conn *sdk.Connection
 	cfg  *sdkcfg.Config
 }
 
 // New will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
-func New(ocmConfigFile string) (ocmClient, error) {
-	client := ocmClient{}
+func New(ocmConfigFile string) (Client, error) {
+	client := Client{}
 	cfg, err := newConfigFromFile(ocmConfigFile)
 	if err != nil {
 		return client, fmt.Errorf("failed to load config file: %w", err)
@@ -45,7 +47,7 @@ func New(ocmConfigFile string) (ocmClient, error) {
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster
-func (client ocmClient) GetSupportRoleARN(clusterID string) (string, error) {
+func (client Client) GetSupportRoleARN(clusterID string) (string, error) {
 	claim, err := client.GetAWSAccountClaim(clusterID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get account claim: %w", err)
@@ -61,7 +63,7 @@ func (client ocmClient) GetSupportRoleARN(clusterID string) (string, error) {
 }
 
 // GetAWSAccountClaim gets the AWS Account Claim object for a given cluster
-func (client ocmClient) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountClaim, error) {
+func (client Client) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountClaim, error) {
 	ac := &awsv1alpha1.AccountClaim{}
 	acString, err := client.getClusterResource(clusterID, "aws_account_claim")
 	if err != nil {
@@ -76,7 +78,7 @@ func (client ocmClient) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.Accou
 
 // GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name
 // Returns a v1.Cluster object or an error
-func (client ocmClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+func (client Client) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 	q := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", identifier)
 	resp, err := client.conn.ClustersMgmt().V1().Clusters().List().Search(q).Send()
 	if err != nil || resp.Error() != nil || resp.Status() != http.StatusOK {
@@ -92,7 +94,7 @@ func (client ocmClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 }
 
 // GetClusterDeployment gets the ClusterDeployment object for a given cluster
-func (client ocmClient) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error) {
+func (client Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error) {
 	cd := &hivev1.ClusterDeployment{}
 	cdString, err := client.getClusterResource(clusterID, "cluster_deployment")
 	if err != nil {
@@ -106,7 +108,7 @@ func (client ocmClient) GetClusterDeployment(clusterID string) (*hivev1.ClusterD
 }
 
 // getClusterResource allows to load different cluster resources
-func (client ocmClient) getClusterResource(clusterID string, resourceKey string) (string, error) {
+func (client Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
 
 	response, err := client.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
 	if err != nil {
@@ -116,7 +118,7 @@ func (client ocmClient) getClusterResource(clusterID string, resourceKey string)
 }
 
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog
-func (client ocmClient) SendCHGMServiceLog(cluster *v1.Cluster) error {
+func (client Client) SendCHGMServiceLog(cluster *v1.Cluster) error {
 	json, err := getServiceLogTemplate(sl_clusterHasGoneMissing)
 	if err != nil {
 		return fmt.Errorf("failed to get CHGM-SL template: %w", err)
@@ -129,8 +131,7 @@ func (client ocmClient) SendCHGMServiceLog(cluster *v1.Cluster) error {
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster
-func (client ocmClient) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Cluster) error {
-
+func (client Client) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Cluster) error {
 	builder := servicelog.NewLogEntry()
 	builder.Copy(le)
 	builder.ClusterUUID(cluster.ExternalID())
