@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ import (
 
 const (
 	accessKeyIDFilename       string = "aws_access_key_id"
-	secretAccessKeyIDFilename string = "aws_secret_access_key"
+	secretAccessKeyIDFilename string = "aws_secret_access_key" /* #nosec */
 	maxRetries                int    = 3
 )
 
@@ -76,15 +77,18 @@ func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) 
 
 // NewClientFrmFileCredentials creates a new client by reading credentials from a file
 func NewClientFrmFileCredentials(dir string, region string) (AwsClient, error) {
-	filepath := strings.TrimSuffix(dir, "/")
+	dir = strings.TrimSuffix(dir, "/")
+	dir = filepath.Clean(dir)
 
-	accessKeyBytes, err := ioutil.ReadFile(path.Join(filepath, accessKeyIDFilename))
+	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
+	accessKeyBytes, err := ioutil.ReadFile(accessKeyBytesPath)
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, filepath)
+		return AwsClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
 	}
-	secretKeyBytes, err := ioutil.ReadFile(path.Join(filepath, secretAccessKeyIDFilename))
+	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
+	secretKeyBytes, err := ioutil.ReadFile(secretKeyBytesPath)
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, filepath)
+		return AwsClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
 	}
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
