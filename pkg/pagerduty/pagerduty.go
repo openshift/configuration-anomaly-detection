@@ -2,9 +2,12 @@ package pagerduty
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"os"
 	"reflect"
 	"time"
 
@@ -113,9 +116,9 @@ func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
-		err := commonErrorHandling(err, sdkErr)
-		if err != nil {
-			return err
+		commonErr := commonErrorHandling(err, sdkErr)
+		if commonErr != nil {
+			return commonErr
 		}
 		if sdkErr.StatusCode == http.StatusNotFound {
 			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
@@ -141,9 +144,9 @@ func (p PagerDuty) GetAlerts(incidentID string) ([]Alert, error) {
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
-		err := commonErrorHandling(err, sdkErr)
-		if err != nil {
-			return nil, err
+		commonErr := commonErrorHandling(err, sdkErr)
+		if commonErr != nil {
+			return nil, commonErr
 		}
 		if sdkErr.StatusCode == http.StatusNotFound {
 			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
@@ -190,6 +193,78 @@ func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error
 	}
 
 	return internalBody.ClusterID, nil
+}
+
+// fileReader will wrap the os or fstest.MapFS stucts so we are not locked in
+type fileReader interface {
+	ReadFile(name string) ([]byte, error)
+}
+
+type RealFileReader struct{}
+
+func (_ RealFileReader) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+type WebhookPayloadToIncidentID struct {
+	Event struct {
+		Data struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	} `json:"event"`
+}
+
+// ExtractExternalIDFromPayload will retrieve the payloadFilePath and return the externalID
+func (p PagerDuty) ExtractExternalIDFromPayload(payloadFilePath string, reader fileReader) (string, error) {
+	data, err := readPayloadFile(payloadFilePath, reader)
+	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
+	if err != nil {
+		return "", fmt.Errorf("could not read the payloadFile: %w", err)
+	}
+	return p.ExtractExternalIDFromBytes(data)
+}
+
+// ExtractExternalIDFromBytes will return the externalID from the bytes[] data
+func (p PagerDuty) ExtractExternalIDFromBytes(data []byte) (string, error) {
+	var err error
+	w := WebhookPayloadToIncidentID{}
+	err = json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+	incidentID := w.Event.Data.ID
+	if incidentID == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID")}
+	}
+
+	alerts, err := p.GetAlerts(incidentID)
+	if err != nil {
+		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
+	}
+
+	// there should be only one alert
+	for _, a := range alerts {
+		// that one alert should have a valid ExternalID
+		if a.ExternalID != "" {
+			return a.ExternalID, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
+}
+
+// readPayloadFile is a temporary function soley responsible to retrieve the payload data from somewhere.
+// if we choose to pivot and use a different way of pulling the payload data we can change this function and ExtractExternalIDFromPayload inputs
+func readPayloadFile(payloadFilePath string, reader fileReader) ([]byte, error) {
+	data, err := reader.ReadFile(payloadFilePath)
+	if err != nil {
+		ok := isPathError(err)
+		if ok {
+			return nil, FileNotFoundErr{FilePath: payloadFilePath, Err: err}
+		}
+		return nil, err
+	}
+	return data, nil
 }
 
 // extractNotesFromBody will extract from map[string]interface{} the '.details.notes' while doing type checks
@@ -247,9 +322,9 @@ func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
-		err := commonErrorHandling(err, sdkErr)
-		if err != nil {
-			return err
+		commonErr := commonErrorHandling(err, sdkErr)
+		if commonErr != nil {
+			return commonErr
 		}
 	}
 
@@ -308,4 +383,9 @@ func (p PagerDuty) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
 		ExternalID: externalID,
 	}
 	return alert, nil
+}
+
+func isPathError(err error) bool {
+	_, ok := err.(*fs.PathError)
+	return ok
 }
