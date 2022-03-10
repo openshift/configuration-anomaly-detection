@@ -43,7 +43,9 @@ var ClusterMissingCmd = &cobra.Command{
 			return fmt.Errorf("could not start awsClient: %w", err)
 		}
 
-		_, err = ocm.New("")
+		// in this case it's ok if the envvar is empty
+		CAD_OCM_FILE_PATH := os.Getenv("CAD_OCM_FILE_PATH")
+		_, err = ocm.New(CAD_OCM_FILE_PATH)
 		if err != nil {
 			return fmt.Errorf("could not create ocm client: %w", err)
 		}
@@ -67,5 +69,5 @@ var (
 )
 
 func init() {
-	ClusterMissingCmd.Flags().StringVarP(&incidentID, "incident", "i", "", "the incident ID to do the operation on")
+	ClusterMissingCmd.Flags().StringVarP(&incidentID, "payload", "p", "", "The incident payload as recieved from the PagerDuty WebHook")
 }
