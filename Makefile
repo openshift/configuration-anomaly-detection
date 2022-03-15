@@ -79,5 +79,16 @@ isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true 
 coverage: hack/codecov.sh
 
 
+# not using the 'all' target to make the target independent
 .PHONY: validate
-validate: build generate generate-markdown isclean
+validate: build generate generate-markdown checks isclean
+
+# will hold all of the checks that will run on the repo. this can be extracted to a script if need be
+.PHONY: checks
+checks:  check-duplicate-error-messages
+
+# check-duplicate-error-messages will conform with 
+.PHONY: check-duplicate-error-messages
+check-duplicate-error-messages:
+	@(test $$(grep -Ir errors.New . | grep -v -e .*.md | wc -l) -eq 0) || (echo "please use fmt.Errorf and not errors.New" >&2 && exit 1)
+	@(test $$(grep -Ir 'fmt.Errorf("' . | grep -v -e './.git' -e .*.md | sed 's/\(.*\)\(fmt.Errorf.*\)/\2/' | sort | uniq -c | awk '$$1 != "1"' | wc -l) -eq 0) || (echo "There are duplicate error values, please consolidate them or make them unique" >&2 && exit 1)
