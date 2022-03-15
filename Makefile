@@ -1,26 +1,38 @@
 # Binaries used in Makefile
 bin/cobra:
-	GOBIN=$(PWD)/bin go install $(shell go list -m -f '{{ .Path}}/cobra@{{ .Version }}' github.com/spf13/cobra)
+	GOBIN=$(PWD)/bin go install -mod=readonly $(shell go list -m -f '{{ .Path}}/cobra@{{ .Version }}' github.com/spf13/cobra)
 
 cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
-	GOBIN=$(PWD)/cadctl go install $(PWD)/cadctl
+	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath $(PWD)/cadctl
+
+bin/gosec:
+	GOBIN=$(PWD)/bin go install -mod=readonly github.com/securego/gosec/v2/cmd/gosec@v2.10.0
+
+bin/golangci-lint:
+	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golangci/golangci-lint/cmd/golangci-lint@v1.44.2
 
 # Actions
 .DEFAULT_GOAL := all
 .PHONY: all
 all: build test
 
+# build uses the following Go flags:
+# -s -w for stripping the binary (making it smaller)
+# the extended flags are for enabling ELF hardening features. 
+# See also:  https://www.redhat.com/en/blog/hardening-elf-binaries-using-relocation-read-only-relro
+# -mod=readonly and -trimpath are for generating reproducible/verifiable binaries. See also: https://reproducible-builds.org/
+# For more information about -buildmode=pie https://www.redhat.com/en/blog/position-independent-executables-pie
 .PHONY: build
 build:
-	go build ./...
+	go build -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath ./...
 
 .PHONY: test
 test:
-	go test ./...
+	go test -race -mod=readonly ./...
 
 .PHONY: test-with-coverage
 test-with-coverage:
-	go test -cover ./...
+	go test -cover -mod=readonly ./...
 
 .PHONY: cadctl-install-local
 cadctl-install-local: cadctl/cadctl
@@ -37,6 +49,12 @@ cadctl-install-local-force:
 isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true to nullify
 	@(test "$(ALLOW_DIRTY_CHECKOUT)" != "false" || test 0 -eq $$(git status --porcelain | wc -l)) || (echo "Local git checkout is not clean, commit changes and try again." >&2 && exit 1)
 
-# not using the 'all' target to make the target independent
-.PHONY: ci-check
-ci-check: build test isclean
+.PHONY: coverage
+coverage: hack/codecov.sh
+
+.PHONY: lint
+lint: bin/golangci-lint
+	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+
+.PHONY: validate
+validate: build isclean

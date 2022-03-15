@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"time"
 
@@ -203,7 +204,11 @@ type fileReader interface {
 type RealFileReader struct{}
 
 func (_ RealFileReader) ReadFile(name string) ([]byte, error) {
-	return os.ReadFile(name)
+	target, err := os.ReadFile(filepath.Clean(name))
+	if err != nil {
+		return []byte{}, err
+	}
+	return target, nil
 }
 
 type WebhookPayloadToIncidentID struct {
