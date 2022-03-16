@@ -16,10 +16,12 @@ linters:
   enable:
     - deadcode
     - errcheck
+    - gocyclo
+    - gosec
     - gosimple
     - govet
-    - gosec
     - ineffassign
+    - misspell
     - staticcheck
     - structcheck
     - typecheck
