@@ -196,7 +196,7 @@ func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error
 	return internalBody.ClusterID, nil
 }
 
-// fileReader will wrap the os or fstest.MapFS stucts so we are not locked in
+// fileReader will wrap the os or fstest.MapFS structs so we are not locked in
 type fileReader interface {
 	ReadFile(name string) ([]byte, error)
 }
@@ -258,7 +258,7 @@ func (p PagerDuty) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
 }
 
-// readPayloadFile is a temporary function soley responsible to retrieve the payload data from somewhere.
+// readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.
 // if we choose to pivot and use a different way of pulling the payload data we can change this function and ExtractExternalIDFromPayload inputs
 func readPayloadFile(payloadFilePath string, reader fileReader) ([]byte, error) {
 	data, err := reader.ReadFile(payloadFilePath)

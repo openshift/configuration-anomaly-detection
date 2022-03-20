@@ -18,11 +18,11 @@ Wait a minute until it becomes available, then apply the rest:
 oc apply -f . 
 ```
 
-**Note**: The pipeline require a persistant storage. The pvc defined here only works for AWS, so for local testing on a crc a pvc with the same name should be created manually.
+**Note**: The pipeline require a persistent storage. The pvc defined here only works for AWS, so for local testing on a crc a pvc with the same name should be created manually.
 
 The CRs are going to be created in the `configuration-anomaly-detection` namespace.
 
-After applying the CRs, a Weblistner will be opened for triggereing pipelines. F.e. http://el-pipeline-event-listener.configuration-anomaly-detection.svc.cluster.local:8080 on CRC.
+After applying the CRs, a Weblistner will be opened for triggering pipelines. F.e. http://el-pipeline-event-listener.configuration-anomaly-detection.svc.cluster.local:8080 on CRC.
 
 ## Trigger a Pipeline Run
 

@@ -69,5 +69,5 @@ var (
 )
 
 func init() {
-	ClusterMissingCmd.Flags().StringVarP(&incidentID, "payload", "p", "", "The incident payload as recieved from the PagerDuty WebHook")
+	ClusterMissingCmd.Flags().StringVarP(&incidentID, "payload", "p", "", "The incident payload as received from the PagerDuty WebHook")
 }

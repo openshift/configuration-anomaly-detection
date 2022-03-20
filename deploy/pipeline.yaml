@@ -4,7 +4,7 @@
 # https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload
 
 # The Pipeline will use a pvc for pesistent storage of logs and outputs inbetween PipelineRuns.
-# The logs will be accessable over a simple dashboards
+# The logs will be accessible over a simple dashboards
 # Each step of the Pipeline will store in the following file structure:
 #   /logs/<clusterID>/<eventID>-<pipelineID>/<task>
 
