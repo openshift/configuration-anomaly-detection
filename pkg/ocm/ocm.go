@@ -74,7 +74,7 @@ func (client ocmClient) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.Accou
 	return ac, err
 }
 
-// GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name 
+// GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name
 // Returns a v1.Cluster object or an error
 func (client ocmClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 	q := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", identifier)
@@ -152,11 +152,18 @@ func (client ocmClient) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Clus
 
 // getServiceLogTemplate fetches a servicelog template from a url
 func getServiceLogTemplate(url string) (string, error) {
+	var err error
+	//#nosec G107 -- the url is hardcoded so no permutations can happen
 	resp, err := http.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("HTTP protocol error: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		internalErr := resp.Body.Close()
+		if internalErr != nil {
+			err = fmt.Errorf("could not close http body: %w", internalErr)
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("received bad http status code: %#v", resp)
 	}
@@ -164,7 +171,9 @@ func getServiceLogTemplate(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read body: %w", err)
 	}
-	return string(bodyBytes), nil
+
+	// as the defer can raise an error, returning the error here aswell
+	return string(bodyBytes), err
 }
 
 // newConfigFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
