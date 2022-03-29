@@ -103,7 +103,7 @@ func newConfigFromFile(ocmConfigFile string) (*sdkcfg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cfg == nil {
+	if cfg == nil || cfg == (&sdkcfg.Config{}) {
 		return nil, fmt.Errorf("not logged in")
 	}
 	return cfg, err
