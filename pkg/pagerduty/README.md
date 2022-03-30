@@ -34,14 +34,14 @@ INCIDENT_ID= # the ID pulled from the create command
 pd incident:resolve --ids ${INCIDENT_ID}
 ```
 
-## Recieving PagerDuty Webhook Messages
+## Receiving PagerDuty Webhook Messages
 
 ### Manual Testing
 #### Set up the WebHook
 To do this I needed to create a webhook https://support.pagerduty.com/docs/webhooks#add-a-v3-webhook-subscription
 and attach it to a schedule (I put all of the options on)
 
-#### Provide an http reciever to push the webhook data to
+#### Provide an http receiver to push the webhook data to
 
 then I installed https://ngrok.com/ on my machine and started it with 
 ```
@@ -55,7 +55,7 @@ this is what I plumbed to PD
 NGROK HAS NOT BEEN APPROVED BY THE SECURITY TEAM, DO NOT USE WITH PRODUCTION DATA
 TODO: find a better alternative
 
-#### Connect the http reciever to a local port to recieve the webhook data
+#### Connect the http receive to a local port to receive the webhook data
 then I used `nc` to retrieve the data:
 
 ```

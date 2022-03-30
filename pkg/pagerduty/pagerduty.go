@@ -196,7 +196,7 @@ func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error
 	return internalBody.ClusterID, nil
 }
 
-// fileReader will wrap the os or fstest.MapFS stucts so we are not locked in
+// fileReader will wrap the os or fstest.MapFS structs so we are not locked in
 type fileReader interface {
 	ReadFile(name string) ([]byte, error)
 }

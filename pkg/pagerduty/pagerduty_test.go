@@ -257,7 +257,7 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 
-		When("If the incident that is passed to the funcion doesn't exist", func() {
+		When("If the incident that is passed to the function doesn't exist", func() {
 			It("Should throw an error (404 notFound)", func() {
 				//Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
@@ -330,7 +330,7 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 
-		When("If the incident that is passed to the funcion doesn't exist", func() {
+		When("If the incident that is passed to the function doesn't exist", func() {
 			It("Should throw an error (404 notFound)", func() {
 				//Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
