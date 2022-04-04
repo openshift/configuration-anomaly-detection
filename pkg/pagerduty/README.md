@@ -4,16 +4,26 @@ Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the fun
 [embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetPDClient/ /^}$/)
 ```go
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient() (pagerduty.PagerDuty, error) {
-	CAD_PD, ok := os.LookupEnv("CAD_PD")
+func GetPDClient() (pagerduty.Client, error) {
+	cadPD, ok := os.LookupEnv("CAD_PD")
 	if !ok {
-		return pagerduty.PagerDuty{}, fmt.Errorf("could not load CAD_PD envvar")
+		return pagerduty.Client{}, fmt.Errorf("could not load CAD_PD envvar")
 	}
 
-	return pagerduty.NewWithToken(CAD_PD)
+	return pagerduty.NewWithToken(cadPD)
 }
 ```
 
+## make `cadctl` load PD creds
+### if you can `pagerduty-cli` installed
+you can run the oneliner:
+```
+export CAD_PD=$(jq  .subdomains[].legacyToken ~/.config/pagerduty-cli/config.json -r) 
+```
+and the token will be used
+
+### if you wish to load a token from the UI
+use the link to get an token, and bind it to the envvar https://support.pagerduty.com/docs/api-access-keys#generate-a-user-token-rest-api-key
 
 ## Manutally test on an incident
 

@@ -1,3 +1,4 @@
+// Package cmd holds the cadctl cobra data
 /*
 Copyright © 2022 Red Hat, Inc.
 

@@ -24,8 +24,8 @@ const (
 	pagerDutyTimeout = time.Second * 30
 )
 
-// PagerDuty will hold all of the required fields for any PagerDuty Operation
-type PagerDuty struct {
+// Client will hold all of the required fields for any Client Operation
+type Client struct {
 	// c is the PagerDuty client
 	c *sdk.Client
 	// currentUserEmail is the current logged in user's email
@@ -34,19 +34,19 @@ type PagerDuty struct {
 
 // NewWithToken is similar to New but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
-func NewWithToken(authToken string) (PagerDuty, error) {
+func NewWithToken(authToken string) (Client, error) {
 	c := sdk.NewClient(authToken)
 	return New(c)
 }
 
 // New will create a PagerDuty struct with all of the required fields
-func New(client *sdk.Client) (PagerDuty, error) {
+func New(client *sdk.Client) (Client, error) {
 	sdkUser, err := getCurrentUser(client)
 	if err != nil {
-		return PagerDuty{}, fmt.Errorf("could not create a new client: %w", err)
+		return Client{}, fmt.Errorf("could not create a new client: %w", err)
 	}
 
-	resp := PagerDuty{
+	resp := Client{
 		c:                client,
 		currentUserEmail: sdkUser.Email,
 	}
@@ -55,7 +55,7 @@ func New(client *sdk.Client) (PagerDuty, error) {
 }
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
-func (p PagerDuty) MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error {
+func (c Client) MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID: incidentID,
@@ -65,7 +65,7 @@ func (p PagerDuty) MoveToEscalationPolicy(incidentID string, escalationPolicyID 
 			},
 		},
 	}
-	err := p.manageIncident(o)
+	err := c.manageIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not update the escalation policy: %w", err)
 	}
@@ -73,7 +73,7 @@ func (p PagerDuty) MoveToEscalationPolicy(incidentID string, escalationPolicyID 
 }
 
 // AssignToUser will assign the incident to the provided user
-func (p PagerDuty) AssignToUser(incidentID string, userID string) error {
+func (c Client) AssignToUser(incidentID string, userID string) error {
 	o := []sdk.ManageIncidentsOptions{{
 		ID: incidentID,
 		Assignments: []sdk.Assignee{{
@@ -83,7 +83,7 @@ func (p PagerDuty) AssignToUser(incidentID string, userID string) error {
 			},
 		}},
 	}}
-	err := p.manageIncident(o)
+	err := c.manageIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not assign to user: %w", err)
 	}
@@ -91,14 +91,14 @@ func (p PagerDuty) AssignToUser(incidentID string, userID string) error {
 }
 
 // AcknowledgeIncident will acknowledge an incident
-func (p PagerDuty) AcknowledgeIncident(incidentID string) error {
+func (c Client) AcknowledgeIncident(incidentID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID:     incidentID,
 			Status: "acknowledged",
 		},
 	}
-	err := p.manageIncident(o)
+	err := c.manageIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not acknowledge the incident: %w", err)
 	}
@@ -106,14 +106,14 @@ func (p PagerDuty) AcknowledgeIncident(incidentID string) error {
 }
 
 // AddNote will add a note to an incident
-func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
+func (c Client) AddNote(incidentID string, noteContent string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
 
-	_, err := p.c.CreateIncidentNoteWithContext(ctx, incidentID, sdkNote)
+	_, err := c.c.CreateIncidentNoteWithContext(ctx, incidentID, sdkNote)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -135,13 +135,13 @@ func (p PagerDuty) AddNote(incidentID string, noteContent string) error {
 }
 
 // GetAlerts will retrieve the alerts for a specific incident
-func (p PagerDuty) GetAlerts(incidentID string) ([]Alert, error) {
+func (c Client) GetAlerts(incidentID string) ([]Alert, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
 	o := sdk.ListIncidentAlertsOptions{}
 
-	alerts, err := p.c.ListIncidentAlertsWithContext(ctx, incidentID, o)
+	alerts, err := c.c.ListIncidentAlertsWithContext(ctx, incidentID, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -160,7 +160,7 @@ func (p PagerDuty) GetAlerts(incidentID string) ([]Alert, error) {
 
 	res := []Alert{}
 	for _, alert := range alerts.Alerts {
-		localAlert, err := p.toLocalAlert(alert)
+		localAlert, err := c.toLocalAlert(alert)
 		if err != nil {
 			return nil, fmt.Errorf("could not convert alert toLocalAlert: %w", err)
 		}
@@ -171,7 +171,7 @@ func (p PagerDuty) GetAlerts(incidentID string) ([]Alert, error) {
 
 // ExtractIDFromCHGM extracts from an Alert body until an external ID
 // the function is a member function but doesn't use any of the other funcs / types in the PagerDuty struct
-func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
+func (Client) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
 	var err error
 
 	externalBody, err := extractNotesFromBody(data)
@@ -196,14 +196,16 @@ func (_ PagerDuty) ExtractIDFromCHGM(data map[string]interface{}) (string, error
 	return internalBody.ClusterID, nil
 }
 
-// fileReader will wrap the os or fstest.MapFS structs so we are not locked in
-type fileReader interface {
+// FileReader will wrap the os or fstest.MapFS structs so we are not locked in
+type FileReader interface {
 	ReadFile(name string) ([]byte, error)
 }
 
+// RealFileReader will allow for reading a file
 type RealFileReader struct{}
 
-func (_ RealFileReader) ReadFile(name string) ([]byte, error) {
+// ReadFile implements the Reader interface to allow for mocking this later
+func (RealFileReader) ReadFile(name string) ([]byte, error) {
 	target, err := os.ReadFile(filepath.Clean(name))
 	if err != nil {
 		return []byte{}, err
@@ -211,6 +213,7 @@ func (_ RealFileReader) ReadFile(name string) ([]byte, error) {
 	return target, nil
 }
 
+// WebhookPayloadToIncidentID is a generated struct used to extract the incident id out
 type WebhookPayloadToIncidentID struct {
 	Event struct {
 		Data struct {
@@ -220,17 +223,17 @@ type WebhookPayloadToIncidentID struct {
 }
 
 // ExtractExternalIDFromPayload will retrieve the payloadFilePath and return the externalID
-func (p PagerDuty) ExtractExternalIDFromPayload(payloadFilePath string, reader fileReader) (string, error) {
+func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
 	data, err := readPayloadFile(payloadFilePath, reader)
 	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
 	if err != nil {
 		return "", fmt.Errorf("could not read the payloadFile: %w", err)
 	}
-	return p.ExtractExternalIDFromBytes(data)
+	return c.ExtractExternalIDFromBytes(data)
 }
 
 // ExtractExternalIDFromBytes will return the externalID from the bytes[] data
-func (p PagerDuty) ExtractExternalIDFromBytes(data []byte) (string, error) {
+func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	var err error
 	w := WebhookPayloadToIncidentID{}
 	err = json.Unmarshal(data, &w)
@@ -242,7 +245,7 @@ func (p PagerDuty) ExtractExternalIDFromBytes(data []byte) (string, error) {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID")}
 	}
 
-	alerts, err := p.GetAlerts(incidentID)
+	alerts, err := c.GetAlerts(incidentID)
 	if err != nil {
 		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
 	}
@@ -260,7 +263,7 @@ func (p PagerDuty) ExtractExternalIDFromBytes(data []byte) (string, error) {
 
 // readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.
 // if we choose to pivot and use a different way of pulling the payload data we can change this function and ExtractExternalIDFromPayload inputs
-func readPayloadFile(payloadFilePath string, reader fileReader) ([]byte, error) {
+func readPayloadFile(payloadFilePath string, reader FileReader) ([]byte, error) {
 	data, err := reader.ReadFile(payloadFilePath)
 	if err != nil {
 		ok := isPathError(err)
@@ -320,10 +323,10 @@ type internalCHGMAlertBody struct {
 // manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
 // the reason we send an array instead of a single item is to be compatible with the sdk
 // the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
-func (p PagerDuty) manageIncident(o []sdk.ManageIncidentsOptions) error {
+func (c Client) manageIncident(o []sdk.ManageIncidentsOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
-	_, err := p.c.ManageIncidentsWithContext(ctx, p.currentUserEmail, o)
+	_, err := c.c.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -378,8 +381,8 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 }
 
 // toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
-func (p PagerDuty) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
-	externalID, err := p.ExtractIDFromCHGM(sdkAlert.Body)
+func (c Client) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
+	externalID, err := c.ExtractIDFromCHGM(sdkAlert.Body)
 	if err != nil {
 		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
 	}
