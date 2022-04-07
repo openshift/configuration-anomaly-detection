@@ -75,8 +75,8 @@ func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) 
 	}, nil
 }
 
-// NewClientFrmFileCredentials creates a new client by reading credentials from a file
-func NewClientFrmFileCredentials(dir string, region string) (AwsClient, error) {
+// NewClientFromFileCredentials creates a new client by reading credentials from a file
+func NewClientFromFileCredentials(dir string, region string) (AwsClient, error) {
 	dir = strings.TrimSuffix(dir, "/")
 	dir = filepath.Clean(dir)
 
