@@ -1,6 +1,19 @@
 # PagerDuty Package
 
 Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the functions it has
+[embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetPDClient/ /^}$/)
+```go
+// GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
+func GetPDClient() (pagerduty.PagerDuty, error) {
+	CAD_PD, ok := os.LookupEnv("CAD_PD")
+	if !ok {
+		return pagerduty.PagerDuty{}, fmt.Errorf("could not load CAD_PD envvar")
+	}
+
+	return pagerduty.NewWithToken(CAD_PD)
+}
+```
+
 
 ## Manutally test on an incident
 
