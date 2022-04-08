@@ -126,28 +126,30 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 	return response.Body().Resources()[resourceKey], nil
 }
 
-// SendCHGMServiceLog allows to send a cluster has gone missing servicelog
-func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) error {
-	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
+// SendCHGMServiceLog allows to send a cluster has gone missing servicelog.
+// On success it will return the sent service log entry.
+func (client Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
+	return client.sendServiceLog(client.newServiceLogBuilder(chgmServiceLog), cluster)
 }
 
-// sendServiceLog allows to send a generic servicelog to a cluster
-func (c Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) error {
+// sendServiceLog allows to send a generic servicelog to a cluster.
+// On success it will return the sent service log entry for further processing.
+func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) (*servicelog.LogEntry, error) {
 	builder.ClusterUUID(cluster.ExternalID())
 	builder.ClusterID(cluster.ID())
 	builder.SubscriptionID(cluster.Subscription().ID())
 	le, err := builder.Build()
 	if err != nil {
-		return fmt.Errorf("could not create post request: %w", err)
+		return nil, fmt.Errorf("could not create post request: %w", err)
 	}
 
 	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
 	request = request.Body(le)
 	resp, err := request.Send()
 	if err != nil {
-		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
+		return nil, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
-	return nil
+	return le, nil
 }
 
 // newServiceLogBuilder creates a service log template
