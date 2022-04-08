@@ -8,7 +8,6 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.1.1
 	github.com/onsi/gomega v1.18.1
-	github.com/openshift-online/ocm-cli v0.1.62
 	github.com/openshift-online/ocm-sdk-go v0.1.242
 	github.com/openshift/aws-account-operator/pkg/apis v0.0.0-20220225132100-6b3881514a02
 	github.com/openshift/hive/apis v0.0.0-20220225023448-bc126c582d02
@@ -44,7 +43,6 @@ require (
 	github.com/mailru/easyjson v0.7.0 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/openshift/api v0.0.0-20210216211028-bb81baaf35cd // indirect

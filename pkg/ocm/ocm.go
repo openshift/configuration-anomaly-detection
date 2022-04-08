@@ -8,7 +8,6 @@ import (
 	"os"
 
 	_ "github.com/golang/mock/mockgen/model"
-	sdkcfg "github.com/openshift-online/ocm-cli/pkg/config"
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -25,24 +24,26 @@ var (
 // currently we do not need to export the connection or the config, as we create the Client using the New func
 type Client struct {
 	conn *sdk.Connection
-	cfg  *sdkcfg.Config
 }
 
 // New will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
 func New(ocmConfigFile string) (Client, error) {
+	var err error
 	client := Client{}
-	cfg, err := newConfigFromFile(ocmConfigFile)
-	if err != nil {
-		return client, fmt.Errorf("failed to load config file: %w", err)
-	}
-	client.cfg = cfg
 
-	conn, err := client.cfg.Connection()
-	if err != nil {
-		return client, fmt.Errorf("can't create connection: %w", err)
+	if ocmConfigFile != "" {
+		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
+		if err != nil {
+			return client, err
+		}
 	}
-	client.conn = conn
+
+	client.conn, err = sdk.NewConnectionBuilder().Load(ocmConfigFile).Build()
+	if err != nil {
+		return client, fmt.Errorf("failed to create new OCM connection: %w", err)
+	}
+
 	return client, nil
 }
 
@@ -175,23 +176,4 @@ func getServiceLogTemplate(url string) (string, error) {
 
 	// as the defer can raise an error, returning the error here aswell
 	return string(bodyBytes), err
-}
-
-// newConfigFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
-func newConfigFromFile(ocmConfigFile string) (*sdkcfg.Config, error) {
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Load the configuration file from std path
-	cfg, err := sdkcfg.Load()
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil || cfg == (&sdkcfg.Config{}) {
-		return nil, fmt.Errorf("not logged in")
-	}
-	return cfg, err
 }
