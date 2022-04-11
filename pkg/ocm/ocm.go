@@ -3,9 +3,7 @@ package ocm
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
 
 	_ "github.com/golang/mock/mockgen/model"
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -16,9 +14,21 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
-var (
-	sl_clusterHasGoneMissing = "https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json"
-)
+type slTemplate struct {
+	Severity     string
+	ServiceName  string
+	Summary      string
+	Description  string
+	InternalOnly bool
+}
+
+var chgmServiceLog slTemplate = slTemplate{
+	Severity:     "Error",
+	ServiceName:  "SREManualAction",
+	Summary:      "Action required: cluster not checking in",
+	Description:  "Your cluster requires you to take action because it is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopping instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console.",
+	InternalOnly: false,
+}
 
 // Client is the ocm client with which we can run the commands
 // currently we do not need to export the connection or the config, as we create the Client using the New func
@@ -31,13 +41,6 @@ type Client struct {
 func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
-
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return client, err
-		}
-	}
 
 	client.conn, err = sdk.NewConnectionBuilder().Load(ocmConfigFile).Build()
 	if err != nil {
@@ -110,7 +113,6 @@ func (client Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDepl
 
 // getClusterResource allows to load different cluster resources
 func (client Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
-
 	response, err := client.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
 	if err != nil {
 		return "", err
@@ -120,21 +122,11 @@ func (client Client) getClusterResource(clusterID string, resourceKey string) (s
 
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog
 func (client Client) SendCHGMServiceLog(cluster *v1.Cluster) error {
-	json, err := getServiceLogTemplate(sl_clusterHasGoneMissing)
-	if err != nil {
-		return fmt.Errorf("failed to get CHGM-SL template: %w", err)
-	}
-	le, err := servicelog.UnmarshalLogEntry(json)
-	if err != nil {
-		return fmt.Errorf("failed to create SL message from json (%s): %w", json, err)
-	}
-	return client.sendServiceLog(le, cluster)
+	return client.sendServiceLog(client.newServiceLogBuilder(chgmServiceLog), cluster)
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster
-func (client Client) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Cluster) error {
-	builder := servicelog.NewLogEntry()
-	builder.Copy(le)
+func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) error {
 	builder.ClusterUUID(cluster.ExternalID())
 	builder.ClusterID(cluster.ID())
 	builder.SubscriptionID(cluster.Subscription().ID())
@@ -152,28 +144,15 @@ func (client Client) sendServiceLog(le *servicelog.LogEntry, cluster *v1.Cluster
 	return nil
 }
 
-// getServiceLogTemplate fetches a servicelog template from a url
-func getServiceLogTemplate(url string) (string, error) {
-	var err error
-	//#nosec G107 -- the url is hardcoded so no permutations can happen
-	resp, err := http.Get(url)
-	if err != nil {
-		return "", fmt.Errorf("HTTP protocol error: %w", err)
-	}
-	defer func() {
-		internalErr := resp.Body.Close()
-		if internalErr != nil {
-			err = fmt.Errorf("could not close http body: %w", internalErr)
-		}
-	}()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("received bad http status code: %#v", resp)
-	}
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read body: %w", err)
-	}
-
-	// as the defer can raise an error, returning the error here aswell
-	return string(bodyBytes), err
+// newServiceLogBuilder creates a service log template
+func (client Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder {
+	builder := servicelog.NewLogEntry()
+	// it does not work if we use servicelog.SeverityError directly, because SeverityError
+	// is lower-case and the service log API wants it in upper-case.
+	builder.Severity(servicelog.Severity(sl.Severity))
+	builder.ServiceName(sl.ServiceName)
+	builder.Summary(sl.Summary)
+	builder.Description(sl.Description)
+	builder.InternalOnly(sl.InternalOnly)
+	return builder
 }

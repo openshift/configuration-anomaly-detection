@@ -5,9 +5,18 @@ Use the `ocm.New` to create an OCM client. It will provide functions to interact
 [embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetOCMClient/ /^}$/)
 ```go
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (ocm.OcmClient, error) {
-	// in this case it's ok if the envvar is empty
+func GetOCMClient() (ocm.Client, error) {
 	CAD_OCM_FILE_PATH := os.Getenv("CAD_OCM_FILE_PATH")
+
+	_, err := os.Stat(CAD_OCM_FILE_PATH)
+	if os.IsNotExist(err) {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return ocm.Client{}, err
+		}
+		CAD_OCM_FILE_PATH = filepath.Join(configDir, "/ocm/ocm.json")
+	}
+
 	return ocm.New(CAD_OCM_FILE_PATH)
 }
 ```

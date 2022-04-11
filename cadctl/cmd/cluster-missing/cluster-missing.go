@@ -18,6 +18,7 @@ package clustermissing
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -52,8 +53,17 @@ var ClusterMissingCmd = &cobra.Command{
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
 func GetOCMClient() (ocm.Client, error) {
-	// in this case it's ok if the envvar is empty
 	CAD_OCM_FILE_PATH := os.Getenv("CAD_OCM_FILE_PATH")
+
+	_, err := os.Stat(CAD_OCM_FILE_PATH)
+	if os.IsNotExist(err) {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return ocm.Client{}, err
+		}
+		CAD_OCM_FILE_PATH = filepath.Join(configDir, "/ocm/ocm.json")
+	}
+
 	return ocm.New(CAD_OCM_FILE_PATH)
 }
 

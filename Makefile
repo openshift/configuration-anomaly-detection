@@ -26,7 +26,7 @@ all: build lint test generate-markdown
 # -mod=readonly and -trimpath are for generating reproducible/verifiable binaries. See also: https://reproducible-builds.org/
 # For more information about -buildmode=pie https://www.redhat.com/en/blog/position-independent-executables-pie
 .PHONY: build
-build:
+build: cadctl-install-local-force
 	go build -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath ./...
 
 .PHONY: test
