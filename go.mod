@@ -8,12 +8,14 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/onsi/ginkgo/v2 v2.1.1
 	github.com/onsi/gomega v1.18.1
-	github.com/openshift-online/ocm-sdk-go v0.1.242
+	github.com/openshift-online/ocm-sdk-go v0.1.258
 	github.com/openshift/aws-account-operator/pkg/apis v0.0.0-20220225132100-6b3881514a02
 	github.com/openshift/hive/apis v0.0.0-20220225023448-bc126c582d02
 	github.com/spf13/cobra v1.3.0
 	gopkg.in/yaml.v2 v2.4.0
 )
+
+require github.com/mitchellh/go-homedir v1.1.0 // indirect
 
 require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -45,7 +47,9 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/openshift-online/ocm-cli v0.1.62
 	github.com/openshift/api v0.0.0-20210216211028-bb81baaf35cd // indirect
+	github.com/openshift/rosa v1.1.12
 	github.com/prometheus/client_golang v1.9.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.15.0 // indirect
