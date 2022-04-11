@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 
 	_ "github.com/golang/mock/mockgen/model"
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -16,7 +15,7 @@ import (
 )
 
 type slTemplate struct {
-	Severity     servicelog.Severity
+	Severity     string
 	ServiceName  string
 	Summary      string
 	Description  string
@@ -24,7 +23,7 @@ type slTemplate struct {
 }
 
 var chgmServiceLog slTemplate = slTemplate{
-	Severity:     servicelog.SeverityError,
+	Severity:     "Error",
 	ServiceName:  "SREManualAction",
 	Summary:      "Action required: cluster not checking in",
 	Description:  "Your cluster requires you to take action because it is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopping instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console.",
@@ -42,13 +41,6 @@ type Client struct {
 func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
-
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return client, err
-		}
-	}
 
 	client.conn, err = sdk.NewConnectionBuilder().Load(ocmConfigFile).Build()
 	if err != nil {
@@ -155,6 +147,8 @@ func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster
 // newServiceLogBuilder creates a service log template
 func (client Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder {
 	builder := servicelog.NewLogEntry()
+	// it does not work if we use servicelog.SeverityError directly, because SeverityError
+	// is lower-case and the service log API wants it in upper-case.
 	builder.Severity(servicelog.Severity(sl.Severity))
 	builder.ServiceName(sl.ServiceName)
 	builder.Summary(sl.Summary)
