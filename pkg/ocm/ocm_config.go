@@ -7,11 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/golang/glog"
-	"github.com/mitchellh/go-homedir"
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	"github.com/openshift/rosa/pkg/debug"
-	"github.com/openshift/rosa/pkg/info"
 )
 
 // Config is the type used to store the configuration of the client.
@@ -77,7 +73,7 @@ func Location() (path string, err error) {
 	}
 
 	// Determine home directory to use for the legacy file path
-	home, err := homedir.Dir()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
@@ -101,25 +97,9 @@ func Location() (path string, err error) {
 
 // Connection creates a connection using this configuration.
 func (c *Config) Connection() (connection *sdk.Connection, err error) {
-	// Create the logger:
-	level := glog.Level(1)
-	if debug.Enabled() {
-		level = glog.Level(0)
-	}
-	logger, err := sdk.NewGlogLoggerBuilder().
-		DebugV(level).
-		InfoV(level).
-		WarnV(level).
-		Build()
-	if err != nil {
-		return
-	}
-
 	// Prepare the builder for the connection adding only the properties that have explicit
 	// values in the configuration, so that default values won't be overridden:
 	builder := sdk.NewConnectionBuilder()
-	builder.Logger(logger)
-	builder.Agent("OCM-CLI/" + info.Version)
 	if c.TokenURL != "" {
 		builder.TokenURL(c.TokenURL)
 	}
