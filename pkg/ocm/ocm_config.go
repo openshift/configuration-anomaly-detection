@@ -39,7 +39,6 @@ func Load() (cfg *Config, err error) {
 	_, err = os.Stat(file)
 	if os.IsNotExist(err) {
 		cfg = &Config{}
-		err = nil
 		return
 	}
 	if err != nil {
