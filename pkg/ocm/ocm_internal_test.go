@@ -41,7 +41,7 @@ var _ = Describe("OCM Internal", func() {
 				configLocation = "invalid"
 			})
 			It("should return an empty configuration", func() {
-				Expect(config).To(Equal(&Config{}))
+				Expect(config).To(BeNil())
 			})
 		})
 
