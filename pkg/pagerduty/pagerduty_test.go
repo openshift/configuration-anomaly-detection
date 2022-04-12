@@ -19,7 +19,7 @@ var _ = Describe("Pagerduty", func() {
 		mux        *http.ServeMux
 		server     *httptest.Server
 		client     *sdk.Client
-		p          pagerduty.PagerDuty
+		p          pagerduty.Client
 		incidentID string
 	)
 	BeforeEach(func() {
@@ -51,7 +51,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The authentication token that is sent is invalid", func() {
 			It("Should throw an error (401 unauthorized)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.WriteHeader(http.StatusUnauthorized)
@@ -66,7 +66,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If sent input parameters are invalid", func() {
 			It("Should throw an error (400 badRequest)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
@@ -85,7 +85,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The Escalation policy has successfully changed", func() {
 			It("Doesn't trigger an error", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					fmt.Fprint(w, `{}`)
@@ -108,7 +108,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The authentication token that is sent is invalid", func() {
 			It("Should throw an error (401 unauthorized)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.WriteHeader(http.StatusUnauthorized)
@@ -123,7 +123,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If sent input parameters are invalid", func() {
 			It("Should throw an error (400 badRequest)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
@@ -142,7 +142,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The Assigned User has successfully changed", func() {
 			It("Doesn't trigger an error", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					fmt.Fprint(w, `{}`)
@@ -162,7 +162,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The authentication token that is sent is invalid", func() {
 			It("Should throw an error (401 unauthorized)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.WriteHeader(http.StatusUnauthorized)
@@ -177,7 +177,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If sent input parameters are invalid", func() {
 			It("Should throw an error (400 badRequest)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
@@ -196,7 +196,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The incident has successfully acknowledged", func() {
 			It("Doesn't trigger an error", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
 					fmt.Fprint(w, `{}`)
@@ -223,7 +223,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The authentication token that is sent is invalid", func() {
 			It("Should throw an error (401 unauthorized)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("POST"))
 					w.Header().Set("Content-Type", "application/json")
@@ -240,7 +240,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If sent input parameters are invalid", func() {
 			It("Should throw an error (400 badRequest)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("POST"))
 					w.Header().Set("Content-Type", "application/json")
@@ -259,7 +259,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If the incident that is passed to the function doesn't exist", func() {
 			It("Should throw an error (404 notFound)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("POST"))
 					w.WriteHeader(http.StatusNotFound)
@@ -275,7 +275,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The incident note was successfully added", func() {
 			It("Doesn't trigger an error", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("POST"))
 					fmt.Fprint(w, `{}`)
@@ -296,7 +296,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The authentication token that is sent is invalid", func() {
 			It("Should throw an error (401 unauthorized)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
@@ -313,7 +313,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If sent input parameters are invalid", func() {
 			It("Should throw an error (400 badRequest)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
@@ -332,7 +332,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("If the incident that is passed to the function doesn't exist", func() {
 			It("Should throw an error (404 notFound)", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
@@ -350,7 +350,7 @@ var _ = Describe("Pagerduty", func() {
 
 		When("The incident alerts (CHGM format) were successfully pulled", func() {
 			It("Doesn't trigger an error and extracts the correct data out", func() {
-				//Arrange
+				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					// CHGM format of
 					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"notes":"cluster_id: 123456"}}}]}`)

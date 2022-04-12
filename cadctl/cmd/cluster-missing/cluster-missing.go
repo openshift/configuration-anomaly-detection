@@ -1,3 +1,4 @@
+// Package clustermissing holds the cluster-missing command
 /*
 Copyright © 2022 Red Hat, Inc.
 
@@ -21,8 +22,9 @@ import (
 	"path/filepath"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	"github.com/spf13/cobra"
 )
 
@@ -30,70 +32,100 @@ import (
 var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
 	Short: "Will remediate the cluster-missing alert",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE:  run,
+}
 
-		_, err := GetAWSClient()
-		if err != nil {
-			return fmt.Errorf("could not start awsClient: %w", err)
-		}
+func run(cmd *cobra.Command, args []string) error {
 
-		_, err = GetOCMClient()
-		if err != nil {
-			return fmt.Errorf("could not create ocm client: %w", err)
-		}
+	awsClient, err := GetAWSClient()
+	if err != nil {
+		return fmt.Errorf("could not start awsClient: %w", err)
+	}
 
-		_, err = GetPDClient()
-		if err != nil {
-			return fmt.Errorf("could not start pagerdutyClient: %w", err)
-		}
+	ocmClient, err := GetOCMClient()
+	if err != nil {
+		return fmt.Errorf("could not create ocm client: %w", err)
+	}
 
+	_, err = GetPDClient()
+	if err != nil {
+		return fmt.Errorf("could not start pagerdutyClient: %w", err)
+	}
+
+	chgmClient := chgm.Client{
+		Service: chgm.Provider{
+			AwsClient: awsClient,
+			OcmClient: ocmClient,
+		},
+	}
+
+	res, err := chgmClient.InvestigateInstances(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
+	}
+
+	fmt.Printf("the returned struct is %#v\n", res)
+
+	if res.UserAuthorized {
+		fmt.Println("The node shutdown was not the customer. Nothing to do.")
 		return nil
-	},
+	}
+
+	// written this way so I can quickly detect if res is true of false
+	fmt.Println("USER INITIATED SHUTDOWN")
+
+	return nil
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
 func GetOCMClient() (ocm.Client, error) {
-	CAD_OCM_FILE_PATH := os.Getenv("CAD_OCM_FILE_PATH")
+	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
-	_, err := os.Stat(CAD_OCM_FILE_PATH)
+	_, err := os.Stat(cadOcmFilePath)
 	if os.IsNotExist(err) {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
 			return ocm.Client{}, err
 		}
-		CAD_OCM_FILE_PATH = filepath.Join(configDir, "/ocm/ocm.json")
+		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
 	}
 
-	return ocm.New(CAD_OCM_FILE_PATH)
+	return ocm.New(cadOcmFilePath)
 }
 
 // GetAWSClient will retrieve the AwsClient from the 'aws' package
-func GetAWSClient() (aws.AwsClient, error) {
-	AWS_ACCESS_KEY_ID, hasAWS_ACCESS_KEY_ID := os.LookupEnv("AWS_ACCESS_KEY_ID")
-	AWS_SECRET_ACCESS_KEY, hasAWS_SECRET_ACCESS_KEY := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-	AWS_SESSION_TOKEN, hasAWS_SESSION_TOKEN := os.LookupEnv("AWS_SESSION_TOKEN")
-	AWS_DEFAULT_REGION, hasAWS_DEFAULT_REGION := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAWS_ACCESS_KEY_ID || !hasAWS_SECRET_ACCESS_KEY || !hasAWS_SESSION_TOKEN || !hasAWS_DEFAULT_REGION {
-		return aws.AwsClient{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
+func GetAWSClient() (aws.Client, error) {
+	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
+	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
+	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
+	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
+	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey || !hasAwsSessionToken || !hasAwsDefaultRegion {
+		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
 	}
 
-	return aws.NewClient(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION)
+	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
 }
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient() (pagerduty.PagerDuty, error) {
-	CAD_PD, ok := os.LookupEnv("CAD_PD")
+func GetPDClient() (pagerduty.Client, error) {
+	cadPD, ok := os.LookupEnv("CAD_PD")
 	if !ok {
-		return pagerduty.PagerDuty{}, fmt.Errorf("could not load CAD_PD envvar")
+		return pagerduty.Client{}, fmt.Errorf("could not load CAD_PD envvar")
 	}
 
-	return pagerduty.NewWithToken(CAD_PD)
+	return pagerduty.NewWithToken(cadPD)
 }
 
 var (
-	incidentID string
+	externalClusterID string
 )
 
 func init() {
-	ClusterMissingCmd.Flags().StringVarP(&incidentID, "payload", "p", "", "The incident payload as received from the PagerDuty WebHook")
+	const externalClusterIDFlagName = "external-id"
+	ClusterMissingCmd.Flags().StringVarP(&externalClusterID, externalClusterIDFlagName, "e", externalClusterID, "the external clusterid extracted from the payload")
+	err := ClusterMissingCmd.MarkFlagRequired(externalClusterIDFlagName)
+	// as this is the init, cannot bubble the error up nicely
+	if err != nil {
+		panic(fmt.Errorf("could not parse required arg %s: %w", externalClusterIDFlagName, err))
+	}
 }

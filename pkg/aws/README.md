@@ -40,16 +40,16 @@ In your code, you can import envvars like in this example:
 [embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetAWSClient/ /^}$/)
 ```go
 // GetAWSClient will retrieve the AwsClient from the 'aws' package
-func GetAWSClient() (aws.AwsClient, error) {
-	AWS_ACCESS_KEY_ID, hasAWS_ACCESS_KEY_ID := os.LookupEnv("AWS_ACCESS_KEY_ID")
-	AWS_SECRET_ACCESS_KEY, hasAWS_SECRET_ACCESS_KEY := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-	AWS_SESSION_TOKEN, hasAWS_SESSION_TOKEN := os.LookupEnv("AWS_SESSION_TOKEN")
-	AWS_DEFAULT_REGION, hasAWS_DEFAULT_REGION := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAWS_ACCESS_KEY_ID || !hasAWS_SECRET_ACCESS_KEY || !hasAWS_SESSION_TOKEN || !hasAWS_DEFAULT_REGION {
-		return aws.AwsClient{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
+func GetAWSClient() (aws.Client, error) {
+	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
+	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
+	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
+	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
+	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey || !hasAwsSessionToken || !hasAwsDefaultRegion {
+		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
 	}
 
-	return aws.NewClient(AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_SESSION_TOKEN, AWS_DEFAULT_REGION)
+	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
 }
 ```
 

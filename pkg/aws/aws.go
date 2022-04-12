@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,30 +19,36 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
-	_ "github.com/golang/mock/mockgen/model"
+	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 const (
 	accessKeyIDFilename       string = "aws_access_key_id"
-	secretAccessKeyIDFilename string = "aws_secret_access_key" /* #nosec */
+	secretAccessKeyIDFilename string = "aws_secret_access_key" /* #nosec G101 -- this is just the fileName, not a key*/
 	maxRetries                int    = 3
+	backoffUpperLimit                = 5 * time.Minute
 )
 
-//go:generate mockgen -destination mock/stsmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
-//go:generate mockgen -destination mock/ec2mock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
-//go:generate mockgen -destination mock/cloudtrailmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
+var (
+	stopInstanceDateRegex = regexp.MustCompile(`\(([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}.*)\)`)
+)
 
-// AwsClient is a representation of the AWS Client
-type AwsClient struct {
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/ec2mock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/cloudtrailmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
+
+// Client is a representation of the AWS Client
+type Client struct {
 	Region           string
 	StsClient        stsiface.STSAPI
 	Ec2Client        ec2iface.EC2API
 	CloudTrailClient cloudtrailiface.CloudTrailAPI
 }
 
-// New creates a new client and is used when we already know the secrets and region,
+// NewClient creates a new client and is used when we already know the secrets and region,
 // without any need to do any lookup.
-func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) {
+func NewClient(accessID, accessSecret, token, region string) (Client, error) {
 	awsConfig := &aws.Config{
 		Region:                        aws.String(region),
 		Credentials:                   credentials.NewStaticCredentials(accessID, accessSecret, token),
@@ -54,20 +61,20 @@ func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) 
 
 	s, err := session.NewSession(awsConfig)
 	if err != nil {
-		return AwsClient{}, err
+		return Client{}, err
 	}
 
 	ec2Sess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return AwsClient{}, err
+		return Client{}, err
 	}
 
 	cloudTrailSess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return AwsClient{}, err
+		return Client{}, err
 	}
 
-	return AwsClient{
+	return Client{
 		Region:           *aws.String(region),
 		StsClient:        sts.New(s),
 		Ec2Client:        ec2.New(ec2Sess),
@@ -76,19 +83,19 @@ func NewClient(accessID, accessSecret, token, region string) (AwsClient, error) 
 }
 
 // NewClientFromFileCredentials creates a new client by reading credentials from a file
-func NewClientFromFileCredentials(dir string, region string) (AwsClient, error) {
+func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 	dir = strings.TrimSuffix(dir, "/")
 	dir = filepath.Clean(dir)
 
 	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
 	accessKeyBytes, err := ioutil.ReadFile(accessKeyBytesPath)
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
+		return Client{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
 	}
 	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
 	secretKeyBytes, err := ioutil.ReadFile(secretKeyBytesPath)
 	if err != nil {
-		return AwsClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
+		return Client{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
 	}
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
@@ -96,16 +103,16 @@ func NewClientFromFileCredentials(dir string, region string) (AwsClient, error) 
 }
 
 // AssumeRole returns you a new client in the account specified in the roleARN
-func (a AwsClient) AssumeRole(roleARN, region string) (AwsClient, error) {
+func (c Client) AssumeRole(roleARN, region string) (Client, error) {
 	input := &sts.AssumeRoleInput{
 		RoleArn: &roleARN,
 	}
-	out, err := a.StsClient.AssumeRole(input)
+	out, err := c.StsClient.AssumeRole(input)
 	if err != nil {
-		return AwsClient{}, err
+		return Client{}, err
 	}
 	if region == "" {
-		region = a.Region
+		region = c.Region
 	}
 	return NewClient(*out.Credentials.AccessKeyId,
 		*out.Credentials.SecretAccessKey,
@@ -114,10 +121,10 @@ func (a AwsClient) AssumeRole(roleARN, region string) (AwsClient, error) {
 }
 
 // ListRunningInstances lists all running or starting instances that belong to a cluster
-func (a *AwsClient) ListRunningInstances(infraId string) ([]*ec2.Instance, error) {
+func (c Client) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
-			Name:   aws.String("tag:kubernetes.io/cluster/" + infraId),
+			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
 			Values: []*string{aws.String("owned")},
 		},
 		{
@@ -125,44 +132,49 @@ func (a *AwsClient) ListRunningInstances(infraId string) ([]*ec2.Instance, error
 			Values: []*string{aws.String("running"), aws.String("pending")},
 		},
 	}
-	return a.listInstancesWithFilter(filters)
+	return c.listInstancesWithFilter(filters)
 }
 
 // ListStoppedInstances lists all stopped instances that belong to a cluster
-func (a *AwsClient) ListStoppedInstances(infraId string) ([]*ec2.Instance, error) {
+func (c Client) ListStoppedInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
-			Name:   aws.String("tag:kubernetes.io/cluster/" + infraId),
+			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
 			Values: []*string{aws.String("owned")},
 		},
 		{
-			Name:   aws.String("instance-state-name"),
-			Values: []*string{aws.String("stopped")},
+			Name: aws.String("instance-state-name"),
+			Values: []*string{
+				aws.String("stopped"),
+				aws.String("stopping"),
+				aws.String("terminated"),
+				aws.String("terminating"),
+			},
 		},
 	}
-	return a.listInstancesWithFilter(filters)
+	return c.listInstancesWithFilter(filters)
 }
 
 // ListInstances lists all stopped instances that belong to a cluster
-func (a *AwsClient) ListInstances(infraId string) ([]*ec2.Instance, error) {
+func (c Client) ListInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
-			Name:   aws.String("tag:kubernetes.io/cluster/" + infraId),
+			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
 			Values: []*string{aws.String("owned")},
 		},
 	}
-	return a.listInstancesWithFilter(filters)
+	return c.listInstancesWithFilter(filters)
 }
 
 // listInstancesWithFilter will return a list of ec2 instance by applying a filter
-func (a *AwsClient) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance, error) {
+func (c Client) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance, error) {
 	in := &ec2.DescribeInstancesInput{
 		Filters: filters,
 	}
 
 	instances := []*ec2.Instance{}
 	for {
-		out, err := a.Ec2Client.DescribeInstances(in)
+		out, err := c.Ec2Client.DescribeInstances(in)
 		if err != nil {
 			return []*ec2.Instance{}, err
 		}
@@ -177,21 +189,159 @@ func (a *AwsClient) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Insta
 	return instances, nil
 }
 
-// ListStopInstancesEvents lists StopInstances events from CloudTrail
-func (a AwsClient) ListStopInstancesEvents() ([]*cloudtrail.Event, error) {
+// PollInstanceStopEventsFor will poll the ListAllInstanceStopEvents, and retry on various cases
+// the returned events are unique per instance and are the most up to date that exist
+func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error) {
+	if len(instances) == 0 {
+		return nil, nil
+	}
+
+	backoffoptions := wait.Backoff{
+		Duration: 2 * time.Second,
+		Factor:   2,
+		Steps:    retryTimes,
+		// How much variance will there be
+		Jitter: 0.01,
+		Cap:    backoffUpperLimit,
+	}
+
+	events := []*cloudtrail.Event{}
+
+	idToStopTime, err := populateStopTime(instances)
+	if err != nil {
+		return nil, fmt.Errorf("could not populate the idToCloudtrailEvent map: %w", err)
+	}
+
+	var executionError error
+	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
+		executionError = nil
+		idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
+
+		localStopEvents, err := c.ListAllInstanceStopEvents()
+		if err != nil {
+			executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
+			return false, nil
+		}
+		localTerminatedEvents, err := c.ListAllTerminatedInstances()
+		if err != nil {
+			executionError = fmt.Errorf("an error occurred in ListAAllTerminatedInstances: %w", err)
+			return false, nil
+		}
+
+		localEvents := []*cloudtrail.Event{}
+		localEvents = append(localEvents, localStopEvents...)
+		localEvents = append(localEvents, localTerminatedEvents...)
+
+		for _, event := range localEvents {
+			instanceID := *event.Resources[0].ResourceName
+
+			storedEvent, ok := idToCloudtrailEvent[instanceID]
+			if !ok {
+				idToCloudtrailEvent[instanceID] = event
+				continue
+			}
+			if storedEvent.EventTime.Before(*event.EventTime) {
+				idToCloudtrailEvent[instanceID] = event
+			}
+
+		}
+		for _, instance := range instances {
+			instanceID := *instance.InstanceId
+			event, ok := idToCloudtrailEvent[instanceID]
+			if !ok {
+				executionError = fmt.Errorf("the stopped instance %s does not have a StopInstanceEvent", instanceID)
+				return false, nil
+			}
+			// not checking if the item is in the array as it's a 1-1 mapping
+			extractedTime := idToStopTime[instanceID]
+
+			if event.EventTime.Before(extractedTime) {
+				executionError = fmt.Errorf("most up to date time is before the instance stopped time")
+				return false, nil
+			}
+		}
+
+		for _, event := range idToCloudtrailEvent {
+			events = append(events, event)
+		}
+
+		return true, nil
+	})
+
+	if err != nil || executionError != nil {
+		if executionError == nil {
+			return nil, fmt.Errorf("command failed after a pollTimeout of %v: %w", backoffUpperLimit, err)
+		}
+		return nil, fmt.Errorf("command failed after a pollTimeout of %v: %v: %w", backoffUpperLimit, err, executionError)
+	}
+
+	return events, nil
+}
+
+func populateStopTime(instances []*ec2.Instance) (map[string]time.Time, error) {
+	idToStopTime := make(map[string]time.Time)
+	for _, instance := range instances {
+		instanceID := *instance.InstanceId
+		if instance.StateTransitionReason == nil || *instance.StateTransitionReason == "" {
+			return nil, fmt.Errorf("StateTransitionReason is missing for instance %s, is required", instanceID)
+		}
+		rawReason := *instance.StateTransitionReason
+		extractedTime, err := getTime(rawReason)
+		if err != nil {
+			return nil, fmt.Errorf("could not extract date for instance %s: %w", *instance.InstanceId, err)
+		}
+		// not checking if the item is in the array as it's a 1-1 mapping
+		idToStopTime[instanceID] = extractedTime
+	}
+	return idToStopTime, nil
+
+}
+
+func getTime(rawReason string) (time.Time, error) {
+	submatches := stopInstanceDateRegex.FindStringSubmatch(rawReason)
+	if submatches == nil || len(submatches) < 2 {
+		return time.Time{}, fmt.Errorf("did not find matches: raw data %s", rawReason)
+	}
+	if len(submatches) != 2 {
+		return time.Time{}, fmt.Errorf("found too many matches: raw data %s", rawReason)
+	}
+
+	// the time format is this specific time as based on the time code (choosing a different time for the format might break the code)
+	extractedTime, err := time.Parse("2006-01-02 15:04:05 MST", submatches[1])
+	if err != nil {
+		return time.Time{}, fmt.Errorf("could not parse the time %s: %w", submatches[1], err)
+	}
+
+	return extractedTime, nil
+}
+
+// ListAllInstanceStopEvents lists StopInstances events from CloudTrail
+func (c Client) ListAllInstanceStopEvents() ([]*cloudtrail.Event, error) {
+	att := &cloudtrail.LookupAttribute{
+		AttributeKey:   aws.String("EventName"),
+		AttributeValue: aws.String("StopInstances"),
+	}
+	return c.listAllInstancesAttribute(att)
+}
+
+// ListAllTerminatedInstances lists TerminatedInstances events from CloudTrail
+func (c Client) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
+	att := &cloudtrail.LookupAttribute{
+		AttributeKey:   aws.String("EventName"),
+		AttributeValue: aws.String("TerminatedInstances"),
+	}
+	return c.listAllInstancesAttribute(att)
+}
+
+func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*cloudtrail.Event, error) {
 	in := &cloudtrail.LookupEventsInput{
-		LookupAttributes: []*cloudtrail.LookupAttribute{
-			{
-				AttributeKey:   aws.String("EventName"),
-				AttributeValue: aws.String("StopInstances"),
-			},
-		},
+		LookupAttributes: []*cloudtrail.LookupAttribute{att},
 	}
 	events := []*cloudtrail.Event{}
 	for {
-		out, err := a.CloudTrailClient.LookupEvents(in)
+		out, err := c.CloudTrailClient.LookupEvents(in)
 		if err != nil {
-			return []*cloudtrail.Event{}, err
+			return nil, err
 		}
 		nextToken := out.NextToken
 		events = append(events, out.Events...)

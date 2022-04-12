@@ -16,7 +16,7 @@ func (i InvalidTokenErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ InvalidTokenErr) Is(target error) bool {
+func (InvalidTokenErr) Is(target error) bool {
 	_, ok := target.(InvalidTokenErr)
 	return ok
 }
@@ -34,7 +34,7 @@ func (i InvalidInputParamsErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ InvalidInputParamsErr) Is(target error) bool {
+func (InvalidInputParamsErr) Is(target error) bool {
 	_, ok := target.(InvalidInputParamsErr)
 	return ok
 }
@@ -51,7 +51,7 @@ func (i IncidentNotFoundErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ IncidentNotFoundErr) Is(target error) bool {
+func (IncidentNotFoundErr) Is(target error) bool {
 	_, ok := target.(IncidentNotFoundErr)
 	return ok
 }
@@ -92,7 +92,7 @@ func (a AlertBodyExternalParseErr) Error() string {
 type AlertBodyDoesNotHaveNotesFieldErr struct{}
 
 // Error prints data (to conform to the other errors in the package
-func (_ AlertBodyDoesNotHaveNotesFieldErr) Error() string {
+func (AlertBodyDoesNotHaveNotesFieldErr) Error() string {
 	err := fmt.Errorf("decoded resource does not have a .details.notes field, stopping")
 	return err.Error()
 }
@@ -101,7 +101,7 @@ func (_ AlertBodyDoesNotHaveNotesFieldErr) Error() string {
 type AlertNotesDoesNotHaveClusterIDFieldErr struct{}
 
 // Error prints data (to conform to the other errors in the package
-func (_ AlertNotesDoesNotHaveClusterIDFieldErr) Error() string {
+func (AlertNotesDoesNotHaveClusterIDFieldErr) Error() string {
 	err := fmt.Errorf("decoded internal resource does not have '.cluster_id' field , stopping")
 	return err.Error()
 }
@@ -112,13 +112,13 @@ type NotesParseErr struct {
 }
 
 // Error prints the wrapped error and the original one
-func (i NotesParseErr) Error() string {
-	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBodyd: %w", i.Err)
+func (n NotesParseErr) Error() string {
+	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBodyd: %w", n.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (_ NotesParseErr) Is(target error) bool {
+func (NotesParseErr) Is(target error) bool {
 	_, ok := target.(NotesParseErr)
 	return ok
 }
@@ -136,7 +136,7 @@ func (f FileNotFoundErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i FileNotFoundErr) Is(target error) bool {
+func (f FileNotFoundErr) Is(target error) bool {
 	_, ok := target.(FileNotFoundErr)
 	return ok
 }
@@ -153,7 +153,7 @@ func (u UnmarshalErr) Error() string {
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (i UnmarshalErr) Is(target error) bool {
+func (u UnmarshalErr) Is(target error) bool {
 	_, ok := target.(UnmarshalErr)
 	return ok
 }

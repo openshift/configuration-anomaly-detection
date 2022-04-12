@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	_ "github.com/golang/mock/mockgen/model"
+	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -23,7 +23,7 @@ type slTemplate struct {
 	InternalOnly bool
 }
 
-var chgmServiceLog slTemplate = slTemplate{
+var chgmServiceLog = slTemplate{
 	Severity:     "Error",
 	ServiceName:  "SREManualAction",
 	Summary:      "Action required: cluster not checking in",
@@ -57,8 +57,8 @@ func New(ocmConfigFile string) (Client, error) {
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster
-func (client Client) GetSupportRoleARN(clusterID string) (string, error) {
-	claim, err := client.GetAWSAccountClaim(clusterID)
+func (c Client) GetSupportRoleARN(clusterID string) (string, error) {
+	claim, err := c.GetAWSAccountClaim(clusterID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get account claim: %w", err)
 	}
@@ -73,9 +73,9 @@ func (client Client) GetSupportRoleARN(clusterID string) (string, error) {
 }
 
 // GetAWSAccountClaim gets the AWS Account Claim object for a given cluster
-func (client Client) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountClaim, error) {
+func (c Client) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountClaim, error) {
 	ac := &awsv1alpha1.AccountClaim{}
-	acString, err := client.getClusterResource(clusterID, "aws_account_claim")
+	acString, err := c.getClusterResource(clusterID, "aws_account_claim")
 	if err != nil {
 		return ac, fmt.Errorf("client failed to load AWS AccountClaim: %w", err)
 	}
@@ -88,9 +88,9 @@ func (client Client) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountC
 
 // GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name
 // Returns a v1.Cluster object or an error
-func (client Client) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+func (c Client) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 	q := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", identifier)
-	resp, err := client.conn.ClustersMgmt().V1().Clusters().List().Search(q).Send()
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().List().Search(q).Send()
 	if err != nil || resp.Error() != nil || resp.Status() != http.StatusOK {
 		return nil, fmt.Errorf("received error while fetch ClusterInfo from ocm: %w with resp %#v", err, resp)
 	}
@@ -104,9 +104,9 @@ func (client Client) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 }
 
 // GetClusterDeployment gets the ClusterDeployment object for a given cluster
-func (client Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error) {
+func (c Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error) {
 	cd := &hivev1.ClusterDeployment{}
-	cdString, err := client.getClusterResource(clusterID, "cluster_deployment")
+	cdString, err := c.getClusterResource(clusterID, "cluster_deployment")
 	if err != nil {
 		return cd, fmt.Errorf("client failed to load ClusterDeployment: %w", err)
 	}
@@ -118,8 +118,8 @@ func (client Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDepl
 }
 
 // getClusterResource allows to load different cluster resources
-func (client Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
-	response, err := client.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
+func (c Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
+	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
 	if err != nil {
 		return "", err
 	}
@@ -127,12 +127,12 @@ func (client Client) getClusterResource(clusterID string, resourceKey string) (s
 }
 
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog
-func (client Client) SendCHGMServiceLog(cluster *v1.Cluster) error {
-	return client.sendServiceLog(client.newServiceLogBuilder(chgmServiceLog), cluster)
+func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) error {
+	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster
-func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) error {
+func (c Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) error {
 	builder.ClusterUUID(cluster.ExternalID())
 	builder.ClusterID(cluster.ID())
 	builder.SubscriptionID(cluster.Subscription().ID())
@@ -141,7 +141,7 @@ func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster
 		return fmt.Errorf("could not create post request: %w", err)
 	}
 
-	request := client.conn.ServiceLogs().V1().ClusterLogs().Add()
+	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
 	request = request.Body(le)
 	resp, err := request.Send()
 	if err != nil {
@@ -151,7 +151,7 @@ func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster
 }
 
 // newServiceLogBuilder creates a service log template
-func (client Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder {
+func (c Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder {
 	builder := servicelog.NewLogEntry()
 	// it does not work if we use servicelog.SeverityError directly, because SeverityError
 	// is lower-case and the service log API wants it in upper-case.

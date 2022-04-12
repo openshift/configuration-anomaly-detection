@@ -11,8 +11,15 @@ bin/golangci-lint:
 bin/gosec:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/securego/gosec/v2/cmd/gosec@v2.10.0
 
+bin/mockgen:
+	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golang/mock/mockgen@v1.6.0
+
 cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
 	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath $(PWD)/cadctl
+
+## make all binaries be used before any other commands
+# Required as mockgen is running without a relative path
+export PATH := $(PWD)/bin:$(PATH)
 
 # Actions
 .DEFAULT_GOAL := all
@@ -40,6 +47,10 @@ lint: bin/golangci-lint
 .PHONY: test-with-race
 test-with-race:
 	go test -race ./...
+
+.PHONY: generate
+generate: bin/mockgen
+	go generate -mod=readonly ./...
 
 .PHONY: test-with-coverage
 test-with-coverage:
@@ -72,4 +83,4 @@ coverage: hack/codecov.sh
 
 
 .PHONY: validate
-validate: build isclean
+validate: build generate generate-markdown isclean
