@@ -15,7 +15,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require github.com/mitchellh/go-homedir v1.1.0 // indirect
+require github.com/mitchellh/go-homedir v1.1.0
 
 require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
@@ -32,7 +32,7 @@ require (
 	github.com/go-openapi/swag v0.19.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
-	github.com/golang/glog v1.0.0 // indirect
+	github.com/golang/glog v1.0.0
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/google/go-querystring v1.0.0 // indirect
@@ -47,7 +47,6 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/openshift-online/ocm-cli v0.1.62
 	github.com/openshift/api v0.0.0-20210216211028-bb81baaf35cd // indirect
 	github.com/openshift/rosa v1.1.12
 	github.com/prometheus/client_golang v1.9.0 // indirect

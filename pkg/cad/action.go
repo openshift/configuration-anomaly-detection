@@ -4,6 +4,9 @@ import (
 	"fmt"
 )
 
+//go:generate mockgen -destination mock/pagerduty.go -package $GOPACKAGE github.com/openshift/configuration-anomaly-detection/pkg/cad PagerDuty
+
+// PagerDuty provides an interface for mockups for PagerDuty specific functions
 type PagerDuty interface {
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
