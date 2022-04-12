@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 
 	_ "github.com/golang/mock/mockgen/model"
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -42,7 +43,12 @@ func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
 
-	client.conn, err = sdk.NewConnectionBuilder().Load(ocmConfigFile).Build()
+	cfg, err := newConfigFromFile(ocmConfigFile)
+	if err != nil {
+		return client, fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	client.conn, err = cfg.Connection()
 	if err != nil {
 		return client, fmt.Errorf("failed to create new OCM connection: %w", err)
 	}
@@ -155,4 +161,23 @@ func (client Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBui
 	builder.Description(sl.Description)
 	builder.InternalOnly(sl.InternalOnly)
 	return builder
+}
+
+// newConfigFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
+func newConfigFromFile(ocmConfigFile string) (*Config, error) {
+	if ocmConfigFile != "" {
+		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Load the configuration file from std path
+	cfg, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil || cfg == (&Config{}) {
+		return nil, fmt.Errorf("not logged in")
+	}
+	return cfg, err
 }
