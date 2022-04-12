@@ -143,7 +143,7 @@ func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster
 		return nil, fmt.Errorf("could not create post request: %w", err)
 	}
 
-	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
+	request := client.conn.ServiceLogs().V1().ClusterLogs().Add()
 	request = request.Body(le)
 	resp, err := request.Send()
 	if err != nil {
