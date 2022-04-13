@@ -11,7 +11,8 @@ import (
 	ec2 "github.com/aws/aws-sdk-go/service/ec2"
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	v10 "github.com/openshift/hive/apis/hive/v1"
+	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
+	v11 "github.com/openshift/hive/apis/hive/v1"
 )
 
 // MockService is a mock of Service interface.
@@ -37,11 +38,25 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 	return m.recorder
 }
 
+// AddNote mocks base method.
+func (m *MockService) AddNote(incidentID, noteContent string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddNote", incidentID, noteContent)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddNote indicates an expected call of AddNote.
+func (mr *MockServiceMockRecorder) AddNote(incidentID, noteContent interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNote", reflect.TypeOf((*MockService)(nil).AddNote), incidentID, noteContent)
+}
+
 // GetClusterDeployment mocks base method.
-func (m *MockService) GetClusterDeployment(clusterID string) (*v10.ClusterDeployment, error) {
+func (m *MockService) GetClusterDeployment(clusterID string) (*v11.ClusterDeployment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterDeployment", clusterID)
-	ret0, _ := ret[0].(*v10.ClusterDeployment)
+	ret0, _ := ret[0].(*v11.ClusterDeployment)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -65,6 +80,34 @@ func (m *MockService) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 func (mr *MockServiceMockRecorder) GetClusterInfo(identifier interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockService)(nil).GetClusterInfo), identifier)
+}
+
+// GetEscalationPolicy mocks base method.
+func (m *MockService) GetEscalationPolicy() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetEscalationPolicy")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetEscalationPolicy indicates an expected call of GetEscalationPolicy.
+func (mr *MockServiceMockRecorder) GetEscalationPolicy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEscalationPolicy", reflect.TypeOf((*MockService)(nil).GetEscalationPolicy))
+}
+
+// GetSilentPolicy mocks base method.
+func (m *MockService) GetSilentPolicy() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSilentPolicy")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetSilentPolicy indicates an expected call of GetSilentPolicy.
+func (mr *MockServiceMockRecorder) GetSilentPolicy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSilentPolicy", reflect.TypeOf((*MockService)(nil).GetSilentPolicy))
 }
 
 // ListRunningInstances mocks base method.
@@ -97,6 +140,20 @@ func (mr *MockServiceMockRecorder) ListStoppedInstances(infraID interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStoppedInstances", reflect.TypeOf((*MockService)(nil).ListStoppedInstances), infraID)
 }
 
+// MoveToEscalationPolicy mocks base method.
+func (m *MockService) MoveToEscalationPolicy(incidentID, escalationPolicyID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MoveToEscalationPolicy", incidentID, escalationPolicyID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MoveToEscalationPolicy indicates an expected call of MoveToEscalationPolicy.
+func (mr *MockServiceMockRecorder) MoveToEscalationPolicy(incidentID, escalationPolicyID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToEscalationPolicy", reflect.TypeOf((*MockService)(nil).MoveToEscalationPolicy), incidentID, escalationPolicyID)
+}
+
 // PollInstanceStopEventsFor mocks base method.
 func (m *MockService) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error) {
 	m.ctrl.T.Helper()
@@ -110,4 +167,19 @@ func (m *MockService) PollInstanceStopEventsFor(instances []*ec2.Instance, retry
 func (mr *MockServiceMockRecorder) PollInstanceStopEventsFor(instances, retryTimes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollInstanceStopEventsFor", reflect.TypeOf((*MockService)(nil).PollInstanceStopEventsFor), instances, retryTimes)
+}
+
+// SendCHGMServiceLog mocks base method.
+func (m *MockService) SendCHGMServiceLog(cluster *v1.Cluster) (*v10.LogEntry, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendCHGMServiceLog", cluster)
+	ret0, _ := ret[0].(*v10.LogEntry)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SendCHGMServiceLog indicates an expected call of SendCHGMServiceLog.
+func (mr *MockServiceMockRecorder) SendCHGMServiceLog(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCHGMServiceLog", reflect.TypeOf((*MockService)(nil).SendCHGMServiceLog), cluster)
 }

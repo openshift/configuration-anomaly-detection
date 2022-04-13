@@ -8,11 +8,13 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -24,6 +26,9 @@ type AwsClient = aws.Client
 // OcmClient is a wrapper around the aws client, and is used to import the received functions into the Provider
 type OcmClient = ocm.Client
 
+// OcmClient is a wrapper around the aws client, and is used to import the received functions into the Provider
+type PdClient = pagerduty.Client
+
 // Provider should have all of the functions that ChgmService is implementing
 type Provider struct {
 	// having awsClient and ocmClient this way
@@ -34,6 +39,7 @@ type Provider struct {
 	// aws.AwsClient feel a bit redundant
 	AwsClient
 	OcmClient
+	PdClient
 }
 
 // This will generate mocks for the interfaces in this file
@@ -48,6 +54,12 @@ type Service interface {
 	// OCM
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
+	SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	// PD
+	AddNote(incidentID string, noteContent string) error
+	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
+	GetEscalationPolicy() string
+	GetSilentPolicy() string
 }
 
 // Client is an implementation of the Interface, and adds functionality above it
@@ -58,6 +70,8 @@ type Service interface {
 // TODO: decide if the Client should be the ChgmProvider
 type Client struct {
 	Service
+	cluster *v1.Cluster
+	cd      *hivev1.ClusterDeployment
 }
 
 // isUserAllowedToStop will verify if a user is allowed to stop instances.
@@ -106,22 +120,68 @@ type InvestigateInstancesOutput struct {
 	UserAuthorized      bool
 }
 
-// InvestigateInstances will check all of the instances under the externalID are running.
-// in case they are not it will make sure the stopped instances are correctly at this state.
-func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOutput, error) {
-	cluster, err := c.GetClusterInfo(externalID)
+// String implements the stringer interface for InvestigateInstancesOutput
+func (i InvestigateInstancesOutput) String() string {
+	msg, err := json.Marshal(&i)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve cluster info for %s: %w", externalID, err)
+		panic(fmt.Errorf("could not marshal: %w", err))
 	}
-	// fmt.Printf("cluster ::: %v\n", cluster)
-	id := cluster.ID()
+	return string(msg)
+}
 
-	cd, err := c.GetClusterDeployment(id)
-	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", id, err)
+func (c *Client) populateStuctWith(externalID string) error {
+	if c.cluster == nil {
+		cluster, err := c.GetClusterInfo(externalID)
+		if err != nil {
+			return fmt.Errorf("could not retrieve cluster info for %s: %w", externalID, err)
+		}
+		// fmt.Printf("cluster ::: %v\n", cluster)
+		c.cluster = cluster
+	}
+	id := c.cluster.ID()
+
+	if c.cd == nil {
+		cd, err := c.GetClusterDeployment(id)
+		if err != nil {
+			return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", id, err)
+		}
+		c.cd = cd
 	}
 	// fmt.Printf("cd ::: %v\n", cd)
-	infraID := cd.Spec.ClusterMetadata.InfraID
+	return nil
+}
+
+// InvestigateInstances will check all of the instances for the cluster are running.
+// in case they are not it will make sure the stopped instances are correctly at this state.
+func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOutput, error) {
+	err := c.populateStuctWith(externalID)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not populate the struct: %w", err)
+	}
+
+	return c.investigateInstances()
+}
+
+// SendServiceLog sends a service log to the corresponding cluster
+// We have to use this function as wrapper, because otherwise we have no access to the
+// cluster. The CHGM package does not export the cluster and cluster deployment yet.
+func (c Client) SendSeviceLog() error {
+	_, err := c.SendCHGMServiceLog(c.cluster)
+	if err != nil {
+		return fmt.Errorf("could not send service log for %s: %w", c.cluster.Name(), err)
+	}
+	return nil
+}
+
+// investigateInstances is the internal version of investigateInstances operating on the read-only
+// version of Client.
+func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
+
+	if c.cd == nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty, did not populate the instance before")
+	}
+
+	infraID := c.cd.Spec.ClusterMetadata.InfraID
 
 	stoppedInstances, err := c.ListStoppedInstances(infraID)
 	if err != nil {
@@ -168,6 +228,34 @@ func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOut
 	}
 
 	return output, nil
+}
+
+// EscalateAlert will ensure that an incident informs a SRE.
+// Optionally notes can be added to the incident
+func (c Client) EscalateAlert(incidentID, notes string) error {
+	return c.updatePagerduty(incidentID, notes, c.GetEscalationPolicy())
+}
+
+// SilenceAlert annotates the PagerDuty alert with the given notes and silences it via
+// assigning the "Silent Test" escalation policy
+func (c Client) SilenceAlert(incidentID, notes string) error {
+	return c.updatePagerduty(incidentID, notes, c.GetSilentPolicy())
+}
+
+// updatePagerduty attaches notes to an incident and moves it to a escalation policy
+func (c Client) updatePagerduty(incidentID, notes, escalationPolicy string) error {
+	if notes != "" {
+		err := c.AddNote(incidentID, notes)
+		if err != nil {
+			return fmt.Errorf("failed to attach notes to incident: %w", err)
+		}
+	}
+
+	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
+	if err != nil {
+		return fmt.Errorf("failed to change incident escalation policy: %w", err)
+	}
+	return nil
 }
 
 // CloudTrailEventRaw will help marshal the cloudtrail.Event.CloudTrailEvent string

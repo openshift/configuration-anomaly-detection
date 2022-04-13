@@ -30,7 +30,7 @@ func SilenceAlert(pd PagerDuty, incidentID, notes string) error {
 // updatePagerduty attaches notes to an incident and moves it to a escalation policy
 func updatePagerduty(pd PagerDuty, incidentID, notes, escalationPolicy string) error {
 	if notes != "" {
-		err := pd.AddNote(incidentID, notes)
+		err := pd.AddNote(incidentID, notes) // notes == service log
 		if err != nil {
 			return fmt.Errorf("failed to attach notes to incident: %w", err)
 		}

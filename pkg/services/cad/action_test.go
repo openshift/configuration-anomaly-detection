@@ -6,8 +6,8 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/openshift/configuration-anomaly-detection/pkg/cad"
-	mock "github.com/openshift/configuration-anomaly-detection/pkg/cad/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/cad"
+	mock "github.com/openshift/configuration-anomaly-detection/pkg/services/cad/mock"
 )
 
 var _ = Describe("CAD", func() {
