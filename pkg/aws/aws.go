@@ -105,7 +105,8 @@ func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 // AssumeRole returns you a new client in the account specified in the roleARN
 func (c Client) AssumeRole(roleARN, region string) (Client, error) {
 	input := &sts.AssumeRoleInput{
-		RoleArn: &roleARN,
+		RoleArn:         &roleARN,
+		RoleSessionName: aws.String("CAD"),
 	}
 	out, err := c.StsClient.AssumeRole(input)
 	if err != nil {
@@ -211,7 +212,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	if err != nil {
 		return nil, fmt.Errorf("could not populate the idToCloudtrailEvent map: %w", err)
 	}
-	fmt.Println("succesfully populateStopTime")
+	fmt.Println("successfully populateStopTime")
 
 	var executionError error
 	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
@@ -223,14 +224,14 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 			executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
 			return false, nil
 		}
-		fmt.Println("succesfully ListAllInstanceStopEvents")
+		fmt.Println("successfully ListAllInstanceStopEvents")
 
 		localTerminatedEvents, err := c.ListAllTerminatedInstances()
 		if err != nil {
 			executionError = fmt.Errorf("an error occurred in ListAAllTerminatedInstances: %w", err)
 			return false, nil
 		}
-		fmt.Println("succesfully ListAllTerminatedInstances")
+		fmt.Println("successfully ListAllTerminatedInstances")
 
 		localEvents := []*cloudtrail.Event{}
 		localEvents = append(localEvents, localStopEvents...)

@@ -118,5 +118,5 @@ yq e .items[].description  parsed-by-yq-webhook-payloads-from-test-pagerduty.yam
 
 to pull a specific json blob (the first one in this example
 ```
- yq '.items[0] | del(.description)'  parsed-by-yq-webhook-payloads-from-test-pagerduty.yaml -ojson | jq -c
+ yq '.items[0] | del(.description)'  parsed-by-yq-webhook-payloads-from-test-pagerduty.yaml -ojson | jq > ../../payload.json
 ```

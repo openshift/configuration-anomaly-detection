@@ -113,7 +113,7 @@ type NotesParseErr struct {
 
 // Error prints the wrapped error and the original one
 func (n NotesParseErr) Error() string {
-	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBodyd: %w", n.Err)
+	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBody: %w", n.Err)
 	return err.Error()
 }
 

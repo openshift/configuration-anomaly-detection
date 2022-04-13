@@ -15,8 +15,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 )
 
-require github.com/mitchellh/go-homedir v1.1.0 // indirect
-
 require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
@@ -47,9 +45,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/openshift-online/ocm-cli v0.1.62
 	github.com/openshift/api v0.0.0-20210216211028-bb81baaf35cd // indirect
-	github.com/openshift/rosa v1.1.12
 	github.com/prometheus/client_golang v1.9.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.15.0 // indirect
@@ -62,7 +58,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	k8s.io/api v0.20.0 // indirect
-	k8s.io/apimachinery v0.23.1 // indirect
+	k8s.io/apimachinery v0.23.1
 	k8s.io/klog/v2 v2.30.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b // indirect

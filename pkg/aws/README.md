@@ -45,8 +45,15 @@ func GetAWSClient() (aws.Client, error) {
 	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
 	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
 	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey || !hasAwsSessionToken || !hasAwsDefaultRegion {
-		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
+	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
+		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
+	}
+	if !hasAwsSessionToken {
+		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
+	}
+	if !hasAwsDefaultRegion {
+		fmt.Println("setting AWS_DEFAULT_REGION to a default value")
+		awsDefaultRegion = "us-east-1"
 	}
 
 	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
