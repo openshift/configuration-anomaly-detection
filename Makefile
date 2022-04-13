@@ -15,7 +15,7 @@ bin/mockgen:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golang/mock/mockgen@v1.6.0
 
 cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
-	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath $(PWD)/cadctl
+	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w" -mod=readonly -trimpath $(PWD)/cadctl
 
 ## make all binaries be used before any other commands
 # Required as mockgen is running without a relative path
@@ -28,13 +28,10 @@ all: build lint test generate-markdown
 
 # build uses the following Go flags:
 # -s -w for stripping the binary (making it smaller)
-# the extended flags are for enabling ELF hardening features. 
-# See also:  https://www.redhat.com/en/blog/hardening-elf-binaries-using-relocation-read-only-relro
 # -mod=readonly and -trimpath are for generating reproducible/verifiable binaries. See also: https://reproducible-builds.org/
-# For more information about -buildmode=pie https://www.redhat.com/en/blog/position-independent-executables-pie
 .PHONY: build
 build: cadctl-install-local-force
-	go build -ldflags="-s -w -extldflags=-zrelro -extldflags=-znow" -buildmode=pie -mod=readonly -trimpath ./...
+	go build -ldflags="-s -w" -mod=readonly -trimpath ./...
 
 .PHONY: test
 test:
