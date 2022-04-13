@@ -113,6 +113,8 @@ func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOut
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve cluster info for %s: %w", externalID, err)
 	}
+	fmt.Println("succesfully GetClusterInfo")
+
 	// fmt.Printf("cluster ::: %v\n", cluster)
 	id := cluster.ID()
 
@@ -120,6 +122,8 @@ func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOut
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", id, err)
 	}
+	fmt.Println("succesfully GetClusterDeployment")
+
 	// fmt.Printf("cd ::: %v\n", cd)
 	infraID := cd.Spec.ClusterMetadata.InfraID
 
@@ -127,6 +131,8 @@ func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOut
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve stopped instances for %s: %w", infraID, err)
 	}
+	fmt.Println("succesfully ListStoppedInstances")
+
 	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)
 
 	if len(stoppedInstances) == 0 {
@@ -137,6 +143,8 @@ func (c Client) InvestigateInstances(externalID string) (InvestigateInstancesOut
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
 	}
+	fmt.Println("succesfully PollInstanceStopEventsFor")
+
 	// fmt.Printf("stoppedInstancesEvents ::: %#v\n", stoppedInstancesEvents)
 
 	if len(stoppedInstancesEvents) == 0 {

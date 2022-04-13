@@ -24,6 +24,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	"github.com/spf13/cobra"
 )
@@ -47,14 +48,37 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not create ocm client: %w", err)
 	}
 
-	_, err = GetPDClient()
+	pdClient, err := GetPDClient()
 	if err != nil {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
 
-	chgmClient := chgm.Client{
+	externalClusterID, err := pdClient.ExtractExternalIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("GetExternalID failed on: %w", err)
+	}
+
+	arClient := assumerole.Client{
 		Service: chgm.Provider{
 			AwsClient: awsClient,
+			OcmClient: ocmClient,
+		},
+	}
+	cadJumprole, hasCadJumprole := os.LookupEnv("CAD_JUMPROLE")
+	if !hasCadJumprole {
+		return fmt.Errorf("CAD_JUMPROLE is missing")
+
+	}
+
+	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cadJumprole)
+	if err != nil {
+		return fmt.Errorf("could not AssumeSupportRoleChain: %w", err)
+	}
+
+	// building twice to override the awsClient
+	chgmClient := chgm.Client{
+		Service: chgm.Provider{
+			AwsClient: customerAwsClient,
 			OcmClient: ocmClient,
 		},
 	}
@@ -67,7 +91,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Printf("the returned struct is %#v\n", res)
 
 	if res.UserAuthorized {
-		fmt.Println("The node shutdown was not the customer. Nothing to do.")
+		fmt.Println("The node shutdown was not the customer. Should alert SRE")
 		return nil
 	}
 
@@ -117,15 +141,15 @@ func GetPDClient() (pagerduty.Client, error) {
 }
 
 var (
-	externalClusterID string
+	payloadPath string = "./payload.json"
 )
 
 func init() {
-	const externalClusterIDFlagName = "external-id"
-	ClusterMissingCmd.Flags().StringVarP(&externalClusterID, externalClusterIDFlagName, "e", externalClusterID, "the external clusterid extracted from the payload")
-	err := ClusterMissingCmd.MarkFlagRequired(externalClusterIDFlagName)
+	const payloadPathFlagName = "payload-path"
+	ClusterMissingCmd.Flags().StringVarP(&payloadPath, payloadPathFlagName, "p", payloadPath, "the path to the payload")
+	err := ClusterMissingCmd.MarkFlagRequired(payloadPathFlagName)
 	// as this is the init, cannot bubble the error up nicely
 	if err != nil {
-		panic(fmt.Errorf("could not parse required arg %s: %w", externalClusterIDFlagName, err))
+		panic(fmt.Errorf("could not parse required arg %s: %w", payloadPathFlagName, err))
 	}
 }

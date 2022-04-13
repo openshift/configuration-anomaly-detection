@@ -211,6 +211,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	if err != nil {
 		return nil, fmt.Errorf("could not populate the idToCloudtrailEvent map: %w", err)
 	}
+	fmt.Println("succesfully populateStopTime")
 
 	var executionError error
 	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
@@ -222,11 +223,14 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 			executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
 			return false, nil
 		}
+		fmt.Println("succesfully ListAllInstanceStopEvents")
+
 		localTerminatedEvents, err := c.ListAllTerminatedInstances()
 		if err != nil {
 			executionError = fmt.Errorf("an error occurred in ListAAllTerminatedInstances: %w", err)
 			return false, nil
 		}
+		fmt.Println("succesfully ListAllTerminatedInstances")
 
 		localEvents := []*cloudtrail.Event{}
 		localEvents = append(localEvents, localStopEvents...)
@@ -252,6 +256,8 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 				executionError = fmt.Errorf("the stopped instance %s does not have a StopInstanceEvent", instanceID)
 				return false, nil
 			}
+			fmt.Println("event in idToCloudtrailEvent[instanceID]", instanceID)
+
 			// not checking if the item is in the array as it's a 1-1 mapping
 			extractedTime := idToStopTime[instanceID]
 
