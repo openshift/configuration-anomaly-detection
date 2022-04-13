@@ -9,4 +9,4 @@ spec:
     name: cad-checks-pipeline
   params:
     - name: payload
-      value: '{"event": {"id": "test"}}'
+      value: '{"event": {"data":{"id": "incidentid"}}}'
