@@ -80,5 +80,7 @@ func (c Client) AssumeSupportRoleChain(identifier, ccsJumpRole, supportRole stri
 		return aws.Client{}, fmt.Errorf("5 failed to assume into support-role: %w", err)
 	}
 
+	fmt.Printf("Succesfully logged into customer account with role: %s\n", customerRole)
+
 	return customerClient, nil
 }

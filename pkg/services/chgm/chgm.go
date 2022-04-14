@@ -103,7 +103,7 @@ func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraI
 		return true
 	}
 
-	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
+	return assumedRoleOfName("O2rganizationAccountAccessRole", userDetails)
 }
 
 // UserInfo will hold the extracted user details
@@ -187,7 +187,6 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve stopped instances for %s: %w", infraID, err)
 	}
-	fmt.Println("successfully ListStoppedInstances")
 
 	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)
 
@@ -199,7 +198,6 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
 	}
-	fmt.Println("successfully PollInstanceStopEventsFor")
 
 	// fmt.Printf("stoppedInstancesEvents ::: %#v\n", stoppedInstancesEvents)
 
@@ -249,12 +247,13 @@ func (c Client) SilenceAlert(incidentID, notes string) error {
 // updatePagerduty attaches notes to an incident and moves it to a escalation policy
 func (c Client) updatePagerduty(incidentID, notes, escalationPolicy string) error {
 	if notes != "" {
+		fmt.Printf("Attaching Note %s\n", notes)
 		err := c.AddNote(incidentID, notes)
 		if err != nil {
 			return fmt.Errorf("failed to attach notes to incident: %w", err)
 		}
 	}
-
+	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
 	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
 	if err != nil {
 		return fmt.Errorf("failed to change incident escalation policy: %w", err)

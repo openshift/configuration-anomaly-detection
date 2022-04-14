@@ -38,6 +38,13 @@ var ClusterMissingCmd = &cobra.Command{
 
 func run(cmd *cobra.Command, args []string) error {
 
+	fmt.Println("Running CAD with webhook payload:")
+	data, err := os.ReadFile(payloadPath)
+	if err != nil {
+		return fmt.Errorf("Failed to read webhook payload: %w", err)
+	}
+	fmt.Printf("%s\n", string(data))
+	
 	awsClient, err := GetAWSClient()
 	if err != nil {
 		return fmt.Errorf("could not start awsClient: %w", err)
@@ -52,16 +59,19 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
+	
+	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("GetIncidentID failed on: %w", err)
+	}
+	fmt.Printf("Incident ID is: %s\n", incidentID)
 
 	externalClusterID, err := pdClient.ExtractExternalIDFromPayload(payloadPath, pagerduty.RealFileReader{})
 	if err != nil {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
 	}
 
-	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
-	if err != nil {
-		return fmt.Errorf("GetIncidentID failed on: %w", err)
-	}
+	fmt.Printf("ClusterExternalID is: %s\n", externalClusterID)
 
 	arClient := assumerole.Client{
 		Service: chgm.Provider{
@@ -90,15 +100,18 @@ func run(cmd *cobra.Command, args []string) error {
 		Service: chgm.Provider{
 			AwsClient: customerAwsClient,
 			OcmClient: ocmClient,
+			PdClient: pdClient,
 		},
 	}
+
+	fmt.Println("Starting Cloud Provider investigation...")
 
 	res, err := chgmClient.InvestigateInstances(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
 	}
 
-	fmt.Printf("the returned struct is %#v\n", res)
+	fmt.Printf("the investigation returned %#v\n", res)
 
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
@@ -109,11 +122,13 @@ func run(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	fmt.Println("Sending CHGM ServiceLog...")
 	err = chgmClient.SendServiceLog()
 	if err != nil {
 		return fmt.Errorf("failed sending service log during before silencing the alert: %w", err)
 	}
 
+	fmt.Println("Silencing Alert...")
 	err = chgmClient.SilenceAlert(incidentID, res.String())
 	if err != nil {
 		return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
@@ -122,6 +137,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Println("USER INITIATED SHUTDOWN")
 
 	return nil
+	
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
@@ -153,7 +169,6 @@ func GetAWSClient() (aws.Client, error) {
 		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
 	}
 	if !hasAwsDefaultRegion {
-		fmt.Println("setting AWS_DEFAULT_REGION to a default value")
 		awsDefaultRegion = "us-east-1"
 	}
 
@@ -166,7 +181,7 @@ func GetPDClient() (pagerduty.Client, error) {
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
-	if !hasCadEscalationPolicy || !hasCadSilentPolicy || hasCadPD {
+	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
 		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD)' is missing")
 	}
 
