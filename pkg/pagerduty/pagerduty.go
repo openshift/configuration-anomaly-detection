@@ -259,6 +259,17 @@ func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader File
 	return c.ExtractExternalIDFromBytes(data)
 }
 
+// ExtractExternalIDFromPayload will retrieve the payloadFilePath and return the incidentID
+func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
+	data, err := readPayloadFile(payloadFilePath, reader)
+	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
+	if err != nil {
+		return "", fmt.Errorf("could not read the payloadFile: %w", err)
+	}
+	fmt.Println("successfully readPayloadFile")
+	return c.ExtractIncidentIDFromBytes(data)
+}
+
 // ExtractExternalIDFromBytes will return the externalID from the bytes[] data
 func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	var err error
@@ -271,7 +282,7 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	if incidentID == "" {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
 	}
-	fmt.Println("successfully extracted externalid")
+	fmt.Println("successfully extracted incidentID")
 
 	alerts, err := c.GetAlerts(incidentID)
 	if err != nil {
@@ -289,6 +300,22 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	}
 
 	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
+}
+
+// ExtractIncidentIDFromBytes will return the incidentID from the bytes[] data
+func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
+	var err error
+	w := WebhookPayloadToIncidentID{}
+	err = json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+	incidentID := w.Event.Data.ID
+	if incidentID == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
+	}
+	fmt.Println("successfully extracted incidentID")
+	return incidentID, nil
 }
 
 // readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.

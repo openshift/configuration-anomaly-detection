@@ -58,6 +58,11 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
 	}
 
+	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("GetIncidentID failed on: %w", err)
+	}
+
 	arClient := assumerole.Client{
 		Service: chgm.Provider{
 			AwsClient: awsClient,
