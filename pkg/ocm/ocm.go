@@ -128,13 +128,13 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog.
 // On success it will return the sent service log entry.
-func (client Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
-	return client.sendServiceLog(client.newServiceLogBuilder(chgmServiceLog), cluster)
+func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
+	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster.
 // On success it will return the sent service log entry for further processing.
-func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) (*servicelog.LogEntry, error) {
+func (c Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) (*servicelog.LogEntry, error) {
 	builder.ClusterUUID(cluster.ExternalID())
 	builder.ClusterID(cluster.ID())
 	builder.SubscriptionID(cluster.Subscription().ID())
@@ -143,7 +143,7 @@ func (client Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster
 		return nil, fmt.Errorf("could not create post request: %w", err)
 	}
 
-	request := client.conn.ServiceLogs().V1().ClusterLogs().Add()
+	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
 	request = request.Body(le)
 	resp, err := request.Send()
 	if err != nil {

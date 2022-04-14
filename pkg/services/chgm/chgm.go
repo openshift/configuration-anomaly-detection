@@ -23,10 +23,10 @@ import (
 // AwsClient is a wrapper around the aws client, and is used to import the received functions into the Provider
 type AwsClient = aws.Client
 
-// OcmClient is a wrapper around the aws client, and is used to import the received functions into the Provider
+// OcmClient is a wrapper around the ocm client, and is used to import the received functions into the Provider
 type OcmClient = ocm.Client
 
-// OcmClient is a wrapper around the aws client, and is used to import the received functions into the Provider
+// PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
 // Provider should have all of the functions that ChgmService is implementing
@@ -165,7 +165,7 @@ func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOu
 // SendServiceLog sends a service log to the corresponding cluster
 // We have to use this function as wrapper, because otherwise we have no access to the
 // cluster. The CHGM package does not export the cluster and cluster deployment yet.
-func (c Client) SendSeviceLog() error {
+func (c Client) SendServiceLog() error {
 	_, err := c.SendCHGMServiceLog(c.cluster)
 	if err != nil {
 		return fmt.Errorf("could not send service log for %s: %w", c.cluster.Name(), err)

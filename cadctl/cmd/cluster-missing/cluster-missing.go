@@ -76,7 +76,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	err = chgmClient.SendSeviceLog()
+	err = chgmClient.SendServiceLog()
 	if err != nil {
 		return fmt.Errorf("failed sending service log during before silencing the alert: %w", err)
 	}
