@@ -22,7 +22,7 @@ spec:
       file=${folder}/payload.json
       echo '$(params.payload)' > $file
       # run the cadctl command
-      RESULT=$(cadctl cluster-missing --payload $file )
+      RESULT=$(cadctl cluster-missing --payload-path $file )
     # envFrom should pull all of the secret information as envvars, so key names should be uppercase
     envFrom:
     - secretRef:
@@ -33,6 +33,8 @@ spec:
         secretKeyRef:
           name: cad-pd-token
           key: token
+    - name: CAD_JUMPROLE
+      value: XXXX
     - name: CAD_OCM_FILE_PATH
       # same value of volumeMounts[0].mountPath + the filename inside the secret
       value: /tmp/test/cad-ocm-token/ocm.json

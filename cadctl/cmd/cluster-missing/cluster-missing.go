@@ -24,6 +24,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	"github.com/spf13/cobra"
 )
@@ -52,11 +53,39 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
 
-	chgmClient := chgm.Client{
+	externalClusterID, err := pdClient.ExtractExternalIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("GetExternalID failed on: %w", err)
+	}
+
+	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("GetIncidentID failed on: %w", err)
+	}
+
+	arClient := assumerole.Client{
 		Service: chgm.Provider{
 			AwsClient: awsClient,
 			OcmClient: ocmClient,
 			PdClient:  pdClient,
+		},
+	}
+	cadJumprole, hasCadJumprole := os.LookupEnv("CAD_JUMPROLE")
+	if !hasCadJumprole {
+		return fmt.Errorf("CAD_JUMPROLE is missing")
+
+	}
+
+	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cadJumprole)
+	if err != nil {
+		return fmt.Errorf("could not AssumeSupportRoleChain: %w", err)
+	}
+
+	// building twice to override the awsClient
+	chgmClient := chgm.Client{
+		Service: chgm.Provider{
+			AwsClient: customerAwsClient,
+			OcmClient: ocmClient,
 		},
 	}
 
@@ -68,7 +97,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Printf("the returned struct is %#v\n", res)
 
 	if res.UserAuthorized {
-		fmt.Println("The node shutdown was not the customer. Nothing to do.")
+		fmt.Println("The node shutdown was not the customer. Should alert SRE")
 		err = chgmClient.EscalateAlert(incidentID, res.String())
 		if err != nil {
 			return fmt.Errorf("could not escalate the alert %s: %w", incidentID, err)
@@ -113,8 +142,15 @@ func GetAWSClient() (aws.Client, error) {
 	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
 	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
 	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey || !hasAwsSessionToken || !hasAwsDefaultRegion {
-		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_DEFAULT_REGION)' is missing")
+	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
+		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
+	}
+	if !hasAwsSessionToken {
+		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
+	}
+	if !hasAwsDefaultRegion {
+		fmt.Println("setting AWS_DEFAULT_REGION to a default value")
+		awsDefaultRegion = "us-east-1"
 	}
 
 	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
@@ -139,24 +175,10 @@ func GetPDClient() (pagerduty.Client, error) {
 }
 
 var (
-	externalClusterID string
-	incidentID        string
+	payloadPath = "./payload.json"
 )
 
 func init() {
-	const externalClusterIDFlagName = "external-id"
-	const incidentIDFlagName = "incident ID"
-	ClusterMissingCmd.Flags().StringVarP(&externalClusterID, externalClusterIDFlagName, "e", externalClusterID, "the external clusterid extracted from the payload")
-	ClusterMissingCmd.Flags().StringVarP(&incidentID, incidentIDFlagName, "i", incidentID, "the ID of the incident")
-	err := ClusterMissingCmd.MarkFlagRequired(externalClusterIDFlagName)
-	// as this is the init, cannot bubble the error up nicely
-	if err != nil {
-		panic(fmt.Errorf("could not parse required arg %s: %w", externalClusterIDFlagName, err))
-	}
-
-	err = ClusterMissingCmd.MarkFlagRequired(incidentIDFlagName)
-	// as this is the init, cannot bubble the error up nicely
-	if err != nil {
-		panic(fmt.Errorf("could not parse required arg %s: %w", incidentIDFlagName, err))
-	}
+	const payloadPathFlagName = "payload-path"
+	ClusterMissingCmd.Flags().StringVarP(&payloadPath, payloadPathFlagName, "p", payloadPath, "the path to the payload")
 }

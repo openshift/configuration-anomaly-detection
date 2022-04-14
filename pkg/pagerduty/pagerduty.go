@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"time"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
@@ -203,9 +204,15 @@ func (Client) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
 	}
 
 	internalBody := internalCHGMAlertBody{}
+
 	err = yaml.Unmarshal([]byte(externalBody), &internalBody)
 	if err != nil {
-		return "", NotesParseErr{Err: err}
+		// TODO: add errcheck for this specific error
+		externalBody = strings.ReplaceAll(externalBody, `\n`, "\n")
+		err = yaml.Unmarshal([]byte(externalBody), &internalBody)
+		if err != nil {
+			return "", NotesParseErr{Err: err}
+		}
 	}
 
 	if internalBody.ClusterID == "" {
@@ -248,7 +255,19 @@ func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader File
 	if err != nil {
 		return "", fmt.Errorf("could not read the payloadFile: %w", err)
 	}
+	fmt.Println("successfully readPayloadFile")
 	return c.ExtractExternalIDFromBytes(data)
+}
+
+// ExtractIncidentIDFromPayload will retrieve the payloadFilePath and return the incidentID
+func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
+	data, err := readPayloadFile(payloadFilePath, reader)
+	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
+	if err != nil {
+		return "", fmt.Errorf("could not read the payloadFile: %w", err)
+	}
+	fmt.Println("successfully readPayloadFile")
+	return c.ExtractIncidentIDFromBytes(data)
 }
 
 // ExtractExternalIDFromBytes will return the externalID from the bytes[] data
@@ -261,8 +280,9 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	}
 	incidentID := w.Event.Data.ID
 	if incidentID == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID")}
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
 	}
+	fmt.Println("successfully extracted incidentID")
 
 	alerts, err := c.GetAlerts(incidentID)
 	if err != nil {
@@ -272,12 +292,30 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	// there should be only one alert
 	for _, a := range alerts {
 		// that one alert should have a valid ExternalID
+		//TODO: validate the alert has the same externalid as the incident
 		if a.ExternalID != "" {
+			fmt.Printf("found a alert with externalid %s\n", a.ExternalID)
 			return a.ExternalID, nil
 		}
 	}
 
 	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
+}
+
+// ExtractIncidentIDFromBytes will return the incidentID from the bytes[] data
+func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
+	var err error
+	w := WebhookPayloadToIncidentID{}
+	err = json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+	incidentID := w.Event.Data.ID
+	if incidentID == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
+	}
+	fmt.Println("successfully extracted incidentID")
+	return incidentID, nil
 }
 
 // readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.

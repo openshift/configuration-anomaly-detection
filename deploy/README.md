@@ -24,6 +24,13 @@ The CRs are going to be created in the `configuration-anomaly-detection` namespa
 
 After applying the CRs, a Weblistner will be opened for triggering pipelines. F.e. http://el-pipeline-event-listener.configuration-anomaly-detection.svc.cluster.local:8080 on CRC.
 
+## [Optional] exposing as a route
+
+if you would like to expose the service via a route, you can run
+```
+oc create route edge --service=el-cad-event-listener
+```
+
 ## Trigger a Pipeline Run
 
 PipelineRuns can be started via the following post command:

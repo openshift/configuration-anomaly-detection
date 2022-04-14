@@ -5,8 +5,8 @@ RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-c
 ADD . /opt
 WORKDIR /opt
 
-# CGO_ENABLED is set to allow the golang binary build to work on the ubi image
 RUN git update-index --refresh; make CGO_ENABLED=0 cadctl-install-local-force
+
 
 FROM quay.io/app-sre/ubi8-ubi-minimal:8.5-240 as runner
 

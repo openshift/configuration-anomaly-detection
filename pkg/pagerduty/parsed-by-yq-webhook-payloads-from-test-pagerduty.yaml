@@ -1,4 +1,8 @@
 items:
+  - description: mvp for testing 
+    event:
+      data:
+        id: $INCIDENT_ID
 
   - description: a PagerDuty incident created event
     event:

@@ -56,7 +56,7 @@ func New(ocmConfigFile string) (Client, error) {
 	return client, nil
 }
 
-// GetSupportRoleARN returns the support role ARN that allows the access to the cluster
+// GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID
 func (c Client) GetSupportRoleARN(clusterID string) (string, error) {
 	claim, err := c.GetAWSAccountClaim(clusterID)
 	if err != nil {

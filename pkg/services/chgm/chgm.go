@@ -187,6 +187,8 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve stopped instances for %s: %w", infraID, err)
 	}
+	fmt.Println("successfully ListStoppedInstances")
+
 	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)
 
 	if len(stoppedInstances) == 0 {
@@ -197,6 +199,8 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
 	}
+	fmt.Println("successfully PollInstanceStopEventsFor")
+
 	// fmt.Printf("stoppedInstancesEvents ::: %#v\n", stoppedInstancesEvents)
 
 	if len(stoppedInstancesEvents) == 0 {
