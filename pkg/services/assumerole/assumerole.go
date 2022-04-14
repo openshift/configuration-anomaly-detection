@@ -53,7 +53,7 @@ type Client struct {
 }
 
 // AssumeSupportRoleChain will jump between the current aws.Client to the customers aws.Client
-func (c Client) AssumeSupportRoleChain(identifier, jumprole string) (aws.Client, error) {
+func (c Client) AssumeSupportRoleChain(identifier, ccsJumpRole, supportRole string) (aws.Client, error) {
 	cluster, err := c.GetClusterInfo(identifier)
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("1 failed to get the cluster details :%w", err)
@@ -61,25 +61,24 @@ func (c Client) AssumeSupportRoleChain(identifier, jumprole string) (aws.Client,
 	region := cluster.Region().Name()
 	internalID := cluster.ID()
 
-	const jumpRole2 = "XXXX"
-	tempClient, err := c.AssumeRole(jumpRole2, region)
+	tempClient, err := c.AssumeRole(ccsJumpRole, region)
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("2 failed to assume into jump-role: %w", err)
 	}
 
-	jumpRoleClient, err := tempClient.AssumeRole(jumprole, region)
+	jumpRoleClient, err := tempClient.AssumeRole(supportRole, region)
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("3 failed to assume into jump-role: %w", err)
 	}
-	supportRole, err := c.GetSupportRoleARN(internalID)
+	customerRole, err := c.GetSupportRoleARN(internalID)
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("4 failed to get support Role: %w", err)
 	}
 
-	supportClient, err := jumpRoleClient.AssumeRole(supportRole, region)
+	customerClient, err := jumpRoleClient.AssumeRole(customerRole, region)
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("5 failed to assume into support-role: %w", err)
 	}
 
-	return supportClient, nil
+	return customerClient, nil
 }
