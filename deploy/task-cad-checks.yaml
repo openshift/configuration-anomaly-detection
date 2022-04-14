@@ -43,6 +43,9 @@ spec:
     volumeMounts:
     - name: cad-ocm-token-file
       mountPath: /tmp/test/cad-ocm-token
+    envFrom:
+    - secretRef:
+        name: cad-aws-credentials
   volumes:
   - name: cad-ocm-token-file
     secret:
