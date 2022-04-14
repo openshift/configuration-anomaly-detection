@@ -103,7 +103,7 @@ func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraI
 		return true
 	}
 
-	return assumedRoleOfName("O2rganizationAccountAccessRole", userDetails)
+	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
 }
 
 // UserInfo will hold the extracted user details
