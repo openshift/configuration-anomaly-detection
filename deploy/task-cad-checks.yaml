@@ -33,7 +33,13 @@ spec:
         secretKeyRef:
           name: cad-pd-token
           key: token
-    - name: CAD_JUMPROLE
+    - name: CAD_ESCALATION_POLICY
+      value: XXXX
+    - name: CAD_SILENT_POLICY
+      value: XXXX
+    - name: CSS_JUMPROLE
+      value: XXXX
+    - name: SUPPORT_JUMPROLE
       value: XXXX
     - name: CAD_OCM_FILE_PATH
       # same value of volumeMounts[0].mountPath + the filename inside the secret
@@ -41,6 +47,9 @@ spec:
     volumeMounts:
     - name: cad-ocm-token-file
       mountPath: /tmp/test/cad-ocm-token
+    envFrom:
+    - secretRef:
+        name: cad-aws-credentials
   volumes:
   - name: cad-ocm-token-file
     secret:
