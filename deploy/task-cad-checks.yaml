@@ -33,6 +33,10 @@ spec:
         secretKeyRef:
           name: cad-pd-token
           key: token
+    - name: CAD_ESCALATION_POLICY
+      value: XXXX
+    - name: CAD_SILENT_POLICY
+      value: XXXX
     - name: CSS_JUMPROLE
       value: XXXX
     - name: SUPPORT_JUMPROLE
