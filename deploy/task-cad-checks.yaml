@@ -33,7 +33,9 @@ spec:
         secretKeyRef:
           name: cad-pd-token
           key: token
-    - name: CAD_JUMPROLE
+    - name: CSS_JUMPROLE
+      value: XXXX
+    - name: SUPPORT_JUMPROLE
       value: XXXX
     - name: CAD_OCM_FILE_PATH
       # same value of volumeMounts[0].mountPath + the filename inside the secret
