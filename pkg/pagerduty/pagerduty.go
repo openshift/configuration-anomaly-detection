@@ -310,10 +310,10 @@ func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
 	if err != nil {
 		return "", UnmarshalErr{Err: err}
 	}
-        incidentID := w.Event.Data.ID
-        if w.Event.Data.Incident.ID != "" {
-                incidentID = w.Event.Data.Incident.ID
-        }
+	incidentID := w.Event.Data.ID
+	if w.Event.Data.Incident.ID != "" {
+		incidentID = w.Event.Data.Incident.ID
+	}
 
 	if incidentID == "" {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}

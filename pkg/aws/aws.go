@@ -218,7 +218,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		fmt.Printf("%s, stopped at %s\n", k, v.String())
 	}
 	fmt.Println("Investigating in reason...")
-        idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
+	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 	var executionError error
 	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
@@ -241,7 +241,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		localEvents := []*cloudtrail.Event{}
 		localEvents = append(localEvents, localStopEvents...)
 		localEvents = append(localEvents, localTerminatedEvents...)
-		
+
 		for _, event := range localEvents {
 			instanceID := *event.Resources[0].ResourceName
 			_, ok := idToStopTime[instanceID]
@@ -267,7 +267,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 			// not checking if the item is in the array as it's a 1-1 mapping
 			extractedTime := idToStopTime[instanceID]
 
-			if event.EventTime.Before(extractedTime){
+			if event.EventTime.Before(extractedTime) {
 				executionError = fmt.Errorf("most up to date time is before the instance stopped time")
 				return false, nil
 			}
