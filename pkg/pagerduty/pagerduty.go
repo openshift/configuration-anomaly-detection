@@ -127,13 +127,10 @@ func (c Client) AcknowledgeIncident(incidentID string) error {
 
 // AddNote will add a note to an incident
 func (c Client) AddNote(incidentID string, noteContent string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
-	defer cancel()
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
-
-	_, err := c.c.CreateIncidentNoteWithContext(ctx, incidentID, sdkNote)
+	_, err := c.c.CreateIncidentNoteWithContext(context.TODO(), incidentID, sdkNote)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -243,7 +240,10 @@ func (RealFileReader) ReadFile(name string) ([]byte, error) {
 type WebhookPayloadToIncidentID struct {
 	Event struct {
 		Data struct {
-			ID string `json:"id"`
+			ID       string `json:"id"`
+			Incident struct {
+				ID string `json:"id"`
+			} `json:"incident"`
 		} `json:"data"`
 	} `json:"event"`
 }
@@ -255,7 +255,6 @@ func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader File
 	if err != nil {
 		return "", fmt.Errorf("could not read the payloadFile: %w", err)
 	}
-	fmt.Println("successfully readPayloadFile")
 	return c.ExtractExternalIDFromBytes(data)
 }
 
@@ -266,7 +265,6 @@ func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader File
 	if err != nil {
 		return "", fmt.Errorf("could not read the payloadFile: %w", err)
 	}
-	fmt.Println("successfully readPayloadFile")
 	return c.ExtractIncidentIDFromBytes(data)
 }
 
@@ -279,10 +277,13 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 		return "", UnmarshalErr{Err: err}
 	}
 	incidentID := w.Event.Data.ID
+	if w.Event.Data.Incident.ID != "" {
+		incidentID = w.Event.Data.Incident.ID
+	}
+
 	if incidentID == "" {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
 	}
-	fmt.Println("successfully extracted incidentID")
 
 	alerts, err := c.GetAlerts(incidentID)
 	if err != nil {
@@ -294,7 +295,6 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 		// that one alert should have a valid ExternalID
 		//TODO: validate the alert has the same externalid as the incident
 		if a.ExternalID != "" {
-			fmt.Printf("found a alert with externalid %s\n", a.ExternalID)
 			return a.ExternalID, nil
 		}
 	}
@@ -311,10 +311,13 @@ func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
 		return "", UnmarshalErr{Err: err}
 	}
 	incidentID := w.Event.Data.ID
+	if w.Event.Data.Incident.ID != "" {
+		incidentID = w.Event.Data.Incident.ID
+	}
+
 	if incidentID == "" {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
 	}
-	fmt.Println("successfully extracted incidentID")
 	return incidentID, nil
 }
 

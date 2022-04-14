@@ -212,12 +212,17 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	if err != nil {
 		return nil, fmt.Errorf("could not populate the idToCloudtrailEvent map: %w", err)
 	}
-	fmt.Println("successfully populateStopTime")
+
+	fmt.Println("Following instances are not running:")
+	for k, v := range idToStopTime {
+		fmt.Printf("%s, stopped at %s\n", k, v.String())
+	}
+	fmt.Println("Investigating in reason...")
+	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 	var executionError error
 	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
 		executionError = nil
-		idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 		localStopEvents, err := c.ListAllInstanceStopEvents()
 		if err != nil {
@@ -239,17 +244,17 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 
 		for _, event := range localEvents {
 			instanceID := *event.Resources[0].ResourceName
-
-			storedEvent, ok := idToCloudtrailEvent[instanceID]
-			if !ok {
-				idToCloudtrailEvent[instanceID] = event
-				continue
+			_, ok := idToStopTime[instanceID]
+			if ok {
+				storedEvent, ok := idToCloudtrailEvent[instanceID]
+				if !ok {
+					idToCloudtrailEvent[instanceID] = event
+				} else if storedEvent.EventTime.Before(*event.EventTime) {
+					idToCloudtrailEvent[instanceID] = event
+				}
 			}
-			if storedEvent.EventTime.Before(*event.EventTime) {
-				idToCloudtrailEvent[instanceID] = event
-			}
-
 		}
+		fmt.Printf("%+v\n", idToCloudtrailEvent)
 		for _, instance := range instances {
 			instanceID := *instance.InstanceId
 			event, ok := idToCloudtrailEvent[instanceID]
@@ -274,6 +279,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 
 		return true, nil
 	})
+	fmt.Printf("%+v\n", idToCloudtrailEvent)
 
 	if err != nil || executionError != nil {
 		if executionError == nil {
@@ -335,7 +341,7 @@ func (c Client) ListAllInstanceStopEvents() ([]*cloudtrail.Event, error) {
 func (c Client) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
 	att := &cloudtrail.LookupAttribute{
 		AttributeKey:   aws.String("EventName"),
-		AttributeValue: aws.String("TerminatedInstances"),
+		AttributeValue: aws.String("TerminateInstances"),
 	}
 	return c.listAllInstancesAttribute(att)
 }
