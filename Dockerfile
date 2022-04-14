@@ -5,9 +5,7 @@ RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-c
 ADD . /opt
 WORKDIR /opt
 
-RUN git update-index --refresh \
-    ; go mod download \
-    && CGO_ENABLED=0 go build -mod=readonly -trimpath -o /opt/cadctl/cadctl ./cadctl/main.go
+RUN git update-index --refresh; make CGO_ENABLED=0 cadctl-install-local-force
 
 
 FROM quay.io/app-sre/ubi8-ubi-minimal:8.5-240 as runner
