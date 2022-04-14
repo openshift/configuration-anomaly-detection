@@ -44,7 +44,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Failed to read webhook payload: %w", err)
 	}
 	fmt.Printf("%s\n", string(data))
-	
+
 	awsClient, err := GetAWSClient()
 	if err != nil {
 		return fmt.Errorf("could not start awsClient: %w", err)
@@ -59,7 +59,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
-	
+
 	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
 	if err != nil {
 		return fmt.Errorf("GetIncidentID failed on: %w", err)
@@ -100,7 +100,7 @@ func run(cmd *cobra.Command, args []string) error {
 		Service: chgm.Provider{
 			AwsClient: customerAwsClient,
 			OcmClient: ocmClient,
-			PdClient: pdClient,
+			PdClient:  pdClient,
 		},
 	}
 
@@ -137,7 +137,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Println("USER INITIATED SHUTDOWN")
 
 	return nil
-	
+
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
