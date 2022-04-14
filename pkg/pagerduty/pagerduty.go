@@ -31,13 +31,21 @@ type Client struct {
 	c *sdk.Client
 	// currentUserEmail is the current logged in user's email
 	currentUserEmail string
+	// escalationPolicy
+	escalationPolicy string
+	// silentPolicy
+	silentPolicy string
 }
 
 // NewWithToken is similar to New but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
-func NewWithToken(authToken string) (Client, error) {
-	c := sdk.NewClient(authToken)
-	return New(c)
+func NewWithToken(authToken, escalationPolicy, silentPolicy string) (Client, error) {
+	c := Client{
+		c:                sdk.NewClient(authToken),
+		escalationPolicy: escalationPolicy,
+		silentPolicy:     silentPolicy,
+	}
+	return c, nil
 }
 
 // New will create a PagerDuty struct with all of the required fields
@@ -50,9 +58,20 @@ func New(client *sdk.Client) (Client, error) {
 	resp := Client{
 		c:                client,
 		currentUserEmail: sdkUser.Email,
+		// TODO: insert missing policies. Do we even need this function?
 	}
 
 	return resp, nil
+}
+
+// GetEscalationPolicy returns the set escalation policy
+func (c Client) GetEscalationPolicy() string {
+	return c.escalationPolicy
+}
+
+// GetSilentPolicy returns the set policy for silencing alerts
+func (c Client) GetSilentPolicy() string {
+	return c.silentPolicy
 }
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy

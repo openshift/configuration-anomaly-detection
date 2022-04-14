@@ -62,6 +62,7 @@ func run(cmd *cobra.Command, args []string) error {
 		Service: chgm.Provider{
 			AwsClient: awsClient,
 			OcmClient: ocmClient,
+			PdClient:  pdClient,
 		},
 	}
 	cadJumprole, hasCadJumprole := os.LookupEnv("CAD_JUMPROLE")
@@ -92,9 +93,22 @@ func run(cmd *cobra.Command, args []string) error {
 
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
+		err = chgmClient.EscalateAlert(incidentID, res.String())
+		if err != nil {
+			return fmt.Errorf("could not escalate the alert %s: %w", incidentID, err)
+		}
 		return nil
 	}
 
+	err = chgmClient.SendServiceLog()
+	if err != nil {
+		return fmt.Errorf("failed sending service log during before silencing the alert: %w", err)
+	}
+
+	err = chgmClient.SilenceAlert(incidentID, res.String())
+	if err != nil {
+		return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
+	}
 	// written this way so I can quickly detect if res is true of false
 	fmt.Println("USER INITIATED SHUTDOWN")
 
@@ -139,12 +153,20 @@ func GetAWSClient() (aws.Client, error) {
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient() (pagerduty.Client, error) {
-	cadPD, ok := os.LookupEnv("CAD_PD")
-	if !ok {
-		return pagerduty.Client{}, fmt.Errorf("could not load CAD_PD envvar")
+	cadPD, hasCadPD := os.LookupEnv("CAD_PD")
+	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
+	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
+
+	if !hasCadEscalationPolicy || !hasCadSilentPolicy || hasCadPD {
+		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD)' is missing")
 	}
 
-	return pagerduty.NewWithToken(cadPD)
+	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
+	if err != nil {
+		return pagerduty.Client{}, fmt.Errorf("could not initialze the client: %w", err)
+	}
+
+	return client, nil
 }
 
 var (
