@@ -259,7 +259,7 @@ func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader File
 	return c.ExtractExternalIDFromBytes(data)
 }
 
-// ExtractExternalIDFromPayload will retrieve the payloadFilePath and return the incidentID
+// ExtractIncidentIDFromPayload will retrieve the payloadFilePath and return the incidentID
 func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
 	data, err := readPayloadFile(payloadFilePath, reader)
 	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
