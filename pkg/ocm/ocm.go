@@ -43,14 +43,27 @@ func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
 
-	cfg, err := newConfigFromFile(ocmConfigFile)
-	if err != nil {
-		return client, fmt.Errorf("failed to load config file: %w", err)
+	ocmClientID, hasOcmClientID := os.LookupEnv("OCM_CLIENT_ID")
+	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("OCM_CLIENT_SECRET")
+	ocmURL, hasOcmURL := os.LookupEnv("OCM_URL")
+
+	if !hasOcmClientID || !hasOcmClientSecret || !hasOcmURL {
+		cfg, err := newConfigFromFile(ocmConfigFile)
+		if err != nil {
+			return client, fmt.Errorf("failed to load config file: %w", err)
+		}
+
+		client.conn, err = cfg.Connection()
+		if err != nil {
+			return client, fmt.Errorf("failed to create new OCM connection from config file: %w", err)
+		}
+
+		return client, nil
 	}
 
-	client.conn, err = cfg.Connection()
+	client.conn, err = sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(true).Build()
 	if err != nil {
-		return client, fmt.Errorf("failed to create new OCM connection: %w", err)
+		return client, fmt.Errorf("failed to create new OCM connection from OCM token: %w", err)
 	}
 
 	return client, nil
