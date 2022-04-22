@@ -52,8 +52,7 @@ func New(ocmConfigFile string) (Client, error) {
 	// verify via regex if the CAD_DEBUG env got set, but disabled.
 	// TODO: discuss if we really need this.
 	debugDisabled, err := regexp.MatchString("false|False|0|no|No", debugValue)
-	// TODO: introduce debug environment
-	// + a separate function
+
 	if hasDebug && !debugDisabled {
 		client.conn, err = newConnectionFromFile(ocmConfigFile)
 		if err != nil {
