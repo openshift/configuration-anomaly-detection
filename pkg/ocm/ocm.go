@@ -63,7 +63,7 @@ func New(ocmConfigFile string) (Client, error) {
 
 	client.conn, err = sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(true).Build()
 	if err != nil {
-		return client, fmt.Errorf("failed to create new OCM connection from OCM token: %w", err)
+		return client, fmt.Errorf("failed to create new OCM connection from OCM client secret pair: %w", err)
 	}
 
 	return client, nil
