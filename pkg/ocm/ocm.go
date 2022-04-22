@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"regexp"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -47,13 +46,9 @@ func New(ocmConfigFile string) (Client, error) {
 	// The debug environment variable ensures that we will never use
 	// a ocm config file on a cluster deployment. The debug environment variable
 	// is only for local cadctl development
-	debugValue, hasDebug := os.LookupEnv("CAD_DEBUG")
+	debugMode := os.Getenv("CAD_DEBUG")
 
-	// verify via regex if the CAD_DEBUG env got set, but disabled.
-	// TODO: discuss if we really need this.
-	debugDisabled, err := regexp.MatchString("false|False|0|no|No", debugValue)
-
-	if hasDebug && !debugDisabled {
+	if debugMode == "true" {
 		client.conn, err = newConnectionFromFile(ocmConfigFile)
 		if err != nil {
 			return client, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
