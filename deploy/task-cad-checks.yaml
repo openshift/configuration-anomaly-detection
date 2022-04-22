@@ -41,16 +41,8 @@ spec:
       value: XXXX
     - name: SUPPORT_JUMPROLE
       value: XXXX
-    - name: CAD_OCM_FILE_PATH
-      # same value of volumeMounts[0].mountPath + the filename inside the secret
-      value: /tmp/test/cad-ocm-token/ocm.json
-    volumeMounts:
-    - name: cad-ocm-token-file
-      mountPath: /tmp/test/cad-ocm-token
     envFrom:
     - secretRef:
         name: cad-aws-credentials
-  volumes:
-  - name: cad-ocm-token-file
-    secret:
-      secretName: cad-ocm-token-file
+    - secretRef:
+        name: cad-ocm-client-secret

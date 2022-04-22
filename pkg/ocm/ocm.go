@@ -43,17 +43,57 @@ func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
 
-	cfg, err := newConfigFromFile(ocmConfigFile)
-	if err != nil {
-		return client, fmt.Errorf("failed to load config file: %w", err)
+	// The debug environment variable ensures that we will never use
+	// a ocm config file on a cluster deployment. The debug environment variable
+	// is only for local cadctl development
+	debugMode := os.Getenv("CAD_DEBUG")
+
+	if debugMode == "true" {
+		client.conn, err = newConnectionFromFile(ocmConfigFile)
+		if err != nil {
+			return client, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
+		}
+		return client, nil
 	}
 
-	client.conn, err = cfg.Connection()
+	client.conn, err = newConnectionFromClientPair()
 	if err != nil {
-		return client, fmt.Errorf("failed to create new OCM connection: %w", err)
+		return client, fmt.Errorf("failed to create connection from client key pair: %w", err)
 	}
 
 	return client, nil
+}
+
+// newConnectionFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
+// and creates a connection.
+func newConnectionFromFile(ocmConfigFile string) (*sdk.Connection, error) {
+	if ocmConfigFile != "" {
+		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// Load the configuration file from std path
+	cfg, err := Load()
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil || cfg == (&Config{}) {
+		return nil, fmt.Errorf("not logged in")
+	}
+	return cfg.Connection()
+}
+
+// newConnectionFromClientPair creates a new connection via set of client ID, client secret
+// and the target OCM API URL.
+func newConnectionFromClientPair() (*sdk.Connection, error) {
+	ocmClientID, hasOcmClientID := os.LookupEnv("CAD_OCM_CLIENT_ID")
+	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("CAD_OCM_CLIENT_SECRET")
+	ocmURL, hasOcmURL := os.LookupEnv("CAD_OCM_URL")
+	if !hasOcmClientID || !hasOcmClientSecret || !hasOcmURL {
+		return nil, fmt.Errorf("missing environment variables: CAD_OCM_CLIENT_ID CAD_OCM_CLIENT_SECRET CAD_OCM_URL")
+	}
+	return sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(false).Build()
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID
@@ -163,23 +203,4 @@ func (c Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder 
 	builder.Description(sl.Description)
 	builder.InternalOnly(sl.InternalOnly)
 	return builder
-}
-
-// newConfigFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
-func newConfigFromFile(ocmConfigFile string) (*Config, error) {
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Load the configuration file from std path
-	cfg, err := Load()
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil || cfg == (&Config{}) {
-		return nil, fmt.Errorf("not logged in")
-	}
-	return cfg, err
 }
