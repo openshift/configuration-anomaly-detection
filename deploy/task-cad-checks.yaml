@@ -46,7 +46,3 @@ spec:
         name: cad-aws-credentials
     - secretRef:
         name: cad-ocm-client-secret
-  volumes:
-  - name: cad-ocm-token-file
-    secret:
-      secretName: cad-ocm-token-file
