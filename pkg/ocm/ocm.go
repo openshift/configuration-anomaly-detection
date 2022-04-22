@@ -43,9 +43,9 @@ func New(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
 
-	ocmClientID, hasOcmClientID := os.LookupEnv("OCM_CLIENT_ID")
-	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("OCM_CLIENT_SECRET")
-	ocmURL, hasOcmURL := os.LookupEnv("OCM_URL")
+	ocmClientID, hasOcmClientID := os.LookupEnv("CAD_OCM_CLIENT_ID")
+	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("CAD_OCM_CLIENT_SECRET")
+	ocmURL, hasOcmURL := os.LookupEnv("CAD_OCM_URL")
 
 	if !hasOcmClientID || !hasOcmClientSecret || !hasOcmURL {
 		cfg, err := newConfigFromFile(ocmConfigFile)
@@ -61,7 +61,8 @@ func New(ocmConfigFile string) (Client, error) {
 		return client, nil
 	}
 
-	client.conn, err = sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(true).Build()
+	// api.openshift.com and api.stage.openshift.com have valid certificates, hence we can set insecure to false
+	client.conn, err = sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(false).Build()
 	if err != nil {
 		return client, fmt.Errorf("failed to create new OCM connection from OCM client secret pair: %w", err)
 	}
