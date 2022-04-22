@@ -17,7 +17,7 @@ var _ = Describe("OCM Internal", func() {
 		// with a different configLocation as described in the BeforeEach() statements
 		// in each "when" statement.
 		JustBeforeEach(func() {
-			config, err = newConfigFromFile(configLocation)
+			config, err = newConnectionFromFile(configLocation)
 		})
 
 		When("the client configuration exists", func() {
