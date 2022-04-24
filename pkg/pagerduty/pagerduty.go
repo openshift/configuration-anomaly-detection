@@ -253,7 +253,7 @@ func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader File
 	data, err := readPayloadFile(payloadFilePath, reader)
 	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
 	if err != nil {
-		return "", fmt.Errorf("could not read the payloadFile: %w", err)
+		return "", fmt.Errorf("could not read the externalid from the payloadFile: %w", err)
 	}
 	return c.ExtractExternalIDFromBytes(data)
 }
@@ -263,7 +263,7 @@ func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader File
 	data, err := readPayloadFile(payloadFilePath, reader)
 	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
 	if err != nil {
-		return "", fmt.Errorf("could not read the payloadFile: %w", err)
+		return "", fmt.Errorf("could not read the incidentid from the payloadFile: %w", err)
 	}
 	return c.ExtractIncidentIDFromBytes(data)
 }
@@ -282,7 +282,7 @@ func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
 	}
 
 	if incidentID == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract externalID from '%s'", data)}
 	}
 
 	alerts, err := c.GetAlerts(incidentID)
