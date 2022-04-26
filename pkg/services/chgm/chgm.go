@@ -123,15 +123,16 @@ func (i InvestigateInstancesOutput) String() string {
 	msg := ""
 	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
 	// TODO: check if %v is the best formatting for UserInfo
-	msg += fmt.Sprintf("User: '%v' \n", i.User)
-	msg += fmt.Sprintf("The amount of non running instances is: '%v' \n", len(i.NonRunningInstances))
+	msg += fmt.Sprintf("\nUserName : '%v'", i.User.UserName)
+	msg += fmt.Sprintf("\nIssuerUserName: '%v'", i.User.IssuerUserName)
+	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v'", len(i.NonRunningInstances))
 	ids := []string{}
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
 		ids = append(ids, *nonRunningInstance.InstanceId)
 	}
 	if len(i.NonRunningInstances) > 0 {
-		msg += fmt.Sprintf("Instance IDs: '%v' \n", ids)
+		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
 	}
 	return msg
 }
