@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -116,17 +115,26 @@ type UserInfo struct {
 type InvestigateInstancesOutput struct {
 	NonRunningInstances []*ec2.Instance
 	User                UserInfo
-	StopTime            time.Time
 	UserAuthorized      bool
 }
 
 // String implements the stringer interface for InvestigateInstancesOutput
 func (i InvestigateInstancesOutput) String() string {
-	msg, err := json.Marshal(&i)
-	if err != nil {
-		panic(fmt.Errorf("could not marshal: %w", err))
+	msg := ""
+	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
+	// TODO: check if %v is the best formatting for UserInfo
+	msg += fmt.Sprintf("\nUserName : '%v'", i.User.UserName)
+	msg += fmt.Sprintf("\nIssuerUserName: '%v'", i.User.IssuerUserName)
+	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v'", len(i.NonRunningInstances))
+	ids := []string{}
+	for _, nonRunningInstance := range i.NonRunningInstances {
+		// TODO: add also the StateTransitionReason to the output if needed
+		ids = append(ids, *nonRunningInstance.InstanceId)
 	}
-	return string(msg)
+	if len(i.NonRunningInstances) > 0 {
+		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
+	}
+	return msg
 }
 
 func (c *Client) populateStuctWith(externalID string) error {

@@ -52,7 +52,6 @@ func GetAWSClient() (aws.Client, error) {
 		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
 	}
 	if !hasAwsDefaultRegion {
-		fmt.Println("setting AWS_DEFAULT_REGION to a default value")
 		awsDefaultRegion = "us-east-1"
 	}
 

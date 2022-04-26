@@ -5,12 +5,20 @@ Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the fun
 ```go
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient() (pagerduty.Client, error) {
-	cadPD, ok := os.LookupEnv("CAD_PD")
-	if !ok {
-		return pagerduty.Client{}, fmt.Errorf("could not load CAD_PD envvar")
+	cadPD, hasCadPD := os.LookupEnv("CAD_PD")
+	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
+	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
+
+	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
+		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD)' is missing")
 	}
 
-	return pagerduty.NewWithToken(cadPD)
+	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
+	if err != nil {
+		return pagerduty.Client{}, fmt.Errorf("could not initialze the client: %w", err)
+	}
+
+	return client, nil
 }
 ```
 
