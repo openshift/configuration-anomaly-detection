@@ -354,7 +354,7 @@ func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*c
 	for {
 		out, err := c.CloudTrailClient.LookupEvents(in)
 		if err != nil {
-			return nil, err
+			return []*cloudtrail.Event{}, err
 		}
 		nextToken := out.NextToken
 		events = append(events, out.Events...)
