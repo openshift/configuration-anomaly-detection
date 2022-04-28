@@ -4,21 +4,38 @@ This directory contains the configuration for tekton pipelines that perform the 
 
 ## Installation
 
+**Note**: some commands may require cluster-admin. To get it consult your docs team
+
 Install CAD by running the following commands:
 
+### Add the pipelines operator
 First, apply the subscription to the pipeline operator:
 
 ```console
 oc apply -f pipeline-operator-subscription.yaml
 ```
 
+### Configure secrets
+see section at the bottom of `Tasks Secrets` to configure
+
+### Deploy container image
+the repo builds the binary to a container using [../Dockerfile](a container file). build it using
+
+```console
+docker build . -t ${IMAGE_LOCATION}
+```
+and deploy it to a location you want, then change the image in the [./task-cad-checks.yaml](./task-cad-checks.yaml) using [https://github.com/mikefarah/yq](yq)
+```console
+OVERRIDE_IMAGE=${IMAGE_LOCATION} yq --inplace '.spec.steps[].image=env(OVERRIDE_IMAGE)' task-cad-checks.yaml
+```
+
+### Deploy components
 Wait a minute until it becomes available, then apply the rest:
 
 ```console
-oc apply -f . 
+oc apply -f .
 ```
-
-**Note**: The pipeline require a persistent storage. The pvc defined here only works for AWS, so for local testing on a crc a pvc with the same name should be created manually.
+**Note**: the resource [./pipeline-run.yaml](./pipeline-run.yaml) will not be created using `oc apply && oc delete` as it uses a `.metadata.generateName`, thus is only available to create using `oc create` as seen later on
 
 The CRs are going to be created in the `configuration-anomaly-detection` namespace.
 
@@ -36,7 +53,7 @@ oc create route edge --service=el-cad-event-listener
 PipelineRuns can be started via the following post command:
 
 ```console
-curl -X POST --connect-timeout 1 -v --data '{"event": {"id":"12312"}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
+curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
 ```
 
 or for more details, see [tekton's docs on the matter](https://github.com/tektoncd/triggers/tree/main/examples#invoking-the-triggers-locally)
@@ -69,8 +86,6 @@ The documentation for further Tekton commands is available [here](https://docs.o
 [pipeline-operator-subscription.yaml](./pipeline-operator-subscription.yaml) will deploy the tekton pipeline operator on the cluster
 ### Namesapce
 straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next resources
-#### PVC
-[pvc-cad.yaml](./pvc-cad.yaml) is not really needed, but has saved data the workloads were doing
 #### SA
 [serviceaccount.yaml](./serviceaccount.yaml) holds the serviceaccount, role and clusterroles that are needed for the CAD resource
 #### Trigger

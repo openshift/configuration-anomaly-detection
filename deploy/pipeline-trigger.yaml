@@ -20,6 +20,7 @@ spec:
     - name: payload
       description: The event that triggered the webhook.
   resourcetemplates:
+    # make sure ./pipeline-run.yaml is the same as this resource here
     - apiVersion: tekton.dev/v1beta1
       kind: PipelineRun
       metadata:
@@ -35,7 +36,32 @@ spec:
             value: $(tt.params.payload)
 
 ---
-# In order to send request to the event listener and test on local crc use:
+apiVersion: v1
+metadata:
+  name: cad-pipe-listener-secret
+  namespace: configuration-anomaly-detection
+stringData:
+  token: samplesecret
+kind: Secret
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: cad-pipe-listener
+  namespace: configuration-anomaly-detection
+spec:
+  interceptors:
+    - ref:
+        name: "cel"
+      params:
+      - name: "filter"
+        value: "header.canonical('X-Secret-Token').compareSecret('token', 'cad-pipe-listener-secret')"
+  bindings:
+  - ref: cad-check-trigger
+  template:
+    ref: cad-check-trigger-template
+---
+# in order to send request to the event listener and test on local crc use:
 # curl -X POST --connect-timeout 1 -v --data '{"event": {"id":"12312"}}' http://el-cad-event-listener.ci.svc.cluster.local:8080
 apiVersion: triggers.tekton.dev/v1alpha1
 kind: EventListener
@@ -47,11 +73,4 @@ metadata:
 spec:
   serviceAccountName: cad-sa # TODO: split pipeline and trigger SA
   triggers:
-  - name: cad-pipe-listener
-    interceptors:
-    - cel:
-        filter: "header.canonical('X-Secret-Token').compareSecret('token', 'mysecret')"
-    bindings:
-    - ref: cad-check-trigger
-    template:
-      ref: cad-check-trigger-template
+  - triggerRef: cad-pipe-listener
