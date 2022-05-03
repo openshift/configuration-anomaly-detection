@@ -24,9 +24,6 @@ spec:
       # run the cadctl command
       RESULT=$(cadctl cluster-missing --payload-path $file )
     # envFrom should pull all of the secret information as envvars, so key names should be uppercase
-    envFrom:
-    - secretRef:
-        name: cad-aws-credentials
     env:
     - name: CAD_PD
       valueFrom:

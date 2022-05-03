@@ -1,0 +1,322 @@
+# This pipeline definition will be used for automate checks as part of pagerduty webhooks.
+# It expects to receive a payload that contains information about the incident/event that triggered the webhook.
+# For more information about the type of the EVENT input parameter have a look a the pagerduty documentation:
+# https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload
+
+# The Pipeline will use a pvc for pesistent storage of logs and outputs inbetween PipelineRuns.
+# The logs will be accessible over a simple dashboards
+# Each step of the Pipeline will store in the following file structure:
+#   /logs/<clusterID>/<eventID>-<pipelineID>/<task>
+
+#  The CAD pipeline will perform the following steps:
+#
+#                         -- (perform-cad-update-pd) ----
+#                       /                                 \
+#  (perform-cad-checks)                                     (TODO: set-termination-criterium) --- (TODO: cleanup)
+#                       \                                 /
+#                        -- (perform-cad-send-servicelog)
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cad-checks-pipeline
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+    - name: payload
+      type: string
+      description: Json string of the event data
+  tasks:
+    # ------ Step 1: check for Infrastructure problems
+    - name: perform-cad-checks
+      params:
+        - name: payload
+          value: $(params.payload)
+      taskRef:
+        name: cad-checks
+
+---
+
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-pipelines-operator-rh
+  namespace: openshift-operators
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: openshift-pipelines-operator-rh
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: cad-checks-
+  namespace: configuration-anomaly-detection
+spec:
+  serviceAccountName: cad-sa
+  pipelineRef:
+    name: cad-checks-pipeline
+  params:
+    - name: payload
+      value: '{"event": {"data":{"id": "incidentid"}}}'
+
+---
+
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: cad-check-trigger
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+    - name: payload
+      value: $(body)
+---
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: cad-check-trigger-template
+  namespace: configuration-anomaly-detection
+  annotations:
+    triggers.tekton.dev/old-escape-quotes: "true"
+spec:
+  params:
+    - name: payload
+      description: The event that triggered the webhook.
+  resourcetemplates:
+    # make sure ./pipeline-run.yaml is the same as this resource here
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        name: cad-check-$(uid)
+        namespace: configuration-anomaly-detection
+      spec:
+        timeout: 30m
+        serviceAccountName: cad-sa
+        pipelineRef:
+          name: cad-checks-pipeline
+        params:
+          - name: payload
+            value: $(tt.params.payload)
+
+---
+apiVersion: v1
+metadata:
+  name: cad-pipe-listener-secret
+  namespace: configuration-anomaly-detection
+stringData:
+  token: samplesecret
+kind: Secret
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: Trigger
+metadata:
+  name: cad-pipe-listener
+  namespace: configuration-anomaly-detection
+spec:
+  interceptors:
+    - ref:
+        name: "cel"
+      params:
+        - name: "filter"
+          value: "header.canonical('X-Secret-Token').compareSecret('token', 'cad-pipe-listener-secret')"
+  bindings:
+    - ref: cad-check-trigger
+  template:
+    ref: cad-check-trigger-template
+---
+# in order to send request to the event listener and test on local crc use:
+# curl -X POST --connect-timeout 1 -v --data '{"event": {"id":"12312"}}' http://el-cad-event-listener.ci.svc.cluster.local:8080
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: cad-event-listener
+  namespace: configuration-anomaly-detection
+  annotations:
+    triggers.tekton.dev/old-escape-quotes: "true"
+spec:
+  serviceAccountName: cad-sa # TODO: split pipeline and trigger SA
+  triggers:
+    - triggerRef: cad-pipe-listener
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cad-sa
+  namespace: configuration-anomaly-detection
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cad-eventlistener-role
+  namespace: configuration-anomaly-detection
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["list", "watch"]
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - "*"
+    resources:
+      - configmaps
+      - secrets
+      - serviceaccounts
+    verbs:
+      - list
+      - watch
+      - get
+  - apiGroups:
+      - triggers.tekton.dev
+    resources:
+      - "*"
+    verbs:
+      - "*"
+  - apiGroups:
+      - tekton.dev
+    resources:
+      - "*"
+    verbs:
+      - "*"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: cad-eventlistener-clusterrole
+rules:
+  - apiGroups:
+      - triggers.tekton.dev
+    resources:
+      - clusterinterceptors
+    verbs:
+      - list
+      - watch
+---
+# tekton/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cad-eventlistener-rolebinding
+  namespace: configuration-anomaly-detection
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cad-eventlistener-role
+  namespace: configuration-anomaly-detection
+subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+    namespace: configuration-anomaly-detection
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cad-eventlistener-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cad-eventlistener-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+    namespace: configuration-anomaly-detection
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: cad-checks
+  namespace: configuration-anomaly-detection
+spec:
+  params:
+    - name: payload
+      type: string
+      description: Json string of the event data
+  steps:
+    - name: check-infrastructure
+      # this sha is broken, should fix when we onboard
+      image: quay.io/app-sre/cadctl@sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
+      command:
+        - "/bin/bash"
+        - "-c"
+      args:
+        - |-
+          # save the payload to a file
+          folder=$(mktemp -d)
+          file=${folder}/payload.json
+          echo '$(params.payload)' > $file
+          # run the cadctl command
+          RESULT=$(cadctl cluster-missing --payload-path $file )
+      # envFrom should pull all of the secret information as envvars, so key names should be uppercase
+      env:
+        - name: CAD_PD
+          valueFrom:
+            secretKeyRef:
+              name: cad-pd-token
+              key: token
+        - name: CAD_ESCALATION_POLICY
+          value: XXXX
+        - name: CAD_SILENT_POLICY
+          value: XXXX
+        - name: CSS_JUMPROLE
+          value: XXXX
+        - name: SUPPORT_JUMPROLE
+          value: XXXX
+      envFrom:
+        - secretRef:
+            name: cad-aws-credentials
+        - secretRef:
+            name: cad-ocm-client-secret
+
+---
+# to generate this secret use the command
+# cp aws.env.sample aws.env
+# oc create secret generic cad-aws-credentials -n configuration-anomaly-detection --from-env-file=aws.env --dry-run -oyaml > task-cad-checks-secrets-aws.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cad-aws-credentials
+  namespace: configuration-anomaly-detection
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: CHANGEME
+  AWS_DEFAULT_REGION: CHANGEME
+  AWS_SECRET_ACCESS_KEY: CHANGEME
+  AWS_SESSION_TOKEN: CHANGEME
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cad-ocm-client-secret
+  namespace: configuration-anomaly-detection
+type: Opaque
+stringData:
+  CAD_OCM_CLIENT_ID: CHANGEME
+  CAD_OCM_CLIENT_SECRET: CHANGEME
+  CAD_OCM_URL: "https://api.stage.openshift.com"
+
+---
+# to generate this secret use the command
+# oc create secret generic cad-pd-token -n configuration-anomaly-detection --from-literal=token=${PD_TOKEN} --dry-run -oyaml > task-cad-checks-secrets-pd.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cad-pd-token
+  namespace: configuration-anomaly-detection
+type: Opaque
+stringData:
+  token: CHANGEME
