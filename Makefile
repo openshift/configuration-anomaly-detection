@@ -40,13 +40,14 @@ test:
 .PHONY: lint
 lint: bin/golangci-lint
 	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+	cd hack/update-template/ &&  GOLANGCI_LINT_CACHE=$(shell mktemp -d) ../../bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: test-with-race
 test-with-race:
 	go test -race ./...
 
 .PHONY: generate
-generate: bin/mockgen
+generate: bin/mockgen generate-template-file generate-markdown
 	go generate -mod=readonly ./...
 
 .PHONY: test-with-coverage
@@ -79,9 +80,13 @@ isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true 
 coverage: hack/codecov.sh
 
 
+.PHONY: generate-template-file
+generate-template-file:
+	cd ./hack/update-template/ && go build -mod=readonly . && ./update-template
+
 # not using the 'all' target to make the target independent
 .PHONY: validate
-validate: build generate generate-markdown checks isclean
+validate: build generate checks isclean
 
 # will hold all of the checks that will run on the repo. this can be extracted to a script if need be
 .PHONY: checks

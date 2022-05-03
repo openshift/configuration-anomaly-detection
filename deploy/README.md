@@ -12,7 +12,7 @@ Install CAD by running the following commands:
 First, apply the subscription to the pipeline operator:
 
 ```console
-oc apply -f pipeline-operator-subscription.yaml
+oc apply -f tekton
 ```
 
 ### Configure secrets
@@ -33,6 +33,7 @@ OVERRIDE_IMAGE=${IMAGE_LOCATION} yq --inplace '.spec.steps[].image=env(OVERRIDE_
 Wait a minute until it becomes available, then apply the rest:
 
 ```console
+oc apply -f namespace/
 oc apply -f .
 ```
 **Note**: the resource [./pipeline-run.yaml](./pipeline-run.yaml) will not be created using `oc apply && oc delete` as it uses a `.metadata.generateName`, thus is only available to create using `oc create` as seen later on
@@ -82,8 +83,6 @@ tkn pipelinerun list -n configuration-anomaly-detection
 The documentation for further Tekton commands is available [here](https://docs.openshift.com/container-platform/4.4/cli_reference/tkn_cli/op-tkn-reference.html).
 
 ## What Do We Have Here
-### Subscription
-[pipeline-operator-subscription.yaml](./pipeline-operator-subscription.yaml) will deploy the tekton pipeline operator on the cluster
 ### Namesapce
 straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next resources
 #### SA

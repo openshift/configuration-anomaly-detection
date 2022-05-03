@@ -1,0 +1,251 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: configuration-anomaly-detection-template
+parameters: []
+objects:
+- apiVersion: tekton.dev/v1beta1
+  kind: PipelineRun
+  metadata:
+    generateName: cad-checks-
+  spec:
+    params:
+    - name: payload
+      value: '{"event": {"data":{"id": "incidentid"}}}'
+    pipelineRef:
+      name: cad-checks-pipeline
+    serviceAccountName: cad-sa
+- apiVersion: triggers.tekton.dev/v1alpha1
+  kind: TriggerBinding
+  metadata:
+    name: cad-check-trigger
+  spec:
+    params:
+    - name: payload
+      value: $(body)
+- apiVersion: triggers.tekton.dev/v1alpha1
+  kind: TriggerTemplate
+  metadata:
+    annotations:
+      triggers.tekton.dev/old-escape-quotes: "true"
+    name: cad-check-trigger-template
+  spec:
+    params:
+    - description: The event that triggered the webhook.
+      name: payload
+    resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        name: cad-check-$(uid)
+        namespace: configuration-anomaly-detection
+      spec:
+        params:
+        - name: payload
+          value: $(tt.params.payload)
+        pipelineRef:
+          name: cad-checks-pipeline
+        serviceAccountName: cad-sa
+        timeout: 30m
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: cad-pipe-listener-secret
+  stringData:
+    token: samplesecret
+- apiVersion: triggers.tekton.dev/v1beta1
+  kind: Trigger
+  metadata:
+    name: cad-pipe-listener
+  spec:
+    bindings:
+    - ref: cad-check-trigger
+    interceptors:
+    - params:
+      - name: filter
+        value: header.canonical('X-Secret-Token').compareSecret('token', 'cad-pipe-listener-secret')
+      ref:
+        name: cel
+    template:
+      ref: cad-check-trigger-template
+- apiVersion: triggers.tekton.dev/v1alpha1
+  kind: EventListener
+  metadata:
+    annotations:
+      triggers.tekton.dev/old-escape-quotes: "true"
+    name: cad-event-listener
+  spec:
+    serviceAccountName: cad-sa
+    triggers:
+    - triggerRef: cad-pipe-listener
+- apiVersion: tekton.dev/v1beta1
+  kind: Pipeline
+  metadata:
+    name: cad-checks-pipeline
+  spec:
+    params:
+    - description: Json string of the event data
+      name: payload
+      type: string
+    tasks:
+    - name: perform-cad-checks
+      params:
+      - name: payload
+        value: $(params.payload)
+      taskRef:
+        name: cad-checks
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: cad-sa
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: Role
+  metadata:
+    name: cad-eventlistener-role
+  rules:
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - list
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - list
+    - watch
+    - get
+  - apiGroups:
+    - '*'
+    resources:
+    - configmaps
+    - secrets
+    - serviceaccounts
+    verbs:
+    - list
+    - watch
+    - get
+  - apiGroups:
+    - triggers.tekton.dev
+    resources:
+    - '*'
+    verbs:
+    - '*'
+  - apiGroups:
+    - tekton.dev
+    resources:
+    - '*'
+    verbs:
+    - '*'
+- apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRole
+  metadata:
+    creationTimestamp: null
+    name: cad-eventlistener-clusterrole
+  rules:
+  - apiGroups:
+    - triggers.tekton.dev
+    resources:
+    - clusterinterceptors
+    verbs:
+    - list
+    - watch
+- Subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: RoleBinding
+  metadata:
+    name: cad-eventlistener-rolebinding
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: cad-eventlistener-role
+  subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+- Subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+  apiVersion: rbac.authorization.k8s.io/v1
+  kind: ClusterRoleBinding
+  metadata:
+    name: cad-eventlistener-clusterrolebinding
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: cad-eventlistener-clusterrole
+  subjects:
+  - kind: ServiceAccount
+    name: cad-sa
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: cad-aws-credentials
+  stringData:
+    AWS_ACCESS_KEY_ID: CHANGEME
+    AWS_DEFAULT_REGION: CHANGEME
+    AWS_SECRET_ACCESS_KEY: CHANGEME
+    AWS_SESSION_TOKEN: CHANGEME
+  type: Opaque
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: cad-ocm-client-secret
+  stringData:
+    CAD_OCM_CLIENT_ID: CHANGEME
+    CAD_OCM_CLIENT_SECRET: CHANGEME
+    CAD_OCM_URL: https://api.stage.openshift.com
+  type: Opaque
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: cad-pd-token
+  stringData:
+    token: CHANGEME
+  type: Opaque
+- apiVersion: tekton.dev/v1beta1
+  kind: Task
+  metadata:
+    name: cad-checks
+  spec:
+    params:
+    - description: Json string of the event data
+      name: payload
+      type: string
+    steps:
+    - args:
+      - |-
+        # save the payload to a file
+        folder=$(mktemp -d)
+        file=${folder}/payload.json
+        echo '$(params.payload)' > $file
+        # run the cadctl command
+        RESULT=$(cadctl cluster-missing --payload-path $file )
+      command:
+      - /bin/bash
+      - -c
+      env:
+      - name: CAD_PD
+        valueFrom:
+          secretKeyRef:
+            key: token
+            name: cad-pd-token
+      - name: CAD_ESCALATION_POLICY
+        value: XXXX
+      - name: CAD_SILENT_POLICY
+        value: XXXX
+      - name: CSS_JUMPROLE
+        value: XXXX
+      - name: SUPPORT_JUMPROLE
+        value: XXXX
+      envFrom:
+      - secretRef:
+          name: cad-aws-credentials
+      - secretRef:
+          name: cad-ocm-client-secret
+      image: quay.io/app-sre/cadctl@sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
+      name: check-infrastructure

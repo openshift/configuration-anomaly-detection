@@ -27,6 +27,8 @@ spec:
     envFrom:
     - secretRef:
         name: cad-aws-credentials
+    - secretRef:
+        name: cad-ocm-client-secret
     env:
     - name: CAD_PD
       valueFrom:
@@ -41,8 +43,3 @@ spec:
       value: XXXX
     - name: SUPPORT_JUMPROLE
       value: XXXX
-    envFrom:
-    - secretRef:
-        name: cad-aws-credentials
-    - secretRef:
-        name: cad-ocm-client-secret
