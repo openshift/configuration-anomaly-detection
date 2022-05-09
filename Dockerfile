@@ -1,6 +1,5 @@
-FROM golang:1.17.7-alpine3.15 as builder
-
-RUN apk add --update --no-cache ca-certificates tzdata git make bash && update-ca-certificates
+ARG BUILDER_IMG=registry.ci.openshift.org/openshift/release:golang-1.17
+FROM $BUILDER_IMG as builder
 
 ADD . /opt
 WORKDIR /opt
