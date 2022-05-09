@@ -13,65 +13,15 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// Template is the k8s template type. to keep dependencies minimal, k8s api is not pulled in
-type Template struct {
-	APIVersion string        `yaml:"apiVersion"`
-	Kind       string        `yaml:"kind"`
-	Metadata   Metadata      `yaml:"metadata"`
-	Parameters []Parameter   `yaml:"parameters"`
-	Objects    []interface{} `yaml:"objects"`
-}
+const (
+	maxDepth           = 1
+	deployFolderPath   = "../../deploy/"
+	outputTemplateFile = "../../openshift/template.yaml"
+)
 
-// Parameter is a parameter for the template. to keep dependencies minimal, k8s api is not pulled in
-type Parameter struct {
-	Name        string `yaml:"name"`
-	DisplayName string `yaml:"displayName,omitempty"`
-	Description string `yaml:"description"`
-	Value       string `yaml:"value,omitempty"`
-	Required    bool   `yaml:"required,omitempty"`
-	Generate    string `yaml:"generate,omitempty"`
-	From        string `yaml:"from,omitempty"`
-}
-
-// Metadata is the k8s metadata type. to keep dependencies minimal, k8s api is not pulled in
-type Metadata struct {
-	Name string `yaml:"name"`
-}
-
-func main() {
-	ex, getExecutableErr := os.Executable()
-	if getExecutableErr != nil {
-		panic(fmt.Errorf("could not get the Executable: %w", getExecutableErr))
-	}
-
-	workingDirectory := filepath.Dir(ex)
-	fmt.Printf("workingDirectory :: %s\n", workingDirectory)
-
-	var filesNames []string
-	relativeDeployFolder := filepath.Join(workingDirectory, "../../deploy/")
-	// the max depth is relative to the original folder depth
-	initialFolderDepth := strings.Count(relativeDeployFolder, string(os.PathSeparator))
-
-	maxDepth := initialFolderDepth + 1
-	// get all the yaml files in the deploy folder
-	walkErr := filepath.Walk(relativeDeployFolder, func(path string, info os.FileInfo, err error) error {
-		if !strings.HasSuffix(path, "yaml") {
-			return nil
-		}
-		if strings.Count(path, string(os.PathSeparator)) > maxDepth {
-			fmt.Printf("skipping file '%s'\n`", path)
-			return fs.SkipDir
-		}
-		filesNames = append(filesNames, path)
-		return nil
-	})
-
-	if walkErr != nil {
-		panic(fmt.Errorf("error while searching files in '%s': %w", relativeDeployFolder, walkErr))
-	}
-
+var (
 	// this holds all of the info that is static in the template. update this as needed
-	saasTemplateFile := Template{
+	saasTemplateFile = Template{
 		APIVersion: "template.openshift.io/v1",
 		Kind:       "Template",
 		Metadata: Metadata{
@@ -83,12 +33,33 @@ func main() {
 			{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		},
 	}
+)
+
+func main() {
+	ex, getExecutableErr := os.Executable()
+	if getExecutableErr != nil {
+		panic(fmt.Errorf("could not get the Executable: %w", getExecutableErr))
+	}
+
+	workingDirectory := filepath.Dir(ex)
+	fmt.Printf("workingDirectory :: %s\n", workingDirectory)
+
+	var filesNames []string
+	relativeDeployFolder := filepath.Join(workingDirectory, deployFolderPath)
+	// the max depth is relative to the original folder depth
+	initialFolderDepth := strings.Count(relativeDeployFolder, string(os.PathSeparator))
+
+	calculatedMaxDepth := initialFolderDepth + maxDepth
+	// get all the yaml files in the deploy folder
+	walkErr := filepath.Walk(relativeDeployFolder, findAllYamlFilesInDepth(calculatedMaxDepth, &filesNames))
+
+	if walkErr != nil {
+		panic(fmt.Errorf("error while searching files in '%s': %w", relativeDeployFolder, walkErr))
+	}
 
 	totalDecodedObjects := 0
 	// iterate through each of the files
-	fmt.Printf("the filenames are '%v'\n", filesNames)
 	for fileIndex, fileName := range filesNames {
-		fmt.Println("filename", fileName)
 		// read the file
 		fileName = filepath.Clean(fileName)
 		fileAsFileObj, openErr := os.Open(fileName) //#nosec G304 -- This is the best I can do :/
@@ -97,11 +68,10 @@ func main() {
 			panic(fmt.Errorf("could not read file '%s': %w", fileName, openErr))
 		}
 
-		fmt.Printf("fileAsFileObj: %v\n", fileAsFileObj)
 		yamlDecoder := yaml.NewDecoder(fileAsFileObj)
 		yamlDecoder.SetStrict(true)
-		fileDecodedObjects := 0
 
+		fileDecodedObjects := 0
 		for {
 			// fileAsMap is map[interface{}]interface{} as it's the most general object we can create. if we would have had a stict file k8s format we would have used it
 			// it's that and the internal yaml objects are also in that type, so it makes things simpler
@@ -126,14 +96,7 @@ func main() {
 				continue
 			}
 
-			fmt.Printf("the file '%s' has decoded '%d' objects (and in general decoded '%d' objects in '%d' files)\n",
-				fileName,
-				fileDecodedObjects,
-				totalDecodedObjects,
-				fileIndex,
-			)
 			removeNestedField(fileAsMap, "metadata", "namespace")
-			fmt.Println(reflect.TypeOf(fileAsMap["metadata"]))
 
 			kind, kindExists := fileAsMap["kind"]
 			if !kindExists {
@@ -146,41 +109,16 @@ func main() {
 			}
 
 			if apiVersion == "rbac.authorization.k8s.io/v1" && (kind == "RoleBinding" || kind == "ClusterRoleBinding") {
-				subjects, hasSubjects, getNestedSliceErr := mutableNestedSlice(fileAsMap, "subjects")
-				if getNestedSliceErr != nil {
-					panic(fmt.Errorf("error getting subjects: %w", getNestedSliceErr))
+				fixRoleOrClusterRoleBindingErr := fixRoleOrClusterRoleBinding(fileAsMap)
+				if fixRoleOrClusterRoleBindingErr != nil {
+					panic(fmt.Errorf("fixRoleOrClusterRoleBinding failed: %w", fixRoleOrClusterRoleBindingErr))
 				}
-				if !hasSubjects {
-					panic(fmt.Errorf("subjects doesn't exist"))
-				}
-				for subjectIndex, subject := range subjects {
-					extractedSubject, canConvertExtractedSubject := subject.(map[interface{}]interface{})
-					if !canConvertExtractedSubject {
-						panic(fmt.Errorf("could not convert a subject item in index '%d' field into `map[interface{}]interface{}`: '%v'", subjectIndex, reflect.TypeOf(subject)))
-					}
-					delete(extractedSubject, "namespace")
-				}
-				fileAsMap["subjects"] = subjects
 			}
 
 			if apiVersion == "tekton.dev/v1beta1" && kind == "Task" {
-				steps, hasSteps, getNestedStepsErr := mutableNestedSlice(fileAsMap, "spec", "steps")
-				if getNestedStepsErr != nil {
-					panic(fmt.Errorf("error getting steps: %w", getNestedStepsErr))
-				}
-				if !hasSteps {
-					panic(fmt.Errorf("steps doesn't exist"))
-				}
-				for stepIndex, step := range steps {
-					extractedStep, canConvertExtractedStep := step.(map[interface{}]interface{})
-					if !canConvertExtractedStep {
-						panic(fmt.Errorf("could not convert a step item in index '%d' field into `map[interface{}]interface{}`: '%v'", stepIndex, reflect.TypeOf(step)))
-					}
-					if extractedStep["name"] != "check-infrastructure" {
-						continue
-					}
-					extractedStep["image"] = "REGISTRY_IMG@IMAGE_DIGEST"
-					step = extractedStep
+				fixTaskImageErr := fixTaskImage(fileAsMap)
+				if fixTaskImageErr != nil {
+					panic(fmt.Errorf("fixTaskImage failed: %w", fixTaskImageErr))
 				}
 			}
 
@@ -198,7 +136,7 @@ func main() {
 	}
 	// print to stdout just so we know something happened and the code isn't broken
 	fmt.Printf("---\n%s\n", string(saasTemplateFileAsBytes))
-	outputFile := filepath.Join(workingDirectory, "../../openshift/template.yaml")
+	outputFile := filepath.Join(workingDirectory, outputTemplateFile)
 
 	// Open the output file
 	outputFile = filepath.Clean(outputFile)
@@ -217,5 +155,58 @@ func main() {
 	_, writeErr := f.Write(saasTemplateFileAsBytes)
 	if writeErr != nil {
 		panic(fmt.Errorf("could not write marshalled data into file '%s': %w", outputFile, writeErr))
+	}
+}
+func fixRoleOrClusterRoleBinding(fileAsMap map[interface{}]interface{}) error {
+	subjects, hasSubjects, getNestedSliceErr := mutableNestedSlice(fileAsMap, "subjects")
+	if getNestedSliceErr != nil {
+		return fmt.Errorf("error getting subjects: %w", getNestedSliceErr)
+	}
+	if !hasSubjects {
+		return fmt.Errorf("subjects doesn't exist")
+	}
+	for subjectIndex, subject := range subjects {
+		extractedSubject, canConvertExtractedSubject := subject.(map[interface{}]interface{})
+		if !canConvertExtractedSubject {
+			return fmt.Errorf("could not convert a subject item in index '%d' field into `map[interface{}]interface{}`: '%v'", subjectIndex, reflect.TypeOf(subject))
+		}
+		delete(extractedSubject, "namespace")
+	}
+	fileAsMap["subjects"] = subjects
+	return nil
+}
+
+func fixTaskImage(fileAsMap map[interface{}]interface{}) error {
+	steps, hasSteps, getNestedStepsErr := mutableNestedSlice(fileAsMap, "spec", "steps")
+	if getNestedStepsErr != nil {
+		return fmt.Errorf("error getting steps: %w", getNestedStepsErr)
+	}
+	if !hasSteps {
+		return fmt.Errorf("steps doesn't exist")
+	}
+	for stepIndex, step := range steps {
+		extractedStep, canConvertExtractedStep := step.(map[interface{}]interface{})
+		if !canConvertExtractedStep {
+			return fmt.Errorf("could not convert a step item in index '%d' field into `map[interface{}]interface{}`: '%v'", stepIndex, reflect.TypeOf(step))
+		}
+		if extractedStep["name"] != "check-infrastructure" {
+			continue
+		}
+		extractedStep["image"] = "REGISTRY_IMG@IMAGE_DIGEST"
+	}
+	return nil
+}
+
+func findAllYamlFilesInDepth(maxDepth int, filesNames *[]string) func(path string, info os.FileInfo, err error) error {
+	return func(path string, info os.FileInfo, err error) error {
+		if !strings.HasSuffix(path, "yaml") {
+			return nil
+		}
+		if strings.Count(path, string(os.PathSeparator)) > maxDepth {
+			fmt.Printf("skipping file '%s'\n", path)
+			return fs.SkipDir
+		}
+		*filesNames = append(*filesNames, path)
+		return nil
 	}
 }
