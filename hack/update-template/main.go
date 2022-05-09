@@ -44,13 +44,14 @@ func main() {
 	workingDirectory := filepath.Dir(ex)
 	fmt.Printf("workingDirectory :: %s\n", workingDirectory)
 
-	var filesNames []string
 	relativeDeployFolder := filepath.Join(workingDirectory, deployFolderPath)
+
 	// the max depth is relative to the original folder depth
 	initialFolderDepth := strings.Count(relativeDeployFolder, string(os.PathSeparator))
+	calculatedMaxDepth := maxDepth + initialFolderDepth
 
-	calculatedMaxDepth := initialFolderDepth + maxDepth
 	// get all the yaml files in the deploy folder
+	var filesNames []string
 	walkErr := filepath.Walk(relativeDeployFolder, findAllYamlFilesInDepth(calculatedMaxDepth, &filesNames))
 
 	if walkErr != nil {
