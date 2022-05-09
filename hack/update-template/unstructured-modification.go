@@ -1,5 +1,8 @@
 package main
 
+// all of these have been pulled from k8s.io/apimachinery/pkg/apis/meta/v1/unstructured
+// this issue https://github.com/kubernetes/apimachinery/issues/138 explains why I needed to duplicate these funcs
+
 import "fmt"
 
 func mutableNestedSlice(obj map[interface{}]interface{}, fields ...string) ([]interface{}, bool, error) {
@@ -7,6 +10,8 @@ func mutableNestedSlice(obj map[interface{}]interface{}, fields ...string) ([]in
 	if !found || err != nil {
 		return nil, found, err
 	}
+	
+	// using retVal instead of the json stuff that was originally as if broke. this doesn't
 	retVal, ok := val.([]interface{})
 	if !ok {
 		return nil, false, fmt.Errorf("could not convert to []interface{}")
@@ -33,7 +38,6 @@ func nestedFieldNoCopy(obj map[interface{}]interface{}, fields ...string) (inter
 	return val, true, nil
 }
 
-// pulled from k8s.io/apimachinery/pkg/apis/meta/v1/unstructured
 func removeNestedField(obj map[interface{}]interface{}, fields ...string) {
 	m := obj
 	for _, field := range fields[:len(fields)-1] {
