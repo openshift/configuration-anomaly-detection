@@ -13,17 +13,6 @@ parameters:
   description: ""
   value: configuration-anomaly-detection
 objects:
-- apiVersion: tekton.dev/v1beta1
-  kind: PipelineRun
-  metadata:
-    generateName: cad-checks-
-  spec:
-    params:
-    - name: payload
-      value: '{"event": {"data":{"id": "incidentid"}}}'
-    pipelineRef:
-      name: cad-checks-pipeline
-    serviceAccountName: cad-sa
 - apiVersion: triggers.tekton.dev/v1alpha1
   kind: TriggerBinding
   metadata:

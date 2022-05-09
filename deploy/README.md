@@ -61,11 +61,6 @@ or for more details, see [tekton's docs on the matter](https://github.com/tekton
 
 The Pipeline expects to receive details of a pagerduty event as payload. See the webhook payload that is send by Pagerduty [here](https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload).
 
-Or directly via the following command:
-
-```console
-oc create -f pipeline-run.yaml
-```
 
 The logs of the last pipeline can be fetched with the command as long as the pods are still available:
 the `tkn` tool is pulled from https://github.com/tektoncd/cli
