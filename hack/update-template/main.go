@@ -72,16 +72,23 @@ func main() {
 
 	// this holds all of the info that is static in the template. update this as needed
 	saasTemplateFile := Template{
-		APIVersion: "v1",
+		APIVersion: "template.openshift.io/v1",
 		Kind:       "Template",
 		Metadata: Metadata{
 			Name: "configuration-anomaly-detection-template",
+		},
+		Parameters: []Parameter{
+			{Name: "IMAGE_DIGEST", Value: "sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a"},
+			{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/cadctl"},
+			{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		},
 	}
 
 	totalDecodedObjects := 0
 	// iterate through each of the files
+	fmt.Printf("the filenames are '%v'\n", filesNames)
 	for fileIndex, fileName := range filesNames {
+		fmt.Println("filename", fileName)
 		// read the file
 		fileName = filepath.Clean(fileName)
 		fileAsFileObj, openErr := os.Open(fileName) //#nosec G304 -- This is the best I can do :/
@@ -90,12 +97,14 @@ func main() {
 			panic(fmt.Errorf("could not read file '%s': %w", fileName, openErr))
 		}
 
+		fmt.Printf("fileAsFileObj: %v\n", fileAsFileObj)
 		yamlDecoder := yaml.NewDecoder(fileAsFileObj)
 		yamlDecoder.SetStrict(true)
 		fileDecodedObjects := 0
 
 		for {
 			// fileAsMap is map[interface{}]interface{} as it's the most general object we can create. if we would have had a stict file k8s format we would have used it
+			// it's that and the internal yaml objects are also in that type, so it makes things simpler
 			fileAsMap := make(map[interface{}]interface{})
 			decodeErr := yamlDecoder.Decode(&fileAsMap)
 			// break the loop in case of EOF
@@ -117,39 +126,62 @@ func main() {
 				continue
 			}
 
-			metadata, hasMetadata := fileAsMap["metadata"]
-			const namespaceUpdateErrString = "could not update namespace field"
-			if !hasMetadata {
-				panic(fmt.Errorf("%s: does not have a `metadata` field", namespaceUpdateErrString))
-			}
-			// change the namespace in the metadata
-			metadataMap, canConvertMetadata := metadata.(map[interface{}]interface{})
-			if !canConvertMetadata {
-				panic(fmt.Errorf("%s: could not convert metadata into `[]interface{}` '%v'", namespaceUpdateErrString, reflect.TypeOf(metadata)))
-			}
-			delete(metadataMap, "namespace")
-			fileAsMap["metadata"] = metadataMap
+			fmt.Printf("the file '%s' has decoded '%d' objects (and in general decoded '%d' objects in '%d' files)\n",
+				fileName,
+				fileDecodedObjects,
+				totalDecodedObjects,
+				fileIndex,
+			)
+			removeNestedField(fileAsMap, "metadata", "namespace")
+			fmt.Println(reflect.TypeOf(fileAsMap["metadata"]))
 
-			if fileAsMap["apiVersion"] == "rbac.authorization.k8s.io/v1" && (fileAsMap["kind"] == "RoleBinding" || fileAsMap["kind"] == "ClusterRoleBinding") {
-				extractedSubjectsRaw, hasExtractedSubjectsRaw := fileAsMap["subjects"]
-				const roleBindingErrString = "could not modify the k8s RoleBinding/ClusterRoleBinding"
-				if !hasExtractedSubjectsRaw {
-					panic(fmt.Errorf("%s: does not have a `subjects` field", roleBindingErrString))
+			kind, kindExists := fileAsMap["kind"]
+			if !kindExists {
+				panic(fmt.Errorf("kind doesn't exist"))
+			}
+
+			apiVersion, apiVersionExists := fileAsMap["apiVersion"]
+			if !apiVersionExists {
+				panic(fmt.Errorf("apiVersion doesn't exist"))
+			}
+
+			if apiVersion == "rbac.authorization.k8s.io/v1" && (kind == "RoleBinding" || kind == "ClusterRoleBinding") {
+				subjects, hasSubjects, getNestedSliceErr := mutableNestedSlice(fileAsMap, "subjects")
+				if getNestedSliceErr != nil {
+					panic(fmt.Errorf("error getting subjects: %w", getNestedSliceErr))
 				}
-				_ = `kind:ServiceAccount name:cad-sa namespace:configuration-anomaly-detection`
-				extractedSubjectsInterface, canConvertExtractedSubjectsInterface := extractedSubjectsRaw.([]interface{})
-				if !canConvertExtractedSubjectsInterface {
-					panic(fmt.Errorf("%s: could not convert the `subjects` field into `[]interface{}` '%v'", roleBindingErrString, reflect.TypeOf(extractedSubjectsRaw)))
+				if !hasSubjects {
+					panic(fmt.Errorf("subjects doesn't exist"))
 				}
-				for extractedSubjectInterfaceIndex, extractedSubjectInterface := range extractedSubjectsInterface {
-					extractedSubject, canConvertExtractedSubject := extractedSubjectInterface.(map[interface{}]interface{})
+				for subjectIndex, subject := range subjects {
+					extractedSubject, canConvertExtractedSubject := subject.(map[interface{}]interface{})
 					if !canConvertExtractedSubject {
-						panic(fmt.Errorf("%s: could not convert an item in index '%d' field into `map[interface{}]interface{}`: '%v'", roleBindingErrString, extractedSubjectInterfaceIndex, reflect.TypeOf(extractedSubjectInterface)))
+						panic(fmt.Errorf("could not convert a subject item in index '%d' field into `map[interface{}]interface{}`: '%v'", subjectIndex, reflect.TypeOf(subject)))
 					}
 					delete(extractedSubject, "namespace")
 				}
-				fileAsMap["Subjects"] = extractedSubjectsInterface
+				fileAsMap["subjects"] = subjects
+			}
 
+			if apiVersion == "tekton.dev/v1beta1" && kind == "Task" {
+				steps, hasSteps, getNestedStepsErr := mutableNestedSlice(fileAsMap, "spec", "steps")
+				if getNestedStepsErr != nil {
+					panic(fmt.Errorf("error getting steps: %w", getNestedStepsErr))
+				}
+				if !hasSteps {
+					panic(fmt.Errorf("steps doesn't exist"))
+				}
+				for stepIndex, step := range steps {
+					extractedStep, canConvertExtractedStep := step.(map[interface{}]interface{})
+					if !canConvertExtractedStep {
+						panic(fmt.Errorf("could not convert a step item in index '%d' field into `map[interface{}]interface{}`: '%v'", stepIndex, reflect.TypeOf(step)))
+					}
+					if extractedStep["name"] != "check-infrastructure" {
+						continue
+					}
+					extractedStep["image"] = "REGISTRY_IMG@IMAGE_DIGEST"
+					step = extractedStep
+				}
 			}
 
 			fileDecodedObjects++
