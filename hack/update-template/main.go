@@ -170,7 +170,7 @@ func fixRoleOrClusterRoleBinding(fileAsMap map[interface{}]interface{}) error {
 		if !canConvertExtractedSubject {
 			return fmt.Errorf("could not convert a subject item in index '%d' field into `map[interface{}]interface{}`: '%v'", subjectIndex, reflect.TypeOf(subject))
 		}
-		delete(extractedSubject, "namespace")
+		extractedSubject["namespace"] = "${NAMESPACE_NAME}"
 	}
 	fileAsMap["subjects"] = subjects
 	return nil
@@ -192,7 +192,7 @@ func fixTaskImage(fileAsMap map[interface{}]interface{}) error {
 		if extractedStep["name"] != "check-infrastructure" {
 			continue
 		}
-		extractedStep["image"] = "REGISTRY_IMG@IMAGE_DIGEST"
+		extractedStep["image"] = "${REGISTRY_IMG}@${IMAGE_DIGEST}"
 	}
 	return nil
 }

@@ -54,7 +54,7 @@ oc create route edge --service=el-cad-event-listener
 PipelineRuns can be started via the following post command:
 
 ```console
-curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
+oc exec -it deploy/el-cad-event-listener -- curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
 ```
 
 or for more details, see [tekton's docs on the matter](https://github.com/tektoncd/triggers/tree/main/examples#invoking-the-triggers-locally)

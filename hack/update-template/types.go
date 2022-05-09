@@ -13,7 +13,7 @@ type Template struct {
 type Parameter struct {
 	Name        string `yaml:"name"`
 	DisplayName string `yaml:"displayName,omitempty"`
-	Description string `yaml:"description"`
+	Description string `yaml:"description,omitempty"`
 	Value       string `yaml:"value,omitempty"`
 	Required    bool   `yaml:"required,omitempty"`
 	Generate    string `yaml:"generate,omitempty"`

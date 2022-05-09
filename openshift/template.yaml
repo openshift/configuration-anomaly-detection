@@ -4,13 +4,10 @@ metadata:
   name: configuration-anomaly-detection-template
 parameters:
 - name: IMAGE_DIGEST
-  description: ""
   value: sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
 - name: REGISTRY_IMG
-  description: ""
   value: quay.io/app-sre/cadctl
 - name: NAMESPACE_NAME
-  description: ""
   value: configuration-anomaly-detection
 objects:
 - apiVersion: triggers.tekton.dev/v1alpha1
@@ -162,6 +159,7 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: cad-sa
+    namespace: ${NAMESPACE_NAME}
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -173,6 +171,7 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: cad-sa
+    namespace: ${NAMESPACE_NAME}
 - apiVersion: v1
   kind: Secret
   metadata:
@@ -239,5 +238,5 @@ objects:
           name: cad-aws-credentials
       - secretRef:
           name: cad-ocm-client-secret
-      image: REGISTRY_IMG@IMAGE_DIGEST
+      image: ${REGISTRY_IMG}@${IMAGE_DIGEST}
       name: check-infrastructure
