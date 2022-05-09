@@ -72,6 +72,7 @@ generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
 ## CI actions 
 
 # pulled from https://github.com/openshift/boilerplate/blob/056cba90733136e589ac2c4cd45238fd6207cfbd/Makefile#L10-L11
+ALLOW_DIRTY_CHECKOUT := false
 .PHONY: isclean
 isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true to nullify
 	@(test "$(ALLOW_DIRTY_CHECKOUT)" != "false" || test 0 -eq $$(git status --porcelain | wc -l)) || (echo "Local git checkout is not clean, commit changes and try again." >&2 && exit 1)
