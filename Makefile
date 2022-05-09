@@ -38,8 +38,11 @@ test:
 	go test -race -mod=readonly ./...
 
 .PHONY: lint
-lint: bin/golangci-lint
+lint: bin/golangci-lint lint-only-hack
 	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+
+.PHONY: lint-only-hack
+lint-only-hack: bin/golangci-lint
 	cd hack/update-template/ &&  GOLANGCI_LINT_CACHE=$(shell mktemp -d) ../../bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: test-with-race
