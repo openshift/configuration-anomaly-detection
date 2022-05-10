@@ -28,21 +28,14 @@ spec:
     - secretRef:
         name: cad-aws-credentials
     env:
-    - name: CAD_PD
-      valueFrom:
-        secretKeyRef:
-          name: cad-pd-token
-          key: CAD_PD_TOKEN
     - name: CAD_ESCALATION_POLICY
       value: XXXX
     - name: CAD_SILENT_POLICY
-      value: XXXX
-    - name: CAD_CSS_JUMPROLE
-      value: XXXX
-    - name: CAD_SUPPORT_JUMPROLE
       value: XXXX
     envFrom:
     - secretRef:
         name: cad-aws-credentials
     - secretRef:
         name: cad-ocm-client-secret
+    - secretRef:
+        name: cad-pd-token
