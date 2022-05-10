@@ -12,7 +12,7 @@ Install CAD by running the following commands:
 First, apply the subscription to the pipeline operator:
 
 ```console
-oc apply -f pipeline-operator-subscription.yaml
+oc apply -f tekton
 ```
 
 ### Configure secrets
@@ -33,6 +33,7 @@ OVERRIDE_IMAGE=${IMAGE_LOCATION} yq --inplace '.spec.steps[].image=env(OVERRIDE_
 Wait a minute until it becomes available, then apply the rest:
 
 ```console
+oc apply -f namespace/
 oc apply -f .
 ```
 **Note**: the resource [./pipeline-run.yaml](./pipeline-run.yaml) will not be created using `oc apply && oc delete` as it uses a `.metadata.generateName`, thus is only available to create using `oc create` as seen later on
@@ -53,18 +54,13 @@ oc create route edge --service=el-cad-event-listener
 PipelineRuns can be started via the following post command:
 
 ```console
-curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
+oc exec -it deploy/el-cad-event-listener -- curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
 ```
 
 or for more details, see [tekton's docs on the matter](https://github.com/tektoncd/triggers/tree/main/examples#invoking-the-triggers-locally)
 
 The Pipeline expects to receive details of a pagerduty event as payload. See the webhook payload that is send by Pagerduty [here](https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload).
 
-Or directly via the following command:
-
-```console
-oc create -f pipeline-run.yaml
-```
 
 The logs of the last pipeline can be fetched with the command as long as the pods are still available:
 the `tkn` tool is pulled from https://github.com/tektoncd/cli
@@ -82,8 +78,6 @@ tkn pipelinerun list -n configuration-anomaly-detection
 The documentation for further Tekton commands is available [here](https://docs.openshift.com/container-platform/4.4/cli_reference/tkn_cli/op-tkn-reference.html).
 
 ## What Do We Have Here
-### Subscription
-[pipeline-operator-subscription.yaml](./pipeline-operator-subscription.yaml) will deploy the tekton pipeline operator on the cluster
 ### Namesapce
 straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next resources
 #### SA

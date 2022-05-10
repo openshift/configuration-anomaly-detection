@@ -41,15 +41,19 @@ test:
 	go test -race -mod=readonly ./...
 
 .PHONY: lint
-lint: bin/golangci-lint
+lint: bin/golangci-lint lint-only-hack
 	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+
+.PHONY: lint-only-hack
+lint-only-hack: bin/golangci-lint
+	cd hack/update-template/ &&  GOLANGCI_LINT_CACHE=$(shell mktemp -d) ../../bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: test-with-race
 test-with-race:
 	go test -race ./...
 
 .PHONY: generate
-generate: bin/mockgen
+generate: bin/mockgen generate-template-file generate-markdown
 	go generate -mod=readonly ./...
 
 .PHONY: test-with-coverage
@@ -74,6 +78,7 @@ generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
 ## CI actions 
 
 # pulled from https://github.com/openshift/boilerplate/blob/056cba90733136e589ac2c4cd45238fd6207cfbd/Makefile#L10-L11
+ALLOW_DIRTY_CHECKOUT := false
 .PHONY: isclean
 isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true to nullify
 	@(test "$(ALLOW_DIRTY_CHECKOUT)" != "false" || test 0 -eq $$(git status --porcelain | wc -l)) || (echo "Local git checkout is not clean, commit changes and try again." >&2 && exit 1)
@@ -82,9 +87,13 @@ isclean: ## Validate the local checkout is clean. Use ALLOW_DIRTY_CHECKOUT=true 
 coverage: hack/codecov.sh
 
 
+.PHONY: generate-template-file
+generate-template-file:
+	cd ./hack/update-template/ && go build -mod=readonly . && ./update-template
+
 # not using the 'all' target to make the target independent
 .PHONY: validate
-validate: build generate generate-markdown checks isclean
+validate: build generate checks isclean
 
 # will hold all of the checks that will run on the repo. this can be extracted to a script if need be
 .PHONY: checks
