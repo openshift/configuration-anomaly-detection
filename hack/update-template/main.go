@@ -136,9 +136,9 @@ func main() {
 	}
 	// print to stdout just so we know something happened and the code isn't broken
 	fmt.Printf("---\n%s\n", string(saasTemplateFileAsBytes))
-	outputFile := filepath.Join(workingDirectory, outputTemplateFile)
 
 	// Open the output file
+	outputFile := filepath.Join(workingDirectory, outputTemplateFile)
 	outputFile = filepath.Clean(outputFile)
 	f, createErr := os.Create(outputFile) //#nosec G304 -- This is the best I can do :/
 	if createErr != nil {

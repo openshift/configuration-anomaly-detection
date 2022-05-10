@@ -2,6 +2,8 @@ package main
 
 // all of these have been pulled from k8s.io/apimachinery/pkg/apis/meta/v1/unstructured
 // this issue https://github.com/kubernetes/apimachinery/issues/138 explains why I needed to duplicate these funcs
+// most of the commands were using map[string]interface{} in the original but that wasn't what was returned by the `yaml.Unamrshal`
+// thus I moved the checks to `map[interface{}]interface{}`
 
 import "fmt"
 
@@ -10,7 +12,7 @@ func mutableNestedSlice(obj map[interface{}]interface{}, fields ...string) ([]in
 	if !found || err != nil {
 		return nil, found, err
 	}
-	
+
 	// using retVal instead of the json stuff that was originally as if broke. this doesn't
 	retVal, ok := val.([]interface{})
 	if !ok {
