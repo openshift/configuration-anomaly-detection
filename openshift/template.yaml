@@ -196,7 +196,7 @@ objects:
   metadata:
     name: cad-pd-token
   stringData:
-    token: CHANGEME
+    CAD_PD_TOKEN: CHANGEME
   type: Opaque
 - apiVersion: tekton.dev/v1beta1
   kind: Task
@@ -220,23 +220,16 @@ objects:
       - /bin/bash
       - -c
       env:
-      - name: CAD_PD
-        valueFrom:
-          secretKeyRef:
-            key: token
-            name: cad-pd-token
       - name: CAD_ESCALATION_POLICY
         value: XXXX
       - name: CAD_SILENT_POLICY
-        value: XXXX
-      - name: CSS_JUMPROLE
-        value: XXXX
-      - name: SUPPORT_JUMPROLE
         value: XXXX
       envFrom:
       - secretRef:
           name: cad-aws-credentials
       - secretRef:
           name: cad-ocm-client-secret
+      - secretRef:
+          name: cad-pd-token
       image: ${REGISTRY_IMG}@${IMAGE_DIGEST}
       name: check-infrastructure
