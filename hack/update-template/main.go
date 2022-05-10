@@ -47,8 +47,7 @@ func main() {
 	relativeDeployFolder := filepath.Join(workingDirectory, deployFolderPath)
 
 	// the max depth is relative to the original folder depth
-	initialFolderDepth := strings.Count(relativeDeployFolder, string(os.PathSeparator))
-	calculatedMaxDepth := maxDepth + initialFolderDepth
+	calculatedMaxDepth := maxDepth + strings.Count(relativeDeployFolder, string(os.PathSeparator))
 
 	// get all the yaml files in the deploy folder
 	var filesNames []string
@@ -109,14 +108,14 @@ func main() {
 				panic(fmt.Errorf("apiVersion doesn't exist"))
 			}
 
-			if apiVersion == "rbac.authorization.k8s.io/v1" && (kind == "RoleBinding" || kind == "ClusterRoleBinding") {
+			// handle each onject type with it's own use case
+			switch {
+			case apiVersion == "rbac.authorization.k8s.io/v1" && (kind == "RoleBinding" || kind == "ClusterRoleBinding"):
 				fixRoleOrClusterRoleBindingErr := fixRoleOrClusterRoleBinding(fileAsMap)
 				if fixRoleOrClusterRoleBindingErr != nil {
 					panic(fmt.Errorf("fixRoleOrClusterRoleBinding failed: %w", fixRoleOrClusterRoleBindingErr))
 				}
-			}
-
-			if apiVersion == "tekton.dev/v1beta1" && kind == "Task" {
+			case apiVersion == "tekton.dev/v1beta1" && kind == "Task":
 				fixTaskImageErr := fixTaskImage(fileAsMap)
 				if fixTaskImageErr != nil {
 					panic(fmt.Errorf("fixTaskImage failed: %w", fixTaskImageErr))
