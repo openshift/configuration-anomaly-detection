@@ -4,9 +4,9 @@ metadata:
   name: configuration-anomaly-detection-template
 parameters:
 - name: IMAGE_DIGEST
-  value: sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
+  required: true
 - name: REGISTRY_IMG
-  value: quay.io/app-sre/cadctl
+  value: quay.io/app-sre/configuration-anomaly-detection
 - name: NAMESPACE_NAME
   value: configuration-anomaly-detection
 objects:
