@@ -28,8 +28,8 @@ var (
 			Name: "configuration-anomaly-detection-template",
 		},
 		Parameters: []Parameter{
-			{Name: "IMAGE_DIGEST", Value: "sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a"},
-			{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/cadctl"},
+			{Name: "IMAGE_DIGEST", Required: true},
+			{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/configuration-anomaly-detection"},
 			{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		},
 	}
