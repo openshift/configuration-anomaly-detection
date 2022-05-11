@@ -192,7 +192,7 @@ func fixTaskImage(fileAsMap map[interface{}]interface{}) error {
 		if extractedStep["name"] != "check-infrastructure" {
 			continue
 		}
-		extractedStep["image"] = "${REGISTRY_IMG}@${IMAGE_DIGEST}"
+		extractedStep["image"] = "${REGISTRY_IMG}@sha256:${IMAGE_DIGEST}"
 	}
 	return nil
 }

@@ -233,5 +233,5 @@ objects:
           name: cad-ocm-client-secret
       - secretRef:
           name: cad-pd-token
-      image: ${REGISTRY_IMG}@${IMAGE_DIGEST}
+      image: ${REGISTRY_IMG}@sha256:${IMAGE_DIGEST}
       name: check-infrastructure
