@@ -23,23 +23,16 @@ spec:
       echo '$(params.payload)' > $file
       # run the cadctl command
       RESULT=$(cadctl cluster-missing --payload-path $file )
+    env:
+    - name: CAD_ESCALATION_POLICY
+      value: XXXX
+    - name: CAD_SILENT_POLICY
+      value: XXXX
     # envFrom should pull all of the secret information as envvars, so key names should be uppercase
     envFrom:
     - secretRef:
         name: cad-aws-credentials
     - secretRef:
         name: cad-ocm-client-secret
-    env:
-    - name: CAD_PD
-      valueFrom:
-        secretKeyRef:
-          name: cad-pd-token
-          key: token
-    - name: CAD_ESCALATION_POLICY
-      value: XXXX
-    - name: CAD_SILENT_POLICY
-      value: XXXX
-    - name: CSS_JUMPROLE
-      value: XXXX
-    - name: SUPPORT_JUMPROLE
-      value: XXXX
+    - secretRef:
+        name: cad-pd-token

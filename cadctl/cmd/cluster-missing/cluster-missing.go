@@ -80,14 +80,14 @@ func run(cmd *cobra.Command, args []string) error {
 			PdClient:  pdClient,
 		},
 	}
-	cssJumprole, ok := os.LookupEnv("CSS_JUMPROLE")
+	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
 	if !ok {
-		return fmt.Errorf("CSS_JUMPROLE is missing")
+		return fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
 	}
 
-	supportRole, ok := os.LookupEnv("SUPPORT_JUMPROLE")
+	supportRole, ok := os.LookupEnv("CAD_AWS_SUPPORT_JUMPROLE")
 	if !ok {
-		return fmt.Errorf("SUPPORT_JUMPROLE is missing")
+		return fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
 	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
