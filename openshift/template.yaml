@@ -3,8 +3,8 @@ kind: Template
 metadata:
   name: configuration-anomaly-detection-template
 parameters:
-- name: IMAGE_DIGEST
-  required: true
+- name: IMAGE_TAG
+  value: v0.0.0
 - name: REGISTRY_IMG
   value: quay.io/app-sre/configuration-anomaly-detection
 - name: NAMESPACE_NAME
