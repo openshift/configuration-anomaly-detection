@@ -28,7 +28,7 @@ var (
 			Name: "configuration-anomaly-detection-template",
 		},
 		Parameters: []Parameter{
-			{Name: "IMAGE_DIGEST", Required: true},
+			{Name: "IMAGE_TAG", Value: "v0.0.0"},
 			{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/configuration-anomaly-detection"},
 			{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		},
@@ -192,7 +192,7 @@ func fixTaskImage(fileAsMap map[interface{}]interface{}) error {
 		if extractedStep["name"] != "check-infrastructure" {
 			continue
 		}
-		extractedStep["image"] = "${REGISTRY_IMG}@${IMAGE_DIGEST}"
+		extractedStep["image"] = "${REGISTRY_IMG}:${IMAGE_TAG}"
 	}
 	return nil
 }
