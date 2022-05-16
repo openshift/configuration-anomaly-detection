@@ -1,4 +1,5 @@
 reviewers:
+- Nikokolas3270
 - Tessg22
 - georgettica
 - ninabauer
@@ -6,8 +7,13 @@ reviewers:
 - ramonbutter
 - shibumi
 approvers:
-- rafael-azevedo
+- Nikokolas3270
+- Tessg22
 - georgettica
+- ninabauer
+- rafael-azevedo
+- ramonbutter
+- shibumi
 maintainers:
-- rafael-azevedo
 - georgettica
+- rafael-azevedo
