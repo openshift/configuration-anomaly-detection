@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	// this holds all of the info that is static in the template. update this as needed
+	// this holds all the info that is static in the template. update this as needed
 	saasTemplateFile = Template{
 		APIVersion: "template.openshift.io/v1",
 		Kind:       "Template",
@@ -73,8 +73,8 @@ func main() {
 
 		fileDecodedObjects := 0
 		for {
-			// fileAsMap is map[interface{}]interface{} as it's the most general object we can create. if we would have had a stict file k8s format we would have used it
-			// it's that and the internal yaml objects are also in that type, so it makes things simpler
+			// fileAsMap is map[interface{}]interface{} as it's the most general object we can create.
+			// The internal yaml objects are also in that type, so it makes things simpler
 			fileAsMap := make(map[interface{}]interface{})
 			decodeErr := yamlDecoder.Decode(&fileAsMap)
 			// break the loop in case of EOF
@@ -108,7 +108,7 @@ func main() {
 				panic(fmt.Errorf("apiVersion doesn't exist"))
 			}
 
-			// handle each onject type with it's own use case
+			// handle each object type with its own use case
 			switch {
 			case apiVersion == "rbac.authorization.k8s.io/v1" && (kind == "RoleBinding" || kind == "ClusterRoleBinding"):
 				fixRoleOrClusterRoleBindingErr := fixRoleOrClusterRoleBinding(fileAsMap)
