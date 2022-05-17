@@ -10,7 +10,7 @@ parameters:
 - name: NAMESPACE_NAME
   value: configuration-anomaly-detection
 objects:
-- apiVersion: triggers.tekton.dev/v1alpha1
+- apiVersion: triggers.tekton.dev/v1beta1
   kind: TriggerBinding
   metadata:
     name: cad-check-trigger
@@ -70,7 +70,6 @@ objects:
       triggers.tekton.dev/old-escape-quotes: "true"
     name: cad-event-listener
   spec:
-    serviceAccountName: cad-sa
     triggers:
     - triggerRef: cad-pipe-listener
 - apiVersion: tekton.dev/v1beta1
@@ -102,52 +101,17 @@ objects:
     - ""
     resources:
     - configmaps
-    verbs:
-    - list
-    - watch
-  - apiGroups:
-    - ""
-    resources:
-    - configmaps
-    verbs:
-    - list
-    - watch
-    - get
-  - apiGroups:
-    - '*'
-    resources:
-    - configmaps
     - secrets
-    - serviceaccounts
     verbs:
+    - get
     - list
     - watch
-    - get
-  - apiGroups:
-    - triggers.tekton.dev
-    resources:
-    - '*'
-    verbs:
-    - '*'
   - apiGroups:
     - tekton.dev
     resources:
-    - '*'
+    - create
     verbs:
-    - '*'
-- apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRole
-  metadata:
-    creationTimestamp: null
-    name: cad-eventlistener-clusterrole
-  rules:
-  - apiGroups:
-    - triggers.tekton.dev
-    resources:
-    - clusterinterceptors
-    verbs:
-    - list
-    - watch
+    - pipelineruns
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: RoleBinding
   metadata:
@@ -156,18 +120,6 @@ objects:
     apiGroup: rbac.authorization.k8s.io
     kind: Role
     name: cad-eventlistener-role
-  subjects:
-  - kind: ServiceAccount
-    name: cad-sa
-    namespace: ${NAMESPACE_NAME}
-- apiVersion: rbac.authorization.k8s.io/v1
-  kind: ClusterRoleBinding
-  metadata:
-    name: cad-eventlistener-clusterrolebinding
-  roleRef:
-    apiGroup: rbac.authorization.k8s.io
-    kind: ClusterRole
-    name: cad-eventlistener-clusterrole
   subjects:
   - kind: ServiceAccount
     name: cad-sa
