@@ -80,8 +80,6 @@ The documentation for further Tekton commands is available [here](https://docs.o
 ## What Do We Have Here
 ### Namesapce
 straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next resources
-#### SA
-[serviceaccount.yaml](./serviceaccount.yaml) holds the serviceaccount, role and clusterroles that are needed for the CAD resource
 #### Trigger
 [pipeline-trigger.yaml](./pipeline-trigger.yaml) holds all of the triggers and the base config that starts the pipeline
 #### PipeLine

@@ -5,34 +5,34 @@ metadata:
   namespace: configuration-anomaly-detection
 spec:
   params:
-  - name: payload
-    type: string
-    description: Json string of the event data
+    - name: payload
+      type: string
+      description: Json string of the event data
   steps:
-  - name: check-infrastructure
-    # this sha is broken, should fix when we onboard
-    image: quay.io/app-sre/cadctl@sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
-    command:
-    - "/bin/bash"
-    - "-c"
-    args:
-    - |-
-      # save the payload to a file
-      folder=$(mktemp -d)
-      file=${folder}/payload.json
-      echo '$(params.payload)' > $file
-      # run the cadctl command
-      RESULT=$(cadctl cluster-missing --payload-path $file )
-    env:
-    - name: CAD_ESCALATION_POLICY
-      value: XXXX
-    - name: CAD_SILENT_POLICY
-      value: XXXX
-    # envFrom should pull all of the secret information as envvars, so key names should be uppercase
-    envFrom:
-    - secretRef:
-        name: cad-aws-credentials
-    - secretRef:
-        name: cad-ocm-client-secret
-    - secretRef:
-        name: cad-pd-token
+    - name: check-infrastructure
+      # this sha is broken, should fix when we onboard
+      image: quay.io/app-sre/cadctl@sha256:22d2a957d935e883f45addd35acc87450ce71ea2f94c33f2df70ff36b015486a
+      command:
+        - /bin/bash
+        - -c
+      args:
+        - |-
+          # save the payload to a file
+          folder=$(mktemp -d)
+          file=${folder}/payload.json
+          echo '$(params.payload)' > $file
+          # run the cadctl command
+          RESULT=$(cadctl cluster-missing --payload-path $file )
+      env:
+        - name: CAD_ESCALATION_POLICY
+          value: XXXX
+        - name: CAD_SILENT_POLICY
+          value: XXXX
+      # envFrom should pull all of the secret information as envvars, so key names should be uppercase
+      envFrom:
+        - secretRef:
+            name: cad-aws-credentials
+        - secretRef:
+            name: cad-ocm-client-secret
+        - secretRef:
+            name: cad-pd-token
