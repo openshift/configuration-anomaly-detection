@@ -33,7 +33,6 @@ objects:
       kind: PipelineRun
       metadata:
         name: cad-check-$(uid)
-        namespace: configuration-anomaly-detection
       spec:
         params:
         - name: payload

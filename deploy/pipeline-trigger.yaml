@@ -12,7 +12,6 @@ apiVersion: triggers.tekton.dev/v1alpha1
 kind: TriggerTemplate
 metadata:
   name: cad-check-trigger-template
-  namespace: configuration-anomaly-detection
   annotations:
     triggers.tekton.dev/old-escape-quotes: "true"
 spec:
@@ -25,7 +24,6 @@ spec:
       kind: PipelineRun
       metadata:
         name: cad-check-$(uid)
-        namespace: configuration-anomaly-detection
       spec:
         timeout: 30m
         serviceAccountName: cad-sa
@@ -40,7 +38,6 @@ apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
 metadata:
   name: cad-pipe-listener
-  namespace: configuration-anomaly-detection
 spec:
   interceptors:
     - ref:
@@ -59,7 +56,6 @@ apiVersion: triggers.tekton.dev/v1alpha1
 kind: EventListener
 metadata:
   name: cad-event-listener
-  namespace: configuration-anomaly-detection
   annotations:
     triggers.tekton.dev/old-escape-quotes: "true"
 spec:
