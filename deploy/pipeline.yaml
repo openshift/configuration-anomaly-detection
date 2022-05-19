@@ -20,7 +20,6 @@ apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
   name: cad-checks-pipeline
-  namespace: configuration-anomaly-detection
 spec:
   params:
     - name: payload
