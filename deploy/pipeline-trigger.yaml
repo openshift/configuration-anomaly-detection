@@ -36,14 +36,6 @@ spec:
             value: $(tt.params.payload)
 
 ---
-apiVersion: v1
-metadata:
-  name: cad-pipe-listener-secret
-  namespace: configuration-anomaly-detection
-stringData:
-  token: samplesecret
-kind: Secret
----
 apiVersion: triggers.tekton.dev/v1beta1
 kind: Trigger
 metadata:
@@ -55,7 +47,7 @@ spec:
         name: "cel"
       params:
       - name: "filter"
-        value: "header.canonical('X-Secret-Token').compareSecret('token', 'cad-pipe-listener-secret')"
+        value: "header.canonical('X-Secret-Token').compareSecret('X_SECRET_TOKEN', 'cad-pd-token')"
   bindings:
   - ref: cad-check-trigger
   template:

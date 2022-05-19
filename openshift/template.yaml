@@ -42,12 +42,6 @@ objects:
           name: cad-checks-pipeline
         serviceAccountName: cad-sa
         timeout: 30m
-- apiVersion: v1
-  kind: Secret
-  metadata:
-    name: cad-pipe-listener-secret
-  stringData:
-    token: samplesecret
 - apiVersion: triggers.tekton.dev/v1beta1
   kind: Trigger
   metadata:
@@ -58,7 +52,8 @@ objects:
     interceptors:
     - params:
       - name: filter
-        value: header.canonical('X-Secret-Token').compareSecret('token', 'cad-pipe-listener-secret')
+        value: header.canonical('X-Secret-Token').compareSecret('X_SECRET_TOKEN',
+          'cad-pd-token')
       ref:
         name: cel
     template:
@@ -150,7 +145,14 @@ objects:
   metadata:
     name: cad-pd-token
   stringData:
+    CAD_ESCALATION_POLICY: CHANGEME
+    CAD_PD_EMAIL: CHANGEME
+    CAD_PD_PW: CHANGEME
     CAD_PD_TOKEN: CHANGEME
+    CAD_PD_USERNAME: CHANGEME
+    CAD_SILENT_POLICY: CHANGEME
+    PD_SIGNATURE: CHANGEME
+    X_SECRET_TOKEN: CHANGEME
   type: Opaque
 - apiVersion: tekton.dev/v1beta1
   kind: Task
@@ -173,11 +175,6 @@ objects:
       command:
       - /bin/bash
       - -c
-      env:
-      - name: CAD_ESCALATION_POLICY
-        value: XXXX
-      - name: CAD_SILENT_POLICY
-        value: XXXX
       envFrom:
       - secretRef:
           name: cad-aws-credentials
