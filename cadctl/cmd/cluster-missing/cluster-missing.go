@@ -177,12 +177,12 @@ func GetAWSClient() (aws.Client, error) {
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient() (pagerduty.Client, error) {
-	cadPD, hasCadPD := os.LookupEnv("CAD_PD")
+	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD)' is missing")
+		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
