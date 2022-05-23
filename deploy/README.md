@@ -79,9 +79,9 @@ The documentation for further Tekton commands is available [here](https://docs.o
 
 ## What Do We Have Here
 ### Namesapce
-straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next resources
+straightforward, but [namespace.yaml](./namespace.yaml) holds all the next resources
 #### Trigger
-[pipeline-trigger.yaml](./pipeline-trigger.yaml) holds all of the triggers and the base config that starts the pipeline
+[pipeline-trigger.yaml](./pipeline-trigger.yaml) holds all the triggers and the base config that starts the pipeline
 #### PipeLine
 [pipeline.yaml](./pipeline.yaml) the order of the tasks that is triggered by [pipeline-trigger.yaml](./pipeline-trigger.yaml)
 #### Tasks
@@ -92,12 +92,12 @@ straightforward, but [namespace.yaml](./namespace.yaml) holds all of the next re
 
 see [../pkg/aws/](../pkg/aws/) for more details
 
-###### PagerDury
-[task-cad-checks-secrets-pd.yaml](./task-cad-checks-secrets-pd.yaml) thiis will hold the pd creds
-see [../pkg/pagerduty/](../pkg//pagerduty/) for more details
+###### PagerDuty
+[task-cad-checks-secrets-pd.yaml](./task-cad-checks-secrets-pd.yaml) this will hold the pd creds
+see [../pkg/pagerduty/](../pkg/pagerduty/) for more details
 
 ###### OCM
-[task-cad-checks-secrets-ocm.yaml](./task-cad-checks-secrets-ocm.yaml) thiis will hold the ocm creds
+[task-cad-checks-secrets-ocm.yaml](./task-cad-checks-secrets-ocm.yaml) this will hold the ocm creds
 see [../pkg/ocm/](../pkg/ocm/) for more details
 
 #### PipelineRun
