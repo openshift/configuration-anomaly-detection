@@ -49,6 +49,12 @@ func New(ocmConfigFile string) (Client, error) {
 	// is only for local cadctl development
 	debugMode := os.Getenv("CAD_DEBUG")
 
+	// strconv.ParseBool raises an error when debugMode is empty, thus
+	// we have to set it to false if the value is empty.
+	if debugMode == "" {
+		debugMode = "false"
+	}
+
 	debugEnabled, err := strconv.ParseBool(debugMode)
 	if err != nil {
 		return client, fmt.Errorf("failed to parse CAD_DEBUG value '%s': %w", debugMode, err)
