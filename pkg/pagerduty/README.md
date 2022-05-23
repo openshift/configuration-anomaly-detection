@@ -23,17 +23,29 @@ func GetPDClient() (pagerduty.Client, error) {
 ```
 
 ## make `cadctl` load PD creds
-### if you can `pagerduty-cli` installed
+### if you have `pagerduty-cli` installed
 you can run the oneliner:
 ```
-export CAD_PD=$(jq  .subdomains[].legacyToken ~/.config/pagerduty-cli/config.json -r) 
+export CAD_PD_TOKEN=$(jq  .subdomains[].legacyToken ~/.config/pagerduty-cli/config.json -r) 
 ```
 and the token will be used
 
 ### if you wish to load a token from the UI
-use the link to get an token, and bind it to the envvar https://support.pagerduty.com/docs/api-access-keys#generate-a-user-token-rest-api-key
+use the link to get a token, and bind it to the envvar https://support.pagerduty.com/docs/api-access-keys#generate-a-user-token-rest-api-key
 
-## Manutally test on an incident
+### Create the secret 
+
+* CAD_ESCALATION_POLICY: refers to the escalation policy CAD should use to escalate the incident to
+* CAD_PD_EMAIL: refers  to the email for a login via mail/pw credentials
+* CAD_PD_PW: refers to the password for a login via mail/pw credentials
+* CAD_PD_TOKEN: refers to the generated private access token for token-based authentication
+* CAD_PD_USERNAME: refers to the username in case username/pw credentials should be used
+* CAD_SILENT_POLICY: refers to the silent policy CAD should use if the incident shall be silent
+* PD_SIGNATURE: refers to the PagerDuty webhook signature (HMAC+SHA256)
+* X_SECRET_TOKEN: refers to our custom Secret Token for authenticating against our pipeline
+
+
+## Manually test on an incident
 
 to do this, use the https://github.com/martindstone/pagerduty-cli tool.
 
@@ -70,9 +82,9 @@ pd incident:resolve --ids ${INCIDENT_ID}
 ### Manual Testing
 #### Set up the WebHook
 To do this I needed to create a webhook https://support.pagerduty.com/docs/webhooks#add-a-v3-webhook-subscription
-and attach it to a schedule (I put all of the options on)
+and attach it to a schedule (I put all the options on)
 
-#### Provide an http receiver to push the webhook data to
+#### Provide a http receiver to push the webhook data to
 
 then I installed https://ngrok.com/ on my machine and started it with 
 ```
@@ -103,10 +115,10 @@ URL= # the URL from ngrok
 curl -XPOST -d'{}' ${URL}
 ```
 
-#### Prettify the webhook data into oranized yaml data
+#### Prettify the webhook data into organized yaml data
 then to parse the data in a pretty format:
 
-1. I saved all of the json blobs in a yaml file.
+1. I saved all the json blobs in a yaml file.
 2. I added them into a yaml array: 
   - I added a `items:` to the top of the file
   - each json was prepended with `- ` (dash then a space)
