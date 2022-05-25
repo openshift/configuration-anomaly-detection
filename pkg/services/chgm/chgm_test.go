@@ -70,13 +70,13 @@ var _ = Describe("Chgm", func() {
 			})
 		})
 
-		When("ListStoppedInstances fails", func() {
-			It("the ListStoppedInstances should receive the correct InfraID and bubble the error", func() {
+		When("ListNonRunningInstances fails", func() {
+			It("the ListNonRunningInstances should receive the correct InfraID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 
-				mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateInstances("")
 				// Assert
@@ -89,7 +89,7 @@ var _ = Describe("Chgm", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-				mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				// Act
 				got, gotErr := isRunning.InvestigateInstances("")
 				// Assert
@@ -103,7 +103,7 @@ var _ = Describe("Chgm", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-				mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateInstances("")
@@ -113,11 +113,11 @@ var _ = Describe("Chgm", func() {
 		})
 
 		When("there were no StopInstancesEvents", func() {
-			It("the ListStoppedInstances should receive the correct InfraID and bubble the error", func() {
+			It("the ListNonRunningInstances should receive the correct InfraID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-				mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateInstances("")
@@ -142,7 +142,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{}, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
@@ -156,7 +156,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(``)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -171,7 +171,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -186,7 +186,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -201,7 +201,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{}`)
 					cloudTrailResource := cloudtrail.Resource{ResourceName: aws.String("123456")}
 					event.Resources = []*cloudtrail.Resource{&cloudTrailResource}
@@ -218,7 +218,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.07"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -233,7 +233,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.Username = aws.String(fmt.Sprintf("%s-openshift-machine-api-aws-abcd", infraID))
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
@@ -250,7 +250,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.Username = aws.String("osdManagedAdmin-abcd")
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -266,7 +266,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
@@ -281,7 +281,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -297,7 +297,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"IAMUser"}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -313,7 +313,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"test"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -329,7 +329,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
@@ -345,7 +345,7 @@ var _ = Describe("Chgm", func() {
 					// Arrange
 					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-					mockClient.EXPECT().ListStoppedInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 					// Act
