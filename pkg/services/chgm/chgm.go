@@ -48,7 +48,7 @@ type Provider struct {
 type Service interface {
 	// AWS
 	ListRunningInstances(infraID string) ([]*ec2.Instance, error)
-	ListStoppedInstances(infraID string) ([]*ec2.Instance, error)
+	ListNonRunningInstances(infraID string) ([]*ec2.Instance, error)
 	PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error)
 	// OCM
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
@@ -191,9 +191,9 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 
 	infraID := c.cd.Spec.ClusterMetadata.InfraID
 
-	stoppedInstances, err := c.ListStoppedInstances(infraID)
+	stoppedInstances, err := c.ListNonRunningInstances(infraID)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve stopped instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances for %s: %w", infraID, err)
 	}
 
 	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)

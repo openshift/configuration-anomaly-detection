@@ -110,6 +110,21 @@ func (mr *MockServiceMockRecorder) GetSilentPolicy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSilentPolicy", reflect.TypeOf((*MockService)(nil).GetSilentPolicy))
 }
 
+// ListNonRunningInstances mocks base method.
+func (m *MockService) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNonRunningInstances", infraID)
+	ret0, _ := ret[0].([]*ec2.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNonRunningInstances indicates an expected call of ListNonRunningInstances.
+func (mr *MockServiceMockRecorder) ListNonRunningInstances(infraID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNonRunningInstances", reflect.TypeOf((*MockService)(nil).ListNonRunningInstances), infraID)
+}
+
 // ListRunningInstances mocks base method.
 func (m *MockService) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	m.ctrl.T.Helper()
@@ -123,21 +138,6 @@ func (m *MockService) ListRunningInstances(infraID string) ([]*ec2.Instance, err
 func (mr *MockServiceMockRecorder) ListRunningInstances(infraID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRunningInstances", reflect.TypeOf((*MockService)(nil).ListRunningInstances), infraID)
-}
-
-// ListStoppedInstances mocks base method.
-func (m *MockService) ListStoppedInstances(infraID string) ([]*ec2.Instance, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListStoppedInstances", infraID)
-	ret0, _ := ret[0].([]*ec2.Instance)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListStoppedInstances indicates an expected call of ListStoppedInstances.
-func (mr *MockServiceMockRecorder) ListStoppedInstances(infraID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStoppedInstances", reflect.TypeOf((*MockService)(nil).ListStoppedInstances), infraID)
 }
 
 // MoveToEscalationPolicy mocks base method.
