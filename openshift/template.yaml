@@ -170,7 +170,7 @@ objects:
         file=${folder}/payload.json
         echo '$(params.payload)' > $file
         # run the cadctl command
-        RESULT=$(cadctl cluster-missing --payload-path $file )
+        cadctl cluster-missing --payload-path $file
       command:
       - /bin/bash
       - -c

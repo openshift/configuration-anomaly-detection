@@ -15,7 +15,7 @@ func GetPDClient() (pagerduty.Client, error) {
 
 	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
 	if err != nil {
-		return pagerduty.Client{}, fmt.Errorf("could not initialze the client: %w", err)
+		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil

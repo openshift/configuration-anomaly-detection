@@ -17,7 +17,7 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
-// these type aliases are here to make the types unique and unambiguus when using inside the struct
+// these type aliases are here to make the types unique and unambiguous when used inside the struct
 
 // AwsClient is a wrapper around the aws client, and is used to import the received functions into the Provider
 type AwsClient = aws.Client
@@ -44,7 +44,7 @@ type Provider struct {
 // This will generate mocks for the interfaces in this file
 //go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/interfaces.go -package mock
 
-// Service will wrap all the required commands the client needs to run it's operations
+// Service will wrap all the required commands the client needs to run its operations
 type Service interface {
 	// AWS
 	ListRunningInstances(infraID string) ([]*ec2.Instance, error)
@@ -210,7 +210,7 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	// fmt.Printf("stoppedInstancesEvents ::: %#v\n", stoppedInstancesEvents)
 
 	if len(stoppedInstancesEvents) == 0 {
-		return InvestigateInstancesOutput{}, fmt.Errorf("the are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
+		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,

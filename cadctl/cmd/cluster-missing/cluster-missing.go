@@ -41,7 +41,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Println("Running CAD with webhook payload:")
 	data, err := os.ReadFile(payloadPath)
 	if err != nil {
-		return fmt.Errorf("Failed to read webhook payload: %w", err)
+		return fmt.Errorf("failed to read webhook payload: %w", err)
 	}
 	fmt.Printf("%s\n", string(data))
 
@@ -125,7 +125,7 @@ func run(cmd *cobra.Command, args []string) error {
 	fmt.Println("Sending CHGM ServiceLog...")
 	err = chgmClient.SendServiceLog()
 	if err != nil {
-		return fmt.Errorf("failed sending service log during before silencing the alert: %w", err)
+		return fmt.Errorf("failed sending service log before silencing the alert: %w", err)
 	}
 
 	fmt.Println("Silencing Alert...")
@@ -187,7 +187,7 @@ func GetPDClient() (pagerduty.Client, error) {
 
 	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
 	if err != nil {
-		return pagerduty.Client{}, fmt.Errorf("could not initialze the client: %w", err)
+		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil

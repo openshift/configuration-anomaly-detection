@@ -21,7 +21,7 @@ spec:
           file=${folder}/payload.json
           echo '$(params.payload)' > $file
           # run the cadctl command
-          RESULT=$(cadctl cluster-missing --payload-path $file )
+          cadctl cluster-missing --payload-path $file
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
