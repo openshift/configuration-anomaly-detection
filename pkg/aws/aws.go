@@ -136,8 +136,8 @@ func (c Client) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	return c.listInstancesWithFilter(filters)
 }
 
-// ListStoppedInstances lists all stopped instances that belong to a cluster
-func (c Client) ListStoppedInstances(infraID string) ([]*ec2.Instance, error) {
+// ListNonRunningInstances lists all non running instances that belong to a cluster
+func (c Client) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
 			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
