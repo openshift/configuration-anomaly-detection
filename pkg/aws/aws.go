@@ -215,7 +215,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 
 	fmt.Println("Following instances are not running:")
 	for k, v := range idToStopTime {
-		fmt.Printf("%s, stopped at %s\n", k, v.String())
+		fmt.Printf("%s, stopped running at %s\n", k, v.String())
 	}
 	fmt.Println("Investigating in reason...")
 	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
