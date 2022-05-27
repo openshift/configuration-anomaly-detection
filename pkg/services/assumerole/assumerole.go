@@ -58,7 +58,7 @@ func (c Client) AssumeSupportRoleChain(identifier, ccsJumpRole, supportRole stri
 	if err != nil {
 		return aws.Client{}, fmt.Errorf("1 failed to get the cluster details :%w", err)
 	}
-	region := cluster.Region().Name()
+	region := cluster.Region().ID()
 	internalID := cluster.ID()
 
 	tempClient, err := c.AssumeRole(ccsJumpRole, region)
