@@ -28,10 +28,10 @@ type OcmClient = ocm.Client
 // PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
-// Provider should have all of the functions that ChgmService is implementing
+// Provider should have all the functions that ChgmService is implementing
 type Provider struct {
 	// having awsClient and ocmClient this way
-	// allows for all of the method receivers defined on them to be passed into the parent struct,
+	// allows for all the method receivers defined on them to be passed into the parent struct,
 	// thus making it more composable than just having each func redefined here
 	//
 	// a different solution is to have the structs have unique names to begin with, which makes the code
@@ -75,7 +75,7 @@ type Client struct {
 
 // isUserAllowedToStop will verify if a user is allowed to stop instances.
 // as this is the thing that might change the most it is at the top.
-// additionallyit is private as I don't see anyone using this outside of AreAllInstancesRunning
+// Additionally, it is private as I don't see anyone using this outside of AreAllInstancesRunning
 func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraID string) bool {
 	//TODO: what is the best ordering for this? (from the most common to the most rare)
 
@@ -90,7 +90,7 @@ func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraI
 		"openshift-machine-api-aws",
 	}
 	for _, operatorIamName := range operatorIamNames {
-		// I added an additional '-' in the end to make sure it's the same as close as I can to the aws username (cannot guess the uuid)
+		// I added a '-' in the end to make sure it's the same as close as I can to the aws username (cannot guess the uuid)
 		operatorIamName = fmt.Sprintf("%s-%s-", infraID, operatorIamName)
 		if strings.HasPrefix(username, operatorIamName) {
 			return true
@@ -159,7 +159,7 @@ func (c *Client) populateStuctWith(externalID string) error {
 	return nil
 }
 
-// InvestigateInstances will check all of the instances for the cluster are running.
+// InvestigateInstances will check all the instances for the cluster are running.
 // in case they are not it will make sure the stopped instances are correctly at this state.
 func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOutput, error) {
 	err := c.populateStuctWith(externalID)

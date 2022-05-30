@@ -45,7 +45,7 @@ func New(ocmConfigFile string) (Client, error) {
 	client := Client{}
 
 	// The debug environment variable ensures that we will never use
-	// a ocm config file on a cluster deployment. The debug environment variable
+	// an ocm config file on a cluster deployment. The debug environment variable
 	// is only for local cadctl development
 	debugMode := os.Getenv("CAD_DEBUG")
 
@@ -179,13 +179,13 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 }
 
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog.
-// On success it will return the sent service log entry.
+// On success, it will return the sent service log entry.
 func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
 	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster.
-// On success it will return the sent service log entry for further processing.
+// On success, it will return the sent service log entry for further processing.
 func (c Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) (*servicelog.LogEntry, error) {
 	builder.ClusterUUID(cluster.ExternalID())
 	builder.ClusterID(cluster.ID())
