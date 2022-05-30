@@ -9,7 +9,7 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
-// these type aliases are here to make the types unique and unambiguus when using inside the struct
+// these type aliases are here to make the types unique and unambiguous when using inside the struct
 
 // AwsClient is a wrapper around the aws client, and is used to import the received functions into the Provider
 type AwsClient = aws.Client
@@ -17,10 +17,10 @@ type AwsClient = aws.Client
 // OcmClient is a wrapper around the aws client, and is used to import the received functions into the Provider
 type OcmClient = ocm.Client
 
-// Provider should have all of the functions that ChgmService is implementing
+// Provider should have all the functions that ChgmService is implementing
 type Provider struct {
 	// having awsClient and ocmClient this way
-	// allows for all of the method receivers defined on them to be passed into the parent struct,
+	// allows for all the method receivers defined on them to be passed into the parent struct,
 	// thus making it more composable than just having each func redefined here
 	//
 	// a different solution is to have the structs have unique names to begin with, which makes the code
@@ -32,7 +32,7 @@ type Provider struct {
 // This will generate mocks for the interfaces in this file
 //go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/interfaces.go -package mock
 
-// Service will wrap all the required commands the client needs to run it's operations
+// Service will wrap all the required commands the client needs to run its operations
 type Service interface {
 	// AWS
 	AssumeRole(roleARN, region string) (aws.Client, error)

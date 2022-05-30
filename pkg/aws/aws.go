@@ -197,7 +197,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		return nil, nil
 	}
 
-	backoffoptions := wait.Backoff{
+	backoffOptions := wait.Backoff{
 		Duration: 2 * time.Second,
 		Factor:   2,
 		Steps:    retryTimes,
@@ -206,7 +206,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		Cap:    backoffUpperLimit,
 	}
 
-	events := []*cloudtrail.Event{}
+	var events []*cloudtrail.Event
 
 	idToStopTime, err := populateStopTime(instances)
 	if err != nil {
@@ -221,7 +221,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 	var executionError error
-	err = wait.ExponentialBackoff(backoffoptions, func() (bool, error) {
+	err = wait.ExponentialBackoff(backoffOptions, func() (bool, error) {
 		executionError = nil
 
 		localStopEvents, err := c.ListAllInstanceStopEvents()
@@ -238,7 +238,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		}
 		fmt.Println("successfully ListAllTerminatedInstances")
 
-		localEvents := []*cloudtrail.Event{}
+		var localEvents []*cloudtrail.Event
 		localEvents = append(localEvents, localStopEvents...)
 		localEvents = append(localEvents, localTerminatedEvents...)
 
@@ -311,18 +311,18 @@ func populateStopTime(instances []*ec2.Instance) (map[string]time.Time, error) {
 }
 
 func getTime(rawReason string) (time.Time, error) {
-	submatches := stopInstanceDateRegex.FindStringSubmatch(rawReason)
-	if submatches == nil || len(submatches) < 2 {
+	subMatches := stopInstanceDateRegex.FindStringSubmatch(rawReason)
+	if subMatches == nil || len(subMatches) < 2 {
 		return time.Time{}, fmt.Errorf("did not find matches: raw data %s", rawReason)
 	}
-	if len(submatches) != 2 {
+	if len(subMatches) != 2 {
 		return time.Time{}, fmt.Errorf("found too many matches: raw data %s", rawReason)
 	}
 
 	// the time format is this specific time as based on the time code (choosing a different time for the format might break the code)
-	extractedTime, err := time.Parse("2006-01-02 15:04:05 MST", submatches[1])
+	extractedTime, err := time.Parse("2006-01-02 15:04:05 MST", subMatches[1])
 	if err != nil {
-		return time.Time{}, fmt.Errorf("could not parse the time %s: %w", submatches[1], err)
+		return time.Time{}, fmt.Errorf("could not parse the time %s: %w", subMatches[1], err)
 	}
 
 	return extractedTime, nil
@@ -350,7 +350,7 @@ func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*c
 	in := &cloudtrail.LookupEventsInput{
 		LookupAttributes: []*cloudtrail.LookupAttribute{att},
 	}
-	events := []*cloudtrail.Event{}
+	var events []*cloudtrail.Event
 	for {
 		out, err := c.CloudTrailClient.LookupEvents(in)
 		if err != nil {

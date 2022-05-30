@@ -141,7 +141,7 @@ func (f FileNotFoundErr) Is(target error) bool {
 	return ok
 }
 
-// UnmarshalErr wraps the json's json.SyntaxError
+// UnmarshalErr wraps JSON's json.SyntaxError
 type UnmarshalErr struct {
 	Err error
 }

@@ -25,11 +25,11 @@ const (
 	pagerDutyTimeout = time.Second * 30
 )
 
-// Client will hold all of the required fields for any Client Operation
+// Client will hold all the required fields for any Client Operation
 type Client struct {
 	// c is the PagerDuty client
 	c *sdk.Client
-	// currentUserEmail is the current logged in user's email
+	// currentUserEmail is the current logged-in user's email
 	currentUserEmail string
 	// escalationPolicy
 	escalationPolicy string
@@ -37,7 +37,7 @@ type Client struct {
 	silentPolicy string
 }
 
-// NewWithToken is similar to New but you only need to supply to authentication token to start
+// NewWithToken is similar to New, but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
 func NewWithToken(authToken, escalationPolicy, silentPolicy string) (Client, error) {
 	c := Client{
@@ -48,7 +48,7 @@ func NewWithToken(authToken, escalationPolicy, silentPolicy string) (Client, err
 	return c, nil
 }
 
-// New will create a PagerDuty struct with all of the required fields
+// New will create a PagerDuty struct with all the required fields
 func New(client *sdk.Client) (Client, error) {
 	sdkUser, err := getCurrentUser(client)
 	if err != nil {
@@ -187,7 +187,7 @@ func (c Client) GetAlerts(incidentID string) ([]Alert, error) {
 }
 
 // ExtractIDFromCHGM extracts from an Alert body until an external ID
-// the function is a member function but doesn't use any of the other funcs / types in the PagerDuty struct
+// the function is a member function but doesn't use any of the other functions / types in the PagerDuty struct
 func (Client) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
 	var err error
 
