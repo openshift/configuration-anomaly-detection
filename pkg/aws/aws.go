@@ -242,15 +242,22 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		localEvents = append(localEvents, localStopEvents...)
 		localEvents = append(localEvents, localTerminatedEvents...)
 
+		// here we just loop over all stop and terminated events
 		for _, event := range localEvents {
-			instanceID := *event.Resources[0].ResourceName
-			_, ok := idToStopTime[instanceID]
-			if ok {
-				storedEvent, ok := idToCloudtrailEvent[instanceID]
-				if !ok {
-					idToCloudtrailEvent[instanceID] = event
-				} else if storedEvent.EventTime.Before(*event.EventTime) {
-					idToCloudtrailEvent[instanceID] = event
+			// we have to loop over each resource in each event
+			for _, resource := range event.Resources {
+				instanceID := *resource.ResourceName
+				_, ok := idToStopTime[instanceID]
+				if ok {
+					storedEvent, ok := idToCloudtrailEvent[instanceID]
+					if !ok {
+						idToCloudtrailEvent[instanceID] = event
+					} else if storedEvent.EventTime.Before(*event.EventTime) {
+						// here the event exists already, and we compared it with the eventTime of the current event.
+						// We only jump into this else if clause, if the storedEvent happened BEFORE the current event.
+						// This means we are overwriting the idToCloudTrailEvent with the "newest" event.
+						idToCloudtrailEvent[instanceID] = event
+					}
 				}
 			}
 		}
@@ -274,7 +281,9 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		}
 
 		for _, event := range idToCloudtrailEvent {
-			events = append(events, event)
+			if !containsEvent(event, events) {
+				events = append(events, event)
+			}
 		}
 
 		return true, nil
@@ -289,6 +298,16 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	}
 
 	return events, nil
+}
+
+// containsEvent is a little helper function that checks if the list contains an event
+func containsEvent(e *cloudtrail.Event, events []*cloudtrail.Event) bool {
+	for _, event := range events {
+		if event == e {
+			return true
+		}
+	}
+	return false
 }
 
 func populateStopTime(instances []*ec2.Instance) (map[string]time.Time, error) {
