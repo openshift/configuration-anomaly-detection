@@ -54,6 +54,7 @@ type Service interface {
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	GetNodeCount(clusterID string) (int, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
@@ -114,6 +115,7 @@ type UserInfo struct {
 // InvestigateInstancesOutput is the result of the InvestigateInstances command
 type InvestigateInstancesOutput struct {
 	NonRunningInstances []*ec2.Instance
+	AllInstances        int
 	User                UserInfo
 	UserAuthorized      bool
 	ServiceLog          *servicelog.LogEntry
@@ -135,6 +137,7 @@ func (i InvestigateInstancesOutput) String() string {
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
 	}
+	msg += fmt.Sprintf("\nThe amount of all instances is: '%d'", i.AllInstances)
 	msg += fmt.Sprintf("\nService Log Sent: '%v'", i.ServiceLog)
 	return msg
 }
@@ -215,9 +218,14 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if len(stoppedInstancesEvents) == 0 {
 		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
+	nodeCount, err := c.GetNodeCount(c.cd.Spec.ClusterMetadata.ClusterID)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("error while evaluating nodeCount: %w", err)
+	}
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
+		AllInstances:        nodeCount,
 	}
 	for _, event := range stoppedInstancesEvents {
 		// fmt.Printf("the event is %#v\n", event)
