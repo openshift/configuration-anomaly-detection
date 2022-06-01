@@ -159,7 +159,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(``)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -175,7 +175,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -191,7 +191,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -209,7 +209,7 @@ var _ = Describe("Chgm", func() {
 					cloudTrailResource := cloudtrail.Resource{ResourceName: aws.String("123456")}
 					event.Resources = []*cloudtrail.Resource{&cloudTrailResource}
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -225,7 +225,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.07"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					_, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -242,7 +242,7 @@ var _ = Describe("Chgm", func() {
 					event.Username = aws.String(fmt.Sprintf("%s-openshift-machine-api-aws-abcd", infraID))
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -259,7 +259,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.Username = aws.String("osdManagedAdmin-abcd")
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -275,7 +275,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -292,7 +292,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -309,7 +309,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"IAMUser"}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -326,7 +326,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"test"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -343,7 +343,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert
@@ -360,7 +360,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
-					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.ClusterID).Return(0, nil)
+					mockClient.EXPECT().GetNodeCount(clusterDeployment.Spec.ClusterMetadata.InfraID).Return(0, nil)
 					// Act
 					got, gotErr := isRunning.InvestigateInstances("")
 					// Assert

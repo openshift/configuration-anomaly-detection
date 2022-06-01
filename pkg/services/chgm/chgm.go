@@ -137,7 +137,9 @@ func (i InvestigateInstancesOutput) String() string {
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
 	}
-	msg += fmt.Sprintf("\nThe amount of all instances is: '%d'", i.AllInstances)
+	if i.AllInstances >= 0 {
+		msg += fmt.Sprintf("\nThe amount of all instances is: '%d'", i.AllInstances)
+	}
 	msg += fmt.Sprintf("\nService Log Sent: '%+v'\n'%+v'\n'%+v'", i.ServiceLog.Timestamp(), i.ServiceLog.ID(), i.ServiceLog.Summary())
 	return msg
 }
@@ -218,9 +220,12 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if len(stoppedInstancesEvents) == 0 {
 		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
-	nodeCount, err := c.GetNodeCount(c.cd.Spec.ClusterMetadata.ClusterID)
+	// try to get nodeCount
+	nodeCount, err := c.GetNodeCount(c.cd.Spec.ClusterMetadata.InfraID)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("error while evaluating nodeCount: %w", err)
+		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
+		nodeCount = -1 // we set nodeCount to -1. This is equal to "metric missing"
+		fmt.Println("error while evaluating nodeCount: ", err)
 	}
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
