@@ -116,6 +116,7 @@ type InvestigateInstancesOutput struct {
 	NonRunningInstances []*ec2.Instance
 	User                UserInfo
 	UserAuthorized      bool
+	ServiceLog          *servicelog.LogEntry
 }
 
 // String implements the stringer interface for InvestigateInstancesOutput
@@ -134,6 +135,7 @@ func (i InvestigateInstancesOutput) String() string {
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
 	}
+	msg += fmt.Sprintf("\nService Log Sent: '%v'", i.ServiceLog)
 	return msg
 }
 
@@ -173,12 +175,13 @@ func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOu
 // SendServiceLog sends a service log to the corresponding cluster
 // We have to use this function as wrapper, because otherwise we have no access to the
 // cluster. The CHGM package does not export the cluster and cluster deployment yet.
-func (c Client) SendServiceLog() error {
-	_, err := c.SendCHGMServiceLog(c.cluster)
+func (c Client) SendServiceLog() (*servicelog.LogEntry, error) {
+	log, err := c.SendCHGMServiceLog(c.cluster)
 	if err != nil {
-		return fmt.Errorf("could not send service log for %s: %w", c.cluster.Name(), err)
+		return nil, fmt.Errorf("could not send service log for %s: %w", c.cluster.Name(), err)
 	}
-	return nil
+
+	return log, nil
 }
 
 // investigateInstances is the internal version of investigateInstances operating on the read-only

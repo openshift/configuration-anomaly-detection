@@ -123,10 +123,11 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Println("Sending CHGM ServiceLog...")
-	err = chgmClient.SendServiceLog()
+	log, err := chgmClient.SendServiceLog()
 	if err != nil {
 		return fmt.Errorf("failed sending service log before silencing the alert: %w", err)
 	}
+	res.ServiceLog = log
 
 	fmt.Println("Silencing Alert...")
 	err = chgmClient.SilenceAlert(incidentID, res.String())
