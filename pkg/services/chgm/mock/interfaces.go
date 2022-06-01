@@ -96,6 +96,21 @@ func (mr *MockServiceMockRecorder) GetEscalationPolicy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEscalationPolicy", reflect.TypeOf((*MockService)(nil).GetEscalationPolicy))
 }
 
+// GetNodeCount mocks base method.
+func (m *MockService) GetNodeCount(clusterID string) (int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNodeCount", clusterID)
+	ret0, _ := ret[0].(int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNodeCount indicates an expected call of GetNodeCount.
+func (mr *MockServiceMockRecorder) GetNodeCount(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNodeCount", reflect.TypeOf((*MockService)(nil).GetNodeCount), clusterID)
+}
+
 // GetSilentPolicy mocks base method.
 func (m *MockService) GetSilentPolicy() string {
 	m.ctrl.T.Helper()
