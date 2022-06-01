@@ -138,7 +138,7 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
 	}
 	msg += fmt.Sprintf("\nThe amount of all instances is: '%d'", i.AllInstances)
-	msg += fmt.Sprintf("\nService Log Sent: '%v'", i.ServiceLog)
+	msg += fmt.Sprintf("\nService Log Sent: '%+v'\n'%+v'\n'%+v'", i.ServiceLog.Timestamp(), i.ServiceLog.ID(), i.ServiceLog.Summary())
 	return msg
 }
 
