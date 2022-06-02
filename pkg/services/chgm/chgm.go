@@ -212,7 +212,7 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 
 	if len(stoppedInstances) == 0 {
 		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, fmt.Errorf("no non running instances found, terminated instances may have already expired")
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, nil
 	}
 
 	stoppedInstancesEvents, err := c.PollInstanceStopEventsFor(stoppedInstances, 15)

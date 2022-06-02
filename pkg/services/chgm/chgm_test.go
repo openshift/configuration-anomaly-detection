@@ -93,7 +93,7 @@ var _ = Describe("Chgm", func() {
 				// Act
 				got, gotErr := isRunning.InvestigateInstances("")
 				// Assert
-				Expect(gotErr).To(HaveOccurred())
+				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.UserAuthorized).To(BeTrue())
 			})
 		})
