@@ -31,7 +31,7 @@ const (
 )
 
 var (
-	stopInstanceDateRegex = regexp.MustCompile(`\(([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}.*)\)`)
+	stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
 )
 
 //go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
@@ -173,7 +173,7 @@ func (c Client) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance,
 		Filters: filters,
 	}
 
-	instances := []*ec2.Instance{}
+	var instances []*ec2.Instance
 	for {
 		out, err := c.Ec2Client.DescribeInstances(in)
 		if err != nil {
