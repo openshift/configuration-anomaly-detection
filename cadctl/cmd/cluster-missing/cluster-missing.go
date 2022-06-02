@@ -18,6 +18,7 @@ package clustermissing
 
 import (
 	"fmt"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"os"
 	"path/filepath"
 
@@ -92,7 +93,13 @@ func run(cmd *cobra.Command, args []string) error {
 
 	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
 	if err != nil {
-		return fmt.Errorf("could not AssumeSupportRoleChain: %w", err)
+		ccamClient := ccam.Client{
+			Service: ccam.Provider{
+				OcmClient: ocmClient,
+				PdClient:  pdClient,
+			},
+		}
+		return ccamClient.Evaluate(err, externalClusterID, incidentID)
 	}
 
 	// building twice to override the awsClient

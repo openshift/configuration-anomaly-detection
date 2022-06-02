@@ -32,6 +32,14 @@ var chgmServiceLog = slTemplate{
 	InternalOnly: false,
 }
 
+var ccamServiceLog = slTemplate{
+	Severity:     "Error",
+	ServiceName:  "SREManualAction",
+	Summary:      "Action required: Restore missing cloud credentials",
+	Description:  "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install.",
+	InternalOnly: false,
+}
+
 // Client is the ocm client with which we can run the commands
 // currently we do not need to export the connection or the config, as we create the Client using the New func
 type Client struct {
@@ -199,6 +207,12 @@ func (c Client) GetNodeCount(clusterID string) (int, error) {
 // On success, it will return the sent service log entry.
 func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
 	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
+}
+
+// SendCCAMServiceLog allows to send a missing credentials servicelog.
+// On success, it will return the sent service log entry.
+func (c Client) SendCCAMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
+	return c.sendServiceLog(c.newServiceLogBuilder(ccamServiceLog), cluster)
 }
 
 // sendServiceLog allows to send a generic servicelog to a cluster.
