@@ -126,21 +126,21 @@ func (i InvestigateInstancesOutput) String() string {
 	msg := ""
 	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
 	// TODO: check if %v is the best formatting for UserInfo
-	msg += fmt.Sprintf("\nUserName : '%v'", i.User.UserName)
-	msg += fmt.Sprintf("\nIssuerUserName: '%v'", i.User.IssuerUserName)
-	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v'", len(i.NonRunningInstances))
+	msg += fmt.Sprintf("\nUserName : '%v' \n", i.User.UserName)
+	msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
+	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v' \n", len(i.NonRunningInstances))
 	ids := []string{}
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
 		ids = append(ids, *nonRunningInstance.InstanceId)
 	}
 	if len(i.NonRunningInstances) > 0 {
-		msg += fmt.Sprintf("\nInstance IDs: '%v'", ids)
+		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
 	}
 	if i.AllInstances >= 0 {
-		msg += fmt.Sprintf("\nThe amount of all instances is: '%d'", i.AllInstances)
+		msg += fmt.Sprintf("\nThe amount of all instances is: '%d' \n", i.AllInstances)
 	}
-	msg += fmt.Sprintf("\nService Log Sent: '%+v'\n'%+v'\n'%+v'", i.ServiceLog.Timestamp(), i.ServiceLog.ID(), i.ServiceLog.Summary())
+	msg += fmt.Sprintf("\nServiceLog Sent: '%+v'", i.ServiceLog.Summary())
 	return msg
 }
 
