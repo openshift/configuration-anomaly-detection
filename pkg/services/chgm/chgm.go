@@ -129,7 +129,7 @@ func (i InvestigateInstancesOutput) String() string {
 	msg += fmt.Sprintf("\nUserName : '%v' \n", i.User.UserName)
 	msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
 	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v' \n", len(i.NonRunningInstances))
-	ids := []string{}
+	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
 		ids = append(ids, *nonRunningInstance.InstanceId)
@@ -144,7 +144,7 @@ func (i InvestigateInstancesOutput) String() string {
 	return msg
 }
 
-func (c *Client) populateStuctWith(externalID string) error {
+func (c *Client) populateStructWith(externalID string) error {
 	if c.cluster == nil {
 		cluster, err := c.GetClusterInfo(externalID)
 		if err != nil {
@@ -169,7 +169,7 @@ func (c *Client) populateStuctWith(externalID string) error {
 // InvestigateInstances will check all the instances for the cluster are running.
 // in case they are not it will make sure the stopped instances are correctly at this state.
 func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOutput, error) {
-	err := c.populateStuctWith(externalID)
+	err := c.populateStructWith(externalID)
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not populate the struct: %w", err)
 	}
