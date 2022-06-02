@@ -119,6 +119,7 @@ type InvestigateInstancesOutput struct {
 	User                UserInfo
 	UserAuthorized      bool
 	ServiceLog          *servicelog.LogEntry
+	Error               string
 }
 
 // String implements the stringer interface for InvestigateInstancesOutput
@@ -140,7 +141,10 @@ func (i InvestigateInstancesOutput) String() string {
 	if i.AllInstances >= 0 {
 		msg += fmt.Sprintf("\nThe amount of all instances is: '%d' \n", i.AllInstances)
 	}
-	msg += fmt.Sprintf("\nServiceLog Sent: '%+v'", i.ServiceLog.Summary())
+	msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
+	if i.Error != "" {
+		msg += fmt.Sprintf("\nErrors: '%v' \n", i.Error)
+	}
 	return msg
 }
 
@@ -208,7 +212,7 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 
 	if len(stoppedInstances) == 0 {
 		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return InvestigateInstancesOutput{UserAuthorized: true}, fmt.Errorf("no non running instances found, terminated instances may have already expired")
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, fmt.Errorf("no non running instances found, terminated instances may have already expired")
 	}
 
 	stoppedInstancesEvents, err := c.PollInstanceStopEventsFor(stoppedInstances, 15)
