@@ -85,7 +85,7 @@ var _ = Describe("Chgm", func() {
 		})
 
 		When("there were no stopped instances", func() {
-			It("should succeed and return that all instance are running", func() {
+			It("should succeed and return that no non running instances were found", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
