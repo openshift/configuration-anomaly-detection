@@ -1,0 +1,72 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels:
+    tektonconfig.operator.tekton.dev/pruner: "true"
+  name: tekton-resource-pruner
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          containers:
+            - args:
+                - 'tkn pipelinerun delete --keep=100 -f'
+              command:
+                - /bin/sh
+                - -c
+              image: registry.redhat.io/openshift-pipelines/pipelines-cli-tkn-rhel8@sha256:ce87cc7c6c52bc7438b1fbc303e13517100cecf6e852cd7308f9f82de9fef2cc
+              imagePullPolicy: IfNotPresent
+              name: tekton-resource-pruner
+              terminationMessagePath: /dev/termination-log
+              terminationMessagePolicy: FallbackToLogsOnError
+          dnsPolicy: ClusterFirst
+          restartPolicy: OnFailure
+          schedulerName: default-scheduler
+          serviceAccount: cad-tekton-pruner
+          serviceAccountName: cad-tekton-pruner
+          terminationGracePeriodSeconds: 30
+      ttlSecondsAfterFinished: 3600
+  schedule: 0 8 * * *
+  successfulJobsHistoryLimit: 3
+  suspend: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cad-tekton-pruner
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cad-tekton-pruner-role
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - delete
+  - apiGroups:
+      - tekton.dev
+    resources:
+      - pipelineruns
+      - taskruns
+    verbs:
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cad-tekton-pruner-role
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cad-pipelinerun-role
+subjects:
+  - kind: ServiceAccount
+    name: cad-tekton-pruner
