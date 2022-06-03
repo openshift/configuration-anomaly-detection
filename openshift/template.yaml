@@ -209,6 +209,8 @@ objects:
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
+            imagePullSecrets:
+            - name: registry-redhat-io-pull-secret
             restartPolicy: OnFailure
             schedulerName: default-scheduler
             serviceAccount: cad-tekton-pruner
