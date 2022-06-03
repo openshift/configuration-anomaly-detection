@@ -30,6 +30,8 @@ spec:
           serviceAccount: cad-tekton-pruner
           serviceAccountName: cad-tekton-pruner
           terminationGracePeriodSeconds: 30
+          imagePullSecrets:
+            - name: registry-redhat-io-pull-secret
       ttlSecondsAfterFinished: 3600
   schedule: 0 8 * * *
   successfulJobsHistoryLimit: 3
