@@ -279,7 +279,7 @@ func (c Client) updatePagerduty(incidentID, notes, escalationPolicy string) erro
 		fmt.Printf("Attaching Note %s\n", notes)
 		err := c.AddNote(incidentID, notes)
 		if err != nil {
-			return fmt.Errorf("failed to attach notes to incident: %w", err)
+			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
 		}
 	}
 	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
