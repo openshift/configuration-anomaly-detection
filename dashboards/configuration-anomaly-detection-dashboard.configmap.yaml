@@ -1,0 +1,549 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: grafana-dashboard-playground
+  labels:
+    grafana_dashboard: "true"
+  annotations:
+    grafana-folder: /grafana-dashboard-definitions/0
+data:
+  playground.json: |-
+    {
+      "__inputs": [],
+      "__requires": [
+        {
+          "type": "panel",
+          "id": "alertlist",
+          "name": "Alert List",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "dashlist",
+          "name": "Dashboard list",
+          "version": ""
+        },
+        {
+          "type": "grafana",
+          "id": "grafana",
+          "name": "Grafana",
+          "version": "6.6.2"
+        },
+        {
+          "type": "panel",
+          "id": "graph",
+          "name": "Graph",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "heatmap",
+          "name": "Heatmap",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "pluginlist",
+          "name": "Plugin list",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "singlestat",
+          "name": "Singlestat",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "table",
+          "name": "Table",
+          "version": ""
+        },
+        {
+          "type": "panel",
+          "id": "text",
+          "name": "Text",
+          "version": ""
+        }
+      ],
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 0,
+      "id": null,
+      "iteration": 1598863780532,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "datasource": null,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 4,
+          "panels": [],
+          "title": "Building blocks",
+          "type": "row"
+        },
+        {
+          "content": "# How to bulid a dashboard using this Playground\n\n## Full documentation on creating Dashboards\n\nhttps://gitlab.cee.redhat.com/service/app-interface/-/blob/master/docs/app-sre/monitoring.md#VisualizationwithGrafana\n\n## Getting started with the Playground dashboard\n\nBelow you wil find all available panels to be used for a dashboard.\n\nTo start, select a panel to use, and duplicate it (`Panel options > More > Duplicate`).\n\nDrag it to the top of the screen (above the Building blocks Row) and change the panel title, metrics, and any other settings as required.\n\n\n## Saving your dashboard to Grafana\n\nSince all dashboards are managed through source control, saving dashboards is not enabled.\n\nTo save your new dashboard, export it to a JSON file (through the options on the top right of the screen) and save it locally. You will now need to create a merge request to app-interface.\n\nPlease see: https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/docs/app-sre/monitoring.md#adding-dashboards\n\n## Tips and Tricks\n\n* Keep the `Building blocks` Row as part of the dashboard in case you require changes in the future\n* Export the dashboard with the `Building blocks` Row collapsed\n* Group panels together using a Row object (you may find some below)\n\n\nGood luck!",
+          "datasource": null,
+          "gridPos": {
+            "h": 9,
+            "w": 20,
+            "x": 0,
+            "y": 1
+          },
+          "id": 28,
+          "links": [],
+          "mode": "markdown",
+          "options": {},
+          "title": "Playground usage",
+          "type": "text"
+        },
+        {
+          "aliasColors": {},
+          "bars": false,
+          "dashLength": 10,
+          "dashes": false,
+          "datasource": null,
+          "fill": 1,
+          "fillGradient": 0,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 0,
+            "y": 10
+          },
+          "hiddenSeries": false,
+          "id": 2,
+          "legend": {
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "show": true,
+            "total": false,
+            "values": false
+          },
+          "lines": true,
+          "linewidth": 1,
+          "links": [],
+          "nullPointMode": "null",
+          "options": {
+            "dataLinks": []
+          },
+          "percentage": false,
+          "pointradius": 5,
+          "points": false,
+          "renderer": "flot",
+          "seriesOverrides": [],
+          "spaceLength": 10,
+          "stack": false,
+          "steppedLine": false,
+          "thresholds": [],
+          "timeFrom": null,
+          "timeRegions": [],
+          "timeShift": null,
+          "title": "Graph",
+          "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+          },
+          "type": "graph",
+          "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": []
+          },
+          "yaxes": [
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            },
+            {
+              "format": "short",
+              "label": null,
+              "logBase": 1,
+              "max": null,
+              "min": null,
+              "show": true
+            }
+          ],
+          "yaxis": {
+            "align": false,
+            "alignLevel": null
+          }
+        },
+        {
+          "cacheTimeout": null,
+          "colorBackground": false,
+          "colorValue": false,
+          "colors": [
+            "#299c46",
+            "rgba(237, 129, 40, 0.89)",
+            "#d44a3a"
+          ],
+          "datasource": null,
+          "format": "none",
+          "gauge": {
+            "maxValue": 100,
+            "minValue": 0,
+            "show": false,
+            "thresholdLabels": false,
+            "thresholdMarkers": true
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 5,
+            "y": 10
+          },
+          "id": 6,
+          "interval": null,
+          "links": [],
+          "mappingType": 1,
+          "mappingTypes": [
+            {
+              "name": "value to text",
+              "value": 1
+            },
+            {
+              "name": "range to text",
+              "value": 2
+            }
+          ],
+          "maxDataPoints": 100,
+          "nullPointMode": "connected",
+          "nullText": null,
+          "options": {},
+          "postfix": "",
+          "postfixFontSize": "50%",
+          "prefix": "",
+          "prefixFontSize": "50%",
+          "rangeMaps": [
+            {
+              "from": "null",
+              "text": "N/A",
+              "to": "null"
+            }
+          ],
+          "sparkline": {
+            "fillColor": "rgba(31, 118, 189, 0.18)",
+            "full": false,
+            "lineColor": "rgb(31, 120, 193)",
+            "show": false
+          },
+          "tableColumn": "",
+          "thresholds": "",
+          "title": "SingleStat",
+          "type": "singlestat",
+          "valueFontSize": "80%",
+          "valueMaps": [
+            {
+              "op": "=",
+              "text": "N/A",
+              "value": "null"
+            }
+          ],
+          "valueName": "avg"
+        },
+        {
+          "columns": [],
+          "datasource": null,
+          "fontSize": "100%",
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 10,
+            "y": 10
+          },
+          "id": 8,
+          "links": [],
+          "options": {},
+          "pageSize": null,
+          "scroll": true,
+          "showHeader": true,
+          "sort": {
+            "col": 0,
+            "desc": true
+          },
+          "styles": [
+            {
+              "alias": "Time",
+              "align": "auto",
+              "dateFormat": "YYYY-MM-DD HH:mm:ss",
+              "pattern": "Time",
+              "type": "date"
+            },
+            {
+              "alias": "",
+              "align": "auto",
+              "colorMode": null,
+              "colors": [
+                "rgba(245, 54, 54, 0.9)",
+                "rgba(237, 129, 40, 0.89)",
+                "rgba(50, 172, 45, 0.97)"
+              ],
+              "decimals": 2,
+              "pattern": "/.*/",
+              "thresholds": [],
+              "type": "number",
+              "unit": "short"
+            }
+          ],
+          "title": "Table",
+          "transform": "timeseries_to_columns",
+          "type": "table"
+        },
+        {
+          "content": "# title",
+          "datasource": null,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 15,
+            "y": 10
+          },
+          "id": 10,
+          "links": [],
+          "mode": "markdown",
+          "options": {},
+          "title": "Text",
+          "type": "text"
+        },
+        {
+          "cards": {
+            "cardPadding": null,
+            "cardRound": null
+          },
+          "color": {
+            "cardColor": "#b4ff00",
+            "colorScale": "sqrt",
+            "colorScheme": "interpolateOranges",
+            "exponent": 0.5,
+            "mode": "spectrum"
+          },
+          "dataFormat": "timeseries",
+          "datasource": null,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 0,
+            "y": 17
+          },
+          "heatmap": {},
+          "hideZeroBuckets": false,
+          "highlightCards": true,
+          "id": 12,
+          "legend": {
+            "show": false
+          },
+          "links": [],
+          "options": {},
+          "reverseYBuckets": false,
+          "title": "Heatmap",
+          "tooltip": {
+            "show": true,
+            "showHistogram": false
+          },
+          "type": "heatmap",
+          "xAxis": {
+            "show": true
+          },
+          "xBucketNumber": null,
+          "xBucketSize": null,
+          "yAxis": {
+            "decimals": null,
+            "format": "short",
+            "logBase": 1,
+            "max": null,
+            "min": null,
+            "show": true,
+            "splitFactor": null
+          },
+          "yBucketBound": "auto",
+          "yBucketNumber": null,
+          "yBucketSize": null
+        },
+        {
+          "dashboardFilter": "",
+          "datasource": null,
+          "folderId": null,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 5,
+            "y": 17
+          },
+          "id": 14,
+          "limit": 10,
+          "links": [],
+          "nameFilter": "",
+          "onlyAlertsOnDashboard": false,
+          "options": {},
+          "show": "current",
+          "sortOrder": 1,
+          "stateFilter": [],
+          "title": "Alert list",
+          "type": "alertlist"
+        },
+        {
+          "datasource": null,
+          "folderId": null,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 10,
+            "y": 17
+          },
+          "headings": true,
+          "id": 16,
+          "limit": 10,
+          "links": [],
+          "options": {},
+          "query": "",
+          "recent": false,
+          "search": false,
+          "starred": true,
+          "tags": [],
+          "title": "Dashboard list",
+          "type": "dashlist"
+        },
+        {
+          "datasource": null,
+          "gridPos": {
+            "h": 7,
+            "w": 5,
+            "x": 15,
+            "y": 17
+          },
+          "id": 20,
+          "links": [],
+          "options": {},
+          "title": "Plugin list",
+          "type": "pluginlist"
+        },
+        {
+          "collapsed": true,
+          "datasource": null,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "id": 22,
+          "panels": [],
+          "title": "Row",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "datasource": null,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "id": 24,
+          "panels": [],
+          "title": "Row",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "datasource": null,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 26
+          },
+          "id": 26,
+          "panels": [],
+          "title": "Row",
+          "type": "row"
+        }
+      ],
+      "schemaVersion": 22,
+      "style": "dark",
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "text": "app-sre-prod-01-cluster-prometheus",
+              "value": "app-sre-prod-01-cluster-prometheus"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": null,
+            "multi": false,
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": [
+          "5s",
+          "10s",
+          "30s",
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "2h",
+          "1d"
+        ],
+        "time_options": [
+          "5m",
+          "15m",
+          "1h",
+          "6h",
+          "12h",
+          "24h",
+          "2d",
+          "7d",
+          "30d"
+        ]
+      },
+      "timezone": "",
+      "title": "Playground",
+      "uid": "Configuration-Anomaly-Detection",
+      "version": 1
+    }
