@@ -203,14 +203,12 @@ objects:
               command:
               - /bin/sh
               - -c
-              image: registry.redhat.io/openshift-pipelines/pipelines-cli-tkn-rhel8@sha256:e1fa47811f156e48a61741aabe73ef85078960567822a4b23c174c0d9b4d0ee6
+              image: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8@sha256:e1fa47811f156e48a61741aabe73ef85078960567822a4b23c174c0d9b4d0ee6
               imagePullPolicy: IfNotPresent
               name: tekton-resource-pruner
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
-            imagePullSecrets:
-            - name: registry-redhat-io-pull-secret
             restartPolicy: OnFailure
             schedulerName: default-scheduler
             serviceAccount: cad-tekton-pruner
