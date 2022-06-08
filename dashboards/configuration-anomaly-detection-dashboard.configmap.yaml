@@ -5,7 +5,7 @@ metadata:
   labels:
     grafana_dashboard: "true"
   annotations:
-    grafana-folder: /grafana-dashboard-definitions/0
+    grafana-folder: /grafana-dashboard-definitions/Configuration-Anomaly-Detection
 data:
   playground.json: |-
     {
@@ -543,7 +543,7 @@ data:
         ]
       },
       "timezone": "",
-      "title": "Playground",
+      "title": "Configuration-Anomaly-Detection",
       "uid": "Configuration-Anomaly-Detection",
-      "version": 1
+      "version": 2
     }
