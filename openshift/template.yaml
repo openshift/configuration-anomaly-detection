@@ -83,6 +83,13 @@ objects:
       taskRef:
         name: cad-checks
 - apiVersion: v1
+  kind: ResourceQuota
+  metadata:
+    name: pipelinerun-counts
+  spec:
+    hard:
+      count/pipelineruns.tekton.dev: "60"
+- apiVersion: v1
   kind: ServiceAccount
   metadata:
     name: cad-sa
