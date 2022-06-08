@@ -79,7 +79,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "description": "",
           "fieldConfig": {
@@ -147,7 +147,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+                "uid": "${datasource}"
               },
               "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\", status=\"success\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\"}[$__range])) * 100)",
               "hide": false,
@@ -160,7 +160,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "description": "",
           "fieldConfig": {
@@ -227,7 +227,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+                "uid": "${datasource}"
               },
               "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_bucket{namespace=\"$namespace\",status=\"success\",le=\"60\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\",status=\"success\"}[$__range])) * 100)",
               "hide": false,
@@ -240,7 +240,7 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+            "uid": "${datasource}"
           },
           "fieldConfig": {
             "defaults": {
@@ -290,7 +290,7 @@ data:
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+                "uid": "${datasource}"
               },
               "editorMode": "code",
               "exemplar": true,
