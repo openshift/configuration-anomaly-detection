@@ -241,7 +241,7 @@ objects:
     verbs:
     - delete
   - apiGroups:
-    - ""
+    - batch
     resources:
     - jobs
     verbs:
