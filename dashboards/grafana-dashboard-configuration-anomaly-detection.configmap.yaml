@@ -1,0 +1,371 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: grafana-dashboard-configuration-anomaly-detection
+  labels:
+    grafana_dashboard: "true"
+  annotations:
+    grafana-folder: /grafana-dashboard-definitions/Configuration-Anomaly-Detection
+data:
+  Configuration-Anomaly-Detection-SLOs-1654690826229.json: |-
+    {
+      "__inputs": [
+        {
+          "name": "DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS",
+          "label": "app-sre-stage-01-cluster-prometheus",
+          "description": "",
+          "type": "datasource",
+          "pluginId": "prometheus",
+          "pluginName": "Prometheus"
+        }
+      ],
+      "__elements": [],
+      "__requires": [
+        {
+          "type": "panel",
+          "id": "gauge",
+          "name": "Gauge",
+          "version": ""
+        },
+        {
+          "type": "grafana",
+          "id": "grafana",
+          "name": "Grafana",
+          "version": "8.5.2"
+        },
+        {
+          "type": "datasource",
+          "id": "prometheus",
+          "name": "Prometheus",
+          "version": "1.0.0"
+        },
+        {
+          "type": "panel",
+          "id": "stat",
+          "name": "Stat",
+          "version": ""
+        }
+      ],
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "target": {
+              "limit": 100,
+              "matchAny": false,
+              "tags": [],
+              "type": "dashboard"
+            },
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 0,
+      "id": null,
+      "iteration": 1654685784278,
+      "links": [],
+      "liveNow": false,
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [
+                {
+                  "options": {
+                    "[0-89]": {
+                      "color": "red",
+                      "index": 0
+                    },
+                    "[90-100]": {
+                      "color": "green",
+                      "index": 1
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.5.2",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+              },
+              "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\", status=\"success\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\"}[$__range])) * 100)",
+              "hide": false,
+              "refId": "A"
+            }
+          ],
+          "title": "SLO Availability (Target: 90%)",
+          "type": "gauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [
+                {
+                  "options": {
+                    "[0-94]": {
+                      "color": "red",
+                      "index": 0
+                    },
+                    "[95-100]": {
+                      "color": "green",
+                      "index": 1
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 95
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "id": 4,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "8.5.2",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+              },
+              "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_bucket{namespace=\"$namespace\",status=\"success\",le=\"60\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\",status=\"success\"}[$__range])) * 100)",
+              "hide": false,
+              "refId": "A"
+            }
+          ],
+          "title": "SLO Latency (Target: 90%)",
+          "type": "gauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.5.2",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS}"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "histogram_quantile(0.95, sum by(le) (rate(tekton_pipelines_controller_pipelinerun_duration_seconds_bucket{namespace=\"$namespace\",status=\"success\"}[$__range])))",
+              "format": "time_series",
+              "instant": false,
+              "legendFormat": "Average Pipeline Runtime (in seconds)",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Average Pipeline Runtime (in seconds)",
+          "type": "stat"
+        }
+      ],
+      "schemaVersion": 36,
+      "style": "dark",
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "app-sre-stage-01-cluster-prometheus",
+              "value": "app-sre-stage-01-cluster-prometheus"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "queryValue": "",
+            "refresh": 1,
+            "regex": "/app-sre-(prod-01|stage-01)-cluster-prometheus/",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "configuration-anomaly-detection-stage",
+              "value": "configuration-anomaly-detection-stage"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Namespace",
+            "multi": false,
+            "name": "namespace",
+            "options": [
+              {
+                "selected": true,
+                "text": "configuration-anomaly-detection-stage",
+                "value": "configuration-anomaly-detection-stage"
+              },
+              {
+                "selected": false,
+                "text": "configuration-anomaly-detection-prod",
+                "value": "configuration-anomaly-detection-prod"
+              }
+            ],
+            "query": "configuration-anomaly-detection-stage,configuration-anomaly-detection-prod",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-12h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "title": "Configuration-Anomaly-Detection-SLOs",
+      "uid": "2k6bSMj7k",
+      "version": 1,
+      "weekStart": ""
+    }
