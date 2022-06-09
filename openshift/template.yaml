@@ -216,7 +216,7 @@ objects:
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
-            restartPolicy: OnFailure
+            restartPolicy: Never
             schedulerName: default-scheduler
             serviceAccount: cad-tekton-pruner
             serviceAccountName: cad-tekton-pruner
