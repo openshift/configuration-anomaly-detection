@@ -124,7 +124,6 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: cad-sa
-    namespace: ${NAMESPACE_NAME}
 - apiVersion: v1
   kind: Secret
   metadata:
@@ -270,4 +269,3 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: cad-tekton-pruner
-    namespace: ${NAMESPACE_NAME}
