@@ -165,13 +165,6 @@ func fixRoleOrClusterRoleBinding(fileAsMap map[interface{}]interface{}) error {
 	if !hasSubjects {
 		return fmt.Errorf("subjects doesn't exist")
 	}
-	for subjectIndex, subject := range subjects {
-		extractedSubject, canConvertExtractedSubject := subject.(map[interface{}]interface{})
-		if !canConvertExtractedSubject {
-			return fmt.Errorf("could not convert a subject item in index '%d' field into `map[interface{}]interface{}`: '%v'", subjectIndex, reflect.TypeOf(subject))
-		}
-		extractedSubject["namespace"] = "${NAMESPACE_NAME}"
-	}
 	fileAsMap["subjects"] = subjects
 	return nil
 }
