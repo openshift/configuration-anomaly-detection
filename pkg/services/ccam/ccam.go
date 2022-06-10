@@ -95,7 +95,7 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 	}
 
 	if !c.checkMissing(awsError) {
-		return fmt.Errorf("credentials are there, error is different")
+		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
 	log, err := c.SendCCAMServiceLog(c.cluster)
 	if err != nil {

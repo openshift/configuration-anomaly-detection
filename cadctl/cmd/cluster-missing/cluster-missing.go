@@ -93,6 +93,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
 	if err != nil {
+		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
 		ccamClient := ccam.Client{
 			Service: ccam.Provider{
 				OcmClient: ocmClient,
