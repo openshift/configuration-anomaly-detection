@@ -127,8 +127,12 @@ func (i InvestigateInstancesOutput) String() string {
 	msg := ""
 	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
 	// TODO: check if %v is the best formatting for UserInfo
-	msg += fmt.Sprintf("\nUserName : '%v' \n", i.User.UserName)
-	msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
+	if i.User.UserName != "" {
+		msg += fmt.Sprintf("\nUserName : '%v' \n", i.User.UserName)
+	}
+	if i.User.IssuerUserName != "" {
+		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
+	}
 	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v' \n", len(i.NonRunningInstances))
 	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
@@ -141,7 +145,11 @@ func (i InvestigateInstancesOutput) String() string {
 	if i.AllInstances >= 0 {
 		msg += fmt.Sprintf("\nThe amount of all instances is: '%d' \n", i.AllInstances)
 	}
-	msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
+	if i.ServiceLog.Summary() == "" {
+		msg += "\nServiceLog Sent: 'None' \n"
+	} else {
+		msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
+	}
 	if i.Error != "" {
 		msg += fmt.Sprintf("\nErrors: '%v' \n", i.Error)
 	}
