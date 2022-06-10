@@ -4,4 +4,4 @@ metadata:
   name: pipelinerun-counts
 spec:
   hard:
-    count/pipelineruns.tekton.dev: "60"
+    count/pipelineruns.tekton.dev: "100"
