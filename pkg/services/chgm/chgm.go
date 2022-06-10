@@ -146,7 +146,7 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nThe amount of all instances is: '%d' \n", i.AllInstances)
 	}
 	if i.ServiceLog.Summary() == "" {
-		msg += fmt.Sprintf("\nServiceLog Sent: 'None' \n")
+		msg += "\nServiceLog Sent: 'None' \n"
 	} else {
 		msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
 	}
