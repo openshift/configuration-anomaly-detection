@@ -78,7 +78,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: cad-pipelinerun-role
+  name: cad-tekton-pruner-role
 subjects:
   - kind: ServiceAccount
     name: cad-tekton-pruner
