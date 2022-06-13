@@ -77,7 +77,7 @@ type Client struct {
 // isUserAllowedToStop will verify if a user is allowed to stop instances.
 // as this is the thing that might change the most it is at the top.
 // Additionally, it is private as I don't see anyone using this outside of AreAllInstancesRunning
-func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraID string) bool {
+func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
 	//TODO: what is the best ordering for this? (from the most common to the most rare)
 
 	// operatorIamNames will hold all of the iam names that are allowed to stop instances
@@ -106,6 +106,11 @@ func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraI
 	// add RH-SRE-* users to authenticated users to escalate the incident for validation.
 	// The RH SRE on call should verify if the RH SRE was allowed to shutdown the node instance
 	if strings.HasPrefix(username, "RH-SRE-") {
+		return true
+	}
+
+	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such like the bootstrap instance
+	if issuerUsername == "ManagedOpenShift-Installer-Role" {
 		return true
 	}
 
@@ -267,7 +272,7 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 			UserName:       *event.Username,
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
-		if !isUserAllowedToStop(*event.Username, userDetails, infraID) {
+		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID) {
 			output.UserAuthorized = false
 		}
 	}
