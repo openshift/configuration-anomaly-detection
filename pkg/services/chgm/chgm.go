@@ -103,6 +103,12 @@ func isUserAllowedToStop(username string, userDetails CloudTrailEventRaw, infraI
 		return true
 	}
 
+	// add RH-SRE-* users to authenticated users to escalate the incident for validation.
+	// The RH SRE on call should verify if the RH SRE was allowed to shutdown the node instance
+	if strings.HasPrefix(username, "RH-SRE-") {
+		return true
+	}
+
 	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
 }
 
