@@ -366,20 +366,18 @@ func (c Client) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
 }
 
 func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*cloudtrail.Event, error) {
+	// We only look up events that are not older than 2 hours
+	since := time.Now().Add(time.Duration(-2) * time.Hour)
+	// We only look up 1000 events maximum
+	var maxResults int64 = 1000
 	in := &cloudtrail.LookupEventsInput{
 		LookupAttributes: []*cloudtrail.LookupAttribute{att},
+		MaxResults:       &maxResults,
+		StartTime:        &since,
 	}
-	var events []*cloudtrail.Event
-	for {
-		out, err := c.CloudTrailClient.LookupEvents(in)
-		if err != nil {
-			return nil, err
-		}
-		nextToken := out.NextToken
-		events = append(events, out.Events...)
-		if nextToken == nil {
-			break
-		}
+	out, err := c.CloudTrailClient.LookupEvents(in)
+	if err != nil {
+		return nil, err
 	}
-	return events, nil
+	return out.Events, nil
 }
