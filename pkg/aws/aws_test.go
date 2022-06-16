@@ -153,26 +153,6 @@ var _ = Describe("Aws", func() {
 				},
 			}
 		})
-		When("the events are listed on several pages", func() {
-			It("makes several calls to get all pages", func() {
-				nrPages := 10
-				token := awsSDK.String("pointerToNext")
-				lookupEventOut.NextToken = token
-				i := 1
-				mockCloudTrailClient.EXPECT().LookupEvents(gomock.Any()).DoAndReturn(
-					func(input *cloudtrail.LookupEventsInput) (*cloudtrail.LookupEventsOutput, error) {
-						if i == nrPages {
-							lookupEventOut.NextToken = nil
-						}
-						i++
-						return lookupEventOut, nil
-					}).Times(nrPages)
-
-				c, err := client.ListAllInstanceStopEvents()
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(len(c)).Should(Equal(nrPages))
-			})
-		})
 		When("the full list is on one page", func() {
 			It("the values are returned and the cloudtrail api is called just once", func() {
 				mockCloudTrailClient.EXPECT().LookupEvents(gomock.Any()).Return(lookupEventOut, nil).Times(1)
