@@ -3,6 +3,8 @@
 ----
 
 - [Configuration Anomaly Detection](#configuration-anomaly-detection)
+  - [About](#about)
+  - [Contributing](#contributing)
 - [Documentation](#documentation)
   - [CAD CLI](#cad-cli)
   - [Integrations](#integrations)
@@ -14,7 +16,11 @@
 
 # Configuration Anomaly Detection
 
+## About
+
 Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE investigation by detecting cluster anomalies and sending relevant communications to the cluster owner.
+
+## Contributing
 
 To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
