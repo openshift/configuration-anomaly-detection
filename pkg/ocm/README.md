@@ -23,4 +23,4 @@ func GetOCMClient() (ocm.Client, error) {
 
 ## Testing
 
-For testing, you can specify your ocm config in the New function, or leave the field blank.
+For testing, you can specify your OCM config in the New function, or leave the field blank.

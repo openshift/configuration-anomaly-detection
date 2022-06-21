@@ -1,7 +1,7 @@
-# CAD cli tool
+# CAD CLI Tool
 
 ## Install
-as explained in the root, use:
+To install the CAD CLI:
 
 ```shell
 make cadctl-install-local-force
