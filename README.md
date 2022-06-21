@@ -45,6 +45,7 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 4. If stopped/terminated instances are found, pulls AWS CloudTrail events for those instances.
 5. If the user of the event is:
     - Authorized (SRE or OSD managed), escalates the alert to SRE for futher investigation.
+        - **Note:** Authorized users have prefix RH-SRE, osdManagedAdmin, or have the ManagedOpenShift-Installer-Role.
     - Not authorized (not SRE or OSD managed), sends the appropriate service log and silences the alert.
 6. Adds notes with investigation details to the PagerDuty alert.
 
