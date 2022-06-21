@@ -11,8 +11,8 @@
   - [Workflow](#workflow)
   - [Templates](#templates)
   - [Dashboards](#dashboards)
-- [Deployment](#deployment)
-- [Boilerplate](#boilerplate)
+  - [Deployment](#deployment)
+  - [Boilerplate](#boilerplate)
 
 # Configuration Anomaly Detection
 
@@ -49,12 +49,12 @@ TODO - add steps for CAD workflow
 
 Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) directory. See app-interface for further documentation on dashboards.
 
-# Deployment
+## Deployment
 
 * [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
 * [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
 * [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
 
-# Boilerplate
+## Boilerplate
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
