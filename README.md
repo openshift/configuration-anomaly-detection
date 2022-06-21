@@ -1,12 +1,7 @@
-# Configuration Anomaly Detection
 [![Go Report Card](https://goreportcard.com/badge/github.com/openshift/configuration-anomaly-detection)](https://goreportcard.com/report/github.com/openshift/configuration-anomaly-detection) [![PkgGoDev](https://pkg.go.dev/badge/github.com/openshift/configuration-anomaly-detection)](https://pkg.go.dev/github.com/openshift/configuration-anomaly-detection)
 
-
-Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE investigation by detecting cluster anomalies and sending relevant communications to the cluster owner.
-
-To contribute to CAD, please see our [CONTRIBUTING Document](./docs/CONTRIBUTING.md).
-
 ----
+
 - [Configuration Anomaly Detection](#configuration-anomaly-detection)
 - [Documentation](#documentation)
   - [CAD CLI](#cad-cli)
@@ -17,6 +12,11 @@ To contribute to CAD, please see our [CONTRIBUTING Document](./docs/CONTRIBUTING
 - [Deployment](#deployment)
 - [Boilerplate](#boilerplate)
 
+# Configuration Anomaly Detection
+
+Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE investigation by detecting cluster anomalies and sending relevant communications to the cluster owner.
+
+To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 # Documentation
 
