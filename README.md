@@ -38,10 +38,10 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 ## Workflow
 
-1. PagerDuty webhook receives CHGM alert.
-2. CAD Tekton pipeline is triggered.
+1. PagerDuty webhook receives CHGM alert from Dead Man's Snitch.
+2. CAD Tekton pipeline is triggered via PagerDuty sending a webhook to Tekton EventListener.
 3. Logs into AWS account of cluster and checks for stopped/terminated instances.
-    - If unable to access AWS account, sends appropriate service log.
+    - If unable to access AWS account, sends "cluster credentials are missing" service log.
 4. If stopped/terminated instances are found, pulls AWS CloudTrail events for those instances.
 5. If the user of the event is:
     - Authorized (SRE or OSD managed), escalates the alert to SRE for futher investigation.
