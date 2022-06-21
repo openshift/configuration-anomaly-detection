@@ -1,27 +1,54 @@
-# configuration-anomaly-detection
+# Configuration Anomaly Detection
 [![Go Report Card](https://goreportcard.com/badge/github.com/openshift/configuration-anomaly-detection)](https://goreportcard.com/report/github.com/openshift/configuration-anomaly-detection) [![PkgGoDev](https://pkg.go.dev/badge/github.com/openshift/configuration-anomaly-detection)](https://pkg.go.dev/github.com/openshift/configuration-anomaly-detection)
 
-## Purpose
 
-configuration-anomaly-detection (CAD) solves the issue of reacting to a cluster's
-anomaly and informing the cluster owner of the next steps to do on their behalf.
+Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE investigation by detecting cluster anomalies and sending relevant communications to the cluster owner.
+
+To contribute to CAD, please see our [CONTRIBUTING Document](./docs/CONTRIBUTING.md).
+
+----
+- [Configuration Anomaly Detection](#configuration-anomaly-detection)
+- [Documentation](#documentation)
+  - [CAD CLI](#cad-cli)
+  - [Integrations](#integrations)
+  - [Workflow](#workflow)
+  - [Templates](#templates)
+  - [Dashboards](#dashboards)
+- [Deployment](#deployment)
+- [Boilerplate](#boilerplate)
+
+
+# Documentation
+
+## CAD CLI
+
+* [cadctl](./cadctl/README.md) -- Performs workflow for 'cluster has gone missing' (CHGM) alerts.
 
 ## Integrations
 
-CAD integrates with multiple third party tools, to read how they work and are developed see [the package folder](./pkg/)
+* [AWS](./pkg/aws/README.md) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
+* [PagerDuty](./pkg/pagerduty/README.md) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
+* [OCM](./pkg/ocm/README.md) -- Retrieving cluster info and sending service logs.
 
-## Install
+## Workflow
 
-### cadctl
+TODO - add steps for CAD workflow
 
-to install it use the command:
+## Templates
 
-```shell
-make cadctl-install-local-force
-```
+* [Update-Template](./hack/update-template/README.md) -- Updating configuration-anomaly-detection-template.Template.yaml.
+* [OpenShift](./openshift/README.md) -- Used by app-interface to deploy the CAD resources on a target cluster.
 
-and for more info on the matter see [the cadctl code tree](./cadctl/)
+## Dashboards
 
-## Contributing
+Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) directory. See app-interface for further documentation on dashboards.
 
-to learn on how to contribute see [our CONTRIBUTING document](./CONTRIBUTING.md)
+# Deployment
+
+* [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
+* [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
+* [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
+
+# Boilerplate
+
+* [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
