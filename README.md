@@ -38,7 +38,15 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 ## Workflow
 
-TODO - add steps for CAD workflow
+1. PagerDuty webhook receives CHGM alert.
+2. CAD Tekton pipeline is triggered.
+3. Logs into AWS account of cluster and checks for stopped/terminated instances.
+    - If unable to access AWS account, sends appropriate service log.
+4. If stopped/terminated instances are found, pulls AWS CloudTrail events for those instances.
+5. If the user of the event is:
+    - Authorized (SRE or OSD Managed), escalates the alert to SRE for futher investigation.
+    - Not authorized (not SRE or OSD managed), sends the appropriate service log and silences the alert.
+6. Adds notes with investigation details to the PagerDuty alert.
 
 ## Templates
 
