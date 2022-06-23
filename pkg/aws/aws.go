@@ -238,9 +238,20 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		}
 		fmt.Println("successfully ListAllTerminatedInstances")
 
+		// only add events to our investigation, if these events contain
+		// at least one of our cluster instances.
 		var localEvents []*cloudtrail.Event
-		localEvents = append(localEvents, localStopEvents...)
-		localEvents = append(localEvents, localTerminatedEvents...)
+		for _, event := range localStopEvents {
+			if eventContainsInstances(instances, event) {
+				localEvents = append(localEvents, event)
+			}
+		}
+
+		for _, event := range localTerminatedEvents {
+			if eventContainsInstances(instances, event) {
+				localEvents = append(localEvents, event)
+			}
+		}
 
 		// here we just loop over all stop and terminated events
 		for _, event := range localEvents {
@@ -305,6 +316,20 @@ func containsEvent(e *cloudtrail.Event, events []*cloudtrail.Event) bool {
 	for _, event := range events {
 		if event == e {
 			return true
+		}
+	}
+	return false
+}
+
+// eventContainsInstances returns true, when an event lists at least one
+// of the given instances. This function is being used for kicking out events,
+// that are unrelated to our cluster.
+func eventContainsInstances(instances []*ec2.Instance, event *cloudtrail.Event) bool {
+	for _, resource := range event.Resources {
+		for _, instance := range instances {
+			if *instance.InstanceId == *resource.ResourceName {
+				return true
+			}
 		}
 	}
 	return false
