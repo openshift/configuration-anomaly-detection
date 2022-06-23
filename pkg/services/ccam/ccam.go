@@ -35,7 +35,6 @@ type Service interface {
 	// OCM
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	SendCCAMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
-	GetNodeCount(clusterID string) (int, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error

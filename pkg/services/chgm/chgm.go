@@ -54,7 +54,6 @@ type Service interface {
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
-	GetNodeCount(clusterID string) (int, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
@@ -144,7 +143,10 @@ func (i InvestigateInstancesOutput) String() string {
 	if i.User.IssuerUserName != "" {
 		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
 	}
-	msg += fmt.Sprintf("\nThe amount of non running instances is: '%v' \n", len(i.NonRunningInstances))
+	msg += fmt.Sprintf("\nNumber of non running instances: '%v' \n", len(i.NonRunningInstances))
+	if i.AllInstances >= 0 {
+		msg += fmt.Sprintf("\nSupposed cluster size: '%d' \n", i.AllInstances)
+	}
 	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
@@ -152,9 +154,6 @@ func (i InvestigateInstancesOutput) String() string {
 	}
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
-	}
-	if i.AllInstances >= 0 {
-		msg += fmt.Sprintf("\nThe amount of all instances is: '%d' \n", i.AllInstances)
 	}
 	if i.ServiceLog.Summary() == "" {
 		msg += "\nServiceLog Sent: 'None' \n"
@@ -244,13 +243,10 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	if len(stoppedInstancesEvents) == 0 {
 		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
-	// try to get nodeCount
-	nodeCount, err := c.GetNodeCount(c.cd.Spec.ClusterMetadata.InfraID)
-	if err != nil {
-		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
-		nodeCount = -1 // we set nodeCount to -1. This is equal to "metric missing"
-		fmt.Println("error while evaluating nodeCount: ", err)
-	}
+
+	// evaluate number of all supposed nodes
+	nodeCount := c.GetNodeCount()
+
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
@@ -278,6 +274,33 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	}
 
 	return output, nil
+}
+
+// GetNodeCount returns the total number of all nodes that are supposed to be in the cluster
+// We do not use nodes.GetTotal() here, because total seems to be always 0.
+func (c Client) GetNodeCount() int {
+	nodes, ok := c.cluster.GetNodes()
+	if !ok {
+		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
+		fmt.Printf("node data is missing, dumping cluster object: %#v", c.cluster)
+		return -1 // we set nodeCount to -1. This is equal to "metric missing"
+	}
+	masterCount, ok := nodes.GetMaster()
+	if !ok {
+		fmt.Printf("master node data is missing, dumping cluster object: %#v", c.cluster)
+		return -1 // we set nodeCount to -1. This is equal to "metric missing"
+	}
+	infraCount, ok := nodes.GetInfra()
+	if !ok {
+		fmt.Printf("infra node data is missing, dumping cluster object: %#v", c.cluster)
+		return -1 // we set nodeCount to -1. This is equal to "metric missing"
+	}
+	computeCount, ok := nodes.GetCompute()
+	if !ok {
+		fmt.Printf("infra node data is missing, dumping cluster object: %#v", c.cluster)
+		return -1 // we set nodeCount to -1. This is equal to "metric missing"
+	}
+	return masterCount + infraCount + computeCount
 }
 
 // EscalateAlert will ensure that an incident informs a SRE.

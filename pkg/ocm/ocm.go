@@ -186,23 +186,6 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 	return response.Body().Resources()[resourceKey], nil
 }
 
-// GetNodeCount returns the number of supposed nodes for a given cluster.
-func (c Client) GetNodeCount(clusterID string) (int, error) {
-	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MetricQueries().Nodes().Get().Send()
-	if err != nil {
-		return 0, err
-	}
-	body, ok := response.GetBody()
-	if !ok {
-		return 0, fmt.Errorf("could not retrieve body from GetNodeCount response")
-	}
-	nodes, ok := body.GetNodes()
-	if !ok {
-		return 0, fmt.Errorf("could not retrieve nodes from GetNodeCount body")
-	}
-	return len(nodes), nil
-}
-
 // SendCHGMServiceLog allows to send a cluster has gone missing servicelog.
 // On success, it will return the sent service log entry.
 func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
