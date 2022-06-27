@@ -217,7 +217,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 	for k, v := range idToStopTime {
 		fmt.Printf("%s, stopped running at %s\n", k, v.String())
 	}
-	fmt.Println("Investigating in reason...")
+	fmt.Println("Investigating reason...")
 	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 	var executionError error
@@ -244,13 +244,17 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		for _, event := range localStopEvents {
 			if eventContainsInstances(instances, event) {
 				localEvents = append(localEvents, event)
+				continue
 			}
+			fmt.Printf("event lists only foreign instances: %#v\n", event)
 		}
 
 		for _, event := range localTerminatedEvents {
 			if eventContainsInstances(instances, event) {
 				localEvents = append(localEvents, event)
+				continue
 			}
+			fmt.Printf("event lists only foreign instances: %#v\n", event)
 		}
 
 		// here we just loop over all stop and terminated events
