@@ -156,7 +156,7 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
 	}
 	if i.ServiceLog.Summary() == "" {
-		msg += "\nServiceLog Sent: 'None' \n"
+		msg += "\nServiceLog Sent: 'No ServiceLog sent. Manual SRE investigation is needed.' \n"
 	} else {
 		msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
 	}
