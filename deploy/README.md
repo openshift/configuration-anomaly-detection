@@ -16,6 +16,8 @@ This directory contains the configuration for tekton pipelines that perform the 
 ##### AWS
 [task-cad-checks-secrets-aws.yaml](./task-cad-checks-secrets-aws.yaml) This will hold the AWS creds, and we have an env file [aws.env.sample](./aws.env.sample) for populating it.
 
+**Note**: AWS_DEFAULT_REGION and AWS_SESSION_TOKEN env variables are for development purposes only and are optional.
+
 See [../pkg/aws/](../pkg/aws/) for more details.
 
 ##### PagerDuty
@@ -23,7 +25,10 @@ See [../pkg/aws/](../pkg/aws/) for more details.
 See [../pkg/pagerduty/](../pkg/pagerduty/) for more details.
 
 ##### OCM
-[task-cad-checks-secrets-ocm.yaml](./task-cad-checks-secrets-ocm.yaml) This will hold the ocm creds.
+[task-cad-checks-secrets-ocm-client.yaml](./task-cad-checks-secrets-ocm-client.yaml) This will hold the ocm creds.
+
+CAD_OCM_CLIENT_* env vars are in internal kv store. 
+
 See [../pkg/ocm/](../pkg/ocm/) for more details.
 
 #### PipelineRun
@@ -58,6 +63,7 @@ Install CAD by running the following commands:
     ```console
     OVERRIDE_IMAGE=${IMAGE_LOCATION} yq --inplace '.spec.steps[].image=env(OVERRIDE_IMAGE)' task-cad-checks.yaml
     ```
+    **Note**: The test image repository in Quay must be public.
 
 4. Deploy components
 
@@ -91,7 +97,7 @@ oc exec -it deploy/el-cad-event-listener -- curl -X POST -H 'X-Secret-Token: sam
 
 For more details, see the [Tekton Documentation](https://github.com/tektoncd/triggers/tree/main/examples#invoking-the-triggers-locally).
 
-The pipeline expects to receive details of a PagerDuty event as payload. See the [webhook payload](https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkw-v3-overview#webhook-payload) that is sent by PagerDuty.
+The pipeline expects to receive details of a PagerDuty event as payload. See the [webhook payload](https://developer.pagerduty.com/docs/ZG9jOjQ1MTg4ODQ0-overview) that is sent by PagerDuty.
 
 
 The logs of the last pipeline can be fetched with the following command as long as the pods are still available:
