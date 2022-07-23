@@ -179,13 +179,13 @@ func (c Client) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance,
 		if err != nil {
 			return []*ec2.Instance{}, err
 		}
-		nextToken := out.NextToken
 		for _, res := range out.Reservations {
 			instances = append(instances, res.Instances...)
 		}
-		if nextToken == nil {
+		if out.NextToken == nil {
 			break
 		}
+		in.NextToken = out.NextToken
 	}
 	return instances, nil
 }
