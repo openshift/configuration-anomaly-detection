@@ -15,6 +15,7 @@
   - [Dashboards](#dashboards)
   - [Deployment](#deployment)
   - [Boilerplate](#boilerplate)
+  - [PipelinePruner](#PipelinePruner)
 
 # Configuration Anomaly Detection
 
@@ -72,3 +73,7 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 ## Boilerplate
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
+
+## PipelinePruner
+
+* [PipelinePruner](./openshift/PipelinePruning.md) -- Documentation about PipelineRun pruning.
