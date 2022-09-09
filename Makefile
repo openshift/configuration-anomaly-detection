@@ -42,7 +42,7 @@ test:
 
 .PHONY: lint
 lint: bin/golangci-lint lint-only-hack
-	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run --timeout 120s
 
 .PHONY: lint-only-hack
 lint-only-hack: bin/golangci-lint

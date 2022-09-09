@@ -18,9 +18,10 @@ package clustermissing
 
 import (
 	"fmt"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"os"
 	"path/filepath"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -117,6 +118,11 @@ func run(cmd *cobra.Command, args []string) error {
 
 	res, err := chgmClient.InvestigateInstances(externalClusterID)
 	if err != nil {
+		fmt.Printf("Inconclusive, alerting SRE, InvestigateInstances failed on %s: %v\n", externalClusterID, err)
+		escerr := chgmClient.EscalateAlert(incidentID, fmt.Sprintf("CAD Investigation on %s failed: %v", externalClusterID, err))
+		if escerr != nil {
+			return fmt.Errorf("could not escalate the alert %s: %w while: %v", incidentID, escerr, err)
+		}
 		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
 	}
 
