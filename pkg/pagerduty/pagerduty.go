@@ -321,6 +321,37 @@ func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
 	return incidentID, nil
 }
 
+// WebhookPayloadToEventType is a generated struct used to extract the event type out
+type WebhookPayloadToEventType struct {
+	Event struct {
+		Type string `json:"event_type"`
+	} `json:"event"`
+}
+
+// ExtractEventTypeFromPayload will retrieve the payloadFilePath and return the eventType
+func (c Client) ExtractEventTypeFromPayload(payloadFilePath string, reader FileReader) (string, error) {
+	data, err := readPayloadFile(payloadFilePath, reader)
+	if err != nil {
+		return "", fmt.Errorf("could not read the event type from the payloadFile: %w", err)
+	}
+	return c.ExtractEventTypeFromBytes(data)
+}
+
+// ExtractEventTypeFromBytes will return the eventType from the bytes[] data
+func (c Client) ExtractEventTypeFromBytes(data []byte) (string, error) {
+	w := WebhookPayloadToEventType{}
+	err := json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+
+	eventType := w.Event.Type
+	if eventType == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract event_type from '%s'", data)}
+	}
+	return eventType, nil
+}
+
 // readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.
 // if we choose to pivot and use a different way of pulling the payload data we can change this function and ExtractExternalIDFromPayload inputs
 func readPayloadFile(payloadFilePath string, reader FileReader) ([]byte, error) {

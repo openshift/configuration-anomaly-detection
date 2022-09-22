@@ -30,6 +30,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	pagerdutyIncidentResolved = "incident.resolved"
+)
+
 // ClusterMissingCmd represents the cluster-missing command
 var ClusterMissingCmd = &cobra.Command{
 	Use:   "cluster-missing",
@@ -61,6 +65,21 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
 
+	eventType, err := pdClient.ExtractEventTypeFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("could not determine event type: %w", err)
+	}
+
+	switch eventType{
+	case pagerdutyIncidentResolved:
+		return evalutateRestoredCluster(awsClient, ocmClient, pdClient)
+	default:
+		return evaluateMissingCluster(awsClient, ocmClient, pdClient)
+	}
+}
+
+// evaluateMissingCluster will take appropriate action against a cluster whose incident is not resolved
+func evaluateMissingCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) error {
 	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
 	if err != nil {
 		return fmt.Errorf("GetIncidentID failed on: %w", err)
@@ -148,6 +167,13 @@ func run(cmd *cobra.Command, args []string) error {
 
 	return nil
 
+}
+
+// evalutateRestoredCluster will take appropriate action against a cluster whose incident is resolved
+func evalutateRestoredCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) error {
+	// TODO
+	fmt.Println("Incident has resolved")
+	return nil
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
