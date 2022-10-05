@@ -183,3 +183,18 @@ func (mr *MockServiceMockRecorder) SendCHGMServiceLog(cluster interface{}) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCHGMServiceLog", reflect.TypeOf((*MockService)(nil).SendCHGMServiceLog), cluster)
 }
+
+// PostCHGMLimitedSupportReason mocks base method.
+func (m *MockService) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PostCHGMLimitedSupportReason", clusterID)
+	ret0, _ := ret[0].(*v1.LimitedSupportReason)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PostCHGMLimitedSupportReason indicated an expected call of PostCHGMLimitedSupportReason.
+func (mr *MockServiceMockRecorder) PostCHGMLimitedSupportReason(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostCHGMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).PostCHGMLimitedSupportReason), cluster)
+}

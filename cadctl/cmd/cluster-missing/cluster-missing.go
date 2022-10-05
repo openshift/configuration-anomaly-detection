@@ -18,9 +18,10 @@ package clustermissing
 
 import (
 	"fmt"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"os"
 	"path/filepath"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -131,18 +132,26 @@ func run(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Println("Sending CHGM ServiceLog...")
-	log, err := chgmClient.SendServiceLog()
-	if err != nil {
-		return fmt.Errorf("failed sending service log before silencing the alert: %w", err)
-	}
-	res.ServiceLog = log
+	// fmt.Println("Sending CHGM ServiceLog...")
+	// log, err := chgmClient.SendServiceLog()
+	// if err != nil {
+	// 	return fmt.Errorf("failed sending service log before silencing the alert: %w", err)
+	// }
+	// res.ServiceLog = log
 
-	fmt.Println("Silencing Alert...")
-	err = chgmClient.SilenceAlert(incidentID, res.String())
+	// Post CHGM limited support
+	fmt.Println("Sending CHGM limited support reason")
+	reason, err := chgmClient.PostLimitedSupport()
 	if err != nil {
-		return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
+		return fmt.Errorf("failed posting limited support reason: %w", err)
 	}
+	res.LimitedSupportReason = reason
+
+	// fmt.Println("Silencing Alert...")
+	// err = chgmClient.SilenceAlert(incidentID, res.String())
+	// if err != nil {
+	// 	return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
+	// }
 	// written this way so I can quickly detect if res is true of false
 	fmt.Println("USER INITIATED SHUTDOWN")
 

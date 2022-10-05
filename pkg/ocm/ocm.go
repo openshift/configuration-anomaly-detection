@@ -40,6 +40,21 @@ var ccamServiceLog = slTemplate{
 	InternalOnly: false,
 }
 
+type limitedSupportReasonTemplate struct {
+	Details string
+	Summary string
+}
+
+var chgmLimitedSupport = limitedSupportReasonTemplate{
+	Details: "Action required: cluster not checking in",
+	Summary: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopping instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
+}
+
+var ccamLimitedSupport = limitedSupportReasonTemplate{
+	Details: "Action required: Restore missing cloud credentials",
+	Summary: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
+}
+
 // Client is the ocm client with which we can run the commands
 // currently we do not need to export the connection or the config, as we create the Client using the New func
 type Client struct {
@@ -228,5 +243,43 @@ func (c Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder 
 	builder.Summary(sl.Summary)
 	builder.Description(sl.Description)
 	builder.InternalOnly(sl.InternalOnly)
+	return builder
+}
+
+// PostCHGMLimitedSupportReason will post a CCAM limited support reason for a cluster
+// On success, it returns true
+func (c Client) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
+	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(chgmLimitedSupport), clusterID)
+}
+
+// PostCCAMLimitedSupportReason will post a CCAM limited support reason for a cluster
+// On success, it returns true
+func (c Client) PostCCAMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
+	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(ccamLimitedSupport), clusterID)
+}
+
+// postLimitedSupportReason allows to post a generic limited support reason to a cluster
+// On success, returns sent limited support reason
+func (c Client) postLimitedSupportReason(builder *v1.LimitedSupportReasonBuilder, clusterID string) (*v1.LimitedSupportReason, error) {
+
+	ls, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("could not create post request: %w", err)
+	}
+
+	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
+	request = request.Body(ls)
+	resp, err := request.Send()
+	if err != nil {
+		return nil, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
+	}
+	return ls, nil
+
+}
+
+func (c Client) newLimitedSupportReasonBuilder(ls limitedSupportReasonTemplate) *v1.LimitedSupportReasonBuilder {
+	builder := v1.NewLimitedSupportReason()
+	builder.Summary(ls.Summary)
+	builder.Details(ls.Details)
 	return builder
 }

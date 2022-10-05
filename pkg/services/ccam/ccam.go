@@ -3,11 +3,12 @@ package ccam
 
 import (
 	"fmt"
+	"regexp"
+
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"regexp"
 )
 
 var accessDeniedRegex = regexp.MustCompile(`failed to assume into support-role: AccessDenied`)
@@ -35,6 +36,7 @@ type Service interface {
 	// OCM
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	SendCCAMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	PostCCAMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
@@ -101,4 +103,15 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 		return fmt.Errorf("failed to send missing credentials service log: %w", err)
 	}
 	return c.silenceAlert(incidentID, fmt.Sprintf("ServiceLog Sent: '%+v' \n", log.Summary()))
+}
+
+// PostLimitedSupport adds a limited support reason to corresponding cluster
+func (c Client) PostLimitedSupport() (*v1.LimitedSupportReason, error) {
+	id := c.cluster.ID()
+	reason, err := c.PostCCAMLimitedSupportReason(id)
+	if err != nil {
+		return nil, fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
+	}
+
+	return reason, nil
 }

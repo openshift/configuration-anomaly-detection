@@ -54,6 +54,7 @@ type Service interface {
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
@@ -124,12 +125,13 @@ type UserInfo struct {
 
 // InvestigateInstancesOutput is the result of the InvestigateInstances command
 type InvestigateInstancesOutput struct {
-	NonRunningInstances []*ec2.Instance
-	AllInstances        int
-	User                UserInfo
-	UserAuthorized      bool
-	ServiceLog          *servicelog.LogEntry
-	Error               string
+	NonRunningInstances  []*ec2.Instance
+	AllInstances         int
+	User                 UserInfo
+	UserAuthorized       bool
+	ServiceLog           *servicelog.LogEntry
+	LimitedSupportReason *v1.LimitedSupportReason
+	Error                string
 }
 
 // String implements the stringer interface for InvestigateInstancesOutput
@@ -209,6 +211,17 @@ func (c Client) SendServiceLog() (*servicelog.LogEntry, error) {
 	}
 
 	return log, nil
+}
+
+// PostLimitedSupport adds a limited support reason to the corresponding cluster
+func (c Client) PostLimitedSupport() (*v1.LimitedSupportReason, error) {
+	id := c.cluster.ID()
+	reason, err := c.PostCHGMLimitedSupportReason(id)
+	if err != nil {
+		return nil, fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
+	}
+
+	return reason, nil
 }
 
 // investigateInstances is the internal version of investigateInstances operating on the read-only
