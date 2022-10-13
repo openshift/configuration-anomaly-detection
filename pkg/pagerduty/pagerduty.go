@@ -23,6 +23,10 @@ const (
 	InvalidInputParamsErrorCode = 2001
 	// pagerDutyTimeout is the chosen timeout for api requests, can be changed later
 	pagerDutyTimeout = time.Second * 30
+	// CADEmailAddress is the email address for the 'Configuration-Anomaly-Detection' PagerDuty User
+	CADEmailAddress = "sd-sre-platform+pagerduty-configuration-anomaly-detection-agent@redhat.com"
+	// CADIntegrationName is the name of the PD integration used to escalate alerts to Primary.
+	CADIntegrationName = "Dead Man's Snitch"
 )
 
 // Client will hold all the required fields for any Client Operation
@@ -184,6 +188,52 @@ func (c Client) GetAlerts(incidentID string) ([]Alert, error) {
 		res = append(res, localAlert)
 	}
 	return res, nil
+}
+
+// CreateNewAlert triggers an alert using the Deadmanssnitch integration for the given service.
+// If the provided service does not have a DMS integration, an error is returned
+func (c Client) CreateNewAlert(description string, details interface{}, serviceID string) error {
+	service, err := c.c.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
+	if err != nil {
+		return ServiceNotFoundErr{Err: err}
+	}
+
+	integration, err := c.getCADIntegrationFromService(service)
+	if err != nil {
+		return IntegrationNotFoundErr{Err: err}
+	}
+
+	// Current DMS integration requires us to use v1 events
+	event := sdk.Event{
+		ServiceKey: integration.IntegrationKey,
+		Type: "trigger",
+		Description: description,
+		Details: details,
+		Client: CADEmailAddress,
+	}
+
+	response, err := sdk.CreateEventWithHTTPClient(event, c.c.HTTPClient)
+	if err != nil {
+		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
+	}
+	return nil
+}
+
+// getCADIntegrationFromService retrieves the PagerDuty integration used by CAD from the given service.
+// If the integration CAD expects is not found, an error is returned
+func (c Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
+	// For some reason the .Integrations array in the Service object does not contain any usable data,
+	// aside from the ID, so we have to re-grab each integration separately to examine them
+	for _, brokenIntegration := range service.Integrations {
+		realIntegration, err := c.c.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
+		if err != nil {
+			return sdk.Integration{}, fmt.Errorf("failed to retrieve integration '%s' for service '%s': %w", brokenIntegration.ID, service.ID, err)
+		}
+		if realIntegration.Name == CADIntegrationName {
+			return *realIntegration, nil
+		}
+	}
+	return sdk.Integration{}, fmt.Errorf("no integration '%s' exists for service '%s'", CADIntegrationName, service.Name)
 }
 
 // ExtractIDFromCHGM extracts from an Alert body until an external ID
@@ -350,6 +400,41 @@ func (c Client) ExtractEventTypeFromBytes(data []byte) (string, error) {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract event_type from '%s'", data)}
 	}
 	return eventType, nil
+}
+
+// WebhookPayloadToServiceID is a generated struct used to extract the service id from the webhook payload
+type WebhookPayloadToServiceID struct {
+	Event struct {
+		Data struct {
+			Service struct {
+				ID string
+			} `json:"service"`
+		} `json:"data"`
+	} `json:"event"`
+}
+
+// ExtractServiceIDFromPayload will retrieve the payloadFilePath and return the service ID
+func (c Client) ExtractServiceIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
+	data, err := readPayloadFile(payloadFilePath, reader)
+	if err != nil {
+		return "", fmt.Errorf("could not read the service from the payloadFile: %w", err)
+	}
+	return c.ExtractServiceIDFromBytes(data)
+}
+
+// ExtractServiceIDFromBytes will return the service id from the bytes[] data
+func (c Client) ExtractServiceIDFromBytes(data []byte) (string, error) {
+	w := WebhookPayloadToServiceID{}
+	err := json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+
+	serviceID := w.Event.Data.Service.ID
+	if serviceID == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract service.id from '%s'", data)}
+	}
+	return serviceID, nil
 }
 
 // readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.

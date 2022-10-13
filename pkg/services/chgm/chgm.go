@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -53,9 +52,13 @@ type Service interface {
 	// OCM
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
-	SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
+	DeleteCHGMLimitedSupportReason(clusterID string) (bool, error)
+	DeleteCCAMLimitedSupportReason(clusterID string) (bool, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
+	ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error)
+	CreateNewAlert(description string, details interface{}, serviceID string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
 	GetEscalationPolicy() string
 	GetSilentPolicy() string
@@ -124,12 +127,14 @@ type UserInfo struct {
 
 // InvestigateInstancesOutput is the result of the InvestigateInstances command
 type InvestigateInstancesOutput struct {
-	NonRunningInstances []*ec2.Instance
-	AllInstances        int
-	User                UserInfo
-	UserAuthorized      bool
-	ServiceLog          *servicelog.LogEntry
-	Error               string
+	NonRunningInstances  []*ec2.Instance
+	AllInstances         int
+	User                 UserInfo
+	UserAuthorized       bool
+	ClusterState         v1.ClusterState
+	ClusterNotEvaluated  bool
+	LimitedSupportReason *v1.LimitedSupportReason
+	Error                string
 }
 
 // String implements the stringer interface for InvestigateInstancesOutput
@@ -155,11 +160,19 @@ func (i InvestigateInstancesOutput) String() string {
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
 	}
-	if i.ServiceLog.Summary() == "" {
-		msg += "\nServiceLog Sent: 'No ServiceLog sent. Manual SRE investigation is needed.' \n"
-	} else {
-		msg += fmt.Sprintf("\nServiceLog Sent: '%+v' \n", i.ServiceLog.Summary())
+
+	summary, ok := i.LimitedSupportReason.GetSummary()
+	if !ok {
+		summary = "No summary was posted"
 	}
+	details, ok := i.LimitedSupportReason.GetDetails()
+	if !ok {
+		details = "No details were posted"
+	}
+	msg += fmt.Sprintln("\nLimited Support reason sent:")
+	msg += fmt.Sprintf("- Summary: '%s'\n", summary)
+	msg += fmt.Sprintf("- Details: '%s'\n", details)
+
 	if i.Error != "" {
 		msg += fmt.Sprintf("\nErrors: '%v' \n", i.Error)
 	}
@@ -188,42 +201,29 @@ func (c *Client) populateStructWith(externalID string) error {
 	return nil
 }
 
-// InvestigateInstances will check all the instances for the cluster are running.
+// InvestigateStoppedInstances will check all the instances for the cluster are running.
 // in case they are not it will make sure the stopped instances are correctly at this state.
-func (c *Client) InvestigateInstances(externalID string) (InvestigateInstancesOutput, error) {
+func (c *Client) InvestigateStoppedInstances(externalID string) (InvestigateInstancesOutput, error) {
 	err := c.populateStructWith(externalID)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not populate the struct: %w", err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not populate the struct when investigating stopped instances: %w", err)
 	}
 
-	return c.investigateInstances()
+	return c.investigateStoppedInstances()
 }
 
-// SendServiceLog sends a service log to the corresponding cluster
-// We have to use this function as wrapper, because otherwise we have no access to the
-// cluster. The CHGM package does not export the cluster and cluster deployment yet.
-func (c Client) SendServiceLog() (*servicelog.LogEntry, error) {
-	log, err := c.SendCHGMServiceLog(c.cluster)
-	if err != nil {
-		return nil, fmt.Errorf("could not send service log for %s: %w", c.cluster.Name(), err)
-	}
-
-	return log, nil
-}
-
-// investigateInstances is the internal version of investigateInstances operating on the read-only
+// investigateStoppedInstances is the internal version of InvestigateStoppedInstances operating on the read-only
 // version of Client.
-func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
-
+func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error) {
 	if c.cd == nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty, did not populate the instance before")
+		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
 	}
 
 	infraID := c.cd.Spec.ClusterMetadata.InfraID
 
 	stoppedInstances, err := c.ListNonRunningInstances(infraID)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err)
 	}
 
 	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)
@@ -274,6 +274,94 @@ func (c Client) investigateInstances() (InvestigateInstancesOutput, error) {
 	}
 
 	return output, nil
+}
+
+// InvestigateStartedInstances will check whether the instances for the cluster have been properly resumed.
+func (c *Client) InvestigateStartedInstances(externalID string) (InvestigateInstancesOutput, error) {
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not populate the struct when investigating started instances: %w", err)
+	}
+
+	return c.investigateStartedInstances()
+}
+
+// investigateStartedInstances is the internal version of InvestigateStartedInstances operating on the read-only
+// version of Client.
+func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error) {
+	if c.cd == nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating started instances, did not populate the instance before")
+	}
+
+	infraID := c.cd.Spec.ClusterMetadata.InfraID
+
+	// Verify cluster is in a valid state to be investigated (ie - not hibernating, powering down, or being deleted)
+	state, ok := c.cluster.GetState()
+	if !ok {
+		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.cluster.ID())
+	}
+	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
+		output := InvestigateInstancesOutput{
+			ClusterState: state,
+			ClusterNotEvaluated: true,
+		}
+		return output, nil
+	}
+
+	// Verify cluster is fully running (no instances remain unstarted)
+	stoppedInstances, err := c.ListNonRunningInstances(infraID)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating started instances for %s: %w", infraID, err)
+	}
+	if len(stoppedInstances) != 0 {
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "non running instances found: cluster has not fully started or has excess machines"}, nil
+	}
+
+	// Verify cluster has expected number of nodes
+	nodeCount := c.GetNodeCount()
+	runningInstances, err := c.ListRunningInstances(infraID)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running instances for %s: %w", infraID, err)
+	}
+	if len(runningInstances) != nodeCount {
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running instances does not match the expected node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
+	}
+
+	output := InvestigateInstancesOutput{
+		NonRunningInstances: stoppedInstances,
+		UserAuthorized:      true,
+		AllInstances:        nodeCount,
+	}
+	return output, nil
+}
+
+// PostCHGMLimitedSupport adds a CHGM limited support reason to the corresponding cluster
+func (c Client) PostCHGMLimitedSupport(externalID string) (*v1.LimitedSupportReason, error) {
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return &v1.LimitedSupportReason{}, fmt.Errorf("could not populate the struct when posting CHGM Limited Support reason: %w", err)
+	}
+	return c.PostCHGMLimitedSupportReason(c.cluster.ID())
+}
+
+// RemoveCHGMLimitedSupport removes chgm-related limited support reasons added to the cluster by CAD, returning
+// true if any reasons were removed
+func (c Client) RemoveCHGMLimitedSupport(externalID string) (bool, error) {
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return false, fmt.Errorf("could not populate the struct when removing CHGM Limited Support reason: %w", err)
+	}
+	return c.DeleteCHGMLimitedSupportReason(c.cluster.ID())
+}
+
+// RemoveCCAMLimitedSupport removes ccam-related limited support reasons added to the cluster by CAD, returning
+// true if any reasons were removed
+func (c Client) RemoveCCAMLimitedSupport(externalID string) (bool, error) {
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return false, fmt.Errorf("could not populate the struct when removing CCAM Limited Support reason: %w", err)
+	}
+	return c.DeleteCCAMLimitedSupportReason(c.cluster.ID())
 }
 
 // GetNodeCount returns the total number of all nodes that are supposed to be in the cluster
@@ -328,6 +416,100 @@ func (c Client) updatePagerduty(incidentID, notes, escalationPolicy string) erro
 	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
 	if err != nil {
 		return fmt.Errorf("failed to change incident escalation policy: %w", err)
+	}
+	return nil
+}
+
+// CreateIncidentForRestoredCluster creates an alert for a cluster that no longer has a CHGM alert firing, but is
+// still somehow failing investigation
+func (c *Client) CreateIncidentForRestoredCluster(resultErr, externalID, serviceID string) error {
+	// Ensure the client is properly populated w/ the cluster object prior to creating the alert
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return fmt.Errorf("could not populate the struct when creating an incident for restored cluster: %w", err)
+	}
+
+	// The alert description acts as a title for the resulting incident
+	description := fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", c.cluster.ID())
+
+	// Defining the alert's details as a struct creates a table of entries that is easily parsed
+	details := struct {
+		ClusterID  string `json:"Cluster ID"`
+		Reason     string `json:"Reason"`
+		Resolution string `json:"Resolution"`
+		SOP        string `json:"SOP"`
+	}{
+		ClusterID: c.cluster.ID(),
+		Reason: resultErr,
+		Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
+		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
+	}
+
+	err = c.CreateNewAlert(description, details, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to create incident for restored cluster '%s': %w", c.cluster.ID(), err)
+	}
+	return nil
+}
+
+// CreateIncidentForInvestigationFailure creates an alert for a cluster that could not be properly investigated
+func (c *Client) CreateIncidentForInvestigationFailure(investigationErr error, externalID, serviceID string) error {
+	// Ensure the client is properly populated w/ the cluster object prior to creating the alert
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return fmt.Errorf("could not populate the struct when creating an incident for failed investigation: %w", err)
+	}
+
+	// The alert description acts as a title for the resulting incident
+	description := fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", c.cluster.ID())
+
+	// Defining the alert's details as a struct creates a table of entries that is easily parsed
+	details := struct {
+		ClusterID  string `json:"Cluster ID"`
+		Error      string `json:"Error"`
+		Resolution string `json:"Resolution"`
+		SOP        string `json:"SOP"`
+	}{
+		ClusterID: c.cluster.ID(),
+		Error: investigationErr.Error(),
+		Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",
+		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
+	}
+
+	err = c.CreateNewAlert(description, details, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to create incident for failed investigation on cluster '%s': %w", c.cluster.ID(), err)
+	}
+	return nil
+}
+
+// CreateIncidentForLimitedSupportRemovalFailure creates an alert for a cluster who's Limited Support reasons could not
+// be removed by CAD
+func (c Client) CreateIncidentForLimitedSupportRemovalFailure(lsErr error, externalID, serviceID string) error {
+	err := c.populateStructWith(externalID)
+	if err != nil {
+		return fmt.Errorf("could not populate the struct when creating an incident for failing to add a Limited Support reason: %w", err)
+	}
+
+	// The alert description acts as a title for the resulting incident
+	description := fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", c.cluster.ID())
+
+	// Defining the alert's details as a struct creates a table of entries that is easily parsed
+	details := struct {
+		ClusterID  string `json:"Cluster ID"`
+		Error      string `json:"Error"`
+		Resolution string `json:"Resolution"`
+		SOP        string `json:"SOP"`
+	}{
+		ClusterID: c.cluster.ID(),
+		Error: lsErr.Error(),
+		Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
+		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
+	}
+
+	err = c.CreateNewAlert(description, details, serviceID)
+	if err != nil {
+		return fmt.Errorf("failed to create incident for failed Limited Support post to cluster '%s': %w", c.cluster.ID(), err)
 	}
 	return nil
 }

@@ -56,6 +56,57 @@ func (IncidentNotFoundErr) Is(target error) bool {
 	return ok
 }
 
+// ServiceNotFoundErr wraps the errors returned when PagerDuty services cannot be retrieved
+type ServiceNotFoundErr struct {
+	Err error
+}
+
+// Error prints the wrapped and original error
+func (s ServiceNotFoundErr) Error() string {
+	err := fmt.Errorf("the given service was not found: %w", s.Err)
+	return err.Error()
+}
+
+// Is indicates whether the supplied error is a ServiceNotFoundErr
+func (ServiceNotFoundErr) Is(target error) bool {
+	_, ok := target.(ServiceNotFoundErr)
+	return ok
+}
+
+// IntegrationNotFoundErr wraps the errors returned when a PagerDuty service's integration cannot be found
+type IntegrationNotFoundErr struct {
+	Err error
+}
+
+// Error prints the wrapped and original error
+func (i IntegrationNotFoundErr) Error() string {
+	err := fmt.Errorf("the given integration was not found: %w", i.Err)
+	return err.Error()
+}
+
+// Is indicates whether the supplied error is an IntegrationNotFoundErr
+func (IntegrationNotFoundErr) Is(target error) bool {
+	_, ok := target.(IntegrationNotFoundErr)
+	return ok
+}
+
+// CreateEventErr wraps the errors returned when failing to create a PagerDuty event
+type CreateEventErr struct {
+	Err error
+}
+
+// Error prints the wrapped and original error
+func (c CreateEventErr) Error() string {
+	err := fmt.Errorf("failed to create event: %w", c.Err)
+	return err.Error()
+}
+
+// Is indicates whether the supplied error is a CreateEventErr
+func (CreateEventErr) Is(target error) bool {
+	_, ok := target.(CreateEventErr)
+	return ok
+}
+
 // AlertBodyExternalCastErr denotes the fact the alert's body field could not be converted correctly
 type AlertBodyExternalCastErr struct {
 	FailedProperty     string

@@ -18,9 +18,11 @@ package clustermissing
 
 import (
 	"fmt"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -65,21 +67,6 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
 
-	eventType, err := pdClient.ExtractEventTypeFromPayload(payloadPath, pagerduty.RealFileReader{})
-	if err != nil {
-		return fmt.Errorf("could not determine event type: %w", err)
-	}
-
-	switch eventType{
-	case pagerdutyIncidentResolved:
-		return evalutateRestoredCluster(awsClient, ocmClient, pdClient)
-	default:
-		return evaluateMissingCluster(awsClient, ocmClient, pdClient)
-	}
-}
-
-// evaluateMissingCluster will take appropriate action against a cluster whose incident is not resolved
-func evaluateMissingCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) error {
 	incidentID, err := pdClient.ExtractIncidentIDFromPayload(payloadPath, pagerduty.RealFileReader{})
 	if err != nil {
 		return fmt.Errorf("GetIncidentID failed on: %w", err)
@@ -89,6 +76,11 @@ func evaluateMissingCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient
 	externalClusterID, err := pdClient.ExtractExternalIDFromPayload(payloadPath, pagerduty.RealFileReader{})
 	if err != nil {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
+	}
+
+	eventType, err := pdClient.ExtractEventTypeFromPayload(payloadPath, pagerduty.RealFileReader{})
+	if err != nil {
+		return fmt.Errorf("could not determine event type: %w", err)
 	}
 
 	fmt.Printf("ClusterExternalID is: %s\n", externalClusterID)
@@ -134,7 +126,14 @@ func evaluateMissingCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient
 
 	fmt.Println("Starting Cloud Provider investigation...")
 
-	res, err := chgmClient.InvestigateInstances(externalClusterID)
+	if eventType == pagerdutyIncidentResolved {
+		return evaluateRestoredCluster(chgmClient, externalClusterID)
+	}
+	return evaluateMissingCluster(chgmClient, incidentID, externalClusterID)
+}
+
+func evaluateMissingCluster(chgmClient chgm.Client, incidentID string, externalClusterID string) error {
+	res, err := chgmClient.InvestigateStoppedInstances(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
 	}
@@ -143,37 +142,192 @@ func evaluateMissingCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient
 
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
-		err = chgmClient.EscalateAlert(incidentID, res.String())
+		err := chgmClient.EscalateAlert(incidentID, res.String())
 		if err != nil {
 			return fmt.Errorf("could not escalate the alert %s: %w", incidentID, err)
 		}
 		return nil
 	}
 
-	fmt.Println("Sending CHGM ServiceLog...")
-	log, err := chgmClient.SendServiceLog()
+	// Post CHGM limited support
+	fmt.Println("Sending CHGM limited support reason")
+	reason, err := chgmClient.PostCHGMLimitedSupport(externalClusterID)
 	if err != nil {
-		return fmt.Errorf("failed sending service log before silencing the alert: %w", err)
+		return fmt.Errorf("failed posting limited support reason: %w", err)
 	}
-	res.ServiceLog = log
+	res.LimitedSupportReason = reason
 
-	fmt.Println("Silencing Alert...")
 	err = chgmClient.SilenceAlert(incidentID, res.String())
 	if err != nil {
 		return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
 	}
-	// written this way so I can quickly detect if res is true of false
-	fmt.Println("USER INITIATED SHUTDOWN")
 
 	return nil
-
 }
 
-// evalutateRestoredCluster will take appropriate action against a cluster whose incident is resolved
-func evalutateRestoredCluster(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) error {
-	// TODO
-	fmt.Println("Incident has resolved")
+// evaluateRestoredCluster will take appropriate action against a cluster whose CHGM incident has resolved.
+//
+// Because CAD only runs a single time against a cluster when the alert resolves, robust retry logic is needed to
+// ensure the cluster is in a supportable state afterwards
+func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) error {
+	serviceID := retryUntilServiceObtained(chgmClient)
+	res, err := chgmClient.InvestigateStartedInstances(externalClusterID)
+	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
+	if err != nil {
+		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", externalClusterID, err)
+		originalErr := err
+		retries := 1
+
+		err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to escalate to Primary, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return fmt.Errorf("InvestigateStartedInstances failed for %s: %w", externalClusterID, originalErr)
+	}
+
+	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
+	if res.ClusterNotEvaluated {
+		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
+		return nil
+	}
+
+	// Investigation completed, but the cluster has not been restored properly - keep in limited support & alert Primary, retrying as many times as necessary to escalate the issue
+	if res.Error != "" {
+		fmt.Printf("Cluster failed post-restart check. Result: %#v\n", res)
+		retries := 1
+		err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to escalate to Primary to report investigation results, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return nil
+	}
+
+	// Cluster has been restored - remove any limited support reasons that CAD may have added as the result of it's
+	// missing instances investigation
+	//
+	// If we fail to remove either of the Limited Support reasons after several attempts, alert Primary
+
+	// Start by removing any 'Cloud Credentials Are Missing' alerts added by CAD
+	fmt.Println("Investigation complete. Cluster should be removed from Limited Support")
+	fmt.Println("Removing 'Cloud Credentials Are Missing' Limited Support reasons")
+	retries := 1
+	var removedReasons bool
+	removedReasons, err = chgmClient.RemoveCCAMLimitedSupport(externalClusterID)
+	for err != nil && retries <= 3 {
+		fmt.Printf("Failed to remove CCAM Limited Support reason from cluster %s: %v\n", externalClusterID, err)
+
+		sleepBeforeRetrying(retries, 300)
+		retries++
+
+		removedReasons, err = chgmClient.RemoveCCAMLimitedSupport(externalClusterID)
+	}
+	// After 3 retries, if the LS reason hasn't been removed - alert Primary
+	if err != nil {
+		fmt.Println("Failed 3 times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
+		originalErr := err
+		retries = 1
+
+		err = chgmClient.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to alert Primary (attempt %d). Err: %v\n", retries, err)
+			fmt.Println("Retrying")
+
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = chgmClient.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return fmt.Errorf("Failed to remove CCAM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+	}
+	if removedReasons{
+		fmt.Println("Removed CCAM Limited Support reason from cluster")
+	} else {
+		fmt.Println("No CCAM Limited Support reasons needed to be removed")
+	}
+
+	// Remove 'Cluster Has Gone Missing' Limited Support reasons added by CAD
+	fmt.Println("Removing 'Cluster Has Gone Missing' Limited Support reasons")
+	retries = 1
+	removedReasons, err = chgmClient.RemoveCHGMLimitedSupport(externalClusterID)
+	for err != nil && retries <= 3 {
+		fmt.Printf("Failed to remove CHGM Limited Support reason from cluster %s: %v\n", externalClusterID, err)
+
+		// Sleep for a time, based on the number of retries (up to 300 seconds)
+		sleepBeforeRetrying(retries, 300)
+		retries++
+
+		removedReasons, err = chgmClient.RemoveCHGMLimitedSupport(externalClusterID)
+	}
+	// After 3 retries, if the LS reason hasn't been removed - alert Primary
+	if err != nil {
+		fmt.Println("Failed 3 times to remove CHGM Limited Support reason from cluster. Attempting to alert Primary.")
+		originalErr := err
+		retries = 1
+
+		err = chgmClient.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to alert Primary (attempt %d). Err: %v\n", retries, err)
+			fmt.Println("Retrying")
+
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = chgmClient.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+
+		}
+		fmt.Println("Primary has been alerted")
+		return fmt.Errorf("Failed to remove CHGM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+	}
+	if removedReasons {
+		fmt.Println("Removed CHGM Limited Support reason from cluster")
+	} else {
+		fmt.Println("No CHGM Limited Support reasons needed to be removed")
+	}
 	return nil
+}
+
+// retryUntilServiceObtained attempts to retrieve the serviceID from the PD payload, retrying until successful
+func retryUntilServiceObtained(chgmClient chgm.Client) string {
+		// Retrieve the service to alert on, retrying until we succeed
+		serviceID, err := chgmClient.ExtractServiceIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+		retries := 1
+		for err != nil {
+			fmt.Printf("Failed to retrieve service from PagerDuty, retrying (attempt %d). Error encountered: %v\n", retries, err)
+
+			// Sleep for a time, based on the number of retries (up to 300 seconds)
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			serviceID, err = chgmClient.ExtractServiceIDFromPayload(payloadPath, pagerduty.RealFileReader{})
+		}
+		return serviceID
+}
+
+// sleepBeforeRetrying sleeps with an exponential backoff based on the current retry, up to the given maximum sleep time.
+func sleepBeforeRetrying(currentRetry, maxSleepSeconds int) {
+	duration := currentRetry * currentRetry
+	sleepTime := time.Duration(duration) * time.Second
+	if duration > maxSleepSeconds {
+		sleepTime = time.Duration(maxSleepSeconds) * time.Second
+	}
+
+	fmt.Printf("Waiting %s seconds before trying again\n", sleepTime.String())
+	time.Sleep(sleepTime)
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
