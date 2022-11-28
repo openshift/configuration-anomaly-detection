@@ -3,11 +3,11 @@ package ccam
 
 import (
 	"fmt"
+	"regexp"
+
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"regexp"
 )
 
 var accessDeniedRegex = regexp.MustCompile(`failed to assume into support-role: AccessDenied`)
@@ -34,7 +34,8 @@ type Provider struct {
 type Service interface {
 	// OCM
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
-	SendCCAMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error)
+	CCAMLimitedSupportExists(clusterID string) (bool, error)
+	PostCCAMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
@@ -67,38 +68,41 @@ func (c Client) checkMissing(err error) bool {
 	return accessDeniedRegex.MatchString(err.Error())
 }
 
-// silenceAlert annotates the PagerDuty alert with the given notes and silences it via
-// assigning the "Silent Test" escalation policy
-func (c Client) silenceAlert(incidentID, notes string) error {
-	escalationPolicy := c.GetSilentPolicy()
-	if notes != "" {
-		fmt.Printf("Attaching Note %s\n", notes)
-		err := c.AddNote(incidentID, notes)
-		if err != nil {
-			return fmt.Errorf("failed to attach notes to CCAM incident: %w", err)
-		}
-	}
-	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
-	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
-	if err != nil {
-		return fmt.Errorf("failed to change incident escalation policy in CCAM step: %w", err)
-	}
-	return nil
-}
-
-// Evaluate estimates if the awsError is a cluster credentials are missing error.
+// Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
+// the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
+// LS reason, no additional reasons are added and no error is returned.
 func (c Client) Evaluate(awsError error, externalClusterID string, incidentID string) error {
 	err := c.populateStructWith(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("failed to populate struct in Evaluate in CCAM step: %w", err)
 	}
-
 	if !c.checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
-	log, err := c.SendCCAMServiceLog(c.cluster)
+
+	lsExists, err := c.CCAMLimitedSupportExists(c.cluster.ID())
 	if err != nil {
-		return fmt.Errorf("failed to send missing credentials service log: %w", err)
+		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
-	return c.silenceAlert(incidentID, fmt.Sprintf("ServiceLog Sent: '%+v' \n", log.Summary()))
+	if lsExists {
+		fmt.Println("Avoided reposting duplicate CCAM limited support reason")
+		return nil
+	}
+
+	ls, err := c.PostCCAMLimitedSupportReason(c.cluster.ID())
+	if err == nil {
+		fmt.Printf("Added the following Limited Support reason to cluster: %#v\n", *ls)
+	}
+	return err
+}
+
+// PostLimitedSupport adds a limited support reason to corresponding cluster
+func (c Client) PostLimitedSupport() (*v1.LimitedSupportReason, error) {
+	id := c.cluster.ID()
+	reason, err := c.PostCCAMLimitedSupportReason(id)
+	if err != nil {
+		return nil, fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
+	}
+
+	return reason, nil
 }

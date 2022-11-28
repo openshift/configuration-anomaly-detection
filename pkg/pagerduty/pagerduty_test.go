@@ -367,6 +367,48 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 	})
+
+	Describe("CreateNewAlert", func() {
+		var (
+			serviceID string
+			dmsIntegrationID string
+		)
+		BeforeEach(func(){
+			serviceID = "service-id-12345"
+			dmsIntegrationID = "integration-id-12345"
+		})
+		When("The service cannot be retrieved", func(){
+			It("should return a ServiceNotFoundErr", func() {
+				err := p.CreateNewAlert("empty-description", "empty-details", "nonexistent-service")
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(pagerduty.ServiceNotFoundErr{}))
+			})
+		})
+		When("The service has no Dead Man's Snitch integrations", func(){
+			It("should return an IntegrationNotFoundErr", func(){
+				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[]}}`, serviceID)
+				})
+				err := p.CreateNewAlert("empty-description", "empty-details", serviceID)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(pagerduty.IntegrationNotFoundErr{}))
+			})
+		})
+		When("The event creation fails", func(){
+			It("should return a CreateEventErr", func() {
+				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[{"id":"%s"}]}}`, serviceID, dmsIntegrationID)
+				})
+				mux.HandleFunc(fmt.Sprintf("/services/%s/integrations/%s", serviceID, dmsIntegrationID), func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, `{"integration":{"id":"%s","name":"%s"}}`, dmsIntegrationID, pagerduty.CADIntegrationName)
+				})
+				err := p.CreateNewAlert("empty-description", "empty-details", serviceID)
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError(pagerduty.CreateEventErr{}))
+			})
+		})
+	})
+
 	Describe("ExtractExternalIDFromCGHMAlertBody", func() {
 		var alertBody map[string]interface{}
 		BeforeEach(func() {

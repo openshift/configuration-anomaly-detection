@@ -11,34 +11,29 @@ import (
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	servicelog "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsv1alpha1 "github.com/openshift/aws-account-operator/pkg/apis/aws/v1alpha1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
-type slTemplate struct {
-	Severity     string
-	ServiceName  string
-	Summary      string
-	Description  string
-	InternalOnly bool
+type limitedSupportReasonTemplate struct {
+	Details string
+	Summary string
 }
 
-var chgmServiceLog = slTemplate{
-	Severity:     "Error",
-	ServiceName:  "SREManualAction",
-	Summary:      "Action required: cluster not checking in",
-	Description:  "Your cluster requires you to take action because it is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopping instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console.",
-	InternalOnly: false,
+// NOTE: USE CAUTION WHEN CHANGING THESE TEMPLATES!!
+// Changing the templates' summaries will likely prevent CAD from removing clusters with these Limited Support reasons in the future, since it identifies which reasons to delete via their summaries.
+// If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
+// reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
+var chgmLimitedSupport = limitedSupportReasonTemplate{
+	Summary: "Action required: Cluster not checking in",
+	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 }
 
-var ccamServiceLog = slTemplate{
-	Severity:     "Error",
-	ServiceName:  "SREManualAction",
-	Summary:      "Action required: Restore missing cloud credentials",
-	Description:  "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install.",
-	InternalOnly: false,
+var ccamLimitedSupport = limitedSupportReasonTemplate{
+	Summary: "Action required: Restore missing cloud credentials",
+	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
+// CAUTION!!
 
 // Client is the ocm client with which we can run the commands
 // currently we do not need to export the connection or the config, as we create the Client using the New func
@@ -160,6 +155,7 @@ func (c Client) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 	if resp.Total() == 0 {
 		return nil, fmt.Errorf("no cluster found for %s", identifier)
 	}
+
 	return resp.Items().Get(0), nil
 }
 
@@ -186,47 +182,108 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 	return response.Body().Resources()[resourceKey], nil
 }
 
-// SendCHGMServiceLog allows to send a cluster has gone missing servicelog.
-// On success, it will return the sent service log entry.
-func (c Client) SendCHGMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
-	return c.sendServiceLog(c.newServiceLogBuilder(chgmServiceLog), cluster)
+// PostCHGMLimitedSupportReason will post a CCAM limited support reason for a cluster
+// On success, it returns true
+func (c Client) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
+	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(chgmLimitedSupport), clusterID)
 }
 
-// SendCCAMServiceLog allows to send a missing credentials servicelog.
-// On success, it will return the sent service log entry.
-func (c Client) SendCCAMServiceLog(cluster *v1.Cluster) (*servicelog.LogEntry, error) {
-	return c.sendServiceLog(c.newServiceLogBuilder(ccamServiceLog), cluster)
+// PostCCAMLimitedSupportReason will post a CCAM limited support reason for a cluster
+// On success, it returns true
+func (c Client) PostCCAMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
+	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(ccamLimitedSupport), clusterID)
 }
 
-// sendServiceLog allows to send a generic servicelog to a cluster.
-// On success, it will return the sent service log entry for further processing.
-func (c Client) sendServiceLog(builder *servicelog.LogEntryBuilder, cluster *v1.Cluster) (*servicelog.LogEntry, error) {
-	builder.ClusterUUID(cluster.ExternalID())
-	builder.ClusterID(cluster.ID())
-	builder.SubscriptionID(cluster.Subscription().ID())
-	le, err := builder.Build()
+// postLimitedSupportReason allows to post a generic limited support reason to a cluster
+// On success, returns sent limited support reason
+func (c Client) postLimitedSupportReason(builder *v1.LimitedSupportReasonBuilder, clusterID string) (*v1.LimitedSupportReason, error) {
+	ls, err := builder.Build()
 	if err != nil {
 		return nil, fmt.Errorf("could not create post request: %w", err)
 	}
 
-	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
-	request = request.Body(le)
+	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
+	request = request.Body(ls)
 	resp, err := request.Send()
 	if err != nil {
 		return nil, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
-	return le, nil
+	return ls, nil
 }
 
-// newServiceLogBuilder creates a service log template
-func (c Client) newServiceLogBuilder(sl slTemplate) *servicelog.LogEntryBuilder {
-	builder := servicelog.NewLogEntry()
-	// it does not work if we use servicelog.SeverityError directly, because SeverityError
-	// is lower-case and the service log API wants it in upper-case.
-	builder.Severity(servicelog.Severity(sl.Severity))
-	builder.ServiceName(sl.ServiceName)
-	builder.Summary(sl.Summary)
-	builder.Description(sl.Description)
-	builder.InternalOnly(sl.InternalOnly)
+// newLimitedSupportReasonBuilder creates a Limited Support reason
+func (c Client) newLimitedSupportReasonBuilder(ls limitedSupportReasonTemplate) *v1.LimitedSupportReasonBuilder {
+	builder := v1.NewLimitedSupportReason()
+	builder.Summary(ls.Summary)
+	builder.Details(ls.Details)
+	builder.DetectionType(v1.DetectionTypeManual)
 	return builder
+}
+
+// CCAMLimitedSupportExists indicates whether CAD has posted a CCAM LS reason to the given cluster already
+func (c Client) CCAMLimitedSupportExists(clusterID string) (bool, error) {
+	return c.limitedSupportExists(ccamLimitedSupport, clusterID)
+}
+
+// CHGMLimitedSupportExists indicates whether CAD has posted a CHGM LS reason to the given cluster already
+func (c Client) CHGMLimitedSupportExists(clusterID string) (bool, error) {
+	return c.limitedSupportExists(chgmLimitedSupport, clusterID)
+}
+
+func (c Client) limitedSupportExists(ls limitedSupportReasonTemplate, clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
+	}
+	for _, reason := range reasons {
+		if reason.Summary() == ls.Summary {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// DeleteCCAMLimitedSupportReason removes the CCAM-specific limited support reasons from a cluster, returning true if any reasons were removed
+func (c Client) DeleteCCAMLimitedSupportReason(clusterID string) (bool, error) {
+	return c.deleteLimitedSupportReasons(ccamLimitedSupport.Summary, clusterID)
+}
+
+// DeleteCHGMLimitedSupportReason removes the CHGM-specific limited support reasons from a cluster, returning true if any reasons were removed
+func (c Client) DeleteCHGMLimitedSupportReason(clusterID string) (bool, error) {
+	return c.deleteLimitedSupportReasons(chgmLimitedSupport.Summary, clusterID)
+}
+
+// deleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
+func (c Client) deleteLimitedSupportReasons(summaryToDelete, clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("could not list current limited support reasons: %w", err)
+	}
+
+	// Remove each limited support reason matching the given template
+	removedReasons := false
+	for _, reason := range reasons {
+		if reason.Summary() == summaryToDelete {
+			reasonID, ok := reason.GetID()
+			if !ok {
+				return false, fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
+			}
+			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
+			if err != nil {
+				return false, fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
+			}
+			removedReasons = true
+		}
+	}
+	return removedReasons, nil
+}
+
+func (c Client) listLimitedSupportReasons(clusterID string) ([]*v1.LimitedSupportReason, error) {
+	// List reasons
+	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons()
+	reasons, err := clusterLimitedSupport.List().Send()
+	if err != nil {
+		return []*v1.LimitedSupportReason{} ,fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
+	}
+	return reasons.Items().Slice(), nil
 }

@@ -15,11 +15,11 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
-var _ = Describe("Chgm", func() {
+var _ = Describe("ChgmTriggered", func() {
 	Describe("AreAllInstancesRunning", func() {
 
 		// this is a var but I use it as a const
-		var fakeErr = fmt.Errorf("test")
+		var fakeErr = fmt.Errorf("test triggered")
 		var (
 			mockCtrl          *gomock.Controller
 			mockClient        *mock.MockService
@@ -52,7 +52,7 @@ var _ = Describe("Chgm", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(nil, fakeErr)
 				// Act
-				_, gotErr := isRunning.InvestigateInstances("")
+				_, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
 			})
@@ -64,7 +64,7 @@ var _ = Describe("Chgm", func() {
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(nil, fakeErr)
 				// Act
-				_, gotErr := isRunning.InvestigateInstances("")
+				_, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
 			})
@@ -78,7 +78,7 @@ var _ = Describe("Chgm", func() {
 
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
 				// Act
-				_, gotErr := isRunning.InvestigateInstances("")
+				_, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
 			})
@@ -91,7 +91,7 @@ var _ = Describe("Chgm", func() {
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				// Act
-				got, gotErr := isRunning.InvestigateInstances("")
+				got, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.UserAuthorized).To(BeTrue())
@@ -106,7 +106,7 @@ var _ = Describe("Chgm", func() {
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fakeErr)
 				// Act
-				_, gotErr := isRunning.InvestigateInstances("")
+				_, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
 			})
@@ -120,7 +120,7 @@ var _ = Describe("Chgm", func() {
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fakeErr)
 				// Act
-				_, gotErr := isRunning.InvestigateInstances("")
+				_, gotErr := isRunning.InvestigateStoppedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
 			})
@@ -145,7 +145,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{}, nil)
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -161,7 +161,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -177,7 +177,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -193,7 +193,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -211,7 +211,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -227,7 +227,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					_, gotErr := isRunning.InvestigateInstances("")
+					_, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).To(HaveOccurred())
 				})
@@ -244,7 +244,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeTrue())
@@ -261,7 +261,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeTrue())
@@ -277,7 +277,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeFalse())
@@ -294,7 +294,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeFalse())
@@ -311,7 +311,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeFalse())
@@ -328,7 +328,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeFalse())
@@ -345,7 +345,7 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeFalse())
@@ -362,11 +362,161 @@ var _ = Describe("Chgm", func() {
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
 					// Act
-					got, gotErr := isRunning.InvestigateInstances("")
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
 					// Assert
 					Expect(gotErr).NotTo(HaveOccurred())
 					Expect(got.UserAuthorized).To(BeTrue())
 				})
+			})
+		})
+	})
+})
+
+var _ = Describe("ChgmResolved", func(){
+	Describe("AreAllInstancesRunning", func(){
+
+		var fakeErr = fmt.Errorf("test resolved")
+		var (
+			mockCtrl *gomock.Controller
+			mockClient *mock.MockService
+			isRunning chgm.Client
+			cluster *v1.Cluster
+			clusterDeployment hivev1.ClusterDeployment
+			infraID string
+
+			instance ec2.Instance
+		)
+		BeforeEach(func() {
+			mockCtrl = gomock.NewController(GinkgoT())
+			mockClient = mock.NewMockService(mockCtrl)
+			isRunning = chgm.Client{Service: mockClient}
+			var err error
+			// Must explicitly set all node types for GetNodeCount() to work in these tests
+			cluster, err = v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(0)).State(v1.ClusterStateReady).Build()
+			Expect(err).ToNot(HaveOccurred())
+			clusterDeployment = hivev1.ClusterDeployment{
+				Spec: hivev1.ClusterDeploymentSpec{
+					ClusterMetadata: &hivev1.ClusterMetadata{
+						InfraID: "12345",
+					},
+				},
+			}
+			infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
+			instance = ec2.Instance{InstanceId: aws.String("12345")}
+		})
+		AfterEach(func() {
+			mockCtrl.Finish()
+		})
+		When("the cluster state is undefined", func(){
+			It("should return an error", func() {
+				statelessCluster, err := v1.NewCluster().ID("statelessCluster").Build()
+				Expect(err).ToNot(HaveOccurred())
+				statelessDeployment := hivev1.ClusterDeployment{
+					Spec: hivev1.ClusterDeploymentSpec{
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							InfraID: "statelessCluster",
+							ClusterID: "statelessCluster",
+						},
+					},
+				}
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(statelessCluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(statelessCluster.ID())).Return(&statelessDeployment, nil)
+
+				_, gotErr := isRunning.InvestigateStartedInstances("")
+				Expect(gotErr).To(HaveOccurred())
+			})
+		})
+		When("the cluster is uninstalling", func(){
+			It("should not investigate the cluster", func(){
+				uninstallingCluster, err := v1.NewCluster().ID("uninstallingCluster").State(v1.ClusterStateUninstalling).Build()
+				Expect(err).ToNot(HaveOccurred())
+				uninstallingClusterDeployment := hivev1.ClusterDeployment{
+					Spec: hivev1.ClusterDeploymentSpec{
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							InfraID: "uninstallingCluster",
+							ClusterID: "uninstallingCluster",
+						},
+					},
+				}
+
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(uninstallingCluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(uninstallingCluster.ID())).Return(&uninstallingClusterDeployment, nil)
+
+				got, gotErr := isRunning.InvestigateStartedInstances("uninstallingCluster")
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.ClusterNotEvaluated).To(BeTrue())
+				Expect(got.ClusterState).To(Equal(v1.ClusterStateUninstalling))
+			})
+		})
+		When("ListNonRunningInstances fails", func(){
+			It("should receive the correct InfraID and bubble the error", func() {
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
+				// Act
+				_, gotErr := isRunning.InvestigateStartedInstances("")
+				// Assert
+				Expect(gotErr).To(HaveOccurred())
+			})
+		})
+		When("there are stopped instances", func(){
+			It("should succeed and return that non-running instances were found", func() {
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				// Act
+				got, gotErr := isRunning.InvestigateStartedInstances("")
+				// Assert
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.Error).ToNot(BeEmpty())
+				Expect(got.UserAuthorized).To(BeTrue())
+			})
+		})
+		When("ListRunningInstances fails", func(){
+			It("should receive the correct InfraID and bubble the error", func(){
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
+				// Act
+				_, gotErr := isRunning.InvestigateStartedInstances("")
+				// Assert
+				Expect(gotErr).To(HaveOccurred())
+			})
+		})
+		When("the machine count does not equal the expected node count", func(){
+			It("should succeed and return that insuffient machines were found", func(){
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
+				// Act
+				got, gotErr := isRunning.InvestigateStartedInstances("")
+				// Assert
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.Error).ToNot(BeEmpty())
+				Expect(got.UserAuthorized).To(BeTrue())
+			})
+		})
+		When("the cluster appears to be healthy again", func() {
+			It("should succeed and return that no issues were found", func() {
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				// Act
+				got, gotErr := isRunning.InvestigateStartedInstances("")
+				// Assert
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.Error).To(BeEmpty())
+				Expect(got.UserAuthorized).To(BeTrue())
+				Expect(got.AllInstances).ToNot(BeZero())
+				Expect(got.NonRunningInstances).To(BeEmpty())
 			})
 		})
 	})

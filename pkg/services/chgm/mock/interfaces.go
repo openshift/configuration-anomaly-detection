@@ -11,8 +11,8 @@ import (
 	ec2 "github.com/aws/aws-sdk-go/service/ec2"
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
-	v11 "github.com/openshift/hive/apis/hive/v1"
+	pagerduty "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	v10 "github.com/openshift/hive/apis/hive/v1"
 )
 
 // MockService is a mock of Service interface.
@@ -52,11 +52,70 @@ func (mr *MockServiceMockRecorder) AddNote(incidentID, noteContent interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNote", reflect.TypeOf((*MockService)(nil).AddNote), incidentID, noteContent)
 }
 
+// CreateNewAlert mocks base method.
+func (m *MockService) CreateNewAlert(description string, details interface{}, serviceID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateNewAlert", description, details, serviceID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CreateNewAlert indicates an expected call of CreateNewAlert.
+func (mr *MockServiceMockRecorder) CreateNewAlert(description, details, serviceID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewAlert", reflect.TypeOf((*MockService)(nil).CreateNewAlert), description, details, serviceID)
+}
+
+// DeleteCCAMLimitedSupportReason mocks base method.
+func (m *MockService) DeleteCCAMLimitedSupportReason(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCCAMLimitedSupportReason", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteCCAMLimitedSupportReason indicates an expected call of DeleteCCAMLimitedSupportReason.
+func (mr *MockServiceMockRecorder) DeleteCCAMLimitedSupportReason(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCCAMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).DeleteCCAMLimitedSupportReason), clusterID)
+}
+
+// DeleteCHGMLimitedSupportReason mocks base method.
+func (m *MockService) DeleteCHGMLimitedSupportReason(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteCHGMLimitedSupportReason", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteCHGMLimitedSupportReason indicates an expected call of DeleteCHGMLimitedSupportReason.
+func (mr *MockServiceMockRecorder) DeleteCHGMLimitedSupportReason(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHGMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).DeleteCHGMLimitedSupportReason), clusterID)
+}
+
+// ExtractServiceIDFromPayload mocks base method.
+func (m *MockService) ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExtractServiceIDFromPayload", payloadFilePath, reader)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExtractServiceIDFromPayload indicates an expected call of ExtractServiceIDFromPayload.
+func (mr *MockServiceMockRecorder) ExtractServiceIDFromPayload(payloadFilePath, reader interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractServiceIDFromPayload", reflect.TypeOf((*MockService)(nil).ExtractServiceIDFromPayload), payloadFilePath, reader)
+}
+
 // GetClusterDeployment mocks base method.
-func (m *MockService) GetClusterDeployment(clusterID string) (*v11.ClusterDeployment, error) {
+func (m *MockService) GetClusterDeployment(clusterID string) (*v10.ClusterDeployment, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterDeployment", clusterID)
-	ret0, _ := ret[0].(*v11.ClusterDeployment)
+	ret0, _ := ret[0].(*v10.ClusterDeployment)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -169,17 +228,17 @@ func (mr *MockServiceMockRecorder) PollInstanceStopEventsFor(instances, retryTim
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollInstanceStopEventsFor", reflect.TypeOf((*MockService)(nil).PollInstanceStopEventsFor), instances, retryTimes)
 }
 
-// SendCHGMServiceLog mocks base method.
-func (m *MockService) SendCHGMServiceLog(cluster *v1.Cluster) (*v10.LogEntry, error) {
+// PostCHGMLimitedSupportReason mocks base method.
+func (m *MockService) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendCHGMServiceLog", cluster)
-	ret0, _ := ret[0].(*v10.LogEntry)
+	ret := m.ctrl.Call(m, "PostCHGMLimitedSupportReason", clusterID)
+	ret0, _ := ret[0].(*v1.LimitedSupportReason)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SendCHGMServiceLog indicates an expected call of SendCHGMServiceLog.
-func (mr *MockServiceMockRecorder) SendCHGMServiceLog(cluster interface{}) *gomock.Call {
+// PostCHGMLimitedSupportReason indicates an expected call of PostCHGMLimitedSupportReason.
+func (mr *MockServiceMockRecorder) PostCHGMLimitedSupportReason(clusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendCHGMServiceLog", reflect.TypeOf((*MockService)(nil).SendCHGMServiceLog), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostCHGMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).PostCHGMLimitedSupportReason), clusterID)
 }
