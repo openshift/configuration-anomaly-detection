@@ -182,6 +182,24 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 	return response.Body().Resources()[resourceKey], nil
 }
 
+// GetCloudProvider returns the cloud provider name for a given cluster as a string
+func (c Client) GetCloudProvider(identifier string) (string, error) {
+	cluster, err := c.GetClusterInfo(identifier)
+	if err != nil {
+		return "", fmt.Errorf("GetClusterInfo failed on: %w", err)
+	}
+
+	cloudProvider, ok := cluster.GetCloudProvider()
+	if !ok {
+		return "", fmt.Errorf("could not get clusters cloudProvider")
+	}
+	cloudProviderID, ok := cloudProvider.GetID()
+	if !ok {
+		return "", fmt.Errorf("could not get cloudProvider id")
+	}
+	return cloudProviderID, nil
+}
+
 // PostCHGMLimitedSupportReason will post a CCAM limited support reason for a cluster
 // On success, it returns true
 func (c Client) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {

@@ -85,6 +85,13 @@ func run(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("ClusterExternalID is: %s\n", externalClusterID)
 
+	cloudProvider, err := ocmClient.GetCloudProvider(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("GetCloudProvider failed on: %w", err)
+	} else if cloudProvider != "aws" {
+		return fmt.Errorf("cloudprovider is not supported: %s", cloudProvider)
+	}
+
 	arClient := assumerole.Client{
 		Service: chgm.Provider{
 			AwsClient: awsClient,
