@@ -20,7 +20,7 @@ spec:
           folder=$(mktemp -d)
           file=${folder}/payload.json
           cat << EOF > $file
-          '$(params.payload)'
+          $(params.payload)
           EOF
           # run the cadctl command
           cadctl cluster-missing --payload-path $file
