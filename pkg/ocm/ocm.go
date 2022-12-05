@@ -182,8 +182,8 @@ func (c Client) getClusterResource(clusterID string, resourceKey string) (string
 	return response.Body().Resources()[resourceKey], nil
 }
 
-// GetCloudProvider returns the cloud provider name for a given cluster as a string
-func (c Client) GetCloudProvider(identifier string) (string, error) {
+// GetCloudProviderID returns the cloud provider name for a given cluster as a string
+func (c Client) GetCloudProviderID(identifier string) (string, error) {
 	cluster, err := c.GetClusterInfo(identifier)
 	if err != nil {
 		return "", fmt.Errorf("GetClusterInfo failed on: %w", err)
