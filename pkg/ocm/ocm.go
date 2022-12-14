@@ -25,12 +25,12 @@ type limitedSupportReasonTemplate struct {
 // If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
 // reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
 var chgmLimitedSupport = limitedSupportReasonTemplate{
-	Summary: "Action required: Cluster not checking in",
+	Summary: "Cluster not checking in",
 	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 }
 
 var ccamLimitedSupport = limitedSupportReasonTemplate{
-	Summary: "Action required: Restore missing cloud credentials",
+	Summary: "Restore missing cloud credentials",
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
 // CAUTION!!
