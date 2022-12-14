@@ -63,14 +63,14 @@ func (c *Client) populateStructWith(externalID string) error {
 
 // checkMissing checks for missing credentials that are required for assuming
 // into the support-role. If these credentials are missing we can silence the
-// alert and send a service log.
+// alert and post limited support reason.
 func (c Client) checkMissing(err error) bool {
 	return accessDeniedRegex.MatchString(err.Error())
 }
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
-// LS reason, no additional reasons are added and no error is returned.
+// LS reason, no additional reasons are added and incident is sent to SilentTest.
 func (c Client) Evaluate(awsError error, externalClusterID string, incidentID string) error {
 	err := c.populateStructWith(externalClusterID)
 	if err != nil {
@@ -93,7 +93,7 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 	if err == nil {
 		fmt.Printf("Added the following Limited Support reason to cluster: %#v\n", *ls)
 	}
-	return err
+	return c.silenceAlert(incidentID, fmt.Sprintf("Cluster %s incident silenced", externalClusterID))
 }
 
 // PostLimitedSupport adds a limited support reason to corresponding cluster
@@ -105,4 +105,23 @@ func (c Client) PostLimitedSupport() (*v1.LimitedSupportReason, error) {
 	}
 
 	return reason, nil
+}
+
+// silenceAlert annotates the PagerDuty alert with the given notes and silences it via
+// assigning the "Silent Test" escalation policy
+func (c Client) silenceAlert(incidentID, notes string) error {
+	escalationPolicy := c.GetSilentPolicy()
+	if notes != "" {
+		fmt.Printf("Attaching Note %s\n", notes)
+		err := c.AddNote(incidentID, notes)
+		if err != nil {
+			return fmt.Errorf("failed to attach notes to CCAM incident: %w", err)
+		}
+	}
+	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
+	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
+	if err != nil {
+		return fmt.Errorf("failed to change incident escalation policy in CCAM step: %w", err)
+	}
+	return nil
 }
