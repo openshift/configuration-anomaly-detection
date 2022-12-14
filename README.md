@@ -39,20 +39,20 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 * [AWS](./pkg/aws/README.md) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
 * [PagerDuty](./pkg/pagerduty/README.md) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
-* [OCM](./pkg/ocm/README.md) -- Retrieving cluster info and sending service logs.
+* [OCM](./pkg/ocm/README.md) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
 
 ## Workflow
 
 1. PagerDuty webhook receives CHGM alert from Dead Man's Snitch.
 2. CAD Tekton pipeline is triggered via PagerDuty sending a webhook to Tekton EventListener.
 3. Logs into AWS account of cluster and checks for stopped/terminated instances.
-    - If unable to access AWS account, sends "cluster credentials are missing" service log.
+    - If unable to access AWS account, posts "cluster credentials are missing" limited support reason.
 4. If stopped/terminated instances are found, pulls AWS CloudTrail events for those instances.
     - If no stopped/terminated instances are found, escalates to SRE for further investigation.
 5. If the user of the event is:
     - Authorized (SRE or OSD managed), escalates the alert to SRE for futher investigation.
         - **Note:** Authorized users have prefix RH-SRE, osdManagedAdmin, or have the ManagedOpenShift-Installer-Role.
-    - Not authorized (not SRE or OSD managed), sends the appropriate service log and silences the alert.
+    - Not authorized (not SRE or OSD managed), posts the appropriate limited support reason and silences the alert.
 6. Adds notes with investigation details to the PagerDuty alert.
 
 ## Templates
