@@ -248,13 +248,21 @@ func (c Client) CHGMLimitedSupportExists(clusterID string) (bool, error) {
 	return c.limitedSupportExists(chgmLimitedSupport, clusterID)
 }
 
+// limitedSupportExists returns true if the provided limitedSupportReasonTemplate's summary and details fields match an existing
+// reason on the given cluster
 func (c Client) limitedSupportExists(ls limitedSupportReasonTemplate, clusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("could not retrieve cluster info from OCM: %w", err)
+	}
+
+	reasons, err := c.listLimitedSupportReasons(cluster.ID())
 	if err != nil {
 		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
 	}
 	for _, reason := range reasons {
-		if reason.Summary() == ls.Summary {
+		if reason.Summary() == ls.Summary && reason.Details() == ls.Details {
 			return true, nil
 		}
 	}
