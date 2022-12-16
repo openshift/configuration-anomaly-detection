@@ -55,6 +55,7 @@ type Service interface {
 	PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
 	DeleteCHGMLimitedSupportReason(clusterID string) (bool, error)
 	DeleteCCAMLimitedSupportReason(clusterID string) (bool, error)
+	CHGMLimitedSupportExists(clusterID string) (bool, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error)

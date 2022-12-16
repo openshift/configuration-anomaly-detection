@@ -52,6 +52,21 @@ func (mr *MockServiceMockRecorder) AddNote(incidentID, noteContent interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNote", reflect.TypeOf((*MockService)(nil).AddNote), incidentID, noteContent)
 }
 
+// CHGMLimitedSupportExists mocks base method.
+func (m *MockService) CHGMLimitedSupportExists(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CHGMLimitedSupportExists", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CHGMLimitedSupportExists indicates an expected call of CHGMLimitedSupportExists.
+func (mr *MockServiceMockRecorder) CHGMLimitedSupportExists(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CHGMLimitedSupportExists", reflect.TypeOf((*MockService)(nil).CHGMLimitedSupportExists), clusterID)
+}
+
 // CreateNewAlert mocks base method.
 func (m *MockService) CreateNewAlert(description string, details interface{}, serviceID string) error {
 	m.ctrl.T.Helper()
