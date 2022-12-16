@@ -94,9 +94,7 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		"openshift-machine-api-aws",
 	}
 	for _, operatorIamName := range operatorIamNames {
-		// I added a '-' in the end to make sure it's the same as close as I can to the aws username (cannot guess the uuid)
-		operatorIamName = fmt.Sprintf("%s-%s-", infraID, operatorIamName)
-		if strings.HasPrefix(username, operatorIamName) {
+		if strings.Contains(username, operatorIamName) {
 			return true
 		}
 	}
@@ -303,7 +301,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
 		output := InvestigateInstancesOutput{
-			ClusterState: state,
+			ClusterState:        state,
 			ClusterNotEvaluated: true,
 		}
 		return output, nil
@@ -440,10 +438,10 @@ func (c *Client) CreateIncidentForRestoredCluster(resultErr, externalID, service
 		Resolution string `json:"Resolution"`
 		SOP        string `json:"SOP"`
 	}{
-		ClusterID: c.cluster.ID(),
-		Reason: resultErr,
+		ClusterID:  c.cluster.ID(),
+		Reason:     resultErr,
 		Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
-		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
+		SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
 	}
 
 	err = c.CreateNewAlert(description, details, serviceID)
@@ -471,10 +469,10 @@ func (c *Client) CreateIncidentForInvestigationFailure(investigationErr error, e
 		Resolution string `json:"Resolution"`
 		SOP        string `json:"SOP"`
 	}{
-		ClusterID: c.cluster.ID(),
-		Error: investigationErr.Error(),
+		ClusterID:  c.cluster.ID(),
+		Error:      investigationErr.Error(),
 		Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",
-		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
+		SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
 	}
 
 	err = c.CreateNewAlert(description, details, serviceID)
@@ -502,10 +500,10 @@ func (c Client) CreateIncidentForLimitedSupportRemovalFailure(lsErr error, exter
 		Resolution string `json:"Resolution"`
 		SOP        string `json:"SOP"`
 	}{
-		ClusterID: c.cluster.ID(),
-		Error: lsErr.Error(),
+		ClusterID:  c.cluster.ID(),
+		Error:      lsErr.Error(),
 		Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
-		SOP: "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
+		SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
 	}
 
 	err = c.CreateNewAlert(description, details, serviceID)
