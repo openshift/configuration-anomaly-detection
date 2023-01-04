@@ -139,13 +139,28 @@ func run(cmd *cobra.Command, args []string) error {
 	return evaluateMissingCluster(chgmClient, incidentID, externalClusterID)
 }
 
+// evaluateMissingCluster checks CHGM incident.triggered payload
+// checks stopped instances and existing LS to determine if alert should be escalated
 func evaluateMissingCluster(chgmClient chgm.Client, incidentID string, externalClusterID string) error {
 	res, err := chgmClient.InvestigateStoppedInstances(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
 	}
-
 	fmt.Printf("the investigation returned %#v\n", res)
+
+	lsExists, err := chgmClient.CHGMLimitedSupportExists(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("failed to determine if limited support reason already exists: %w", err)
+	}
+
+	// if lsExists, silence alert and add investigation to notes
+	if lsExists {
+		err = chgmClient.SilenceAlert(incidentID, res.String())
+		if err != nil {
+			return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
+		}
+		return nil
+	}
 
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
@@ -156,22 +171,12 @@ func evaluateMissingCluster(chgmClient chgm.Client, incidentID string, externalC
 		return nil
 	}
 
-	lsExists, err := chgmClient.CHGMLimitedSupportExists(externalClusterID)
+	fmt.Println("Sending CHGM limited support reason")
+	reason, err := chgmClient.PostCHGMLimitedSupport(externalClusterID)
 	if err != nil {
-		return fmt.Errorf("failed to determine if limited support reason already exists: %w", err)
+		return fmt.Errorf("failed posting limited support reason: %w", err)
 	}
-
-	if !lsExists {
-		// Post CHGM limited support
-		fmt.Println("Sending CHGM limited support reason")
-		reason, err := chgmClient.PostCHGMLimitedSupport(externalClusterID)
-		if err != nil {
-			return fmt.Errorf("failed posting limited support reason: %w", err)
-		}
-		res.LimitedSupportReason = reason
-	} else {
-		fmt.Println("Avoided posting duplicate CHGM Limited Support reason")
-	}
+	res.LimitedSupportReason = reason
 
 	err = chgmClient.SilenceAlert(incidentID, res.String())
 	if err != nil {
@@ -268,10 +273,10 @@ func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) e
 			err = chgmClient.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
 		}
 		fmt.Println("Primary has been alerted")
-		return fmt.Errorf("Failed to remove CCAM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+		return fmt.Errorf("failed to remove CCAM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
 	}
 
-	if removedReasons{
+	if removedReasons {
 		fmt.Println("Removed CCAM Limited Support reason from cluster")
 	} else {
 		fmt.Println("No CCAM Limited Support reasons needed to be removed")
@@ -308,7 +313,7 @@ func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) e
 
 		}
 		fmt.Println("Primary has been alerted")
-		return fmt.Errorf("Failed to remove CHGM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+		return fmt.Errorf("failed to remove CHGM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
 	}
 	if removedReasons {
 		fmt.Println("Removed CHGM Limited Support reason from cluster")
