@@ -11,7 +11,6 @@ import (
 	ec2 "github.com/aws/aws-sdk-go/service/ec2"
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	pagerduty "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	v10 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -96,19 +95,19 @@ func (mr *MockServiceMockRecorder) DeleteCHGMLimitedSupportReason(clusterID inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHGMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).DeleteCHGMLimitedSupportReason), clusterID)
 }
 
-// ExtractServiceIDFromPayload mocks base method.
-func (m *MockService) ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error) {
+// ExtractServiceIDFromBytes mocks base method.
+func (m *MockService) ExtractServiceIDFromBytes(data []byte) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtractServiceIDFromPayload", payloadFilePath, reader)
+	ret := m.ctrl.Call(m, "ExtractServiceIDFromBytes", data)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ExtractServiceIDFromPayload indicates an expected call of ExtractServiceIDFromPayload.
-func (mr *MockServiceMockRecorder) ExtractServiceIDFromPayload(payloadFilePath, reader interface{}) *gomock.Call {
+// ExtractServiceIDFromBytes indicates an expected call of ExtractServiceIDFromBytes.
+func (mr *MockServiceMockRecorder) ExtractServiceIDFromBytes(data interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractServiceIDFromPayload", reflect.TypeOf((*MockService)(nil).ExtractServiceIDFromPayload), payloadFilePath, reader)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractServiceIDFromBytes", reflect.TypeOf((*MockService)(nil).ExtractServiceIDFromBytes), data)
 }
 
 // GetClusterDeployment mocks base method.

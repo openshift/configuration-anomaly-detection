@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -15,6 +17,8 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
+
+const restoredClusterRetryDelaySeconds = 1200
 
 // these type aliases are here to make the types unique and unambiguous when used inside the struct
 
@@ -60,7 +64,7 @@ type Service interface {
 	NonCADLimitedSupportExists(clusterID string) (bool, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
-	ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error)
+	ExtractServiceIDFromBytes(data []byte) (string, error)
 	CreateNewAlert(description string, details interface{}, serviceID string) error
 	MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error
 	GetEscalationPolicy() string
@@ -77,6 +81,236 @@ type Client struct {
 	Service
 	cluster *v1.Cluster
 	cd      *hivev1.ClusterDeployment
+	Alert   utils.Alert
+}
+
+func (c *Client) Triggered() error {
+
+	incidentID := c.Alert.IncidentID
+	externalClusterID := c.Alert.ExternalClusterID
+	res, err := c.InvestigateStoppedInstances(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("InvestigateInstances failed on %s: %w", externalClusterID, err)
+	}
+
+	fmt.Printf("the investigation returned %#v\n", res)
+
+	if res.UserAuthorized {
+		fmt.Println("The node shutdown was not the customer. Should alert SRE")
+		err := c.EscalateAlert(incidentID, res.String())
+		if err != nil {
+			return fmt.Errorf("could not escalate the alert %s: %w", incidentID, err)
+		}
+		return nil
+	}
+
+	// Post CHGM limited support
+	fmt.Println("Sending CHGM limited support reason")
+	reason, err := c.PostCHGMLimitedSupport(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("failed posting limited support reason: %w", err)
+	}
+	res.LimitedSupportReason = reason
+
+	err = c.SilenceAlert(incidentID, res.String())
+	if err != nil {
+		return fmt.Errorf("assigning the incident to Silent Test did not work: %w", err)
+	}
+
+	return nil
+}
+
+// evaluateRestoredCluster will take appropriate action against a cluster whose CHGM incident has resolved.
+//
+// Because CAD only runs a single time against a cluster when the alert resolves, robust retry logic is needed to
+// ensure the cluster is in a supportable state afterwards
+func (c *Client) Resolved() error {
+	externalClusterID := c.Alert.ExternalClusterID
+	serviceID := c.retryUntilServiceObtained()
+	res, err := c.investigateRestoredCluster(externalClusterID, serviceID)
+	if err != nil {
+		return fmt.Errorf("failure while investigating cluster: %w", err)
+	}
+
+	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
+	if res.ClusterNotEvaluated {
+		fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
+		return nil
+	}
+
+	// Investigation completed, but an error was encountered.
+	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
+	if res.Error != "" {
+		fmt.Printf("Cluster failed alert resolution check. Result: %#v\n", res)
+		fmt.Printf("Waiting %d seconds before rechecking cluster\n", restoredClusterRetryDelaySeconds)
+
+		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
+
+		res, err = c.investigateRestoredCluster(externalClusterID, serviceID)
+		if err != nil {
+			return fmt.Errorf("failure while re-investigating cluster: %w", err)
+		}
+		if res.ClusterNotEvaluated {
+			fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
+			return nil
+		}
+
+		if res.Error != "" {
+			retries := 1
+			err = c.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+			for err != nil {
+				fmt.Printf("Failed to escalate to Primary to report investigation results, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+				// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+				c.sleepBeforeRetrying(retries, 300)
+				retries++
+
+				err = c.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+			}
+			fmt.Println("Primary has been alerted")
+			return nil
+		}
+	}
+
+	// Cluster has been restored - remove any limited support reasons that CAD may have added as the result of it's
+	// missing instances investigation
+	//
+	// If we fail to remove either of the Limited Support reasons after several attempts, alert Primary
+
+	// Start by removing any 'Cloud Credentials Are Missing' alerts added by CAD
+	fmt.Println("Investigation complete. Cluster should be removed from Limited Support")
+	fmt.Println("Removing 'Cloud Credentials Are Missing' Limited Support reasons")
+	retries := 1
+	var removedReasons bool
+	removedReasons, err = c.RemoveCCAMLimitedSupport(externalClusterID)
+	for err != nil && retries <= 3 {
+		fmt.Printf("Failed to remove CCAM Limited Support reason from cluster %s: %v\n", externalClusterID, err)
+
+		c.sleepBeforeRetrying(retries, 300)
+		retries++
+
+		removedReasons, err = c.RemoveCCAMLimitedSupport(externalClusterID)
+	}
+	// After 3 retries, if the LS reason hasn't been removed - alert Primary
+	if err != nil {
+		fmt.Println("Failed 3 times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
+		originalErr := err
+		retries = 1
+
+		err = c.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to alert Primary (attempt %d). Err: %v\n", retries, err)
+			fmt.Println("Retrying")
+
+			c.sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = c.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return fmt.Errorf("failed to remove CCAM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+	}
+	if removedReasons {
+		fmt.Println("Removed CCAM Limited Support reason from cluster")
+	} else {
+		fmt.Println("No CCAM Limited Support reasons needed to be removed")
+	}
+
+	// Remove 'Cluster Has Gone Missing' Limited Support reasons added by CAD
+	fmt.Println("Removing 'Cluster Has Gone Missing' Limited Support reasons")
+	retries = 1
+	removedReasons, err = c.RemoveCHGMLimitedSupport(externalClusterID)
+	for err != nil && retries <= 3 {
+		fmt.Printf("Failed to remove CHGM Limited Support reason from cluster %s: %v\n", externalClusterID, err)
+
+		// Sleep for a time, based on the number of retries (up to 300 seconds)
+		c.sleepBeforeRetrying(retries, 300)
+		retries++
+
+		removedReasons, err = c.RemoveCHGMLimitedSupport(externalClusterID)
+	}
+	// After 3 retries, if the LS reason hasn't been removed - alert Primary
+	if err != nil {
+		fmt.Println("Failed 3 times to remove CHGM Limited Support reason from cluster. Attempting to alert Primary.")
+		originalErr := err
+		retries = 1
+
+		err = c.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to alert Primary (attempt %d). Err: %v\n", retries, err)
+			fmt.Println("Retrying")
+
+			c.sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = c.CreateIncidentForLimitedSupportRemovalFailure(originalErr, externalClusterID, serviceID)
+
+		}
+		fmt.Println("Primary has been alerted")
+		return fmt.Errorf("failed to remove CHGM Limited Support reason from cluster %s: %w", externalClusterID, originalErr)
+	}
+	if removedReasons {
+		fmt.Println("Removed CHGM Limited Support reason from cluster")
+	} else {
+		fmt.Println("No CHGM Limited Support reasons needed to be removed")
+	}
+	return nil
+}
+
+// retryUntilServiceObtained attempts to retrieve the serviceID from the PD.Payload, retrying until successful
+func (c *Client) retryUntilServiceObtained() string {
+	// Retrieve the service to alert on, retrying until we succeed
+	serviceID, err := c.ExtractServiceIDFromBytes(c.Alert.Payload)
+	retries := 1
+	for err != nil {
+		fmt.Printf("Failed to retrieve service from PagerDuty, retrying (attempt %d). Error encountered: %v\n", retries, err)
+
+		// Sleep for a time, based on the number of retries (up to 300 seconds)
+		c.sleepBeforeRetrying(retries, 300)
+		retries++
+
+		serviceID, err = c.ExtractServiceIDFromBytes(c.Alert.Payload)
+	}
+	return serviceID
+}
+
+// sleepBeforeRetrying sleeps with an exponential backoff based on the current retry, up to the given maximum sleep time.
+func (c *Client) sleepBeforeRetrying(currentRetry, maxSleepSeconds int) {
+	duration := currentRetry * currentRetry
+	sleepTime := time.Duration(duration) * time.Second
+	if duration > maxSleepSeconds {
+		sleepTime = time.Duration(maxSleepSeconds) * time.Second
+	}
+
+	fmt.Printf("Waiting %s seconds before trying again\n", sleepTime.String())
+	time.Sleep(sleepTime)
+}
+
+// investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
+// Primary is notified via PagerDuty incident
+func (c *Client) investigateRestoredCluster(externalClusterID, serviceID string) (res InvestigateInstancesOutput, err error) {
+	res, err = c.InvestigateStartedInstances(externalClusterID)
+	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
+	if err != nil {
+		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", externalClusterID, err)
+		originalErr := err
+		retries := 1
+
+		err = c.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to escalate to Primary, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+			c.sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = c.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", externalClusterID, originalErr)
+	}
+
+	return res, nil
 }
 
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
@@ -122,10 +356,10 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	// "OrganizationAccountAccessRole" could be an SRE based on the cluster type
 	// - NON-CCS: "OrganizationAccountAccessRole" can only be SRE
 	// - CCS: "OrganizationAccountAccessRole" can only be customer
-	// 
+	//
 	// We currently flag all stopped/terminated instances by an user that assumesRoles "OrganizationAccountAccessRole"
 	// as authorized, to avoid putting anything in limited support (we don't know if it's SRE).
-	// 
+	//
 	// We could change the logic to know whether or not it was an SRE in the future,
 	// as to not unnecessarily page for all "OrganizationAccountAccessRole" instance stops.
 	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
@@ -139,17 +373,17 @@ type UserInfo struct {
 
 // RunningNodesCount holds the number of actual running nodes
 type RunningNodesCount struct {
-    Master int
-    Infra  int
-    Worker int
+	Master int
+	Infra  int
+	Worker int
 }
 
 // ExpectedNodesCount holds the number of expected running nodes
 type ExpectedNodesCount struct {
-    Master    int
-    Infra     int
-    MinWorker int
-    MaxWorker int
+	Master    int
+	Infra     int
+	MinWorker int
+	MaxWorker int
 }
 
 // InvestigateInstancesOutput is the result of the InvestigateInstances command
@@ -177,10 +411,10 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
 	}
 	msg += fmt.Sprintf("\nNumber of non running instances: '%v' \n", len(i.NonRunningInstances))
-    msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
-        i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
-    msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
-        i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
+	msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
+		i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
+	msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
+		i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
 	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
@@ -262,7 +496,7 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 
 	if len(stoppedInstances) == 0 {
 		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return InvestigateInstancesOutput{UserAuthorized: true, RunningInstances:  *runningNodesCount,
+		return InvestigateInstancesOutput{UserAuthorized: true, RunningInstances: *runningNodesCount,
 			ExpectedInstances: *expectedNodesCount, Error: "no non running instances found, terminated instances may have already expired"}, nil
 	}
 
@@ -278,8 +512,8 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
-		RunningInstances:  *runningNodesCount,
-		ExpectedInstances: *expectedNodesCount,
+		RunningInstances:    *runningNodesCount,
+		ExpectedInstances:   *expectedNodesCount,
 	}
 	for _, event := range stoppedInstancesEvents {
 		// fmt.Printf("the event is %#v\n", event)
@@ -307,9 +541,9 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 		}
 	}
 
-	// Return the last `stoppedInstanceEvent` `UserInfo`, ideally we would want to return 
-	// all users that stopped events, not just the last one. But in the case it's authorized, 
-	// it's not too much of an issue to just keep one of the authorized users. 
+	// Return the last `stoppedInstanceEvent` `UserInfo`, ideally we would want to return
+	// all users that stopped events, not just the last one. But in the case it's authorized,
+	// it's not too much of an issue to just keep one of the authorized users.
 	return output, nil
 }
 
@@ -338,7 +572,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.cluster.ID())
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := InvestigateInstancesOutput {
+		output := InvestigateInstancesOutput{
 			ClusterState:        string(state),
 			ClusterNotEvaluated: true,
 		}
@@ -350,8 +584,8 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
 	}
 	if lsExists {
-		output := InvestigateInstancesOutput {
-			ClusterState: "unrelated limited support reasons present on cluster",
+		output := InvestigateInstancesOutput{
+			ClusterState:        "unrelated limited support reasons present on cluster",
 			ClusterNotEvaluated: true,
 		}
 		return output, nil
@@ -360,15 +594,15 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	// Verify cluster has expected number of nodes running
 	runningNodesCount, err := c.GetRunningNodesCount(infraID)
 	if err != nil {
-        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
 	expectedNodesCount, err := c.GetExpectedNodesCount()
 	if err != nil {
-        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
-        // Check for mistmach in running nodes and expected nodes
+	// Check for mistmach in running nodes and expected nodes
 	if runningNodesCount.Master != expectedNodesCount.Master {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
@@ -377,9 +611,9 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	}
 
 	output := InvestigateInstancesOutput{
-		UserAuthorized:      true,
-        ExpectedInstances:   *expectedNodesCount,
-        RunningInstances:    *runningNodesCount,
+		UserAuthorized:    true,
+		ExpectedInstances: *expectedNodesCount,
+		RunningInstances:  *runningNodesCount,
 	}
 	return output, nil
 }
@@ -415,36 +649,36 @@ func (c Client) RemoveCCAMLimitedSupport(externalID string) (bool, error) {
 
 // GetRunningNodesCount return the number of running nodes that are currently running in the cluster
 func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error) {
-    instances, err := c.ListRunningInstances(infraID) 
+	instances, err := c.ListRunningInstances(infraID)
 	if err != nil {
 		return nil, err
 	}
 
-    runningNodesCount := &RunningNodesCount{
-        Master: 0,
-        Infra: 0,
-        Worker: 0,
-    }
+	runningNodesCount := &RunningNodesCount{
+		Master: 0,
+		Infra:  0,
+		Worker: 0,
+	}
 
-    for _, instance := range instances {
-        for _, t := range instance.Tags {
-            if *t.Key == "Name" {
-                switch {
-                case strings.Contains(*t.Value, "master"):
-                    runningNodesCount.Master++
-                case strings.Contains(*t.Value, "infra"):
-                    runningNodesCount.Infra++
-                case strings.Contains(*t.Value, "worker"):
-                    runningNodesCount.Worker++
-                default:
-                    continue
-                }
-            }
-        }
+	for _, instance := range instances {
+		for _, t := range instance.Tags {
+			if *t.Key == "Name" {
+				switch {
+				case strings.Contains(*t.Value, "master"):
+					runningNodesCount.Master++
+				case strings.Contains(*t.Value, "infra"):
+					runningNodesCount.Infra++
+				case strings.Contains(*t.Value, "worker"):
+					runningNodesCount.Worker++
+				default:
+					continue
+				}
+			}
+		}
 
-    }
+	}
 
-    return runningNodesCount, nil
+	return runningNodesCount, nil
 }
 
 // GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
@@ -467,77 +701,77 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		return nil, fmt.Errorf("Failed to retrieve infra node data")
 	}
 
-    minWorkerCount, maxWorkerCount := 0, 0
+	minWorkerCount, maxWorkerCount := 0, 0
 	computeCount, computeCountOk := nodes.GetCompute()
 	if computeCountOk {
-	    minWorkerCount += computeCount
-	    maxWorkerCount += computeCount
-    }
-    autoscaleCompute, autoscaleComputeOk := nodes.GetAutoscaleCompute()
-    if autoscaleComputeOk {
-        minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
-        if !ok {
-            fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.cluster)
-            return nil, fmt.Errorf("Failed to retrieve min replicas from autoscale compute data")
-        }
+		minWorkerCount += computeCount
+		maxWorkerCount += computeCount
+	}
+	autoscaleCompute, autoscaleComputeOk := nodes.GetAutoscaleCompute()
+	if autoscaleComputeOk {
+		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
+		if !ok {
+			fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.cluster)
+			return nil, fmt.Errorf("Failed to retrieve min replicas from autoscale compute data")
+		}
 
-        maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
-        if !ok {
-            fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.cluster)
-            return nil, fmt.Errorf("Failed to retrieve max replicas from autoscale compute data")
-        }
+		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
+		if !ok {
+			fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.cluster)
+			return nil, fmt.Errorf("Failed to retrieve max replicas from autoscale compute data")
+		}
 
-        minWorkerCount += minReplicasCount
-        maxWorkerCount += maxReplicasCount
-    }
-    if !computeCountOk && !autoscaleComputeOk {
-        fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.cluster)
-        return nil, fmt.Errorf("Failed to retrieve cluster compute and autoscale compute data")
-    }
+		minWorkerCount += minReplicasCount
+		maxWorkerCount += maxReplicasCount
+	}
+	if !computeCountOk && !autoscaleComputeOk {
+		fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.cluster)
+		return nil, fmt.Errorf("Failed to retrieve cluster compute and autoscale compute data")
+	}
 
-    poolMinWorkersCount, poolMaxWorkersCount := 0, 0
-    machinePools, err := c.GetClusterMachinePools(c.cluster.ID())
-    if err != nil {
+	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
+	machinePools, err := c.GetClusterMachinePools(c.cluster.ID())
+	if err != nil {
 		fmt.Printf("machine pools data is missing, dumping cluster object: %#v", c.cluster)
 		return nil, fmt.Errorf("Failed to retrieve machine pools data")
-    }
-    for _, pool := range machinePools {
-        replicasCount, replicasCountOk := pool.GetReplicas()
-        if replicasCountOk {
-            poolMinWorkersCount += replicasCount
-            poolMaxWorkersCount += replicasCount
-        }
+	}
+	for _, pool := range machinePools {
+		replicasCount, replicasCountOk := pool.GetReplicas()
+		if replicasCountOk {
+			poolMinWorkersCount += replicasCount
+			poolMaxWorkersCount += replicasCount
+		}
 
-        autoscaling, autoscalingOk := pool.GetAutoscaling()
-        if autoscalingOk {
-            minReplicasCount, ok := autoscaling.GetMinReplicas()
-            if !ok {
-                fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-                return nil, fmt.Errorf("Failed to retrieve min replicas data from autoscaling pool")
-            }
+		autoscaling, autoscalingOk := pool.GetAutoscaling()
+		if autoscalingOk {
+			minReplicasCount, ok := autoscaling.GetMinReplicas()
+			if !ok {
+				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				return nil, fmt.Errorf("Failed to retrieve min replicas data from autoscaling pool")
+			}
 
-            maxReplicasCount, ok := autoscaling.GetMaxReplicas()
-            if !ok {
-                fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-                return nil, fmt.Errorf("Failed to retrieve max replicas data from autoscaling pool")
-            }
+			maxReplicasCount, ok := autoscaling.GetMaxReplicas()
+			if !ok {
+				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				return nil, fmt.Errorf("Failed to retrieve max replicas data from autoscaling pool")
+			}
 
-            poolMinWorkersCount += minReplicasCount
-            poolMaxWorkersCount += maxReplicasCount
-        }
+			poolMinWorkersCount += minReplicasCount
+			poolMaxWorkersCount += maxReplicasCount
+		}
 
-        if !replicasCountOk && !autoscalingOk {
-            fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
-            return nil, fmt.Errorf("Failed to retrieve replicas and autoscaling data from autoscaling pool")
-        }
-    }
+		if !replicasCountOk && !autoscalingOk {
+			fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
+			return nil, fmt.Errorf("Failed to retrieve replicas and autoscaling data from autoscaling pool")
+		}
+	}
 
-    nodeCount := &ExpectedNodesCount {
-        Master: masterCount,
-        Infra: infraCount,
-        MinWorker: minWorkerCount + poolMinWorkersCount,
-        MaxWorker: maxWorkerCount + poolMaxWorkersCount,
-    }
+	nodeCount := &ExpectedNodesCount{
+		Master:    masterCount,
+		Infra:     infraCount,
+		MinWorker: minWorkerCount + poolMinWorkersCount,
+		MaxWorker: maxWorkerCount + poolMaxWorkersCount,
+	}
 	return nodeCount, nil
 }
 

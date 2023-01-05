@@ -29,3 +29,6 @@ See [the subfolder for OCM](./ocm/)
 2. Change the endpoint to include the code that needs to run with all of the required params.
 
 3. Build `cadctl` (explained in the root README.md) and run `cadctl test`.
+
+Check service/title/alertname combination
+

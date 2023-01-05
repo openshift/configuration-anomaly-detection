@@ -19,7 +19,7 @@ package cmd
 import (
 	"os"
 
-	clustermissing "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/cluster-missing"
+	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
 	"github.com/spf13/cobra"
 )
 
@@ -39,5 +39,5 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(clustermissing.ClusterMissingCmd)
+	rootCmd.AddCommand(investigate.InvestigateCmd)
 }

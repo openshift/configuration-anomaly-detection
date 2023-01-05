@@ -1,7 +1,7 @@
 # PagerDuty Package
 
 Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the functions it has
-[embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetPDClient/ /^}$/)
+[embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetPDClient/ /^}$/)
 ```go
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient() (pagerduty.Client, error) {

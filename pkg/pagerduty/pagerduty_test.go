@@ -1,6 +1,7 @@
 package pagerduty_test
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -505,6 +506,81 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(res).Should(Equal("12345"))
+			})
+		})
+	})
+	Describe("ExtractTitleFromBytes", func() {
+		Describe("ExtractTitleFromBytes", func() {
+			var (
+				payload []bytes
+			)
+			BeforeEach(func() {
+				// Arrange
+				payload = []bytes
+			})
+			When("the payload is empty", func() {
+				It("should fail on ", func() {
+					// Arrange
+					// Act
+					_, err := p.ExtractExternalIDFromBytes(payload)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.FileNotFoundErr{}))
+				})
+			})
+
+			When("the payload path points to a file not on the filesystem", func() {
+				It("should fail on FileNotFoundErr", func() {
+					// Arrange
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("bla", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.FileNotFoundErr{}))
+				})
+			})
+
+			When("the payload path points to an empty file", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(""),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
+			})
+
+			When("the payload path points to an empty json struct", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte("{}"),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
+			})
+
+			When("the payload path points to a fake payload data (sent as a sample webhook data)", func() {
+				It("should fail on json marshalling error", func() {
+					// Arrange
+					fs = fstest.MapFS{
+						"payload.json": {
+							Data: []byte(`{"event":{"id":"$ID","event_type":"pagey.ping","resource_type":"pagey","occurred_at":"DATE","agent":null,"client":null,"data":{"message":"Hello from your friend Pagey!","type":"ping"}}}`),
+						},
+					}
+					// Act
+					_, err := p.ExtractExternalIDFromPayload("payload.json", fs)
+					// Assert
+					Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				})
 			})
 		})
 	})

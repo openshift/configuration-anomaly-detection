@@ -27,6 +27,9 @@ const (
 	CADEmailAddress = "sd-sre-platform+pagerduty-configuration-anomaly-detection-agent@redhat.com"
 	// CADIntegrationName is the name of the PD integration used to escalate alerts to Primary.
 	CADIntegrationName = "Dead Man's Snitch"
+	// pagerdutyIncidentResolved is the event type of the incident
+	PagerdutyIncidentResolved  = "incident.resolved"
+	PagerdutyIncidentTriggered = "incident.triggered"
 )
 
 // Client will hold all the required fields for any Client Operation
@@ -205,11 +208,11 @@ func (c Client) CreateNewAlert(description string, details interface{}, serviceI
 
 	// Current DMS integration requires us to use v1 events
 	event := sdk.Event{
-		ServiceKey: integration.IntegrationKey,
-		Type: "trigger",
+		ServiceKey:  integration.IntegrationKey,
+		Type:        "trigger",
 		Description: description,
-		Details: details,
-		Client: CADEmailAddress,
+		Details:     details,
+		Client:      CADEmailAddress,
 	}
 
 	response, err := sdk.CreateEventWithHTTPClient(event, c.c.HTTPClient)
@@ -369,6 +372,30 @@ func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
 		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
 	}
 	return incidentID, nil
+}
+
+// WebhookPayloadToTitle is a generated struct used to extract the incident id out
+type WebhookPayloadToTitle struct {
+	Event struct {
+		Data struct {
+			Title string `json:"title"`
+		} `json:"data"`
+	} `json:"event"`
+}
+
+// ExtractTitleFromBytes extracts and returns the incident title from a webhook payload
+func ExtractTitleFromBytes(data []byte) (string, error) {
+	w := WebhookPayloadToTitle{}
+	err := json.Unmarshal(data, &w)
+	if err != nil {
+		return "", UnmarshalErr{Err: err}
+	}
+	title := w.Event.Data.Title
+
+	if title == "" {
+		return "", UnmarshalErr{Err: fmt.Errorf("could not extract title from '%s'", data)}
+	}
+	return title, nil
 }
 
 // WebhookPayloadToEventType is a generated struct used to extract the event type out

@@ -211,7 +211,7 @@ func (c Client) GetCloudProviderID(identifier string) (string, error) {
 	return cloudProviderID, nil
 }
 
-// PostCHGMLimitedSupportReason will post a CCAM limited support reason for a cluster
+// PostCHGMLimitedSupportReason will post a CHGM limited support reason for a cluster
 // On success, it returns true
 func (c Client) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
 	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(chgmLimitedSupport), clusterID)
