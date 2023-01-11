@@ -372,17 +372,17 @@ var _ = Describe("ChgmTriggered", func() {
 	})
 })
 
-var _ = Describe("ChgmResolved", func(){
-	Describe("AreAllInstancesRunning", func(){
+var _ = Describe("ChgmResolved", func() {
+	Describe("AreAllInstancesRunning", func() {
 
 		var fakeErr = fmt.Errorf("test resolved")
 		var (
-			mockCtrl *gomock.Controller
-			mockClient *mock.MockService
-			isRunning chgm.Client
-			cluster *v1.Cluster
+			mockCtrl          *gomock.Controller
+			mockClient        *mock.MockService
+			isRunning         chgm.Client
+			cluster           *v1.Cluster
 			clusterDeployment hivev1.ClusterDeployment
-			infraID string
+			infraID           string
 
 			instance ec2.Instance
 		)
@@ -407,14 +407,14 @@ var _ = Describe("ChgmResolved", func(){
 		AfterEach(func() {
 			mockCtrl.Finish()
 		})
-		When("the cluster state is undefined", func(){
+		When("the cluster state is undefined", func() {
 			It("should return an error", func() {
 				statelessCluster, err := v1.NewCluster().ID("statelessCluster").Build()
 				Expect(err).ToNot(HaveOccurred())
 				statelessDeployment := hivev1.ClusterDeployment{
 					Spec: hivev1.ClusterDeploymentSpec{
 						ClusterMetadata: &hivev1.ClusterMetadata{
-							InfraID: "statelessCluster",
+							InfraID:   "statelessCluster",
 							ClusterID: "statelessCluster",
 						},
 					},
@@ -426,14 +426,14 @@ var _ = Describe("ChgmResolved", func(){
 				Expect(gotErr).To(HaveOccurred())
 			})
 		})
-		When("the cluster is uninstalling", func(){
-			It("should not investigate the cluster", func(){
+		When("the cluster is uninstalling", func() {
+			It("should not investigate the cluster", func() {
 				uninstallingCluster, err := v1.NewCluster().ID("uninstallingCluster").State(v1.ClusterStateUninstalling).Build()
 				Expect(err).ToNot(HaveOccurred())
 				uninstallingClusterDeployment := hivev1.ClusterDeployment{
 					Spec: hivev1.ClusterDeploymentSpec{
 						ClusterMetadata: &hivev1.ClusterMetadata{
-							InfraID: "uninstallingCluster",
+							InfraID:   "uninstallingCluster",
 							ClusterID: "uninstallingCluster",
 						},
 					},
@@ -448,7 +448,7 @@ var _ = Describe("ChgmResolved", func(){
 				Expect(got.ClusterState).To(Equal(v1.ClusterStateUninstalling))
 			})
 		})
-		When("ListNonRunningInstances fails", func(){
+		When("ListNonRunningInstances fails", func() {
 			It("should receive the correct InfraID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
@@ -460,7 +460,7 @@ var _ = Describe("ChgmResolved", func(){
 				Expect(gotErr).To(HaveOccurred())
 			})
 		})
-		When("there are stopped instances", func(){
+		When("there are stopped instances", func() {
 			It("should succeed and return that non-running instances were found", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
@@ -474,8 +474,8 @@ var _ = Describe("ChgmResolved", func(){
 				Expect(got.UserAuthorized).To(BeTrue())
 			})
 		})
-		When("ListRunningInstances fails", func(){
-			It("should receive the correct InfraID and bubble the error", func(){
+		When("ListRunningInstances fails", func() {
+			It("should receive the correct InfraID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
@@ -487,8 +487,8 @@ var _ = Describe("ChgmResolved", func(){
 				Expect(gotErr).To(HaveOccurred())
 			})
 		})
-		When("the machine count does not equal the expected node count", func(){
-			It("should succeed and return that insuffient machines were found", func(){
+		When("the machine count does not equal the expected node count", func() {
+			It("should succeed and return that insuffient machines were found", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)

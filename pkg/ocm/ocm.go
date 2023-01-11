@@ -33,6 +33,7 @@ var ccamLimitedSupport = limitedSupportReasonTemplate{
 	Summary: "Restore missing cloud credentials",
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
+
 // CAUTION!!
 
 // Client is the ocm client with which we can run the commands
@@ -245,7 +246,7 @@ func (c Client) CCAMLimitedSupportExists(clusterID string) (bool, error) {
 
 // CHGMLimitedSupportExists indicates whether CAD has posted a CHGM LS reason to the given cluster already
 func (c Client) CHGMLimitedSupportExists(clusterID string) (bool, error) {
-	return c.limitedSupportExists(chgmLimitedSupport, clusterID)
+	return c.limitedSupportReasonsExist(clusterID)
 }
 
 // limitedSupportExists returns true if the provided limitedSupportReasonTemplate's summary and details fields match an existing
@@ -304,12 +305,29 @@ func (c Client) deleteLimitedSupportReasons(summaryToDelete, clusterID string) (
 	return removedReasons, nil
 }
 
+// limitedSupportReasonsExist indicates whether any LS reasons exist on a given cluster
+func (c Client) limitedSupportReasonsExist(clusterID string) (bool, error) {
+	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("failed to retrieve cluster info from OCM: %w", err)
+	}
+	reasons, err := c.listLimitedSupportReasons(cluster.ID())
+	if err != nil {
+		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
+	}
+	if len(reasons) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (c Client) listLimitedSupportReasons(clusterID string) ([]*v1.LimitedSupportReason, error) {
 	// List reasons
 	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons()
 	reasons, err := clusterLimitedSupport.List().Send()
 	if err != nil {
-		return []*v1.LimitedSupportReason{} ,fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
+		return []*v1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
 	}
 	return reasons.Items().Slice(), nil
 }
