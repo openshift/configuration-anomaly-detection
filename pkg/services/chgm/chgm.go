@@ -55,7 +55,8 @@ type Service interface {
 	PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error)
 	DeleteCHGMLimitedSupportReason(clusterID string) (bool, error)
 	DeleteCCAMLimitedSupportReason(clusterID string) (bool, error)
-	CHGMLimitedSupportExists(clusterID string) (bool, error)
+	LimitedSupportReasonsExist(clusterID string) (bool, error)
+	NonCADLimitedSupportExists(clusterID string) (bool, error)
 	// PD
 	AddNote(incidentID string, noteContent string) error
 	ExtractServiceIDFromPayload(payloadFilePath string, reader pagerduty.FileReader) (string, error)
@@ -300,8 +301,20 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.cluster.ID())
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := InvestigateInstancesOutput{
+		output := InvestigateInstancesOutput {
 			ClusterState:        state,
+			ClusterNotEvaluated: true,
+		}
+		return output, nil
+	}
+
+	lsExists, err := c.NonCADLimitedSupportExists(c.cluster.ID())
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
+	}
+	if lsExists {
+		output := InvestigateInstancesOutput {
+			ClusterState: "unrelated limited support reasons present on cluster",
 			ClusterNotEvaluated: true,
 		}
 		return output, nil

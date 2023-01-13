@@ -246,24 +246,18 @@ func (c Client) CCAMLimitedSupportExists(clusterID string) (bool, error) {
 
 // CHGMLimitedSupportExists indicates whether CAD has posted a CHGM LS reason to the given cluster already
 func (c Client) CHGMLimitedSupportExists(clusterID string) (bool, error) {
-	return c.limitedSupportReasonsExist(clusterID)
+	return c.limitedSupportExists(chgmLimitedSupport, clusterID)
 }
 
 // limitedSupportExists returns true if the provided limitedSupportReasonTemplate's summary and details fields match an existing
 // reason on the given cluster
 func (c Client) limitedSupportExists(ls limitedSupportReasonTemplate, clusterID string) (bool, error) {
-	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
-	cluster, err := c.GetClusterInfo(clusterID)
-	if err != nil {
-		return false, fmt.Errorf("could not retrieve cluster info from OCM: %w", err)
-	}
-
-	reasons, err := c.listLimitedSupportReasons(cluster.ID())
+	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
 	}
 	for _, reason := range reasons {
-		if reason.Summary() == ls.Summary && reason.Details() == ls.Details {
+		if c.reasonsMatch(ls, reason){
 			return true, nil
 		}
 	}
@@ -305,14 +299,9 @@ func (c Client) deleteLimitedSupportReasons(summaryToDelete, clusterID string) (
 	return removedReasons, nil
 }
 
-// limitedSupportReasonsExist indicates whether any LS reasons exist on a given cluster
-func (c Client) limitedSupportReasonsExist(clusterID string) (bool, error) {
-	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
-	cluster, err := c.GetClusterInfo(clusterID)
-	if err != nil {
-		return false, fmt.Errorf("failed to retrieve cluster info from OCM: %w", err)
-	}
-	reasons, err := c.listLimitedSupportReasons(cluster.ID())
+// LimitedSupportReasonsExist indicates whether any LS reasons exist on a given cluster
+func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
 	}
@@ -322,9 +311,39 @@ func (c Client) limitedSupportReasonsExist(clusterID string) (bool, error) {
 	return true, nil
 }
 
+// NonCADLimitedSupportExists returns true if the given cluster has a limited support reason that doesn't appear to be one of CAD's
+func (c Client) NonCADLimitedSupportExists(clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("failed to list current limited support reasons: %w", err)
+	}
+	if len(reasons) == 0 {
+		return false, nil
+	}
+
+	for _, reason := range reasons {
+		if !c.reasonsMatch(ccamLimitedSupport, reason) && !c.reasonsMatch(chgmLimitedSupport, reason) {
+				// Reason differs from CAD's reasons - cluster is in LS for something else
+				return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c Client) reasonsMatch(template limitedSupportReasonTemplate, reason *v1.LimitedSupportReason) bool {
+	return reason.Summary() == template.Summary && reason.Details() == template.Details
+}
+
+// listLimitedSupportReasons returns all limited support reasons attached to the given cluster
 func (c Client) listLimitedSupportReasons(clusterID string) ([]*v1.LimitedSupportReason, error) {
+	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return []*v1.LimitedSupportReason{}, fmt.Errorf("failed to retrieve cluster info from OCM: %w", err)
+	}
+
 	// List reasons
-	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons()
+	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).LimitedSupportReasons()
 	reasons, err := clusterLimitedSupport.List().Send()
 	if err != nil {
 		return []*v1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)

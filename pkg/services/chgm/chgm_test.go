@@ -448,11 +448,35 @@ var _ = Describe("ChgmResolved", func() {
 				Expect(got.ClusterState).To(Equal(v1.ClusterStateUninstalling))
 			})
 		})
+		When("the cluster is in limited support for an unrelated reason", func() {
+			It("should not investigate the cluster", func() {
+				lsCluster, err := v1.NewCluster().ID("lsCluster").State(v1.ClusterStateReady).Build()
+				Expect(err).ToNot(HaveOccurred())
+				lsClusterDeployment := hivev1.ClusterDeployment{
+					Spec: hivev1.ClusterDeploymentSpec{
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							InfraID:   "lsCluster",
+							ClusterID: "lsCluster",
+						},
+					},
+				}
+
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(lsCluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(lsCluster.ID())).Return(&lsClusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(lsCluster.ID())).Return(true, nil)
+
+				got, gotErr := isRunning.InvestigateStartedInstances("lsCluster")
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.ClusterNotEvaluated).To(BeTrue())
+				Expect(string(got.ClusterState)).To(ContainSubstring("unrelated limited support reasons present on cluster"))
+			})
+		})
 		When("ListNonRunningInstances fails", func() {
 			It("should receive the correct InfraID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateStartedInstances("")
@@ -465,6 +489,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				// Act
 				got, gotErr := isRunning.InvestigateStartedInstances("")
@@ -479,6 +504,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
 				// Act
@@ -492,6 +518,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				// Act
@@ -507,6 +534,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				// Act
