@@ -148,7 +148,7 @@ func evaluateMissingCluster(chgmClient chgm.Client, incidentID string, externalC
 	}
 	fmt.Printf("the investigation returned %#v\n", res)
 
-	lsExists, err := chgmClient.CHGMLimitedSupportExists(externalClusterID)
+	lsExists, err := chgmClient.LimitedSupportReasonsExist(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("failed to determine if limited support reason already exists: %w", err)
 	}
@@ -215,7 +215,7 @@ func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) e
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
-		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
+		fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
 		return nil
 	}
 

@@ -52,21 +52,6 @@ func (mr *MockServiceMockRecorder) AddNote(incidentID, noteContent interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNote", reflect.TypeOf((*MockService)(nil).AddNote), incidentID, noteContent)
 }
 
-// CHGMLimitedSupportExists mocks base method.
-func (m *MockService) CHGMLimitedSupportExists(clusterID string) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CHGMLimitedSupportExists", clusterID)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CHGMLimitedSupportExists indicates an expected call of CHGMLimitedSupportExists.
-func (mr *MockServiceMockRecorder) CHGMLimitedSupportExists(clusterID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CHGMLimitedSupportExists", reflect.TypeOf((*MockService)(nil).CHGMLimitedSupportExists), clusterID)
-}
-
 // CreateNewAlert mocks base method.
 func (m *MockService) CreateNewAlert(description string, details interface{}, serviceID string) error {
 	m.ctrl.T.Helper()
@@ -184,6 +169,21 @@ func (mr *MockServiceMockRecorder) GetSilentPolicy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSilentPolicy", reflect.TypeOf((*MockService)(nil).GetSilentPolicy))
 }
 
+// LimitedSupportReasonsExist mocks base method.
+func (m *MockService) LimitedSupportReasonsExist(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LimitedSupportReasonsExist", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LimitedSupportReasonsExist indicates an expected call of LimitedSupportReasonsExist.
+func (mr *MockServiceMockRecorder) LimitedSupportReasonsExist(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LimitedSupportReasonsExist", reflect.TypeOf((*MockService)(nil).LimitedSupportReasonsExist), clusterID)
+}
+
 // ListNonRunningInstances mocks base method.
 func (m *MockService) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	m.ctrl.T.Helper()
@@ -226,6 +226,21 @@ func (m *MockService) MoveToEscalationPolicy(incidentID, escalationPolicyID stri
 func (mr *MockServiceMockRecorder) MoveToEscalationPolicy(incidentID, escalationPolicyID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToEscalationPolicy", reflect.TypeOf((*MockService)(nil).MoveToEscalationPolicy), incidentID, escalationPolicyID)
+}
+
+// NonCADLimitedSupportExists mocks base method.
+func (m *MockService) NonCADLimitedSupportExists(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NonCADLimitedSupportExists", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NonCADLimitedSupportExists indicates an expected call of NonCADLimitedSupportExists.
+func (mr *MockServiceMockRecorder) NonCADLimitedSupportExists(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NonCADLimitedSupportExists", reflect.TypeOf((*MockService)(nil).NonCADLimitedSupportExists), clusterID)
 }
 
 // PollInstanceStopEventsFor mocks base method.
