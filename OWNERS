@@ -7,6 +7,8 @@ reviewers:
 - RaphaelBut
 - bng0y
 - typeid
+- tnierman
+- sam-nguyen7
 approvers:
 - Makdaam
 - Nikokolas3270
@@ -16,5 +18,6 @@ approvers:
 - RaphaelBut
 - bng0y
 - typeid
+- sam-nguyen7
 maintainers:
 - rafael-azevedo
