@@ -148,7 +148,7 @@ type InvestigateInstancesOutput struct {
 	ExpectedInstances    ExpectedNodesCount
 	User                 UserInfo
 	UserAuthorized       bool
-	ClusterState         v1.ClusterState
+	ClusterState         string
 	ClusterNotEvaluated  bool
 	LimitedSupportReason *v1.LimitedSupportReason
 	Error                string
@@ -329,7 +329,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
 		output := InvestigateInstancesOutput {
-			ClusterState:        state,
+			ClusterState:        string(state),
 			ClusterNotEvaluated: true,
 		}
 		return output, nil
@@ -347,15 +347,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return output, nil
 	}
 
-	// Verify cluster is fully running (no instances remain unstarted)
-	stoppedInstances, err := c.ListNonRunningInstances(infraID)
-	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating started instances for %s: %w", infraID, err)
-	}
-	if len(stoppedInstances) != 0 {
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "non running instances found: cluster has not fully started or has excess machines"}, nil
-	}
-
+	// Verify cluster has expected number of nodes running
 	runningNodesCount, err := c.GetRunningNodesCount(infraID)
 	if err != nil {
         return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
@@ -366,7 +358,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
         return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
-    // Check for mistmach in running nodes and expected nodes
+        // Check for mistmach in running nodes and expected nodes
 	if runningNodesCount.Master != expectedNodesCount.Master {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
@@ -375,7 +367,6 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	}
 
 	output := InvestigateInstancesOutput{
-		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
         ExpectedInstances:   *expectedNodesCount,
         RunningInstances:    *runningNodesCount,
@@ -579,7 +570,7 @@ func (c *Client) CreateIncidentForRestoredCluster(resultErr, externalID, service
 	}
 
 	// The alert description acts as a title for the resulting incident
-	description := fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", c.cluster.ID())
+	description := fmt.Sprintf("cluster %s has failed CAD's CHGM resolution investigation", c.cluster.ID())
 
 	// Defining the alert's details as a struct creates a table of entries that is easily parsed
 	details := struct {
@@ -610,7 +601,7 @@ func (c *Client) CreateIncidentForInvestigationFailure(investigationErr error, e
 	}
 
 	// The alert description acts as a title for the resulting incident
-	description := fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", c.cluster.ID())
+	description := fmt.Sprintf("CAD's CHGM resolution investigation for cluster %s has encountered an error", c.cluster.ID())
 
 	// Defining the alert's details as a struct creates a table of entries that is easily parsed
 	details := struct {

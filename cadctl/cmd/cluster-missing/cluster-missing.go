@@ -34,6 +34,8 @@ import (
 
 const (
 	pagerdutyIncidentResolved = "incident.resolved"
+
+	restoredClusterRetryDelaySeconds = 1200
 )
 
 // ClusterMissingCmd represents the cluster-missing command
@@ -192,25 +194,9 @@ func evaluateMissingCluster(chgmClient chgm.Client, incidentID string, externalC
 // ensure the cluster is in a supportable state afterwards
 func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) error {
 	serviceID := retryUntilServiceObtained(chgmClient)
-	res, err := chgmClient.InvestigateStartedInstances(externalClusterID)
-	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
+	res, err := investigateRestoredCluster(chgmClient, externalClusterID, serviceID)
 	if err != nil {
-		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", externalClusterID, err)
-		originalErr := err
-		retries := 1
-
-		err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
-		for err != nil {
-			fmt.Printf("Failed to escalate to Primary, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
-
-			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
-			sleepBeforeRetrying(retries, 300)
-			retries++
-
-			err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
-		}
-		fmt.Println("Primary has been alerted")
-		return fmt.Errorf("InvestigateStartedInstances failed for %s: %w", externalClusterID, originalErr)
+		return fmt.Errorf("failure while investigating cluster: %w", err)
 	}
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
@@ -219,22 +205,38 @@ func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) e
 		return nil
 	}
 
-	// Investigation completed, but the cluster has not been restored properly - keep in limited support & alert Primary, retrying as many times as necessary to escalate the issue
+	// Investigation completed, but an error was encountered.
+	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
 	if res.Error != "" {
-		fmt.Printf("Cluster failed post-restart check. Result: %#v\n", res)
-		retries := 1
-		err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
-		for err != nil {
-			fmt.Printf("Failed to escalate to Primary to report investigation results, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+		fmt.Printf("Cluster failed alert resolution check. Result: %#v\n", res)
+		fmt.Printf("Waiting %d seconds before rechecking cluster\n", restoredClusterRetryDelaySeconds)
 
-			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
-			sleepBeforeRetrying(retries, 300)
-			retries++
+		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds)*time.Second)
 
-			err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+		res, err = investigateRestoredCluster(chgmClient, externalClusterID, serviceID)
+		if err != nil {
+			return fmt.Errorf("failure while re-investigating cluster: %w", err)
 		}
-		fmt.Println("Primary has been alerted")
-		return nil
+		if res.ClusterNotEvaluated {
+			fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
+			return nil
+		}
+
+		if res.Error != "" {
+			retries := 1
+			err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+			for err != nil {
+				fmt.Printf("Failed to escalate to Primary to report investigation results, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+				// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+				sleepBeforeRetrying(retries, 300)
+				retries++
+
+				err = chgmClient.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
+			}
+			fmt.Println("Primary has been alerted")
+			return nil
+		}
 	}
 
 	// Cluster has been restored - remove any limited support reasons that CAD may have added as the result of it's
@@ -321,6 +323,33 @@ func evaluateRestoredCluster(chgmClient chgm.Client, externalClusterID string) e
 		fmt.Println("No CHGM Limited Support reasons needed to be removed")
 	}
 	return nil
+}
+
+// investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
+// Primary is notified via PagerDuty incident
+func investigateRestoredCluster(chgmClient chgm.Client, externalClusterID, serviceID string) (res chgm.InvestigateInstancesOutput, err error) {
+	res, err = chgmClient.InvestigateStartedInstances(externalClusterID)
+	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
+	if err != nil {
+		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", externalClusterID, err)
+		originalErr := err
+		retries := 1
+
+		err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		for err != nil {
+			fmt.Printf("Failed to escalate to Primary, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
+
+			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
+			sleepBeforeRetrying(retries, 300)
+			retries++
+
+			err = chgmClient.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		}
+		fmt.Println("Primary has been alerted")
+		return chgm.InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", externalClusterID, originalErr)
+	}
+
+	return res, nil
 }
 
 // retryUntilServiceObtained attempts to retrieve the serviceID from the PD payload, retrying until successful
