@@ -223,7 +223,7 @@ objects:
             serviceAccountName: cad-tekton-pruner
             terminationGracePeriodSeconds: 30
         ttlSecondsAfterFinished: 3600
-    schedule: 0 0 * * WED
+    schedule: 0 0 * * 3
     successfulJobsHistoryLimit: 3
     suspend: false
 - apiVersion: v1
