@@ -9,6 +9,7 @@ reviewers:
 - typeid
 - tnierman
 - sam-nguyen7
+- zmird-r
 approvers:
 - Makdaam
 - Nikokolas3270
@@ -19,5 +20,6 @@ approvers:
 - bng0y
 - typeid
 - sam-nguyen7
+- zmird-r
 maintainers:
 - rafael-azevedo
