@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
@@ -34,15 +35,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// ClusterMissingCmd represents the cluster-missing command
+// InvestigateCmd represents the entry point for alert investigation
 var InvestigateCmd = &cobra.Command{
-	Use:   "start-investigation",
-	Short: "Will remediate the cluster-missing alert",
+	Use:   "investigate",
+	Short: "Filter for and investigate supported alerts",
 	RunE:  run,
 }
 
 var (
 	payloadPath = "./payload.json"
+	// CADPagerdutyService service id for cad alerts
+	CADPagerdutyService = "TODO"
 )
 
 func init() {
@@ -53,51 +56,42 @@ func init() {
 func run(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("Running CAD with webhook payload:")
-	data, err := os.ReadFile(payloadPath)
+	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
 	}
-	fmt.Printf("%s\n", string(data))
+	fmt.Printf("%s\n", string(payload))
 
-	pdClient, err := GetPDClient()
+	pdClient, err := GetPDClient(payload)
 	if err != nil {
 		return fmt.Errorf("could not start pagerdutyClient: %w", err)
 	}
 
-	title, err := pagerduty.ExtractTitleFromBytes(data)
-	if err != nil {
-		return err
+	// put intro struct in pd for simpler access
+	title := pdClient.GetTitle()
+	serviceName := pdClient.GetServiceName()
+	incidentID := pdClient.GetIncidentID()
+	eventType := pdClient.GetEventType()
+
+	// currently cad fires its alerts on deadmanssnitch service
+	// change this to the new cad service
+	CADPagerdutyService = pdClient.GetServiceID()
+
+	// After this point we know CAD will investigate the alert
+	// so we can initialize the other clients
+	alertType := isAlertSupported(title, serviceName)
+	if alertType == "" {
+		fmt.Printf("Alert is not supported by CAD: %s", title)
+		return nil
 	}
 
-	// Will return a normalized alert name or an error if the alert is not supported
-	alertType, err := GetAlertType(title)
-	if err != nil {
-		return err
-	}
-
-	// gather alert info and populate alert
-	incidentID, err := pdClient.ExtractIncidentIDFromBytes(data)
-	if err != nil {
-		return fmt.Errorf("GetIncidentID failed on: %w", err)
-	}
+	// print parsed struct
+	fmt.Printf("AlertType is '%s'", alertType)
 	fmt.Printf("Incident ID is: %s\n", incidentID)
 
-	externalClusterID, err := pdClient.ExtractExternalIDFromBytes(data)
+	externalClusterID, err := pdClient.RetrieveExternalClusterID()
 	if err != nil {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
-	}
-
-	eventType, err := pdClient.ExtractEventTypeFromBytes(data)
-	if err != nil {
-		return fmt.Errorf("could not determine event type: %w", err)
-	}
-
-	fmt.Printf("ClusterExternalID is: %s\n", externalClusterID)
-
-	alert := utils.Alert{
-		Payload:           data,
-		ExternalClusterID: externalClusterID,
-		IncidentID:        incidentID,
 	}
 
 	awsClient, err := GetAWSClient()
@@ -110,40 +104,42 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not create ocm client: %w", err)
 	}
 
-	// alert specific setup
-	fmt.Printf("AlertType is '%s'", alertType)
+	// Try to jump into support role
+	customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
+		externalClusterID, incidentID)
+	if err != nil {
+		return err
+	}
+
+	// Alert specific setup of investigation.Client
 	client := investigation.Client{}
+
+	cluster, err := ocmClient.GetClusterInfo(externalClusterID)
+	if err != nil {
+		return fmt.Errorf("could not retrieve cluster info for %s: %w", externalClusterID, err)
+	}
+
+	clusterdeployment, err := ocmClient.GetClusterDeployment(cluster.ID())
+	if err != nil {
+		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", cluster.ID(), err)
+	}
 
 	switch alertType {
 	case "ClusterHasGoneMissing":
-		_, err := checkCloudProvider(&ocmClient, externalClusterID, []string{"aws"})
+		_, err = checkCloudProvider(&ocmClient, externalClusterID, []string{"aws"})
 		if err != nil {
 			return fmt.Errorf("failed cloud provider check: %w", err)
 		}
 
-		// Try to jump into support role
-		customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
-			externalClusterID, incidentID)
-		if err != nil {
-			fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
-			// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
-			ccamClient := ccam.Client{
-				Service: ccam.Provider{
-					OcmClient: ocmClient,
-					PdClient:  pdClient,
-				},
-			}
-			return ccamClient.Evaluate(err, externalClusterID, incidentID)
-		}
-
 		client = investigation.Client{
-			Service: &chgm.Client{
+			Investigation: &chgm.Client{
 				Service: chgm.Provider{
 					AwsClient: customerAwsClient,
 					OcmClient: ocmClient,
 					PdClient:  pdClient,
 				},
-				Alert: alert,
+				Cluster:           cluster,
+				ClusterDeployment: clusterdeployment,
 			},
 		}
 	// case "ClusterProvisioningDelay":
@@ -157,19 +153,68 @@ func run(cmd *cobra.Command, args []string) error {
 	// 		Alert: alert,
 	// 	},
 	// }
+
 	// this should never happen as GetAlertType should fail on unsupported alerts
 	default:
 		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
 	}
-
 	// execute the investigation that corresponds to the event.type
 	switch eventType {
-	case pagerduty.PagerdutyIncidentTriggered:
-		err = client.Triggered()
-	case pagerduty.PagerdutyIncidentResolved:
-		err = client.Resolved()
+	case pagerduty.IncidentTriggered:
+		limitedSupport, notes := client.Investigation.Triggered()
+
+		if limitedSupport == (ocm.LimitedSupportReason{}) {
+			return utils.Retry(3, time.Second*2, func() error {
+				return pdClient.UpdateAndEscalateAlert(string(notes))
+			})
+		}
+
+		fmt.Printf("Sending limited support reason: %s", limitedSupport.Summary)
+		return utils.Retry(3, time.Second*2, func() error {
+			return client.PostLimitedSupport(notes)
+		})
+
+	case pagerduty.IncidentResolved:
+		output, err := client.Investigation.Resolved()
+		// do we always want to alert primary if a resolve fails?
+		// if we put a cluster in limited support and fail to remove it
+		// the cluster owner can follow normal limited support flow to get it removed
+		if err != nil {
+			return utils.Retry(3, time.Second*2, func() error {
+				return pdClient.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v", err.Error()))
+			})
+
+		} else if output.NewAlert != (pagerduty.NewAlert{}) {
+			err = utils.Retry(3, time.Second*2, func() error {
+				return pdClient.AddNote(output.Notes)
+			})
+			if err != nil {
+				fmt.Printf("Failed to add notes to incident: %s", output.Notes)
+			}
+			return utils.Retry(3, time.Second*2, func() error {
+				return pdClient.CreateNewAlert(output.NewAlert, CADPagerdutyService)
+			})
+		}
+
+		err = utils.Retry(3, time.Second*2, func() error {
+			return ocmClient.DeleteLimitedSupportReasons(output.LimitedSupportReason.Summary, cluster.ID())
+		})
+		if err != nil {
+			fmt.Println("failed to remove limited support")
+			err = utils.Retry(3, time.Second*2, func() error {
+				return pdClient.CreateNewAlert(investigation.GetAlertForLimitedSupportRemovalFailure(err, cluster.ID()), CADPagerdutyService)
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create alert: %w", err)
+			}
+			fmt.Println("alert has been send")
+			return nil
+		}
+		fmt.Println("limited support removed")
+		return nil
+	default:
+		return fmt.Errorf("event type '%s' is not supported", eventType)
 	}
-	return err
 }
 
 // jumpRoles will return an aws client or an error after trying to jump into
@@ -194,19 +239,36 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 		return aws.Client{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
-	return arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
+	ccamClient, err := ccam.New(ocmClient, pdClient, externalClusterID)
+	if err != nil {
+		return aws.Client{}, err
+	}
+
+	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
+	if err != nil {
+		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
+		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
+		return aws.Client{}, ccamClient.Evaluate(err, externalClusterID, incidentID)
+	}
+	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' Limited Support reasons if any")
+	return customerAwsClient, ccamClient.RemoveLimitedSupport()
 }
 
-// GetAlertType will return a normalized form of the alertname as a string
-// or an error if the alert is not supported by CAD
-func GetAlertType(alertTitle string) (string, error) {
-	// if strings.Contains(alertTitle, "ClusterProvisioningDelay") {
-	// 	return "ClusterProvisioningDelay", nil
-	// }
-	if strings.Contains(alertTitle, "has gone missing") {
-		return "ClusterHasGoneMissing", nil
+// isAlertSupported will return a normalized form of the alertname as string or
+// an empty string if the alert is not supported
+func isAlertSupported(alertTitle string, service string) string {
+
+	// change to enum
+	if service == "prod-deadmanssnitch" || service == "stage-deadmanssnitch" {
+		if strings.Contains(alertTitle, "has gone missing") {
+			return "ClusterHasGoneMissing"
+		}
 	}
-	return "", fmt.Errorf("alertType is not supported by CAD: %s", alertTitle)
+
+	// if strings.Contains(alertTitle, "ClusterProvisioningDelay") && service == "app-sre-alertmanager {
+	// 	return "ClusterProvisioningDelay"
+	// }
+	return ""
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
@@ -245,7 +307,7 @@ func GetAWSClient() (aws.Client, error) {
 }
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient() (pagerduty.Client, error) {
+func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
@@ -254,7 +316,7 @@ func GetPDClient() (pagerduty.Client, error) {
 		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
 	}
 
-	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
+	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy, webhookPayload)
 	if err != nil {
 		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
 	}
@@ -276,6 +338,5 @@ func checkCloudProvider(ocmClient *ocm.Client, externalClusterID string, support
 			return cloudProvider, nil
 		}
 	}
-
 	return "", fmt.Errorf("the clusters cloud provider is not supported")
 }
