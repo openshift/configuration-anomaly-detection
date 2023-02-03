@@ -21,7 +21,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
@@ -30,7 +29,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -44,8 +42,6 @@ var InvestigateCmd = &cobra.Command{
 
 var (
 	payloadPath = "./payload.json"
-	// CADPagerdutyService service id for cad alerts
-	CADPagerdutyService = "TODO"
 )
 
 func init() {
@@ -73,10 +69,6 @@ func run(cmd *cobra.Command, args []string) error {
 	incidentID := pdClient.GetIncidentID()
 	eventType := pdClient.GetEventType()
 
-	// currently cad fires its alerts on deadmanssnitch service
-	// change this to the new cad service
-	CADPagerdutyService = pdClient.GetServiceID()
-
 	// After this point we know CAD will investigate the alert
 	// so we can initialize the other clients
 	alertType := isAlertSupported(title, serviceName)
@@ -86,7 +78,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	// print parsed struct
-	fmt.Printf("AlertType is '%s'", alertType)
+	fmt.Printf("AlertType is '%s'\n", alertType)
 	fmt.Printf("Incident ID is: %s\n", incidentID)
 
 	externalClusterID, err := pdClient.RetrieveExternalClusterID()
@@ -158,60 +150,15 @@ func run(cmd *cobra.Command, args []string) error {
 	default:
 		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
 	}
-	// execute the investigation that corresponds to the event.type
+
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		limitedSupport, notes := client.Investigation.Triggered()
-
-		if limitedSupport == (ocm.LimitedSupportReason{}) {
-			return utils.Retry(3, time.Second*2, func() error {
-				return pdClient.UpdateAndEscalateAlert(string(notes))
-			})
-		}
-
-		fmt.Printf("Sending limited support reason: %s", limitedSupport.Summary)
-		return utils.Retry(3, time.Second*2, func() error {
-			return client.PostLimitedSupport(notes)
-		})
-
+		return client.Investigation.Triggered()
 	case pagerduty.IncidentResolved:
-		output, err := client.Investigation.Resolved()
+		return client.Investigation.Resolved()
 		// do we always want to alert primary if a resolve fails?
 		// if we put a cluster in limited support and fail to remove it
 		// the cluster owner can follow normal limited support flow to get it removed
-		if err != nil {
-			return utils.Retry(3, time.Second*2, func() error {
-				return pdClient.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v", err.Error()))
-			})
-
-		} else if output.NewAlert != (pagerduty.NewAlert{}) {
-			err = utils.Retry(3, time.Second*2, func() error {
-				return pdClient.AddNote(output.Notes)
-			})
-			if err != nil {
-				fmt.Printf("Failed to add notes to incident: %s", output.Notes)
-			}
-			return utils.Retry(3, time.Second*2, func() error {
-				return pdClient.CreateNewAlert(output.NewAlert, CADPagerdutyService)
-			})
-		}
-
-		err = utils.Retry(3, time.Second*2, func() error {
-			return ocmClient.DeleteLimitedSupportReasons(output.LimitedSupportReason.Summary, cluster.ID())
-		})
-		if err != nil {
-			fmt.Println("failed to remove limited support")
-			err = utils.Retry(3, time.Second*2, func() error {
-				return pdClient.CreateNewAlert(investigation.GetAlertForLimitedSupportRemovalFailure(err, cluster.ID()), CADPagerdutyService)
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create alert: %w", err)
-			}
-			fmt.Println("alert has been send")
-			return nil
-		}
-		fmt.Println("limited support removed")
-		return nil
 	default:
 		return fmt.Errorf("event type '%s' is not supported", eventType)
 	}
@@ -250,7 +197,7 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
 		return aws.Client{}, ccamClient.Evaluate(err, externalClusterID, incidentID)
 	}
-	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' Limited Support reasons if any")
+	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
 	return customerAwsClient, ccamClient.RemoveLimitedSupport()
 }
 

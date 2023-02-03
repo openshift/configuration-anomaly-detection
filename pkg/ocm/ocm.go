@@ -239,7 +239,7 @@ func (c Client) LimitedSupportExists(ls LimitedSupportReason, clusterID string) 
 }
 
 // DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
-func (c Client) DeleteLimitedSupportReasons(summaryToDelete, clusterID string) error {
+func (c Client) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID string) error {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return fmt.Errorf("could not list current limited support reasons: %w", err)
@@ -248,7 +248,7 @@ func (c Client) DeleteLimitedSupportReasons(summaryToDelete, clusterID string) e
 	// Remove each limited support reason matching the given template
 	removedReasons := false
 	for _, reason := range reasons {
-		if reason.Summary() == summaryToDelete {
+		if c.reasonsMatch(ls, reason) {
 			reasonID, ok := reason.GetID()
 			if !ok {
 				return fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
@@ -260,8 +260,10 @@ func (c Client) DeleteLimitedSupportReasons(summaryToDelete, clusterID string) e
 			removedReasons = true
 		}
 	}
-	if !removedReasons {
-		fmt.Println("Tried to remove limited support reason but none were found")
+	if removedReasons {
+		fmt.Printf("Removed limited support reason %s\n", ls.Summary)
+	} else {
+		fmt.Printf("Found no limited support reason to remove\n")
 	}
 	return nil
 }
@@ -278,8 +280,9 @@ func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
 	return true, nil
 }
 
-// NonCADLimitedSupportExists returns true if the given cluster has a limited support reason that doesn't appear to be one of CAD's
-func (c Client) NonCADLimitedSupportExists(clusterID string) (bool, error) {
+// UnrelatedLimitedSupportExists takes a cluster id and limited support reason
+// Returns true if any other limited support reason than the given one exists on the cluster
+func (c Client) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("failed to list current limited support reasons: %w", err)
@@ -289,15 +292,15 @@ func (c Client) NonCADLimitedSupportExists(clusterID string) (bool, error) {
 	}
 
 	for _, reason := range reasons {
-		if !c.reasonsMatch(ccamLimitedSupport, reason) && !c.reasonsMatch(chgmLimitedSupport, reason) {
-			// Reason differs from CAD's reasons - cluster is in LS for something else
+		if !c.reasonsMatch(ls, reason) {
+			fmt.Printf("cluster is in limited support for unrelated reason: %s\n", reason.Summary())
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func (c Client) reasonsMatch(template limitedSupportReasonTemplate, reason *v1.LimitedSupportReason) bool {
+func (c Client) reasonsMatch(template LimitedSupportReason, reason *v1.LimitedSupportReason) bool {
 	return reason.Summary() == template.Summary && reason.Details() == template.Details
 }
 

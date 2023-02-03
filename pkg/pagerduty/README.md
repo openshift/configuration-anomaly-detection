@@ -4,7 +4,7 @@ Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the fun
 [embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetPDClient/ /^}$/)
 ```go
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient() (pagerduty.Client, error) {
+func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
@@ -13,7 +13,7 @@ func GetPDClient() (pagerduty.Client, error) {
 		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
 	}
 
-	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy)
+	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy, webhookPayload)
 	if err != nil {
 		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
 	}

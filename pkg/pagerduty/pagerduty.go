@@ -285,6 +285,7 @@ func (c Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 	if err != nil {
 		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
 	}
+	fmt.Printf("Alert has been created %s\n", newAlert.Description)
 	return nil
 }
 
@@ -456,19 +457,20 @@ func (c Client) UpdateAndEscalateAlert(notes string) error {
 // SilenceAlert annotates the PagerDuty alert with the given notes and silences it via
 // assigning the "Silent Test" escalation policy
 func (c Client) SilenceAlert(notes string) error {
+	fmt.Println("Silencing alert")
 	return c.updatePagerduty(notes, c.GetSilentPolicy())
 }
 
 // updatePagerduty attaches notes to an incident and moves it to a escalation policy
 func (c Client) updatePagerduty(notes, escalationPolicy string) error {
 	if notes != "" {
-		fmt.Printf("Attaching Note %s\n", notes)
+		fmt.Println("Attaching Note")
 		err := c.AddNote(notes)
 		if err != nil {
 			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
 		}
 	}
-	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
+	fmt.Printf("Move to escalation policy: %s", escalationPolicy)
 	err := c.MoveToEscalationPolicy(escalationPolicy)
 	if err != nil {
 		return fmt.Errorf("failed to change incident escalation policy: %w", err)

@@ -13,14 +13,26 @@ make
 
 The binary is then available under `./cadctl/cadctl`
 
+## Integrate a new alert
+
+Alerts are send to CAD via pagerduty webhooks to a common entry point and then identified by title and service they fire on.
+This is due to the limitation that we cannot filter specific alerts to send from a service. For more information see https://support.pagerduty.com/docs/webhooks
+
+To integrate a new alert you have to add it to the `isAlertSupported` function in `investigate.go` and write a corresponding service.
+The service needs to implement functions for the event types (triggered, resolved, escalated...) you want to investigate.
+
+Add a webhook to both the stage and production version of the service your alert fires on. Example https://redhat.pagerduty.com/integrations/webhooks/PRI7A2P
+
 ## Testing
+
+For testing an investigation, it may be sufficient to run CAD locally. A payload with an incident ID from PD should be used as an argument. However, make sure you trigger the particular incident in a cluster first, sothat it becomes available in Pagerduty and there is actually a cloud infrastructure in the back on which the investigation can run. Otherwise, the test will be fairly short by either CAD not being able to find the PD incident, or CAD being unable to log in to the cloud provider. 
 
 Try to add as many unit tests as possible to the functions you are writing. Have a look into the other investigations about how the dependencies are mocked away. Think of the happy as well as unhappy paths.
 Keep the entry arguments for each investigation the same. The argument is a path to a JSON blob which should look similar to the one received by Pagerduty.
 
 ```bash
 echo '{"event": {"data":{"id": "<pd-incident-id>"}}}' > ./payload
-cadctl cluster-missing --payload-path ./payload
+cadctl investigate --payload-path ./payload
 ```
 
 NOTE: the JSON blob is reduced here to the important part that is analyzed by CAD atm. PD sends a larger JSON object.
@@ -34,8 +46,6 @@ The dependencies so far are:
 - OCM
 - Tekton
   
-For testing an investigation, it may be sufficient to run CAD locally. A JSON blob with an incident ID from PD should be used as an argument. However, make sure you trigger the particular incident in a cluster first, sothat it becomes available in Pagerduty and there is actually a cloud infrastructure in the back on which the investigation can run. Otherwise, the test will be fairly short by either CAD not being able to find the PD incident, or CAD being unable to log in to the cloud provider.
-
 To test Tekton and the deployment configuration, put CAD on OpenShift behind a Tekton event-listener and use curl to trigger pipeline runs by using example payloads.
 
 ## Coding Style

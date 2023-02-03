@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -25,7 +26,7 @@ const restoredClusterRetryDelaySeconds = 1200
 // If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
 // reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
 var chgmLimitedSupport = ocm.LimitedSupportReason{
-	Summary: "Action required: Cluster not checking in",
+	Summary: "Cluster not checking in",
 	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 }
 
@@ -62,9 +63,14 @@ type Service interface {
 	GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error)
 	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
 	LimitedSupportReasonsExist(clusterID string) (bool, error)
-	NonCADLimitedSupportExists(clusterID string) (bool, error)
+	UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
+	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
 	// PD
 	SilenceAlert(notes string) error
+	AddNote(notes string) error
+	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
+	GetServiceID() string
+	UpdateAndEscalateAlert(notes string) error
 }
 
 // Client for the chgm investigation
@@ -76,82 +82,96 @@ type Client struct {
 }
 
 // Triggered will analyse chgm incidents that are newly created
-func (c *Client) Triggered() (ocm.LimitedSupportReason, investigation.Notes) {
+func (c *Client) Triggered() error {
 	res, err := c.investigateStoppedInstances()
 	if err != nil {
-		return ocm.LimitedSupportReason{}, investigation.Notes(fmt.Sprintf("InvestigateInstances failed: %s", err.Error()))
+		return c.UpdateAndEscalateAlert(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 
 	fmt.Printf("the investigation returned %#v\n", res)
 
+	lsExists, err := c.LimitedSupportReasonsExist(c.Cluster.ID())
+	if err != nil {
+		return c.UpdateAndEscalateAlert(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
+	}
+
+	// if lsExists, silence alert and add investigation to notes
+	if lsExists {
+		fmt.Println("Unrelated limited support reason present on cluster, silencing")
+		return c.SilenceAlert(res.String() + "Unrelated limited support reason present on cluster, silenced.")
+	}
+
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
-		return ocm.LimitedSupportReason{}, investigation.Notes(res.String())
+		return c.UpdateAndEscalateAlert(res.String())
 	}
 
 	// The node shutdown was the customer
-	// Put into limited support and update incident notes
-	return chgmLimitedSupport, investigation.Notes(res.String())
+	// Put into limited support, silence and update incident notes
+	fmt.Printf("Sending limited support reason: %s\n", chgmLimitedSupport.Summary)
+	return utils.Retry(3, time.Second*2, func() error {
+		return c.PostLimitedSupport(res.String())
+	})
 }
 
-// evaluateRestoredCluster will take appropriate action against a cluster whose CHGM incident has resolved.
-//
-// Because CAD only runs a single time against a cluster when the alert resolves, robust retry logic is needed to
-// ensure the cluster is in a supportable state afterwards
+// Resolved will take appropriate action against a cluster whose CHGM incident has resolved.
 func (c *Client) Resolved() error {
-	externalClusterID := c.Alert.ExternalClusterID
-	serviceID := c.retryUntilServiceObtained()
-	res, err := c.investigateRestoredCluster(externalClusterID, serviceID)
+	res, err := c.investigateStartedInstances()
+
+	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
 	if err != nil {
-		return fmt.Errorf("failure while investigating cluster: %w", err)
+		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
+		if err != nil {
+			fmt.Println("could not update incident notes")
+		}
+		return utils.Retry(3, time.Second*2, func() error {
+			return c.CreateNewAlert(c.getInvestigationFailureAlert(err), c.GetServiceID())
+		})
 	}
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
-		fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
-		return nil
+		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
+		err = utils.Retry(3, time.Second*2, func() error {
+			return c.AddNote(res.String())
+		})
+		if err != nil {
+			fmt.Printf("Failed to add notes to incident: %s\n", res.String())
+		}
 	}
 
 	// Investigation completed, but an error was encountered.
 	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
 	if res.Error != "" {
-		fmt.Printf("Cluster failed alert resolution check. Result: %#v\n", res)
-		fmt.Printf("Waiting %d seconds before rechecking cluster\n", restoredClusterRetryDelaySeconds)
-
-		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
-
-		res, err = c.investigateRestoredCluster(externalClusterID, serviceID)
+		fmt.Printf("investigation completed, but cluster has not been restored properly\n")
+		err = utils.Retry(3, time.Second*2, func() error {
+			return c.AddNote(res.String())
+		})
 		if err != nil {
-			return fmt.Errorf("failure while re-investigating cluster: %w", err)
-		}
-		if res.ClusterNotEvaluated {
-			fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
-			return nil
+			fmt.Printf("failed to add notes to incident: %s\n", res.String())
 		}
 
-		if res.Error != "" {
-			retries := 1
-			err = c.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
-			for err != nil {
-				fmt.Printf("Failed to escalate to Primary to report investigation results, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
-
-				// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
-				c.sleepBeforeRetrying(retries, 300)
-				retries++
-
-				err = c.CreateIncidentForRestoredCluster(res.Error, externalClusterID, serviceID)
-			}
-			fmt.Println("Primary has been alerted")
-			return nil
-		}
+		// TODO maybe add unrelated limited support check here instead of inside investigation
+		return utils.Retry(3, time.Second*2, func() error {
+			return c.CreateNewAlert(c.getFailedPostCHGMAlert(res.Error), c.GetServiceID())
+		})
 	}
-
-	// Investigation completed successful
-	return investigation.Output{
-		LimitedSupportReason: chgmLimitedSupport,
-		Notes:                res.String(),
-		NewAlert:             pagerduty.NewAlert{},
-	}, nil
+	fmt.Println("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
+	err = utils.Retry(3, time.Second*2, func() error {
+		return c.DeleteLimitedSupportReasons(chgmLimitedSupport, c.Cluster.ID())
+	})
+	if err != nil {
+		fmt.Println("failed to remove limited support")
+		err = utils.Retry(3, time.Second*2, func() error {
+			return c.CreateNewAlert(investigation.GetAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create alert: %w", err)
+		}
+		fmt.Println("Alert has been send")
+		return nil
+	}
+	return nil
 }
 
 // investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
@@ -404,7 +424,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return output, nil
 	}
 
-	lsExists, err := c.NonCADLimitedSupportExists(c.cluster.ID())
+	lsExists, err := c.UnrelatedLimitedSupportExists(chgmLimitedSupport, c.Cluster.ID())
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
 	}
@@ -573,12 +593,12 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 
 // getFailedPostCHGMAlert returns an alert for a cluster that resolved its chgm alert but somehow is still failing CAD checks
 // This is potentially very noisy and led to some confusion for primary already
-func (c *Client) getFailedPostCHGMAlert(investigationErr error) pagerduty.NewAlert {
+func (c *Client) getFailedPostCHGMAlert(investigationErr string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", c.Cluster.ID()),
 		Details: pagerduty.NewAlertDetails{
 			ClusterID:  c.Cluster.ID(),
-			Error:      investigationErr.Error(),
+			Error:      investigationErr,
 			Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
 		}}
@@ -649,7 +669,7 @@ func assumedRoleOfName(role string, userDetails CloudTrailEventRaw) bool {
 // PostLimitedSupport will put the cluster into limited support
 // As the deadmanssnitch operator is not silenced on limited support
 // the alert is updated with notes and silenced
-func (c Client) PostLimitedSupport(notes investigation.Notes) error {
+func (c Client) PostLimitedSupport(notes string) error {
 	err := c.PostLimitedSupportReason(chgmLimitedSupport, c.Cluster.ID())
 	if err != nil {
 		return fmt.Errorf("failed posting limited support reason: %w", err)

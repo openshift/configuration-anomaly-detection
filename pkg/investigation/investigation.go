@@ -3,7 +3,6 @@ package investigation
 import (
 	"fmt"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
@@ -17,10 +16,8 @@ import (
 // update the webhook parsing in the pagerduty service accordingly
 // https://developer.pagerduty.com/docs/db0fa8c8984fc-overview#event-data-types
 type Investigation interface {
-	Triggered() (ocm.LimitedSupportReason, Notes)
-	Resolved() (Output, error)
-	PostLimitedSupport(notes Notes) error
-	RemoveLimitedSupport() error
+	Triggered() error
+	Resolved() error
 	// Reopened() (InvestigationOutput, error)
 	// Escalated() (InvestigationOutput, error)
 }
@@ -30,29 +27,16 @@ type Client struct {
 	Investigation
 }
 
-// Notes is a type for the Notes that get posted to the incident
-type Notes string
-
-// Output is a common return type for investigations
-// An investigation can lead to an alert being fired, cluster can
-// be put into limited support, a service log can be send or the
-// alert that started the investigation can be updated with notes and escalated
-type Output struct {
-	LimitedSupportReason ocm.LimitedSupportReason
-	Notes                string
-	NewAlert             pagerduty.NewAlert
-}
-
 var webhookMisconfigurationMsg = "Please review the webhook configuration and exclude or implement the event type."
 
 // Triggered is the Client behavior in case the investigation does not implement event type Triggered
-func (c *Client) Triggered() (ocm.LimitedSupportReason, Notes) {
-	return ocm.LimitedSupportReason{}, Notes("event type 'incident.triggered' is not implemented for this alert" + webhookMisconfigurationMsg)
+func (c *Client) Triggered() error {
+	return fmt.Errorf("event type 'incident.triggered' is not implemented for this alert" + webhookMisconfigurationMsg)
 }
 
 // Resolved is the Client behavior in case the investigation does not implement event type Resolved
-func (c *Client) Resolved() (Output, error) {
-	return Output{}, fmt.Errorf("event type 'incident.resolved' is not implemented for this alert" + webhookMisconfigurationMsg)
+func (c *Client) Resolved() error {
+	return fmt.Errorf("event type 'incident.resolved' is not implemented for this alert" + webhookMisconfigurationMsg)
 }
 
 // // Reopened is the Client behavior in case the investigation does not implement event type Reopened

@@ -10,11 +10,11 @@ func Retry(count int, sleep time.Duration, fn func() error) error {
 	var err error
 	for i := 0; i < count; i++ {
 		if i > 0 {
-			fmt.Printf("Retry %d: %s", i, err.Error())
+			fmt.Printf("Retry %d: %s \n", i, err.Error())
 			time.Sleep(sleep)
 			sleep *= 2
 		}
-		err := fn()
+		err = fn()
 		if err == nil {
 			return nil
 		}

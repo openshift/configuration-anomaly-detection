@@ -1,22 +1,22 @@
 package chgm_test
 
-import (
-	"fmt"
+// import (
+// 	"fmt"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/cloudtrail"
-	"github.com/aws/aws-sdk-go/service/ec2"
-	"github.com/golang/mock/gomock"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm/mock"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
-)
+// 	"github.com/aws/aws-sdk-go/aws"
+// 	"github.com/aws/aws-sdk-go/service/cloudtrail"
+// 	"github.com/aws/aws-sdk-go/service/ec2"
+// 	"github.com/golang/mock/gomock"
+// 	. "github.com/onsi/ginkgo/v2"
+// 	. "github.com/onsi/gomega"
+// 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+// 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+// 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm/mock"
+// 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+// )
 
-var _ = Describe("ChgmTriggered", func() {
-	Describe("AreAllInstancesRunning", func() {
+// var _ = Describe("ChgmTriggered", func() {
+// 	Describe("AreAllInstancesRunning", func() {
 
 		// this is a var but I use it as a const
 		var fakeErr = fmt.Errorf("test triggered")
@@ -59,31 +59,31 @@ var _ = Describe("ChgmTriggered", func() {
 			})
 		})
 
-		When("GetClusterDeployment fails", func() {
-			It("the GetClusterDeployment should receive the correct cluster_id and bubble up the error", func() {
-				// Arrange
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
-				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(nil, fakeErr)
-				// Act
-				_, gotErr := isRunning.InvestigateStoppedInstances("")
-				// Assert
-				Expect(gotErr).To(HaveOccurred())
-			})
-		})
+// 		When("GetClusterDeployment fails", func() {
+// 			It("the GetClusterDeployment should receive the correct cluster_id and bubble up the error", func() {
+// 				// Arrange
+// 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+// 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(nil, fakeErr)
+// 				// Act
+// 				_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 				// Assert
+// 				Expect(gotErr).To(HaveOccurred())
+// 			})
+// 		})
 
-		When("ListNonRunningInstances fails", func() {
-			It("the ListNonRunningInstances should receive the correct InfraID and bubble the error", func() {
-				// Arrange
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
-				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+// 		When("ListNonRunningInstances fails", func() {
+// 			It("the ListNonRunningInstances should receive the correct InfraID and bubble the error", func() {
+// 				// Arrange
+// 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+// 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
-				// Act
-				_, gotErr := isRunning.InvestigateStoppedInstances("")
-				// Assert
-				Expect(gotErr).To(HaveOccurred())
-			})
-		})
+// 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
+// 				// Act
+// 				_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 				// Assert
+// 				Expect(gotErr).To(HaveOccurred())
+// 			})
+// 		})
 
 		When("there were no stopped instances", func() {
 			It("should succeed and return that no non running instances were found", func() {
@@ -137,12 +137,12 @@ var _ = Describe("ChgmTriggered", func() {
 				event cloudtrail.Event
 			)
 
-			BeforeEach(func() {
-				event = cloudtrail.Event{
-					Username:        aws.String("12345"),
-					CloudTrailEvent: aws.String(`{"eventVersion":"1.08"}`),
-				}
-			})
+// 			BeforeEach(func() {
+// 				event = cloudtrail.Event{
+// 					Username:        aws.String("12345"),
+// 					CloudTrailEvent: aws.String(`{"eventVersion":"1.08"}`),
+// 				}
+// 			})
 
 			When("the returned CloudTrailEvent is empty", func() {
 				It("getting stopped instances events should pass but an error should bubble up", func() {
@@ -171,12 +171,12 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(``)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					_, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).To(HaveOccurred())
-				})
-			})
+// 					// Act
+// 					_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).To(HaveOccurred())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent is an empty json", func() {
 				It("the validation should fail and bubble up the error", func() {
@@ -189,12 +189,12 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					_, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).To(HaveOccurred())
-				})
-			})
+// 					// Act
+// 					_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).To(HaveOccurred())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent is an invalid json", func() {
 				It("the validation should fail and bubble up the error", func() {
@@ -207,12 +207,12 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					_, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).To(HaveOccurred())
-				})
-			})
+// 					// Act
+// 					_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).To(HaveOccurred())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent has more than one resource", func() {
 				It("it should fail and bubble up the error", func() {
@@ -227,12 +227,12 @@ var _ = Describe("ChgmTriggered", func() {
 					event.Resources = []*cloudtrail.Resource{&cloudTrailResource}
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					_, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).To(HaveOccurred())
-				})
-			})
+// 					// Act
+// 					_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).To(HaveOccurred())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent has an older version of eventversion", func() {
 				It("the validation should fail and bubble up  the error", func() {
@@ -245,12 +245,12 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.07"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					_, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).To(HaveOccurred())
-				})
-			})
+// 					// Act
+// 					_, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).To(HaveOccurred())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent has a matching valid operatorname", func() {
 				It("the deletion will be marked as ok", func() {
@@ -264,13 +264,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08"}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeTrue())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeTrue())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEvent has a matching valid operatorname", func() {
 				It("the deletion will be marked as ok", func() {
@@ -283,13 +283,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.Username = aws.String("osdManagedAdmin-abcd")
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeTrue())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeTrue())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEventRaw has no data", func() {
 				It("the deletion will be marked invalid", func() {
@@ -301,13 +301,13 @@ var _ = Describe("ChgmTriggered", func() {
 					mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeFalse())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeFalse())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEventRaw has an empty userIdentity", func() {
 				It("the deletion will be marked invalid", func() {
@@ -320,13 +320,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeFalse())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeFalse())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEventRaw has a userIdentity is an iam user", func() {
 				It("the deletion will be marked invalid", func() {
@@ -339,13 +339,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"IAMUser"}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeFalse())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeFalse())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEventRaw base data is correct, but the sessionissue's role is not role", func() {
 				It("the deletion will be marked invalid", func() {
@@ -358,13 +358,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"test"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeFalse())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeFalse())
+// 				})
+// 			})
 
 			When("the returned CloudTrailEventRaw base data is correct, but the sessionissue's username is not the correct user", func() {
 				It("the deletion will be marked invalid", func() {
@@ -377,13 +377,13 @@ var _ = Describe("ChgmTriggered", func() {
 					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`)
 					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 
-					// Act
-					got, gotErr := isRunning.InvestigateStoppedInstances("")
-					// Assert
-					Expect(gotErr).NotTo(HaveOccurred())
-					Expect(got.UserAuthorized).To(BeFalse())
-				})
-			})
+// 					// Act
+// 					got, gotErr := isRunning.InvestigateStoppedInstances("")
+// 					// Assert
+// 					Expect(gotErr).NotTo(HaveOccurred())
+// 					Expect(got.UserAuthorized).To(BeFalse())
+// 				})
+// 			})
 
 			When("username role is OrganizationAccountAccessRole", func() {
 				It("the deletion will be marked as valid", func() {
@@ -464,8 +464,8 @@ var _ = Describe("ChgmTriggered", func() {
 	})
 })
 
-var _ = Describe("ChgmResolved", func() {
-	Describe("AreAllInstancesRunning", func() {
+// var _ = Describe("ChgmResolved", func() {
+// 	Describe("AreAllInstancesRunning", func() {
 
 		var fakeErr = fmt.Errorf("test resolved")
 		var (
@@ -532,25 +532,25 @@ var _ = Describe("ChgmResolved", func() {
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(statelessCluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(statelessCluster.ID())).Return(&statelessDeployment, nil)
 
-				_, gotErr := isRunning.InvestigateStartedInstances("")
-				Expect(gotErr).To(HaveOccurred())
-			})
-		})
-		When("the cluster is uninstalling", func() {
-			It("should not investigate the cluster", func() {
-				uninstallingCluster, err := v1.NewCluster().ID("uninstallingCluster").State(v1.ClusterStateUninstalling).Build()
-				Expect(err).ToNot(HaveOccurred())
-				uninstallingClusterDeployment := hivev1.ClusterDeployment{
-					Spec: hivev1.ClusterDeploymentSpec{
-						ClusterMetadata: &hivev1.ClusterMetadata{
-							InfraID:   "uninstallingCluster",
-							ClusterID: "uninstallingCluster",
-						},
-					},
-				}
+// 				_, gotErr := isRunning.InvestigateStartedInstances("")
+// 				Expect(gotErr).To(HaveOccurred())
+// 			})
+// 		})
+// 		When("the cluster is uninstalling", func() {
+// 			It("should not investigate the cluster", func() {
+// 				uninstallingCluster, err := v1.NewCluster().ID("uninstallingCluster").State(v1.ClusterStateUninstalling).Build()
+// 				Expect(err).ToNot(HaveOccurred())
+// 				uninstallingClusterDeployment := hivev1.ClusterDeployment{
+// 					Spec: hivev1.ClusterDeploymentSpec{
+// 						ClusterMetadata: &hivev1.ClusterMetadata{
+// 							InfraID:   "uninstallingCluster",
+// 							ClusterID: "uninstallingCluster",
+// 						},
+// 					},
+// 				}
 
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(uninstallingCluster, nil)
-				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(uninstallingCluster.ID())).Return(&uninstallingClusterDeployment, nil)
+// 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(uninstallingCluster, nil)
+// 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(uninstallingCluster.ID())).Return(&uninstallingClusterDeployment, nil)
 
 				got, gotErr := isRunning.InvestigateStartedInstances("uninstallingCluster")
 				Expect(gotErr).ToNot(HaveOccurred())

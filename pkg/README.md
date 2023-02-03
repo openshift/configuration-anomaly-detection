@@ -30,5 +30,3 @@ See [the subfolder for OCM](./ocm/)
 
 3. Build `cadctl` (explained in the root README.md) and run `cadctl test`.
 
-Check service/title/alertname combination
-

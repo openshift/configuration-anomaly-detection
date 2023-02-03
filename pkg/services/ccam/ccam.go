@@ -18,7 +18,7 @@ import (
 // reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
 
 var ccamLimitedSupport = ocm.LimitedSupportReason{
-	Summary: "Action required: Restore missing cloud credentials",
+	Summary: "Restore missing cloud credentials",
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
 
@@ -50,7 +50,7 @@ type Service interface {
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	LimitedSupportExists(limitedSupportReason ocm.LimitedSupportReason, clusterID string) (bool, error)
 	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
-	DeleteLimitedSupportReasons(summaryToDelete, clusterID string) error
+	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
 	// PD
 	AddNote(noteContent string) error
 	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
@@ -119,17 +119,14 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 	if err != nil {
 		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
-	if lsExists {
-		fmt.Println("Avoided reposting duplicate CCAM limited support reason")
-		return nil
-	}
+	if !lsExists {
+		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.cluster.ID())
+		if err != nil {
+			return fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
+		}
 
-	err = c.PostLimitedSupportReason(ccamLimitedSupport, c.cluster.ID())
-	if err != nil {
-		return fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
 	}
-	fmt.Printf("Added the following Limited Support reason to cluster: %#v\n", ccamLimitedSupport)
-	return err
+	return c.SilenceAlert(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v\n", ccamLimitedSupport))
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
@@ -137,7 +134,7 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 // Run this after cloud credentials are confirmed
 func (c Client) RemoveLimitedSupport() error {
 	err := utils.Retry(3, time.Second*2, func() error {
-		return c.DeleteLimitedSupportReasons(ccamLimitedSupport.Summary, c.cluster.ID())
+		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.cluster.ID())
 	})
 	if err != nil {
 		fmt.Println("Failed 3 times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
@@ -166,23 +163,4 @@ func (c Client) getCCAMAlert(lsError error) pagerduty.NewAlert {
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
 		},
 	}
-}
-
-// silenceAlert annotates the PagerDuty alert with the given notes and silences it via
-// assigning the "Silent Test" escalation policy
-func (c Client) silenceAlert(incidentID, notes string) error {
-	escalationPolicy := c.GetSilentPolicy()
-	if notes != "" {
-		fmt.Printf("Attaching Note %s\n", notes)
-		err := c.AddNote(incidentID, notes)
-		if err != nil {
-			return fmt.Errorf("failed to attach notes to CCAM incident: %w", err)
-		}
-	}
-	fmt.Printf("Moving Alert to Escalation Policy %s\n", escalationPolicy)
-	err := c.MoveToEscalationPolicy(incidentID, escalationPolicy)
-	if err != nil {
-		return fmt.Errorf("failed to change incident escalation policy in CCAM step: %w", err)
-	}
-	return nil
 }
