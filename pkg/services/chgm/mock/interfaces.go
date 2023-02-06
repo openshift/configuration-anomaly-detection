@@ -141,6 +141,21 @@ func (mr *MockServiceMockRecorder) GetClusterInfo(identifier interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockService)(nil).GetClusterInfo), identifier)
 }
 
+// GetClusterMachinePools mocks base method.
+func (m *MockService) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMachinePools", clusterID)
+	ret0, _ := ret[0].([]*v1.MachinePool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterMachinePools indicates an expected call of GetClusterMachinePools.
+func (mr *MockServiceMockRecorder) GetClusterMachinePools(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockService)(nil).GetClusterMachinePools), clusterID)
+}
+
 // GetEscalationPolicy mocks base method.
 func (m *MockService) GetEscalationPolicy() string {
 	m.ctrl.T.Helper()

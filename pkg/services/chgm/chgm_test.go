@@ -382,6 +382,7 @@ var _ = Describe("ChgmResolved", func() {
 			isRunning         chgm.Client
 			cluster           *v1.Cluster
 			clusterDeployment hivev1.ClusterDeployment
+			machinePools      []*v1.MachinePool
 			infraID           string
 
 			instance ec2.Instance
@@ -504,6 +505,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
@@ -518,6 +520,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
@@ -534,6 +537,7 @@ var _ = Describe("ChgmResolved", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
@@ -543,7 +547,6 @@ var _ = Describe("ChgmResolved", func() {
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.Error).To(BeEmpty())
 				Expect(got.UserAuthorized).To(BeTrue())
-				Expect(got.AllInstances).ToNot(BeZero())
 				Expect(got.NonRunningInstances).To(BeEmpty())
 			})
 		})
