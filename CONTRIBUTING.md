@@ -15,17 +15,17 @@ The binary is then available under `./cadctl/cadctl`
 
 ## Integrate a new alert
 
-Alerts are send to CAD via pagerduty webhooks to a common entry point and then identified by title and service they fire on.
-This is due to the limitation that we cannot filter specific alerts to send from a service. For more information see https://support.pagerduty.com/docs/webhooks
+CAD investigations are triggered by pagerduty webhooks. The required investigation type is identified by CAD based on the title and service extracted from the alert payload.
+As pagerduty itself does not provide finer granularity for webhooks than service-based, CAD must filter out the alerts it should investigate for itself. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
-To integrate a new alert you have to add it to the `isAlertSupported` function in `investigate.go` and write a corresponding service.
-The service needs to implement functions for the event types (triggered, resolved, escalated...) you want to investigate.
-
-Add a webhook to both the stage and production version of the service your alert fires on. Example https://redhat.pagerduty.com/integrations/webhooks/PRI7A2P
+To integrate a new alert:
+- add it to the `isAlertSupported` function in `investigate.go` and write a corresponding CAD service.
+- implement functions for the event types (triggered, resolved, escalated...) that require an investigation in a new CAD service.
+- add a webhook to both the stage and production version of the service your alert fires on. E.g. https://redhat.pagerduty.com/integrations/webhooks/PRI7A2P
 
 ## Testing
 
-For testing an investigation, it may be sufficient to run CAD locally. A payload with an incident ID from PD should be used as an argument. However, make sure you trigger the particular incident in a cluster first, sothat it becomes available in Pagerduty and there is actually a cloud infrastructure in the back on which the investigation can run. Otherwise, the test will be fairly short by either CAD not being able to find the PD incident, or CAD being unable to log in to the cloud provider. 
+To test an investigation, it may be sufficient to run CAD locally. A payload with an incident ID from PD should be used as an argument. However, make sure to trigger the particular incident in a cluster first. That way, when it becomes available in Pagerduty,  a cloud infrastructure for the test investigation to run on exists. Otherwise, the test will be cut off by either CAD not being able to find the PD incident, or CAD being unable to log in to the cloud provider. 
 
 Try to add as many unit tests as possible to the functions you are writing. Have a look into the other investigations about how the dependencies are mocked away. Think of the happy as well as unhappy paths.
 Keep the entry arguments for each investigation the same. The argument is a path to a JSON blob which should look similar to the one received by Pagerduty.
