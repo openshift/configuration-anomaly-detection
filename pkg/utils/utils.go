@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// DefaultRetries is the default value of retries
+const DefaultRetries = 10
+
 // Retry will retry a function with a backoff
 func Retry(count int, sleep time.Duration, fn func() error) error {
 	var err error

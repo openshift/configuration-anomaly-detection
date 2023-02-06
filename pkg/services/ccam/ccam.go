@@ -40,8 +40,8 @@ type Provider struct {
 	//
 	// a different solution is to have the structs have unique names to begin with, which makes the code
 	// aws.AwsClient feel a bit redundant
-	OcmClient
-	PdClient
+	*OcmClient
+	*PdClient
 }
 
 // Service will wrap all the required commands the client needs to run its operations
@@ -64,36 +64,19 @@ type Service interface {
 // Client refers to the CCAM client
 type Client struct {
 	Service
-	cluster *v1.Cluster
-	v1.LimitedSupportReason
+	Cluster *v1.Cluster
 }
 
 // New creates a new CCAM client and gets the cluster object from ocm for the internal id
-func New(ocmClient OcmClient, pdClient PdClient, externalClusterID string) (Client, error) {
+func New(ocmClient *OcmClient, pdClient *PdClient, externalClusterID string, cluster *v1.Cluster) (Client, error) {
 	client := Client{
 		Service: Provider{
 			OcmClient: ocmClient,
 			PdClient:  pdClient,
 		},
-	}
-	err := client.populateStructWith(externalClusterID)
-	if err != nil {
-		return Client{}, err
+		Cluster: cluster,
 	}
 	return client, nil
-}
-
-// populateStructWith will populate the client with v1.Cluster object from ocm
-func (c *Client) populateStructWith(externalID string) error {
-	if c.cluster == nil {
-		cluster, err := c.GetClusterInfo(externalID)
-		if err != nil {
-			return fmt.Errorf("could not retrieve cluster info for %s in CCAM step: %w", externalID, err)
-		}
-		// fmt.Printf("cluster ::: %v\n", cluster)
-		c.cluster = cluster
-	}
-	return nil
 }
 
 // checkMissing checks for missing credentials that are required for assuming
@@ -107,22 +90,18 @@ func (c Client) checkMissing(err error) bool {
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
 func (c Client) Evaluate(awsError error, externalClusterID string, incidentID string) error {
-	err := c.populateStructWith(externalClusterID)
-	if err != nil {
-		return fmt.Errorf("failed to populate struct in Evaluate in CCAM step: %w", err)
-	}
 	if !c.checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
 
-	lsExists, err := c.LimitedSupportExists(ccamLimitedSupport, c.cluster.ID())
+	lsExists, err := c.LimitedSupportExists(ccamLimitedSupport, c.Cluster.ID())
 	if err != nil {
 		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
 	if !lsExists {
-		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.cluster.ID())
+		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.Cluster.ID())
 		if err != nil {
-			return fmt.Errorf("could not post limited support reason for %s: %w", c.cluster.Name(), err)
+			return fmt.Errorf("could not post limited support reason for %s: %w", c.Cluster.Name(), err)
 		}
 
 	}
@@ -130,17 +109,17 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
-// if it fails to do so, it will try to alert primary until it succeeds
+// if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
 func (c Client) RemoveLimitedSupport() error {
-	err := utils.Retry(3, time.Second*2, func() error {
-		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.cluster.ID())
+	err := utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
-		fmt.Println("Failed 3 times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
+		fmt.Printf("Failed '%d' times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.\n", utils.DefaultRetries)
 		originalErr := err
-		err := utils.Retry(3, time.Second*2, func() error {
-			return c.CreateNewAlert(c.getCCAMAlert(originalErr), c.GetServiceID())
+		err := utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return c.CreateNewAlert(c.buildAlertForCCAM(originalErr), c.GetServiceID())
 		})
 		if err != nil {
 			fmt.Println("Failed to alert Primary")
@@ -152,12 +131,12 @@ func (c Client) RemoveLimitedSupport() error {
 	return nil
 }
 
-// GetCCAMAlert will return a NewAlert populated with cluster id and the specific error
-func (c Client) getCCAMAlert(lsError error) pagerduty.NewAlert {
+// buildAlertForCCAM will return a NewAlert populated with cluster id and the specific error
+func (c Client) buildAlertForCCAM(lsError error) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", c.cluster.ID()),
+		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", c.Cluster.ID()),
 		Details: pagerduty.NewAlertDetails{
-			ClusterID:  c.cluster.ID(),
+			ClusterID:  c.Cluster.ID(),
 			Error:      lsError.Error(),
 			Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",

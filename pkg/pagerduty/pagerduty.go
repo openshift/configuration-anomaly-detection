@@ -41,7 +41,7 @@ const (
 // Client will hold all the required fields for any Client Operation
 type Client struct {
 	// c is the PagerDuty client
-	c *sdk.Client
+	sdkClient *sdk.Client
 	// currentUserEmail is the current logged-in user's email
 	currentUserEmail string
 	// escalationPolicy
@@ -81,7 +81,7 @@ func NewWithToken(authToken, escalationPolicy, silentPolicy string, webhookPaylo
 		return Client{}, UnmarshalErr{Err: err}
 	}
 	c := Client{
-		c:                sdk.NewClient(authToken),
+		sdkClient:        sdk.NewClient(authToken),
 		escalationPolicy: escalationPolicy,
 		silentPolicy:     silentPolicy,
 		parsedPayload:    parsedPayload,
@@ -90,46 +90,46 @@ func NewWithToken(authToken, escalationPolicy, silentPolicy string, webhookPaylo
 }
 
 // GetEventType returns the event type of the webhook
-func (c Client) GetEventType() string {
+func (c *Client) GetEventType() string {
 	return c.parsedPayload.Event.EventType
 }
 
 // GetServiceID returns the event type of the webhook
-func (c Client) GetServiceID() string {
+func (c *Client) GetServiceID() string {
 	return c.parsedPayload.Event.Data.Service.ServiceID
 }
 
 // GetServiceName returns the event type of the webhook
-func (c Client) GetServiceName() string {
+func (c *Client) GetServiceName() string {
 	return c.parsedPayload.Event.Data.Service.Summary
 }
 
 // GetTitle returns the event type of the webhook
-func (c Client) GetTitle() string {
+func (c *Client) GetTitle() string {
 	return c.parsedPayload.Event.Data.Title
 }
 
 // GetIncidentID returns the event type of the webhook
-func (c Client) GetIncidentID() string {
+func (c *Client) GetIncidentID() string {
 	return c.parsedPayload.Event.Data.IncidentID
 }
 
 // GetEscalationPolicy returns the set escalation policy
-func (c Client) GetEscalationPolicy() string {
+func (c *Client) GetEscalationPolicy() string {
 	return c.escalationPolicy
 }
 
 // GetSilentPolicy returns the set policy for silencing alerts
-func (c Client) GetSilentPolicy() string {
+func (c *Client) GetSilentPolicy() string {
 	return c.silentPolicy
 }
 
 // RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
 // retrieve the externalClusterID from pagerduty, and update the client.
-func (c Client) RetrieveExternalClusterID() (string, error) {
+func (c *Client) RetrieveExternalClusterID() (string, error) {
 
 	// Only do the api call to pagerduty once
-	if c.externalClusterID != nil {
+	if *c.externalClusterID != "" {
 		return *c.externalClusterID, nil
 	}
 
@@ -149,7 +149,7 @@ func (c Client) RetrieveExternalClusterID() (string, error) {
 	for _, a := range alerts {
 		// that one alert should have a valid ExternalID
 		if a.ExternalID != "" {
-			c.externalClusterID = &a.ExternalID
+			*c.externalClusterID = a.ExternalID
 			return *c.externalClusterID, nil
 		}
 	}
@@ -158,7 +158,7 @@ func (c Client) RetrieveExternalClusterID() (string, error) {
 }
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
-func (c Client) MoveToEscalationPolicy(escalationPolicyID string) error {
+func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID: c.GetIncidentID(),
@@ -168,7 +168,7 @@ func (c Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 			},
 		},
 	}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not update the escalation policy: %w", err)
 	}
@@ -177,7 +177,7 @@ func (c Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 
 // AssignToUser will assign the incident to the provided user
 // This is currently not needed by anything
-func (c Client) AssignToUser(userID string) error {
+func (c *Client) AssignToUser(userID string) error {
 	o := []sdk.ManageIncidentsOptions{{
 		ID: c.GetIncidentID(),
 		Assignments: []sdk.Assignee{{
@@ -187,7 +187,7 @@ func (c Client) AssignToUser(userID string) error {
 			},
 		}},
 	}}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not assign to user: %w", err)
 	}
@@ -196,27 +196,27 @@ func (c Client) AssignToUser(userID string) error {
 
 // AcknowledgeIncident will acknowledge an incident
 // This is currently not needed by anything
-func (c Client) AcknowledgeIncident() error {
+func (c *Client) AcknowledgeIncident() error {
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID:     c.GetIncidentID(),
 			Status: "acknowledged",
 		},
 	}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not acknowledge the incident: %w", err)
 	}
 	return nil
 }
 
-// manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
+// updateIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
 // the reason we send an array instead of a single item is to be compatible with the sdk
 // the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
-func (c Client) manageIncident(o []sdk.ManageIncidentsOptions) error {
+func (c *Client) updateIncident(o []sdk.ManageIncidentsOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
-	_, err := c.c.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
+	_, err := c.sdkClient.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -234,11 +234,11 @@ func (c Client) manageIncident(o []sdk.ManageIncidentsOptions) error {
 }
 
 // AddNote will add a note to an incident
-func (c Client) AddNote(noteContent string) error {
+func (c *Client) AddNote(noteContent string) error {
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
-	_, err := c.c.CreateIncidentNoteWithContext(context.TODO(), c.GetIncidentID(), sdkNote)
+	_, err := c.sdkClient.CreateIncidentNoteWithContext(context.TODO(), c.GetIncidentID(), sdkNote)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -261,8 +261,8 @@ func (c Client) AddNote(noteContent string) error {
 
 // CreateNewAlert triggers an alert using the Deadmanssnitch integration for the given service.
 // If the provided service does not have a DMS integration, an error is returned
-func (c Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
-	service, err := c.c.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
+func (c *Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
+	service, err := c.sdkClient.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
 	if err != nil {
 		return ServiceNotFoundErr{Err: err}
 	}
@@ -281,7 +281,7 @@ func (c Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 		Client:      CADEmailAddress,
 	}
 
-	response, err := sdk.CreateEventWithHTTPClient(event, c.c.HTTPClient)
+	response, err := sdk.CreateEventWithHTTPClient(event, c.sdkClient.HTTPClient)
 	if err != nil {
 		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
 	}
@@ -291,11 +291,11 @@ func (c Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 
 // getCADIntegrationFromService retrieves the PagerDuty integration used by CAD from the given service.
 // If the integration CAD expects is not found, an error is returned
-func (c Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
+func (c *Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
 	// For some reason the .Integrations array in the Service object does not contain any usable data,
 	// aside from the ID, so we have to re-grab each integration separately to examine them
 	for _, brokenIntegration := range service.Integrations {
-		realIntegration, err := c.c.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
+		realIntegration, err := c.sdkClient.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
 		if err != nil {
 			return sdk.Integration{}, fmt.Errorf("failed to retrieve integration '%s' for service '%s': %w", brokenIntegration.ID, service.ID, err)
 		}
@@ -307,13 +307,13 @@ func (c Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integrat
 }
 
 // GetAlerts will retrieve the alerts for a specific incident
-func (c Client) GetAlerts() ([]Alert, error) {
+func (c *Client) GetAlerts() ([]Alert, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
 	o := sdk.ListIncidentAlertsOptions{}
 
-	alerts, err := c.c.ListIncidentAlertsWithContext(ctx, c.GetIncidentID(), o)
+	alerts, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, c.GetIncidentID(), o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -420,7 +420,7 @@ type internalCHGMAlertBody struct {
 }
 
 // toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
-func (c Client) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
+func (c *Client) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
 	externalID, err := extractExternalIDFromAlertBody(sdkAlert.Body)
 	if err != nil {
 		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
@@ -450,19 +450,19 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 
 // UpdateAndEscalateAlert will ensure that an incident informs a SRE.
 // Optionally notes can be added to the incident
-func (c Client) UpdateAndEscalateAlert(notes string) error {
+func (c *Client) UpdateAndEscalateAlert(notes string) error {
 	return c.updatePagerduty(notes, c.GetEscalationPolicy())
 }
 
 // SilenceAlert annotates the PagerDuty alert with the given notes and silences it via
 // assigning the "Silent Test" escalation policy
-func (c Client) SilenceAlert(notes string) error {
+func (c *Client) SilenceAlert(notes string) error {
 	fmt.Println("Silencing alert")
 	return c.updatePagerduty(notes, c.GetSilentPolicy())
 }
 
 // updatePagerduty attaches notes to an incident and moves it to a escalation policy
-func (c Client) updatePagerduty(notes, escalationPolicy string) error {
+func (c *Client) updatePagerduty(notes, escalationPolicy string) error {
 	if notes != "" {
 		fmt.Println("Attaching Note")
 		err := c.AddNote(notes)

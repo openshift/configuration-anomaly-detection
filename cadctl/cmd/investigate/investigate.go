@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -45,8 +46,7 @@ var (
 )
 
 func init() {
-	const payloadPathFlagName = "payload-path"
-	InvestigateCmd.Flags().StringVarP(&payloadPath, payloadPathFlagName, "p", payloadPath, "the path to the payload")
+	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 }
 
 func run(cmd *cobra.Command, args []string) error {
@@ -56,30 +56,23 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
 	}
-	fmt.Printf("%s\n", string(payload))
+	fmt.Println(string(payload))
 
 	pdClient, err := GetPDClient(payload)
 	if err != nil {
-		return fmt.Errorf("could not start pagerdutyClient: %w", err)
+		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
-
-	// put intro struct in pd for simpler access
-	title := pdClient.GetTitle()
-	serviceName := pdClient.GetServiceName()
-	incidentID := pdClient.GetIncidentID()
-	eventType := pdClient.GetEventType()
 
 	// After this point we know CAD will investigate the alert
 	// so we can initialize the other clients
-	alertType := isAlertSupported(title, serviceName)
+	alertType := isAlertSupported(pdClient.GetTitle(), pdClient.GetServiceName())
 	if alertType == "" {
-		fmt.Printf("Alert is not supported by CAD: %s", title)
+		fmt.Printf("Alert is not supported by CAD: %s", pdClient.GetTitle())
 		return nil
 	}
 
-	// print parsed struct
 	fmt.Printf("AlertType is '%s'\n", alertType)
-	fmt.Printf("Incident ID is: %s\n", incidentID)
+	fmt.Printf("Incident ID is: %s\n", pdClient.GetIncidentID())
 
 	externalClusterID, err := pdClient.RetrieveExternalClusterID()
 	if err != nil {
@@ -88,34 +81,34 @@ func run(cmd *cobra.Command, args []string) error {
 
 	awsClient, err := GetAWSClient()
 	if err != nil {
-		return fmt.Errorf("could not start awsClient: %w", err)
+		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
 
 	ocmClient, err := GetOCMClient()
 	if err != nil {
-		return fmt.Errorf("could not create ocm client: %w", err)
+		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
-
-	// Try to jump into support role
-	customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
-		externalClusterID, incidentID)
-	if err != nil {
-		return err
-	}
-
-	// Alert specific setup of investigation.Client
-	client := investigation.Client{}
 
 	cluster, err := ocmClient.GetClusterInfo(externalClusterID)
 	if err != nil {
 		return fmt.Errorf("could not retrieve cluster info for %s: %w", externalClusterID, err)
 	}
 
-	clusterdeployment, err := ocmClient.GetClusterDeployment(cluster.ID())
+	clusterDeployment, err := ocmClient.GetClusterDeployment(cluster.ID())
 	if err != nil {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", cluster.ID(), err)
 	}
 
+	// Try to jump into support role
+	customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
+		externalClusterID, cluster)
+	if err != nil {
+		return err
+	}
+
+	investigationClient := investigation.Client{}
+
+	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
 		_, err = checkCloudProvider(&ocmClient, externalClusterID, []string{"aws"})
@@ -123,17 +116,18 @@ func run(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed cloud provider check: %w", err)
 		}
 
-		client = investigation.Client{
+		investigationClient = investigation.Client{
 			Investigation: &chgm.Client{
 				Service: chgm.Provider{
-					AwsClient: customerAwsClient,
-					OcmClient: ocmClient,
-					PdClient:  pdClient,
+					AwsClient: &customerAwsClient,
+					OcmClient: &ocmClient,
+					PdClient:  &pdClient,
 				},
 				Cluster:           cluster,
-				ClusterDeployment: clusterdeployment,
+				ClusterDeployment: clusterDeployment,
 			},
 		}
+	// this comment highlights how the upcoming CPD integration could look like
 	// case "ClusterProvisioningDelay":
 	// client = investigation.Client{
 	// 	Service: &cpd.Client{
@@ -151,11 +145,12 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
 	}
 
+	eventType := pdClient.GetEventType()
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		return client.Investigation.Triggered()
+		return investigationClient.Investigation.Triggered()
 	case pagerduty.IncidentResolved:
-		return client.Investigation.Resolved()
+		return investigationClient.Investigation.Resolved()
 		// do we always want to alert primary if a resolve fails?
 		// if we put a cluster in limited support and fail to remove it
 		// the cluster owner can follow normal limited support flow to get it removed
@@ -167,7 +162,7 @@ func run(cmd *cobra.Command, args []string) error {
 // jumpRoles will return an aws client or an error after trying to jump into
 // support role
 func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client,
-	externalClusterID string, incidentID string) (aws.Client, error) {
+	externalClusterID string, cluster *v1.Cluster) (aws.Client, error) {
 	// Try to get cloud credentials
 	arClient := assumerole.Client{
 		Service: assumerole.Provider{
@@ -186,16 +181,19 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 		return aws.Client{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
-	ccamClient, err := ccam.New(ocmClient, pdClient, externalClusterID)
-	if err != nil {
-		return aws.Client{}, err
+	ccamClient := ccam.Client{
+		Service: ccam.Provider{
+			OcmClient: &ocmClient,
+			PdClient:  &pdClient,
+		},
+		Cluster: cluster,
 	}
 
 	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
 	if err != nil {
 		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
 		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
-		return aws.Client{}, ccamClient.Evaluate(err, externalClusterID, incidentID)
+		return aws.Client{}, ccamClient.Evaluate(err, externalClusterID, pdClient.GetIncidentID())
 	}
 	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
 	return customerAwsClient, ccamClient.RemoveLimitedSupport()
@@ -205,13 +203,13 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 // an empty string if the alert is not supported
 func isAlertSupported(alertTitle string, service string) string {
 
-	// change to enum
+	// TODO change to enum
 	if service == "prod-deadmanssnitch" || service == "stage-deadmanssnitch" {
 		if strings.Contains(alertTitle, "has gone missing") {
 			return "ClusterHasGoneMissing"
 		}
 	}
-
+	// this comment highlights how the upcoming CPD integration could look like
 	// if strings.Contains(alertTitle, "ClusterProvisioningDelay") && service == "app-sre-alertmanager {
 	// 	return "ClusterProvisioningDelay"
 	// }

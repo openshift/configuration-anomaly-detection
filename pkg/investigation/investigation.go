@@ -49,9 +49,9 @@ func (c *Client) Resolved() error {
 // 	return InvestigationOutput{}, fmt.Errorf("event type 'incident.escalated' is not implemented for this alert" + webhookMisconfigurationMsg)
 // }
 
-// GetAlertForLimitedSupportRemovalFailure populates the alert template that is used in case of failure to remove a limited support reason that was
+// BuildAlertForLimitedSupportRemovalFailure populates the alert template that is used in case of failure to remove a limited support reason that was
 // previously added by CAD
-func GetAlertForLimitedSupportRemovalFailure(lsErr error, internalClusterID string) pagerduty.NewAlert {
+func BuildAlertForLimitedSupportRemovalFailure(lsErr error, internalClusterID string) pagerduty.NewAlert {
 	// The alert description acts as a title for the resulting incident
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", internalClusterID),

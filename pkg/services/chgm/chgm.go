@@ -45,9 +45,9 @@ type PdClient = pagerduty.Client
 
 // Provider should have all the functions that ChgmService is implementing
 type Provider struct {
-	AwsClient
-	OcmClient
-	PdClient
+	*AwsClient
+	*OcmClient
+	*PdClient
 }
 
 // This will generate mocks for the interfaces in this file
@@ -105,11 +105,11 @@ func (c *Client) Triggered() error {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
 		return c.UpdateAndEscalateAlert(res.String())
 	}
-
+	res.LimitedSupportReason = chgmLimitedSupport
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
 	fmt.Printf("Sending limited support reason: %s\n", chgmLimitedSupport.Summary)
-	return utils.Retry(3, time.Second*2, func() error {
+	return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 		return c.PostLimitedSupport(res.String())
 	})
 }
@@ -118,25 +118,26 @@ func (c *Client) Triggered() error {
 func (c *Client) Resolved() error {
 	res, err := c.investigateStartedInstances()
 
-	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
+	// The investigation encountered an error & never completed - alert Primary and report the error
 	if err != nil {
 		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
 		if err != nil {
 			fmt.Println("could not update incident notes")
 		}
-		return utils.Retry(3, time.Second*2, func() error {
-			return c.CreateNewAlert(c.getInvestigationFailureAlert(err), c.GetServiceID())
+		return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(err), c.GetServiceID())
 		})
 	}
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
 		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
-		err = utils.Retry(3, time.Second*2, func() error {
+		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 			return c.AddNote(res.String())
 		})
 		if err != nil {
 			fmt.Printf("Failed to add notes to incident: %s\n", res.String())
+			return nil
 		}
 	}
 
@@ -144,31 +145,30 @@ func (c *Client) Resolved() error {
 	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
 	if res.Error != "" {
 		fmt.Printf("investigation completed, but cluster has not been restored properly\n")
-		err = utils.Retry(3, time.Second*2, func() error {
+		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 			return c.AddNote(res.String())
 		})
 		if err != nil {
 			fmt.Printf("failed to add notes to incident: %s\n", res.String())
 		}
 
-		// TODO maybe add unrelated limited support check here instead of inside investigation
-		return utils.Retry(3, time.Second*2, func() error {
-			return c.CreateNewAlert(c.getFailedPostCHGMAlert(res.Error), c.GetServiceID())
+		return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return c.CreateNewAlert(c.buildAlertForFailedPostCHGM(res.Error), c.GetServiceID())
 		})
 	}
 	fmt.Println("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
-	err = utils.Retry(3, time.Second*2, func() error {
+	err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 		return c.DeleteLimitedSupportReasons(chgmLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
 		fmt.Println("failed to remove limited support")
-		err = utils.Retry(3, time.Second*2, func() error {
-			return c.CreateNewAlert(investigation.GetAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
+		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return c.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create alert: %w", err)
 		}
-		fmt.Println("Alert has been send")
+		fmt.Println("Alert has been sent")
 		return nil
 	}
 	return nil
@@ -285,7 +285,7 @@ type InvestigateInstancesOutput struct {
 	UserAuthorized       bool
 	ClusterState         string
 	ClusterNotEvaluated  bool
-	LimitedSupportReason *v1.LimitedSupportReason
+	LimitedSupportReason ocm.LimitedSupportReason
 	Error                string
 }
 
@@ -326,7 +326,7 @@ func (i InvestigateInstancesOutput) String() string {
 	return msg
 }
 
-func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error) {
+func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, error) {
 	if c.ClusterDeployment == nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
 	}
@@ -404,7 +404,7 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 
 // investigateStartedInstances is the internal version of InvestigateStartedInstances operating on the read-only
 // version of Client.
-func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error) {
+func (c *Client) investigateStartedInstances() (InvestigateInstancesOutput, error) {
 	if c.ClusterDeployment == nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating started instances, did not populate the instance before")
 	}
@@ -591,9 +591,9 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 	return nodeCount, nil
 }
 
-// getFailedPostCHGMAlert returns an alert for a cluster that resolved its chgm alert but somehow is still failing CAD checks
+// buildAlertForFailedPostCHGM returns an alert for a cluster that resolved its chgm alert but somehow is still failing CAD checks
 // This is potentially very noisy and led to some confusion for primary already
-func (c *Client) getFailedPostCHGMAlert(investigationErr string) pagerduty.NewAlert {
+func (c *Client) buildAlertForFailedPostCHGM(investigationErr string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", c.Cluster.ID()),
 		Details: pagerduty.NewAlertDetails{
@@ -604,8 +604,8 @@ func (c *Client) getFailedPostCHGMAlert(investigationErr string) pagerduty.NewAl
 		}}
 }
 
-// getInvestigationFailureAlert returns an alert for a cluster that could not be properly investigated
-func (c *Client) getInvestigationFailureAlert(investigationErr error) pagerduty.NewAlert {
+// buildAlertForInvestigationFailure returns an alert for a cluster that could not be properly investigated
+func (c *Client) buildAlertForInvestigationFailure(investigationErr error) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", c.Cluster.ID()),
 		Details: pagerduty.NewAlertDetails{
@@ -669,7 +669,7 @@ func assumedRoleOfName(role string, userDetails CloudTrailEventRaw) bool {
 // PostLimitedSupport will put the cluster into limited support
 // As the deadmanssnitch operator is not silenced on limited support
 // the alert is updated with notes and silenced
-func (c Client) PostLimitedSupport(notes string) error {
+func (c *Client) PostLimitedSupport(notes string) error {
 	err := c.PostLimitedSupportReason(chgmLimitedSupport, c.Cluster.ID())
 	if err != nil {
 		return fmt.Errorf("failed posting limited support reason: %w", err)
