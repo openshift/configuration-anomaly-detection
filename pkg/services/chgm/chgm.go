@@ -262,16 +262,15 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
 
+	runningNodesCount, err := c.GetRunningNodesCount(infraID)
+	if err != nil {
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, nil
+	}
+
 	// evaluate number of all supposed nodes
 	expectedNodesCount, err := c.GetExpectedNodesCount()
 	if err != nil {
-        // TODO
-	}
-
-	// evaluate the number of actual running nodes
-	runningNodesCount, err := c.GetRunningNodesCount()
-	if err != nil {
-        // TODO
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err)
 	}
 
 	output := InvestigateInstancesOutput{
@@ -357,20 +356,23 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "non running instances found: cluster has not fully started or has excess machines"}, nil
 	}
 
-	// evaluate number of all supposed nodes
+	runningNodesCount, err := c.GetRunningNodesCount(infraID)
+	if err != nil {
+        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
+	}
+
 	expectedNodesCount, err := c.GetExpectedNodesCount()
 	if err != nil {
-        // TODO
+        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
-	// evaluate the number of actual running nodes
-	runningNodesCount, err := c.GetRunningNodesCount()
-	if err != nil {
-        // TODO
+    // Check for mistmach in running nodes and expected nodes
+	if runningNodesCount.Master != expectedNodesCount.Master {
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
-
-	// TODO check for master nodes count
-	// TODO check infra for infra nodes count
+	if runningNodesCount.Infra != expectedNodesCount.Infra {
+		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
+	}
 	if runningNodesCount.Worker >= expectedNodesCount.MinWorker && runningNodesCount.Worker <= expectedNodesCount.MaxWorker {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running instances does not match the expected node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
@@ -413,9 +415,34 @@ func (c Client) RemoveCCAMLimitedSupport(externalID string) (bool, error) {
 	return c.DeleteCCAMLimitedSupportReason(c.cluster.ID())
 }
 
-// TODO
-func (c Client) GetRunningNodesCount() (*RunningNodesCount, error) {
-    runningNodesCount := &RunningNodesCount{}
+// GetRunningNodesCount return the number of running nodes that are currently running in the cluster
+func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error) {
+    instances, err := c.ListRunningInstances(infraID) 
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve running instances while counting running nodes %s: %w", infraID, err)
+	}
+
+    runningNodesCount := &RunningNodesCount{
+        Master: 0,
+        Infra: 0,
+        Worker: 0,
+    }
+
+    for _, instance := range instances {
+        for _, t := range instance.Tags {
+            if *t.Key == "Name" {
+                if strings.Contains(*t.Value, "master") {
+                    runningNodesCount.Master++
+                } else if strings.Contains(*t.Value, "infra") {
+                    runningNodesCount.Infra++
+                } else if strings.Contains(*t.Value, "worker") {
+                    runningNodesCount.Worker++
+                }
+            }
+        }
+
+    }
+
     return runningNodesCount, nil
 }
 
