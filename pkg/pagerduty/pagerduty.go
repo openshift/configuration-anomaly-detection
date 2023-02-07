@@ -129,7 +129,7 @@ func (c *Client) GetSilentPolicy() string {
 func (c *Client) RetrieveExternalClusterID() (string, error) {
 
 	// Only do the api call to pagerduty once
-	if *c.externalClusterID != "" {
+	if c.externalClusterID != nil {
 		return *c.externalClusterID, nil
 	}
 
@@ -149,7 +149,7 @@ func (c *Client) RetrieveExternalClusterID() (string, error) {
 	for _, a := range alerts {
 		// that one alert should have a valid ExternalID
 		if a.ExternalID != "" {
-			*c.externalClusterID = a.ExternalID
+			c.externalClusterID = &a.ExternalID
 			return *c.externalClusterID, nil
 		}
 	}
