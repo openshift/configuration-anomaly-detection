@@ -373,9 +373,9 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	if runningNodesCount.Infra != expectedNodesCount.Infra {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
-	if runningNodesCount.Worker >= expectedNodesCount.MinWorker && runningNodesCount.Worker <= expectedNodesCount.MaxWorker {
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running instances does not match the expected node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
-	}
+	// if runningNodesCount.Worker >= expectedNodesCount.MinWorker && runningNodesCount.Worker <= expectedNodesCount.MaxWorker {
+	// 	return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running instances does not match the expected node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
+	// }
 
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
@@ -431,12 +431,15 @@ func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error)
     for _, instance := range instances {
         for _, t := range instance.Tags {
             if *t.Key == "Name" {
-                if strings.Contains(*t.Value, "master") {
+                switch {
+                case strings.Contains(*t.Value, "master"):
                     runningNodesCount.Master++
-                } else if strings.Contains(*t.Value, "infra") {
+                case strings.Contains(*t.Value, "infra"):
                     runningNodesCount.Infra++
-                } else if strings.Contains(*t.Value, "worker") {
+                case strings.Contains(*t.Value, "worker"):
                     runningNodesCount.Worker++
+                default:
+                    continue
                 }
             }
         }
