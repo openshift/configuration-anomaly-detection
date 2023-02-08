@@ -1,3 +1,4 @@
+// Package chgm contains chgm service related functionality
 package chgm
 
 import (
@@ -301,7 +302,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.cluster.ID())
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := InvestigateInstancesOutput {
+		output := InvestigateInstancesOutput{
 			ClusterState:        state,
 			ClusterNotEvaluated: true,
 		}
@@ -313,8 +314,8 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
 	}
 	if lsExists {
-		output := InvestigateInstancesOutput {
-			ClusterState: "unrelated limited support reasons present on cluster",
+		output := InvestigateInstancesOutput{
+			ClusterState:        "unrelated limited support reasons present on cluster",
 			ClusterNotEvaluated: true,
 		}
 		return output, nil

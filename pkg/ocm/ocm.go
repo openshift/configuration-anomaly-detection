@@ -1,3 +1,4 @@
+// Package ocm contains ocm related functionality
 package ocm
 
 import (
@@ -257,7 +258,7 @@ func (c Client) limitedSupportExists(ls limitedSupportReasonTemplate, clusterID 
 		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
 	}
 	for _, reason := range reasons {
-		if c.reasonsMatch(ls, reason){
+		if c.reasonsMatch(ls, reason) {
 			return true, nil
 		}
 	}
@@ -323,8 +324,8 @@ func (c Client) NonCADLimitedSupportExists(clusterID string) (bool, error) {
 
 	for _, reason := range reasons {
 		if !c.reasonsMatch(ccamLimitedSupport, reason) && !c.reasonsMatch(chgmLimitedSupport, reason) {
-				// Reason differs from CAD's reasons - cluster is in LS for something else
-				return true, nil
+			// Reason differs from CAD's reasons - cluster is in LS for something else
+			return true, nil
 		}
 	}
 	return false, nil

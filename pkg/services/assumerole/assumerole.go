@@ -1,3 +1,4 @@
+// Package assumerole contains assumerole related functionality
 package assumerole
 
 import (

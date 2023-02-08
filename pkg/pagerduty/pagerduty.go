@@ -1,3 +1,4 @@
+// Package pagerduty contains pagerduty related functionality
 package pagerduty
 
 import (
@@ -205,11 +206,11 @@ func (c Client) CreateNewAlert(description string, details interface{}, serviceI
 
 	// Current DMS integration requires us to use v1 events
 	event := sdk.Event{
-		ServiceKey: integration.IntegrationKey,
-		Type: "trigger",
+		ServiceKey:  integration.IntegrationKey,
+		Type:        "trigger",
 		Description: description,
-		Details: details,
-		Client: CADEmailAddress,
+		Details:     details,
+		Client:      CADEmailAddress,
 	}
 
 	response, err := sdk.CreateEventWithHTTPClient(event, c.c.HTTPClient)

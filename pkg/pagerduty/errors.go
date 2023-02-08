@@ -1,3 +1,4 @@
+// Package pagerduty contains pagerduty related functionality
 package pagerduty
 
 import (
