@@ -9,7 +9,7 @@ bin/embedmd:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/campoy/embedmd@v1.0.0
 
 bin/golangci-lint:
-	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golangci/golangci-lint/cmd/golangci-lint@v1.45.2
+	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golangci/golangci-lint/cmd/golangci-lint@v1.50.0
 
 bin/gosec:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/securego/gosec/v2/cmd/gosec@v2.10.0
