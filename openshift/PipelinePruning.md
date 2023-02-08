@@ -14,4 +14,4 @@ This command will delete all PipelineRuns except for the last 20.
 
 For doing this, the cronjob needs permissions, these permissions are set in a role, defined in  [template.yaml](template.yaml) as well.
 
-Note, that we have also defined a ResourceQuota that limits the PipelineRuns to a maximum number of 100.
+Note, that we have also defined a ResourceQuota that limits the PipelineRuns to a maximum number of 1000. This does not mean concurrent runs but all the runs that exist for that pipeline.
