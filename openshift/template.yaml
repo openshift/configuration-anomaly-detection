@@ -207,7 +207,7 @@ objects:
           spec:
             containers:
             - args:
-              - tkn pipelinerun delete --keep=50 -f
+              - tkn pipelinerun delete --keep=100 -f
               command:
               - /bin/sh
               - -c
@@ -223,7 +223,7 @@ objects:
             serviceAccountName: cad-tekton-pruner
             terminationGracePeriodSeconds: 30
         ttlSecondsAfterFinished: 3600
-    schedule: 0 0 * * 3
+    schedule: 0 * * * *
     successfulJobsHistoryLimit: 3
     suspend: false
 - apiVersion: v1
