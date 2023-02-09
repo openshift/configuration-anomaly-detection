@@ -264,7 +264,7 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 
 	runningNodesCount, err := c.GetRunningNodesCount(infraID)
 	if err != nil {
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, nil
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err)
 	}
 
 	// evaluate number of all supposed nodes
@@ -419,7 +419,7 @@ func (c Client) RemoveCCAMLimitedSupport(externalID string) (bool, error) {
 func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error) {
     instances, err := c.ListRunningInstances(infraID) 
 	if err != nil {
-		return nil, fmt.Errorf("could not retrieve running instances while counting running nodes %s: %w", infraID, err)
+		return nil, err
 	}
 
     runningNodesCount := &RunningNodesCount{
