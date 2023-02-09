@@ -166,9 +166,9 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
 	}
 	msg += fmt.Sprintf("\nNumber of non running instances: '%v' \n", len(i.NonRunningInstances))
-    msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'",
+    msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
         i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
-    msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'",
+    msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
         i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
 	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
@@ -373,9 +373,6 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	if runningNodesCount.Infra != expectedNodesCount.Infra {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
-	// if runningNodesCount.Worker >= expectedNodesCount.MinWorker && runningNodesCount.Worker <= expectedNodesCount.MaxWorker {
-	// 	return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running instances does not match the expected node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
-	// }
 
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
