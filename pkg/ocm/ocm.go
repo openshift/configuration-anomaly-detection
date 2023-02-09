@@ -174,6 +174,16 @@ func (c Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeploymen
 	return cd, nil
 }
 
+// GetClusterMachinePools get the machine pools for a given cluster
+func (c Client) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
+    response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
+    if err != nil {
+        return nil, err
+    }
+    return response.Items().Slice(), nil
+}
+
+
 // getClusterResource allows to load different cluster resources
 func (c Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
 	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
