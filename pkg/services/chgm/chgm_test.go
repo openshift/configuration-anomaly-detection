@@ -412,8 +412,10 @@ var _ = Describe("ChgmResolved", func() {
 			machinePools      []*v1.MachinePool
 			infraID           string
 
-			instance ec2.Instance
-			instanceTag       ec2.Tag
+			masterInstance    ec2.Instance
+			masterInstanceTag ec2.Tag
+			infraInstance     ec2.Instance
+			infraInstanceTag  ec2.Tag
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
@@ -421,7 +423,7 @@ var _ = Describe("ChgmResolved", func() {
 			isRunning = chgm.Client{Service: mockClient}
 			var err error
 			// Must explicitly set all node types for GetNodeCount() to work in these tests
-			cluster, err = v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(0)).State(v1.ClusterStateReady).Build()
+			cluster, err = v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(v1.ClusterStateReady).Build()
 			Expect(err).ToNot(HaveOccurred())
 			clusterDeployment = hivev1.ClusterDeployment{
 				Spec: hivev1.ClusterDeploymentSpec{
@@ -431,12 +433,20 @@ var _ = Describe("ChgmResolved", func() {
 				},
 			}
 			infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
-            instanceTag.SetKey("Name")
-            instanceTag.SetValue("cluter-test-gzq47-master-0")
-			instance = ec2.Instance{
-			    InstanceId: aws.String("12345"),
-                Tags: []*ec2.Tag{&instanceTag},
 
+			// Setup mock cluster instances
+            		masterInstanceTag.SetKey("Name")
+            		masterInstanceTag.SetValue("cluter-test-gzq47-master-0")
+			masterInstance = ec2.Instance{
+			    	InstanceId: aws.String("12345"),
+                		Tags: []*ec2.Tag{&masterInstanceTag},
+			}
+
+			infraInstanceTag.SetKey("Name")
+			infraInstanceTag.SetValue("cluster-test-gzq47-infra-0")
+			infraInstance = ec2.Instance{
+				InstanceId: aws.String("67890"),
+				Tags: []*ec2.Tag{&infraInstanceTag},
 			}
 		})
 		AfterEach(func() {
@@ -480,58 +490,33 @@ var _ = Describe("ChgmResolved", func() {
 				got, gotErr := isRunning.InvestigateStartedInstances("uninstallingCluster")
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.ClusterNotEvaluated).To(BeTrue())
-				Expect(got.ClusterState).To(Equal(v1.ClusterStateUninstalling))
+				Expect(got.ClusterState).To(Equal(string(v1.ClusterStateUninstalling)))
 			})
 		})
 		When("the cluster is in limited support for an unrelated reason", func() {
 			It("should not investigate the cluster", func() {
-				lsCluster, err := v1.NewCluster().ID("lsCluster").State(v1.ClusterStateReady).Build()
-				Expect(err).ToNot(HaveOccurred())
-				lsClusterDeployment := hivev1.ClusterDeployment{
-					Spec: hivev1.ClusterDeploymentSpec{
-						ClusterMetadata: &hivev1.ClusterMetadata{
-							InfraID:   "lsCluster",
-							ClusterID: "lsCluster",
-						},
-					},
-				}
-
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(lsCluster, nil)
-				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(lsCluster.ID())).Return(&lsClusterDeployment, nil)
-				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(lsCluster.ID())).Return(true, nil)
-
+				// Arrange
+				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(true, nil)
+				// Act
 				got, gotErr := isRunning.InvestigateStartedInstances("lsCluster")
+				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.ClusterNotEvaluated).To(BeTrue())
 				Expect(string(got.ClusterState)).To(ContainSubstring("unrelated limited support reasons present on cluster"))
 			})
 		})
-		When("ListNonRunningInstances fails", func() {
-			It("should receive the correct InfraID and bubble the error", func() {
+		When("NonCADLimitedSupportExists fails", func() {
+			It("should receive the correct internal ID and bubble the error", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
+				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateStartedInstances("")
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
-			})
-		})
-		When("there are stopped instances", func() {
-			It("should succeed and return that non-running instances were found", func() {
-				// Arrange
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
-				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
-				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
-				// Act
-				got, gotErr := isRunning.InvestigateStartedInstances("")
-				// Assert
-				Expect(gotErr).ToNot(HaveOccurred())
-				Expect(got.Error).ToNot(BeEmpty())
-				Expect(got.UserAuthorized).To(BeTrue())
 			})
 		})
 		When("ListRunningInstances fails", func() {
@@ -540,7 +525,6 @@ var _ = Describe("ChgmResolved", func() {
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
 				// Act
 				_, gotErr := isRunning.InvestigateStartedInstances("")
@@ -549,13 +533,12 @@ var _ = Describe("ChgmResolved", func() {
 			})
 		})
 		When("the machine count does not equal the expected node count", func() {
-			It("should succeed and return that insuffient machines were found", func() {
+			It("should complete and return that insufficient machines were found", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 				// Act
 				got, gotErr := isRunning.InvestigateStartedInstances("")
@@ -566,21 +549,21 @@ var _ = Describe("ChgmResolved", func() {
 			})
 		})
 		When("the cluster appears to be healthy again", func() {
-			It("should succeed and return that no issues were found", func() {
+			It("should complete and return that no issues were found", func() {
 				// Arrange
 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().NonCADLimitedSupportExists(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
-				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&masterInstance, &infraInstance}, nil)
 				// Act
 				got, gotErr := isRunning.InvestigateStartedInstances("")
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(got.Error).To(BeEmpty())
 				Expect(got.UserAuthorized).To(BeTrue())
-				Expect(got.NonRunningInstances).To(BeEmpty())
+				Expect(got.ExpectedInstances.Infra).To(Equal(got.RunningInstances.Infra))
+				Expect(got.ExpectedInstances.Master).To(Equal(got.RunningInstances.Master))
 			})
 		})
 	})
