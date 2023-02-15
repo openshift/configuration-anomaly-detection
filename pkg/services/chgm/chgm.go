@@ -102,7 +102,7 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	}
 
 	// I wanted to keep this an if statement, but golangci-lint didn't allow me :(
-	if strings.HasPrefix(username, "osdManagedAdmin-") {
+	if strings.HasPrefix(username, "osdManagedAdmin") {
 		return true
 	}
 
@@ -128,17 +128,17 @@ type UserInfo struct {
 
 // RunningNodesCount holds the number of actual running nodes
 type RunningNodesCount struct {
-    Master int
-    Infra  int
-    Worker int
+	Master int
+	Infra  int
+	Worker int
 }
 
 // ExpectedNodesCount holds the number of expected running nodes
 type ExpectedNodesCount struct {
-    Master    int
-    Infra     int
-    MinWorker int
-    MaxWorker int
+	Master    int
+	Infra     int
+	MinWorker int
+	MaxWorker int
 }
 
 // InvestigateInstancesOutput is the result of the InvestigateInstances command
@@ -166,10 +166,10 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
 	}
 	msg += fmt.Sprintf("\nNumber of non running instances: '%v' \n", len(i.NonRunningInstances))
-    msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
-        i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
-    msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
-        i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
+	msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
+		i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
+	msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
+		i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
 	var ids []string
 	for _, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
@@ -276,8 +276,8 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 	output := InvestigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
-		RunningInstances:  *runningNodesCount,
-		ExpectedInstances: *expectedNodesCount,
+		RunningInstances:    *runningNodesCount,
+		ExpectedInstances:   *expectedNodesCount,
 	}
 	for _, event := range stoppedInstancesEvents {
 		// fmt.Printf("the event is %#v\n", event)
@@ -328,7 +328,7 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.cluster.ID())
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := InvestigateInstancesOutput {
+		output := InvestigateInstancesOutput{
 			ClusterState:        string(state),
 			ClusterNotEvaluated: true,
 		}
@@ -340,8 +340,8 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
 	}
 	if lsExists {
-		output := InvestigateInstancesOutput {
-			ClusterState: "unrelated limited support reasons present on cluster",
+		output := InvestigateInstancesOutput{
+			ClusterState:        "unrelated limited support reasons present on cluster",
 			ClusterNotEvaluated: true,
 		}
 		return output, nil
@@ -350,15 +350,15 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	// Verify cluster has expected number of nodes running
 	runningNodesCount, err := c.GetRunningNodesCount(infraID)
 	if err != nil {
-        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
 	expectedNodesCount, err := c.GetExpectedNodesCount()
 	if err != nil {
-        return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
-        // Check for mistmach in running nodes and expected nodes
+	// Check for mistmach in running nodes and expected nodes
 	if runningNodesCount.Master != expectedNodesCount.Master {
 		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
@@ -367,9 +367,9 @@ func (c Client) investigateStartedInstances() (InvestigateInstancesOutput, error
 	}
 
 	output := InvestigateInstancesOutput{
-		UserAuthorized:      true,
-        ExpectedInstances:   *expectedNodesCount,
-        RunningInstances:    *runningNodesCount,
+		UserAuthorized:    true,
+		ExpectedInstances: *expectedNodesCount,
+		RunningInstances:  *runningNodesCount,
 	}
 	return output, nil
 }
@@ -405,36 +405,36 @@ func (c Client) RemoveCCAMLimitedSupport(externalID string) (bool, error) {
 
 // GetRunningNodesCount return the number of running nodes that are currently running in the cluster
 func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error) {
-    instances, err := c.ListRunningInstances(infraID) 
+	instances, err := c.ListRunningInstances(infraID)
 	if err != nil {
 		return nil, err
 	}
 
-    runningNodesCount := &RunningNodesCount{
-        Master: 0,
-        Infra: 0,
-        Worker: 0,
-    }
+	runningNodesCount := &RunningNodesCount{
+		Master: 0,
+		Infra:  0,
+		Worker: 0,
+	}
 
-    for _, instance := range instances {
-        for _, t := range instance.Tags {
-            if *t.Key == "Name" {
-                switch {
-                case strings.Contains(*t.Value, "master"):
-                    runningNodesCount.Master++
-                case strings.Contains(*t.Value, "infra"):
-                    runningNodesCount.Infra++
-                case strings.Contains(*t.Value, "worker"):
-                    runningNodesCount.Worker++
-                default:
-                    continue
-                }
-            }
-        }
+	for _, instance := range instances {
+		for _, t := range instance.Tags {
+			if *t.Key == "Name" {
+				switch {
+				case strings.Contains(*t.Value, "master"):
+					runningNodesCount.Master++
+				case strings.Contains(*t.Value, "infra"):
+					runningNodesCount.Infra++
+				case strings.Contains(*t.Value, "worker"):
+					runningNodesCount.Worker++
+				default:
+					continue
+				}
+			}
+		}
 
-    }
+	}
 
-    return runningNodesCount, nil
+	return runningNodesCount, nil
 }
 
 // GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
@@ -457,77 +457,77 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		return nil, fmt.Errorf("Failed to retrieve infra node data")
 	}
 
-    minWorkerCount, maxWorkerCount := 0, 0
+	minWorkerCount, maxWorkerCount := 0, 0
 	computeCount, computeCountOk := nodes.GetCompute()
 	if computeCountOk {
-	    minWorkerCount += computeCount
-	    maxWorkerCount += computeCount
-    }
-    autoscaleCompute, autoscaleComputeOk := nodes.GetAutoscaleCompute()
-    if autoscaleComputeOk {
-        minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
-        if !ok {
-            fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.cluster)
-            return nil, fmt.Errorf("Failed to retrieve min replicas from autoscale compute data")
-        }
+		minWorkerCount += computeCount
+		maxWorkerCount += computeCount
+	}
+	autoscaleCompute, autoscaleComputeOk := nodes.GetAutoscaleCompute()
+	if autoscaleComputeOk {
+		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
+		if !ok {
+			fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.cluster)
+			return nil, fmt.Errorf("Failed to retrieve min replicas from autoscale compute data")
+		}
 
-        maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
-        if !ok {
-            fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.cluster)
-            return nil, fmt.Errorf("Failed to retrieve max replicas from autoscale compute data")
-        }
+		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
+		if !ok {
+			fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.cluster)
+			return nil, fmt.Errorf("Failed to retrieve max replicas from autoscale compute data")
+		}
 
-        minWorkerCount += minReplicasCount
-        maxWorkerCount += maxReplicasCount
-    }
-    if !computeCountOk && !autoscaleComputeOk {
-        fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.cluster)
-        return nil, fmt.Errorf("Failed to retrieve cluster compute and autoscale compute data")
-    }
+		minWorkerCount += minReplicasCount
+		maxWorkerCount += maxReplicasCount
+	}
+	if !computeCountOk && !autoscaleComputeOk {
+		fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.cluster)
+		return nil, fmt.Errorf("Failed to retrieve cluster compute and autoscale compute data")
+	}
 
-    poolMinWorkersCount, poolMaxWorkersCount := 0, 0
-    machinePools, err := c.GetClusterMachinePools(c.cluster.ID())
-    if err != nil {
+	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
+	machinePools, err := c.GetClusterMachinePools(c.cluster.ID())
+	if err != nil {
 		fmt.Printf("machine pools data is missing, dumping cluster object: %#v", c.cluster)
 		return nil, fmt.Errorf("Failed to retrieve machine pools data")
-    }
-    for _, pool := range machinePools {
-        replicasCount, replicasCountOk := pool.GetReplicas()
-        if replicasCountOk {
-            poolMinWorkersCount += replicasCount
-            poolMaxWorkersCount += replicasCount
-        }
+	}
+	for _, pool := range machinePools {
+		replicasCount, replicasCountOk := pool.GetReplicas()
+		if replicasCountOk {
+			poolMinWorkersCount += replicasCount
+			poolMaxWorkersCount += replicasCount
+		}
 
-        autoscaling, autoscalingOk := pool.GetAutoscaling()
-        if autoscalingOk {
-            minReplicasCount, ok := autoscaling.GetMinReplicas()
-            if !ok {
-                fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-                return nil, fmt.Errorf("Failed to retrieve min replicas data from autoscaling pool")
-            }
+		autoscaling, autoscalingOk := pool.GetAutoscaling()
+		if autoscalingOk {
+			minReplicasCount, ok := autoscaling.GetMinReplicas()
+			if !ok {
+				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				return nil, fmt.Errorf("Failed to retrieve min replicas data from autoscaling pool")
+			}
 
-            maxReplicasCount, ok := autoscaling.GetMaxReplicas()
-            if !ok {
-                fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-                return nil, fmt.Errorf("Failed to retrieve max replicas data from autoscaling pool")
-            }
+			maxReplicasCount, ok := autoscaling.GetMaxReplicas()
+			if !ok {
+				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				return nil, fmt.Errorf("Failed to retrieve max replicas data from autoscaling pool")
+			}
 
-            poolMinWorkersCount += minReplicasCount
-            poolMaxWorkersCount += maxReplicasCount
-        }
+			poolMinWorkersCount += minReplicasCount
+			poolMaxWorkersCount += maxReplicasCount
+		}
 
-        if !replicasCountOk && !autoscalingOk {
-            fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
-            return nil, fmt.Errorf("Failed to retrieve replicas and autoscaling data from autoscaling pool")
-        }
-    }
+		if !replicasCountOk && !autoscalingOk {
+			fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
+			return nil, fmt.Errorf("Failed to retrieve replicas and autoscaling data from autoscaling pool")
+		}
+	}
 
-    nodeCount := &ExpectedNodesCount {
-        Master: masterCount,
-        Infra: infraCount,
-        MinWorker: minWorkerCount + poolMinWorkersCount,
-        MaxWorker: maxWorkerCount + poolMaxWorkersCount,
-    }
+	nodeCount := &ExpectedNodesCount{
+		Master:    masterCount,
+		Infra:     infraCount,
+		MinWorker: minWorkerCount + poolMinWorkersCount,
+		MaxWorker: maxWorkerCount + poolMaxWorkersCount,
+	}
 	return nodeCount, nil
 }
 
