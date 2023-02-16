@@ -102,7 +102,7 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	}
 
 	// I wanted to keep this an if statement, but golangci-lint didn't allow me :(
-	if strings.HasPrefix(username, "osdManagedAdmin-") {
+	if strings.HasPrefix(username, "osdManagedAdmin") {
 		return true
 	}
 
