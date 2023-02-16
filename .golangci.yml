@@ -7,9 +7,6 @@ issues:
   # explicitly disable the exclude-use-default: https://github.com/golangci/golangci-lint/issues/1504
   exclude-use-default: false
 
-# individual linter configs go here
-linters-settings:
-
 # default linters are enabled `golangci-lint help linters`
 linters:
   disable-all: true
@@ -29,3 +26,5 @@ linters:
     - typecheck
     - unused
     - varcheck
+    - gofmt
+    
