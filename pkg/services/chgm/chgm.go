@@ -179,17 +179,11 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
 	}
 
-	summary, ok := i.LimitedSupportReason.GetSummary()
-	if !ok {
-		summary = "No summary was posted"
+	if i.LimitedSupportReason.Summary() != "" || i.LimitedSupportReason.Details() != "" {
+		msg += fmt.Sprintln("\nLimited Support reason sent:")
+		msg += fmt.Sprintf("- Summary: '%s'\n", i.LimitedSupportReason.Summary())
+		msg += fmt.Sprintf("- Details: '%s'\n", i.LimitedSupportReason.Details())
 	}
-	details, ok := i.LimitedSupportReason.GetDetails()
-	if !ok {
-		details = "No details were posted"
-	}
-	msg += fmt.Sprintln("\nLimited Support reason sent:")
-	msg += fmt.Sprintf("- Summary: '%s'\n", summary)
-	msg += fmt.Sprintf("- Details: '%s'\n", details)
 
 	if i.Error != "" {
 		msg += fmt.Sprintf("\nErrors: '%v' \n", i.Error)
@@ -244,24 +238,6 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err)
 	}
 
-	// fmt.Printf("stoppedInstances ::: %#v\n", stoppedInstances)
-
-	if len(stoppedInstances) == 0 {
-		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "no non running instances found, terminated instances may have already expired"}, nil
-	}
-
-	stoppedInstancesEvents, err := c.PollInstanceStopEventsFor(stoppedInstances, 15)
-	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
-	}
-
-	// fmt.Printf("stoppedInstancesEvents ::: %#v\n", stoppedInstancesEvents)
-
-	if len(stoppedInstancesEvents) == 0 {
-		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
-	}
-
 	runningNodesCount, err := c.GetRunningNodesCount(infraID)
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err)
@@ -271,6 +247,21 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 	expectedNodesCount, err := c.GetExpectedNodesCount()
 	if err != nil {
 		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err)
+	}
+
+	if len(stoppedInstances) == 0 {
+		// UserAuthorized: true so SRE will still be alerted for manual investigation
+		return InvestigateInstancesOutput{UserAuthorized: true, RunningInstances:  *runningNodesCount,
+			ExpectedInstances: *expectedNodesCount, Error: "no non running instances found, terminated instances may have already expired"}, nil
+	}
+
+	stoppedInstancesEvents, err := c.PollInstanceStopEventsFor(stoppedInstances, 15)
+	if err != nil {
+		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
+	}
+
+	if len(stoppedInstancesEvents) == 0 {
+		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
 
 	output := InvestigateInstancesOutput{
