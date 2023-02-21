@@ -122,9 +122,10 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	// "OrganizationAccountAccessRole" could be an SRE based on the cluster type
 	// - NON-CCS: "OrganizationAccountAccessRole" can only be SRE
 	// - CCS: "OrganizationAccountAccessRole" can only be customer
-	// We currently flag all stopped/terminated instances by an user that
-	// assumesRole "OrganizationAccountAccessRole" as authorized, as this
-	// results in no limited support.
+	// 
+	// We currently flag all stopped/terminated instances by an user that assumesRoles "OrganizationAccountAccessRole"
+	// as authorized, to avoid putting anything in limited support (we don't know if it's SRE).
+	// 
 	// We could change the logic to know whether or not it was an SRE in the future,
 	// as to not unnecessarily page for all "OrganizationAccountAccessRole" instance stops.
 	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
