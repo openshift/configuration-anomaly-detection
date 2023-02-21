@@ -403,6 +403,64 @@ var _ = Describe("ChgmTriggered", func() {
 					Expect(got.UserAuthorized).To(BeTrue())
 				})
 			})
+
+			When("issuer user is authorized (ManagedOpenShift-Installer-Role)", func() {
+				It("the deletion will be marked as valid", func() {
+					// Arrange
+					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+					mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"PRINCIPALID_REDACTED:123456userid","arn":"arn:aws:sts::1234:assumed-role/cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials/123456userid","accountId":"1234","accessKeyId":"ACCESSKEYIDREDACTED","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"PRINCIPALID_REDACTED","arn":"arn:aws:iam::1234:role/cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials","accountId":"1234","userName":"cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials"},"webIdFederationData":{"federatedProvider":"arn:aws:iam::1234:oidc-provider/rh-oidc.s3.us-east-1.amazonaws.com/redacted","attributes":{}},"attributes":{"creationDate":"2023-02-21T04:55:57Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:55:57Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.168.0.0","userAgent":"aws-sdk-go/1.43.20 (go1.18.7; linux; amd64) openshift.io cluster-api-provider-aws/4.11.0-202301051515.p0.ga796a77.assembly.stream","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-00c1f1234567"}]}},"responseElements":{"requestId":"redacted","instancesSet":{"items":[{"instanceId":"i-00c1f1234567","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":32,"name":"shutting-down"}}]}},"requestID":"redacted","eventID":"redacted","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+					event.Username = aws.String("123456userid")
+					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+
+					// Act
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
+					// Assert
+					Expect(gotErr).NotTo(HaveOccurred())
+					Expect(got.UserAuthorized).To(BeTrue())
+				})
+			})
+
+			When("issuer user is unauthorized (testuser)", func() {
+				It("the deletion will be marked as invalid", func() {
+					// Arrange
+					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+					mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"REDACTED:OCM","arn":"arn:aws:sts::1234:assumed-role/testuser/OCM","accountId":"1234","accessKeyId":"REDACTED","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"REDACTED","arn":"arn:aws:iam::1234:role/testuser","accountId":"1234","userName":"testuser"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:08:01Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:10:40Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.168.0.0","userAgent":"aws-sdk-go-v2/1.17.3 os/linux lang/go/1.19.5 md/GOOS/linux md/GOARCH/amd64 api/ec2/1.25.0","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-00c1f1234567"}]}},"responseElements":{"requestId":"credacted","instancesSet":{"items":[{"instanceId":"i-00c1f1234567","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"credacted","eventID":"e55a8a64-9949-47a9-9fff-12345678","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+
+					// Act
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
+					// Assert
+					Expect(gotErr).NotTo(HaveOccurred())
+					Expect(got.UserAuthorized).To(BeFalse())
+				})
+			})
+			When("issuer user is authorized (openshift-machine-api-aws)", func() {
+				It("the deletion will be marked as valid", func() {
+					// Arrange
+					mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
+					mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+					mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+					mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+					event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"PRINCIPALID_REDACTED:1234567789","arn":"arn:aws:sts::1234:assumed-role/cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials/1234567789","accountId":"1234","accessKeyId":"REDACTED","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"PRINCIPALID_REDACTED","arn":"arn:aws:iam::1234:role/cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials","accountId":"1234","userName":"cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials"},"webIdFederationData":{"federatedProvider":"arn:aws:iam::1234:oidc-provider/rh-oidc.s3.us-east-1.amazonaws.com/redacted","attributes":{}},"attributes":{"creationDate":"2023-02-21T04:54:56Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:54:56Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.168.0.0","userAgent":"aws-sdk-go/1.43.20 (go1.18.7; linux; amd64) openshift.io cluster-api-provider-aws/4.11.0-202301051515.p0.ga796a77.assembly.stream","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-08020c19123456789"}]}},"responseElements":{"requestId":"b8c78d9a-51de-4910-123456789","instancesSet":{"items":[{"instanceId":"i-08020c19123456789","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":32,"name":"shutting-down"}}]}},"requestID":"b8c78d9a-51de-4910-123456789","eventID":"5455f882-a4db-4505-bea6-123456789","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+					event.Username = aws.String("cluster-name-n9o7-openshift-machine-api-aws-cloud-credentials")
+					mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+
+					// Act
+					got, gotErr := isRunning.InvestigateStoppedInstances("")
+					// Assert
+					Expect(gotErr).NotTo(HaveOccurred())
+					Expect(got.UserAuthorized).To(BeTrue())
+				})
+			})
 		})
 	})
 })

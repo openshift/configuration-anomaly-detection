@@ -83,8 +83,6 @@ type Client struct {
 // as this is the thing that might change the most it is at the top.
 // Additionally, it is private as I don't see anyone using this outside of AreAllInstancesRunning
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
-	//TODO: what is the best ordering for this? (from the most common to the most rare)
-
 	// operatorIamNames will hold all of the iam names that are allowed to stop instances
 	// TODO: (remove when there is more than one item) holds only one item to allow adding IAM stuff later
 	// pulled by:
@@ -95,8 +93,15 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	operatorIamNames := []string{
 		"openshift-machine-api-aws",
 	}
+
 	for _, operatorIamName := range operatorIamNames {
-		if strings.Contains(username, operatorIamName) {
+		// HOTFIX(OSD-15308): the value of `username` is not clearly documented and is obtained from the
+		// API call made to fetch cloudtrail events. (see https://docs.aws.amazon.com/sdk-for-go/api/service/cloudtrail/#Event)
+		// The `openshift-machine-api-aws` operator uses `assumeRole` to perform the node stops/terminations,
+		// therefore it is contained in the `issuerUserName` field.
+		// To not break anything with this hotfix, we're adding the check on top of the currently likely
+		// broken `strings.Contains(username, operatorIamName)`.
+		if strings.Contains(issuerUsername, operatorIamName) || strings.Contains(username, operatorIamName) {
 			return true
 		}
 	}
@@ -112,7 +117,7 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		return true
 	}
 
-	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such like the bootstrap instance
+	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such as the bootstrap instance
 	if issuerUsername == "ManagedOpenShift-Installer-Role" {
 		return true
 	}
