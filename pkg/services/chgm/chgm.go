@@ -79,9 +79,7 @@ type Client struct {
 	cd      *hivev1.ClusterDeployment
 }
 
-// isUserAllowedToStop will verify if a user is allowed to stop instances.
-// as this is the thing that might change the most it is at the top.
-// Additionally, it is private as I don't see anyone using this outside of AreAllInstancesRunning
+// isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
 	// operatorIamNames will hold all of the iam names that are allowed to stop instances
 	// TODO: (remove when there is more than one item) holds only one item to allow adding IAM stuff later
@@ -106,7 +104,6 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		}
 	}
 
-	// I wanted to keep this an if statement, but golangci-lint didn't allow me :(
 	if strings.HasPrefix(username, "osdManagedAdmin") {
 		return true
 	}
@@ -122,6 +119,14 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		return true
 	}
 
+	// "OrganizationAccountAccessRole" could be an SRE based on the cluster type
+	// - NON-CCS: "OrganizationAccountAccessRole" can only be SRE
+	// - CCS: "OrganizationAccountAccessRole" can only be customer
+	// We currently flag all stopped/terminated instances by an user that
+	// assumesRole "OrganizationAccountAccessRole" as authorized, as this
+	// results in no limited support.
+	// We could change the logic to know whether or not it was an SRE in the future,
+	// as to not unnecessarily page for all "OrganizationAccountAccessRole" instance stops.
 	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
 }
 
