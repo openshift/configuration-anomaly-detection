@@ -13,7 +13,7 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
 	}
 
-	client, err := pagerduty.NewWithToken(cadPD, cadEscalationPolicy, cadSilentPolicy, webhookPayload)
+	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
 		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
 	}

@@ -72,16 +72,42 @@ type WebhookPayload struct {
 	} `json:"event"`
 }
 
+// Unmarshal wraps the json.Unmarshal to do some sanity checks
+// it may be worth to do a proper schema and validation
+func (c *WebhookPayload) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, c)
+	if err != nil {
+		return err
+	}
+
+	if c.Event.EventType == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: event_type")}
+	}
+	if c.Event.Data.Service.ServiceID == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: ServiceID")}
+	}
+	if c.Event.Data.Service.Summary == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Summary")}
+	}
+	if c.Event.Data.Title == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Title")}
+	}
+	if c.Event.Data.IncidentID == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: IncidentID")}
+	}
+	return nil
+}
+
 // NewWithToken is similar to New, but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
-func NewWithToken(authToken, escalationPolicy, silentPolicy string, webhookPayload []byte) (Client, error) {
+func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (Client, error) {
 	parsedPayload := WebhookPayload{}
-	err := json.Unmarshal(webhookPayload, &parsedPayload)
+	err := parsedPayload.Unmarshal(webhookPayload)
 	if err != nil {
 		return Client{}, UnmarshalErr{Err: err}
 	}
 	c := Client{
-		sdkClient:        sdk.NewClient(authToken),
+		sdkClient:        sdk.NewClient(authToken, options...),
 		escalationPolicy: escalationPolicy,
 		silentPolicy:     silentPolicy,
 		parsedPayload:    parsedPayload,

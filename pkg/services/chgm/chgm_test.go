@@ -1,41 +1,47 @@
 package chgm_test
 
-// import (
-// 	"fmt"
+import (
+	"fmt"
 
-// 	"github.com/aws/aws-sdk-go/aws"
-// 	"github.com/aws/aws-sdk-go/service/cloudtrail"
-// 	"github.com/aws/aws-sdk-go/service/ec2"
-// 	"github.com/golang/mock/gomock"
-// 	. "github.com/onsi/ginkgo/v2"
-// 	. "github.com/onsi/gomega"
-// 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-// 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-// 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm/mock"
-// 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-// )
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/cloudtrail"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/golang/mock/gomock"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm/mock"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+)
 
-// var _ = Describe("ChgmTriggered", func() {
-// 	Describe("AreAllInstancesRunning", func() {
+var _ = Describe("ChgmTriggered", func() {
+	Describe("AreAllInstancesRunning", func() {
 
 		// this is a var but I use it as a const
 		var fakeErr = fmt.Errorf("test triggered")
 		var (
-			mockCtrl          *gomock.Controller
-			mockClient        *mock.MockService
-			isRunning         chgm.Client
-			cluster           *v1.Cluster
-			clusterDeployment hivev1.ClusterDeployment
-			machinePools      []*v1.MachinePool
-			infraID           string
-			instance          ec2.Instance
+			mockCtrl           *gomock.Controller
+			mockClient         *mock.MockService
+			isRunning          chgm.Client
+			cluster            *v1.Cluster
+			clusterDeployment  hivev1.ClusterDeployment
+			infraID            string
+			instance           ec2.Instance
+			chgmLimitedSupport ocm.LimitedSupportReason
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
 			mockClient = mock.NewMockService(mockCtrl)
-			isRunning = chgm.Client{Service: mockClient}
+
+			chgmLimitedSupport = ocm.LimitedSupportReason{
+				Summary: "Cluster not checking in",
+				Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
+			}
+
 			var err error
-			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Master(1).Infra(0).Compute(0)).Build()
+			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Build()
 			Expect(err).ToNot(HaveOccurred())
 			clusterDeployment = hivev1.ClusterDeployment{
 				Spec: hivev1.ClusterDeploymentSpec{
@@ -44,46 +50,56 @@ package chgm_test
 					}}}
 			infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
 			instance = ec2.Instance{InstanceId: aws.String("12345")}
+
+			isRunning = chgm.Client{
+				Service:           mockClient,
+				Cluster:           cluster,
+				ClusterDeployment: &clusterDeployment,
+			}
 		})
 		AfterEach(func() {
 			mockCtrl.Finish()
 		})
-		When("GetClusterDeployment fails", func() {
-			It("Should bubble up the error", func() {
-				// Arrange
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(nil, fakeErr)
-				// Act
-				_, gotErr := isRunning.InvestigateStoppedInstances("")
-				// Assert
-				Expect(gotErr).To(HaveOccurred())
+		When("Triggered finds instances stopped by the customer", func() {
+			It("should put the cluster into limited support", func() {
+				event := cloudtrail.Event{
+					Username:        aws.String("12345"),
+					CloudTrailEvent: aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`),
+				}
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().LimitedSupportReasonsExist(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
+				// TODO discuss to which degree we want to mock
+				mockClient.EXPECT().SilenceAlert(gomock.Any())
+
+				gotErr := isRunning.Triggered()
+
+				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
+		When("Triggered errors", func() {
+			It("should update the incident notes and escalate to primary", func() {
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fakeErr)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
 
-// 		When("GetClusterDeployment fails", func() {
-// 			It("the GetClusterDeployment should receive the correct cluster_id and bubble up the error", func() {
-// 				// Arrange
-// 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
-// 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(nil, fakeErr)
-// 				// Act
-// 				_, gotErr := isRunning.InvestigateStoppedInstances("")
-// 				// Assert
-// 				Expect(gotErr).To(HaveOccurred())
-// 			})
-// 		})
+				gotErr := isRunning.Triggered()
 
-// 		When("ListNonRunningInstances fails", func() {
-// 			It("the ListNonRunningInstances should receive the correct InfraID and bubble the error", func() {
-// 				// Arrange
-// 				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, nil)
-// 				mockClient.EXPECT().GetClusterDeployment(gomock.Eq(cluster.ID())).Return(&clusterDeployment, nil)
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("there were no stopped instances", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{}, nil)
 
-// 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
-// 				// Act
-// 				_, gotErr := isRunning.InvestigateStoppedInstances("")
-// 				// Assert
-// 				Expect(gotErr).To(HaveOccurred())
-// 			})
-// 		})
+				gotErr := isRunning.Triggered()
+				// Assert
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(got.UserAuthorized).To(BeTrue())
+			})
+		})
+	})
+})
 
 		When("there were no stopped instances", func() {
 			It("should succeed and return that no non running instances were found", func() {
