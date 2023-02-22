@@ -116,17 +116,11 @@ func (c *Client) Triggered() error {
 
 // Resolved will take appropriate action against a cluster whose CHGM incident has resolved.
 func (c *Client) Resolved() error {
-	res, err := c.investigateStartedInstances()
+	res, err := c.investigateRestoredCluster()
 
 	// The investigation encountered an error & never completed - alert Primary and report the error
 	if err != nil {
-		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
-		if err != nil {
-			fmt.Println("could not update incident notes")
-		}
-		return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
-			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(err), c.GetServiceID())
-		})
+		return err
 	}
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
@@ -144,17 +138,32 @@ func (c *Client) Resolved() error {
 	// Investigation completed, but an error was encountered.
 	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
 	if res.Error != "" {
-		fmt.Printf("investigation completed, but cluster has not been restored properly\n")
-		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
-			return c.AddNote(res.String())
-		})
-		if err != nil {
-			fmt.Printf("failed to add notes to incident: %s\n", res.String())
-		}
+		fmt.Printf("Cluster failed alert resolution check. Result: %#v\n", res)
+		fmt.Printf("Waiting %d seconds before rechecking cluster\n", restoredClusterRetryDelaySeconds)
 
-		return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
-			return c.CreateNewAlert(c.buildAlertForFailedPostCHGM(res.Error), c.GetServiceID())
-		})
+		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
+
+		res, err = c.investigateRestoredCluster()
+		if err != nil {
+			return fmt.Errorf("failure while re-investigating cluster: %w", err)
+		}
+		if res.ClusterNotEvaluated {
+			fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
+			return nil
+		}
+		if res.Error != "" {
+			fmt.Printf("investigation completed, but cluster has not been restored properly\n")
+			err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+				return c.AddNote(res.String())
+			})
+			if err != nil {
+				fmt.Printf("failed to add notes to incident: %s\n", res.String())
+			}
+
+			return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+				return c.CreateNewAlert(c.buildAlertForFailedPostCHGM(res.Error), c.GetServiceID())
+			})
+		}
 	}
 	fmt.Println("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
 	err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
@@ -176,26 +185,19 @@ func (c *Client) Resolved() error {
 
 // investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
 // Primary is notified via PagerDuty incident
-func (c *Client) investigateRestoredCluster(externalClusterID, serviceID string) (res InvestigateInstancesOutput, err error) {
-	res, err = c.investigateStartedInstances(externalClusterID)
+func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, err error) {
+	res, err = c.investigateStartedInstances()
 	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
 	if err != nil {
-		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", externalClusterID, err)
+		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", c.Cluster.ExternalID(), err)
 		originalErr := err
-		retries := 1
-
-		err = c.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
-		for err != nil {
-			fmt.Printf("Failed to escalate to Primary, retrying (attempt %d). Error encountered when escalating: %v\n", retries, err)
-
-			// Sleep for a time, backing off based on the number of retries (up to 300 seconds)
-			c.sleepBeforeRetrying(retries, 300)
-			retries++
-
-			err = c.CreateIncidentForInvestigationFailure(originalErr, externalClusterID, serviceID)
+		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
+		if err != nil {
+			fmt.Println("could not update incident notes")
 		}
-		fmt.Println("Primary has been alerted")
-		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", externalClusterID, originalErr)
+		return InvestigateInstancesOutput{}, utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
+		})
 	}
 
 	return res, nil
@@ -314,10 +316,10 @@ func (i InvestigateInstancesOutput) String() string {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
 	}
 
-	if i.LimitedSupportReason.Summary() != "" || i.LimitedSupportReason.Details() != "" {
+	if i.LimitedSupportReason != (ocm.LimitedSupportReason{}) {
 		msg += fmt.Sprintln("\nLimited Support reason sent:")
-		msg += fmt.Sprintf("- Summary: '%s'\n", i.LimitedSupportReason.Summary())
-		msg += fmt.Sprintf("- Details: '%s'\n", i.LimitedSupportReason.Details())
+		msg += fmt.Sprintf("- Summary: '%s'\n", i.LimitedSupportReason.Summary)
+		msg += fmt.Sprintf("- Details: '%s'\n", i.LimitedSupportReason.Details)
 	}
 
 	if i.Error != "" {
@@ -500,21 +502,21 @@ func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error)
 // GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
 // We do not use nodes.GetTotal() here, because total seems to be always 0.
 func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
-	nodes, ok := c.cluster.GetNodes()
+	nodes, ok := c.Cluster.GetNodes()
 	if !ok {
 		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
-		fmt.Printf("node data is missing, dumping cluster object: %#v", c.cluster)
-		return nil, fmt.Errorf("Failed to retrieve cluster node data")
+		fmt.Printf("node data is missing, dumping cluster object: %#v", c.Cluster)
+		return nil, fmt.Errorf("failed to retrieve cluster node data")
 	}
 	masterCount, ok := nodes.GetMaster()
 	if !ok {
-		fmt.Printf("master node data is missing, dumping cluster object: %#v", c.cluster)
-		return nil, fmt.Errorf("Failed to retrieve master node data")
+		fmt.Printf("master node data is missing, dumping cluster object: %#v", c.Cluster)
+		return nil, fmt.Errorf("failed to retrieve master node data")
 	}
 	infraCount, ok := nodes.GetInfra()
 	if !ok {
-		fmt.Printf("infra node data is missing, dumping cluster object: %#v", c.cluster)
-		return nil, fmt.Errorf("Failed to retrieve infra node data")
+		fmt.Printf("infra node data is missing, dumping cluster object: %#v", c.Cluster)
+		return nil, fmt.Errorf("failed to retrieve infra node data")
 	}
 
 	minWorkerCount, maxWorkerCount := 0, 0
@@ -527,29 +529,29 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 	if autoscaleComputeOk {
 		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
 		if !ok {
-			fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.cluster)
-			return nil, fmt.Errorf("Failed to retrieve min replicas from autoscale compute data")
+			fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			return nil, fmt.Errorf("failed to retrieve min replicas from autoscale compute data")
 		}
 
 		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
 		if !ok {
-			fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.cluster)
-			return nil, fmt.Errorf("Failed to retrieve max replicas from autoscale compute data")
+			fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			return nil, fmt.Errorf("failed to retrieve max replicas from autoscale compute data")
 		}
 
 		minWorkerCount += minReplicasCount
 		maxWorkerCount += maxReplicasCount
 	}
 	if !computeCountOk && !autoscaleComputeOk {
-		fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.cluster)
-		return nil, fmt.Errorf("Failed to retrieve cluster compute and autoscale compute data")
+		fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.Cluster)
+		return nil, fmt.Errorf("failed to retrieve cluster compute and autoscale compute data")
 	}
 
 	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
-	machinePools, err := c.GetClusterMachinePools(c.cluster.ID())
+	machinePools, err := c.GetClusterMachinePools(c.Cluster.ID())
 	if err != nil {
-		fmt.Printf("machine pools data is missing, dumping cluster object: %#v", c.cluster)
-		return nil, fmt.Errorf("Failed to retrieve machine pools data")
+		fmt.Printf("machine pools data is missing, dumping cluster object: %#v", c.Cluster)
+		return nil, fmt.Errorf("failed to retrieve machine pools data")
 	}
 	for _, pool := range machinePools {
 		replicasCount, replicasCountOk := pool.GetReplicas()
@@ -563,13 +565,13 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 			minReplicasCount, ok := autoscaling.GetMinReplicas()
 			if !ok {
 				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-				return nil, fmt.Errorf("Failed to retrieve min replicas data from autoscaling pool")
+				return nil, fmt.Errorf("failed to retrieve min replicas data from autoscaling pool")
 			}
 
 			maxReplicasCount, ok := autoscaling.GetMaxReplicas()
 			if !ok {
 				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-				return nil, fmt.Errorf("Failed to retrieve max replicas data from autoscaling pool")
+				return nil, fmt.Errorf("failed to retrieve max replicas data from autoscaling pool")
 			}
 
 			poolMinWorkersCount += minReplicasCount
@@ -578,7 +580,7 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 
 		if !replicasCountOk && !autoscalingOk {
 			fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
-			return nil, fmt.Errorf("Failed to retrieve replicas and autoscaling data from autoscaling pool")
+			return nil, fmt.Errorf("failed to retrieve replicas and autoscaling data from autoscaling pool")
 		}
 	}
 

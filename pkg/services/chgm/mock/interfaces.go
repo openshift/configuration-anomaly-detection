@@ -10,6 +10,7 @@ import (
 	cloudtrail "github.com/aws/aws-sdk-go/service/cloudtrail"
 	ec2 "github.com/aws/aws-sdk-go/service/ec2"
 	gomock "github.com/golang/mock/gomock"
+	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	pagerduty "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
@@ -79,67 +80,6 @@ func (mr *MockServiceMockRecorder) DeleteLimitedSupportReasons(ls, clusterID int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLimitedSupportReasons", reflect.TypeOf((*MockService)(nil).DeleteLimitedSupportReasons), ls, clusterID)
 }
 
-// GetServiceID mocks base method.
-func (m *MockService) GetServiceID() string {
-	m.ctrl.T.Helper()
-<<<<<<< HEAD
-	ret := m.ctrl.Call(m, "DeleteCHGMLimitedSupportReason", clusterID)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeleteCHGMLimitedSupportReason indicates an expected call of DeleteCHGMLimitedSupportReason.
-func (mr *MockServiceMockRecorder) DeleteCHGMLimitedSupportReason(clusterID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCHGMLimitedSupportReason", reflect.TypeOf((*MockService)(nil).DeleteCHGMLimitedSupportReason), clusterID)
-}
-
-// ExtractServiceIDFromBytes mocks base method.
-func (m *MockService) ExtractServiceIDFromBytes(data []byte) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtractServiceIDFromBytes", data)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ExtractServiceIDFromBytes indicates an expected call of ExtractServiceIDFromBytes.
-func (mr *MockServiceMockRecorder) ExtractServiceIDFromBytes(data interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtractServiceIDFromBytes", reflect.TypeOf((*MockService)(nil).ExtractServiceIDFromBytes), data)
-}
-
-// GetClusterDeployment mocks base method.
-func (m *MockService) GetClusterDeployment(clusterID string) (*v10.ClusterDeployment, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterDeployment", clusterID)
-	ret0, _ := ret[0].(*v10.ClusterDeployment)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetClusterDeployment indicates an expected call of GetClusterDeployment.
-func (mr *MockServiceMockRecorder) GetClusterDeployment(clusterID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterDeployment", reflect.TypeOf((*MockService)(nil).GetClusterDeployment), clusterID)
-}
-
-// GetClusterInfo mocks base method.
-func (m *MockService) GetClusterInfo(identifier string) (*v1.Cluster, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterInfo", identifier)
-	ret0, _ := ret[0].(*v1.Cluster)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetClusterInfo indicates an expected call of GetClusterInfo.
-func (mr *MockServiceMockRecorder) GetClusterInfo(identifier interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockService)(nil).GetClusterInfo), identifier)
-}
-
 // GetClusterMachinePools mocks base method.
 func (m *MockService) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
 	m.ctrl.T.Helper()
@@ -155,13 +95,10 @@ func (mr *MockServiceMockRecorder) GetClusterMachinePools(clusterID interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockService)(nil).GetClusterMachinePools), clusterID)
 }
 
-// GetEscalationPolicy mocks base method.
-func (m *MockService) GetEscalationPolicy() string {
+// GetServiceID mocks base method.
+func (m *MockService) GetServiceID() string {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEscalationPolicy")
-=======
 	ret := m.ctrl.Call(m, "GetServiceID")
->>>>>>> c657fa3 (Generate mock)
 	ret0, _ := ret[0].(string)
 	return ret0
 }
