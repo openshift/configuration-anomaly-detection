@@ -79,12 +79,8 @@ type Client struct {
 	cd      *hivev1.ClusterDeployment
 }
 
-// isUserAllowedToStop will verify if a user is allowed to stop instances.
-// as this is the thing that might change the most it is at the top.
-// Additionally, it is private as I don't see anyone using this outside of AreAllInstancesRunning
+// isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
-	//TODO: what is the best ordering for this? (from the most common to the most rare)
-
 	// operatorIamNames will hold all of the iam names that are allowed to stop instances
 	// TODO: (remove when there is more than one item) holds only one item to allow adding IAM stuff later
 	// pulled by:
@@ -95,13 +91,19 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 	operatorIamNames := []string{
 		"openshift-machine-api-aws",
 	}
+
 	for _, operatorIamName := range operatorIamNames {
-		if strings.Contains(username, operatorIamName) {
+		// HOTFIX(OSD-15308): the value of `username` is not clearly documented and is obtained from the
+		// API call made to fetch cloudtrail events. (see https://docs.aws.amazon.com/sdk-for-go/api/service/cloudtrail/#Event)
+		// The `openshift-machine-api-aws` operator uses `assumeRole` to perform the node stops/terminations,
+		// therefore it is contained in the `issuerUserName` field.
+		// To not break anything with this hotfix, we're adding the check on top of the currently likely
+		// broken `strings.Contains(username, operatorIamName)`.
+		if strings.Contains(issuerUsername, operatorIamName) || strings.Contains(username, operatorIamName) {
 			return true
 		}
 	}
 
-	// I wanted to keep this an if statement, but golangci-lint didn't allow me :(
 	if strings.HasPrefix(username, "osdManagedAdmin") {
 		return true
 	}
@@ -112,11 +114,20 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		return true
 	}
 
-	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such like the bootstrap instance
+	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such as the bootstrap instance
 	if issuerUsername == "ManagedOpenShift-Installer-Role" {
 		return true
 	}
 
+	// "OrganizationAccountAccessRole" could be an SRE based on the cluster type
+	// - NON-CCS: "OrganizationAccountAccessRole" can only be SRE
+	// - CCS: "OrganizationAccountAccessRole" can only be customer
+	// 
+	// We currently flag all stopped/terminated instances by an user that assumesRoles "OrganizationAccountAccessRole"
+	// as authorized, to avoid putting anything in limited support (we don't know if it's SRE).
+	// 
+	// We could change the logic to know whether or not it was an SRE in the future,
+	// as to not unnecessarily page for all "OrganizationAccountAccessRole" instance stops.
 	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
 }
 
