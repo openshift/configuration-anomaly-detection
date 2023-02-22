@@ -133,6 +133,7 @@ func (c *Client) Resolved() error {
 			fmt.Printf("Failed to add notes to incident: %s\n", res.String())
 			return nil
 		}
+		return nil
 	}
 
 	// Investigation completed, but an error was encountered.
@@ -195,9 +196,10 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 		if err != nil {
 			fmt.Println("could not update incident notes")
 		}
-		return InvestigateInstancesOutput{}, utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
 		})
+		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", c.Cluster.ExternalID(), originalErr)
 	}
 
 	return res, nil
