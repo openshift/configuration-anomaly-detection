@@ -286,11 +286,19 @@ func (c Client) investigateStoppedInstances() (InvestigateInstancesOutput, error
 			UserName:       *event.Username,
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
+
 		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID) {
 			output.UserAuthorized = false
+
+			// Return early with `output` containing the first unauthorized user.
+			// This prevents overwriting the `Output.User` fields in the next loop.
+			return output, nil
 		}
 	}
 
+	// Return the last `stoppedInstanceEvent` `UserInfo`, ideally we would want to return 
+	// all users that stopped events, not just the last one. But in the case it's authorized, 
+	// it's not too much of an issue to just keep one of the authorized users. 
 	return output, nil
 }
 
