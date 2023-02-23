@@ -196,9 +196,12 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 		if err != nil {
 			fmt.Println("could not update incident notes")
 		}
-		utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
 			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
 		})
+		if err != nil {
+			fmt.Println("failed to alert primary: %w", err)
+		}
 		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", c.Cluster.ExternalID(), originalErr)
 	}
 
