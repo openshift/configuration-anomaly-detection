@@ -105,6 +105,11 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// If jumpRoles does not return an aws.Client and there was no error
+	// then cluster is in limited support for missing cloud credentials
+	if customerAwsClient == (aws.Client{}) {
+		return nil
+	}
 
 	investigationClient := investigation.Client{}
 
