@@ -10,12 +10,14 @@
 - [Documentation](#documentation)
   - [CAD CLI](#cad-cli)
   - [Integrations](#integrations)
-  - [Workflow](#workflow)
+  - [Overview](#overview)
+    - [Alert firing investigation](#alert-firing-investigation)
+  - [CHGM investigation overview](#chgm-investigation-overview)
   - [Templates](#templates)
   - [Dashboards](#dashboards)
   - [Deployment](#deployment)
   - [Boilerplate](#boilerplate)
-  - [PipelinePruner](#PipelinePruner)
+  - [PipelinePruner](#pipelinepruner)
 
 # Configuration Anomaly Detection
 
@@ -41,7 +43,17 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 * [PagerDuty](./pkg/pagerduty/README.md) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
 * [OCM](./pkg/ocm/README.md) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
 
-## Workflow
+## Overview
+
+- CAD is a command line tool that is run in tekton pipelines. 
+- The tekton service is running on an app-sre cluster. 
+- CAD is triggered by PagerDuty webhooks configured on selected services, meaning that all alerts in that service trigger a CAD pipeline. 
+- CAD uses the data received via the webhook to determine which investigation to start.
+
+![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
+![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
+
+### Alert firing investigation
 
 1. PagerDuty webhook receives CHGM alert from Dead Man's Snitch.
 2. CAD Tekton pipeline is triggered via PagerDuty sending a webhook to Tekton EventListener.
@@ -54,6 +66,12 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
         - **Note:** Authorized users have prefix RH-SRE, osdManagedAdmin, or have the ManagedOpenShift-Installer-Role.
     - Not authorized (not SRE or OSD managed), posts the appropriate limited support reason and silences the alert.
 6. Adds notes with investigation details to the PagerDuty alert.
+
+
+## CHGM investigation overview
+
+![CHGM investigation overview](./images/cad_chgm_investigation/chgm_investigation_dark.png#gh-dark-mode-only)
+![CHGM investigation overview](./images/cad_chgm_investigation/chgm_investigation_light.png#gh-light-mode-only)
 
 ## Templates
 
