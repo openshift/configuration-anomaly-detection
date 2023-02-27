@@ -2,7 +2,7 @@
 
 Use the `aws.New` to create an AWS client, and use the functions it has to interact with AWS resources.
 
-See [cluster-missing.go](../../cadctl/cmd/cluster-missing/cluster-missing.go) for an example.
+See [investigation.go](../../cadctl/cmd/investigate/investigate.go) for an example.
 
 ## Testing
 
