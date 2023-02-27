@@ -209,8 +209,6 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 }
 
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
-
-// isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
 	// operatorIamNames will hold all of the iam names that are allowed to stop instances
 	// TODO: (remove when there is more than one item) holds only one item to allow adding IAM stuff later
