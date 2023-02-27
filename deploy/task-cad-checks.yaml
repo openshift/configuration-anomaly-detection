@@ -23,7 +23,7 @@ spec:
           $(params.payload)
           EOF
           # run the cadctl command
-          cadctl cluster-missing --payload-path $file
+          cadctl investigate --payload-path $file
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:

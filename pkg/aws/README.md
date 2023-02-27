@@ -37,7 +37,7 @@ See [investigation.go](../../cadctl/cmd/investigate/investigate.go) for an examp
 	In your code, you can import envvars like in this example:
 
 
-	[embedmd]:# (../../cadctl/cmd/cluster-missing/cluster-missing.go /\/\/ GetAWSClient/ /^}$/)
+	[embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetAWSClient/ /^}$/)
 	```go
 	// GetAWSClient will retrieve the AwsClient from the 'aws' package
 	func GetAWSClient() (aws.Client, error) {
@@ -59,10 +59,10 @@ See [investigation.go](../../cadctl/cmd/investigate/investigate.go) for an examp
 	}
 	```
 
-6. Execute the command:
+6. Execute the command:x``
 
 	```bash
 	export $(cat file.env)
-	../../cadctl/cadctl cluster-missing -i just_a_number
+	../../cadctl/cadctl investigate -i just_a_number
 	```
 

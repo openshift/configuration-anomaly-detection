@@ -178,7 +178,7 @@ objects:
         $(params.payload)
         EOF
         # run the cadctl command
-        cadctl cluster-missing --payload-path $file
+        cadctl investigate --payload-path $file
       command:
       - /bin/bash
       - -c
