@@ -109,7 +109,7 @@ func (c *Client) Triggered() error {
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
 	fmt.Printf("Sending limited support reason: %s\n", chgmLimitedSupport.Summary)
-	return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+	return utils.WithRetries(func() error {
 		return c.PostLimitedSupport(res.String())
 	})
 }
@@ -126,7 +126,7 @@ func (c *Client) Resolved() error {
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
 		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
-		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		err = utils.WithRetries(func() error {
 			return c.AddNote(res.String())
 		})
 		if err != nil {
@@ -154,25 +154,25 @@ func (c *Client) Resolved() error {
 		}
 		if res.Error != "" {
 			fmt.Printf("investigation completed, but cluster has not been restored properly\n")
-			err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			err = utils.WithRetries(func() error {
 				return c.AddNote(res.String())
 			})
 			if err != nil {
 				fmt.Printf("failed to add notes to incident: %s\n", res.String())
 			}
 
-			return utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+			return utils.WithRetries(func() error {
 				return c.CreateNewAlert(c.buildAlertForFailedPostCHGM(res.Error), c.GetServiceID())
 			})
 		}
 	}
 	fmt.Println("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
-	err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+	err = utils.WithRetries(func() error {
 		return c.DeleteLimitedSupportReasons(chgmLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
 		fmt.Println("failed to remove limited support")
-		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		err = utils.WithRetries(func() error {
 			return c.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
 		})
 		if err != nil {
@@ -196,7 +196,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 		if err != nil {
 			fmt.Println("could not update incident notes")
 		}
-		err = utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		err = utils.WithRetries(func() error {
 			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
 		})
 		if err != nil {

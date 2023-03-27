@@ -4,7 +4,6 @@ package ccam
 import (
 	"fmt"
 	"regexp"
-	"time"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -112,13 +111,13 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 // if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
 func (c Client) RemoveLimitedSupport() error {
-	err := utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+	err := utils.WithRetries(func() error {
 		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
-		fmt.Printf("Failed '%d' times to remove CCAM Limited support reason from cluster. Attempting to alert Primary.\n", utils.DefaultRetries)
+		fmt.Println("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
 		originalErr := err
-		err := utils.Retry(utils.DefaultRetries, time.Second*2, func() error {
+		err := utils.WithRetries(func() error {
 			return c.CreateNewAlert(c.buildAlertForCCAM(originalErr), c.GetServiceID())
 		})
 		if err != nil {
