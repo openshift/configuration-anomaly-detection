@@ -109,19 +109,34 @@ func (mr *MockServiceMockRecorder) GetServiceID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockService)(nil).GetServiceID))
 }
 
-// LimitedSupportReasonsExist mocks base method.
-func (m *MockService) LimitedSupportReasonsExist(clusterID string) (bool, error) {
+// IsInLimitedSupport mocks base method.
+func (m *MockService) IsInLimitedSupport(clusterID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LimitedSupportReasonsExist", clusterID)
+	ret := m.ctrl.Call(m, "IsInLimitedSupport", clusterID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// LimitedSupportReasonsExist indicates an expected call of LimitedSupportReasonsExist.
-func (mr *MockServiceMockRecorder) LimitedSupportReasonsExist(clusterID interface{}) *gomock.Call {
+// IsInLimitedSupport indicates an expected call of IsInLimitedSupport.
+func (mr *MockServiceMockRecorder) IsInLimitedSupport(clusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LimitedSupportReasonsExist", reflect.TypeOf((*MockService)(nil).LimitedSupportReasonsExist), clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInLimitedSupport", reflect.TypeOf((*MockService)(nil).IsInLimitedSupport), clusterID)
+}
+
+// LimitedSupportReasonExists mocks base method.
+func (m *MockService) LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LimitedSupportReasonExists", ls, clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LimitedSupportReasonExists indicates an expected call of LimitedSupportReasonExists.
+func (mr *MockServiceMockRecorder) LimitedSupportReasonExists(ls, clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LimitedSupportReasonExists", reflect.TypeOf((*MockService)(nil).LimitedSupportReasonExists), ls, clusterID)
 }
 
 // ListNonRunningInstances mocks base method.
