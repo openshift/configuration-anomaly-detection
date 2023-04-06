@@ -30,6 +30,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -116,7 +117,7 @@ func run(cmd *cobra.Command, args []string) error {
 	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
-		_, err = checkCloudProvider(&ocmClient, externalClusterID, []string{"aws"})
+		_, err = checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
 		if err != nil {
 			return fmt.Errorf("failed cloud provider check: %w", err)
 		}
@@ -274,19 +275,29 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 	return client, nil
 }
 
-// checkCloudProvider takes a list of supported providers
-// and retrieves the clusters cloud provider. It will return the cloud provider
-// if its on the list or an error if its not supported or the clusters cloud provider could
-// not be gathered.
-func checkCloudProvider(ocmClient *ocm.Client, externalClusterID string, supportedProviders []string) (string, error) {
+// checkCloudProviderSupported takes a list of supported providers
+// and retrieves the clusters cloud provider. It will
+// - return the cloud provider if it matches one contained in the supportedProviders list
+// - add a note to pagerduty and return an error if it is not on the supportedProviders list
+func checkCloudProviderSupported(ocmClient *ocm.Client, pdClient *pagerduty.Client, externalClusterID string, supportedProviders []string) (string, error) {
 	cloudProvider, err := ocmClient.GetCloudProviderID(externalClusterID)
 	if err != nil {
 		return "", err
 	}
+
 	for _, provider := range supportedProviders {
 		if cloudProvider == provider {
 			return cloudProvider, nil
 		}
 	}
-	return "", fmt.Errorf("the clusters cloud provider is not supported")
+
+	// CloudProvider doesn't match, try to add a note to pagerduty
+	err = utils.WithRetries(func() error {
+		return pdClient.AddNote("Skipping investigation: no implementation for cloud provider " + cloudProvider)
+	})
+	if err != nil {
+		fmt.Println("Error while posting pagerduty note:", err)
+	}
+
+	return "", fmt.Errorf("the clusters cloud provider is not supported for this CAD investigation")
 }
