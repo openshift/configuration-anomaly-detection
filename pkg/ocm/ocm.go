@@ -161,13 +161,12 @@ func (c Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeploymen
 
 // GetClusterMachinePools get the machine pools for a given cluster
 func (c Client) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
-    response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
-    if err != nil {
-        return nil, err
-    }
-    return response.Items().Slice(), nil
+	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
+	if err != nil {
+		return nil, err
+	}
+	return response.Items().Slice(), nil
 }
-
 
 // getClusterResource allows to load different cluster resources
 func (c Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
@@ -268,8 +267,8 @@ func (c Client) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID s
 	return nil
 }
 
-// LimitedSupportReasonsExist indicates whether any LS reasons exist on a given cluster
-func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
+// IsInLimitedSupport indicates whether any LS reasons exist on a given cluster
+func (c Client) IsInLimitedSupport(clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
@@ -285,7 +284,7 @@ func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
 func (c Client) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
-		return false, fmt.Errorf("failed to list current limited support reasons: %w", err)
+		return false, fmt.Errorf("UnrelatedLimitedSupportExists: failed to list current limited support reasons: %w", err)
 	}
 	if len(reasons) == 0 {
 		return false, nil
@@ -293,7 +292,27 @@ func (c Client) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID
 
 	for _, reason := range reasons {
 		if !c.reasonsMatch(ls, reason) {
-			fmt.Printf("cluster is in limited support for unrelated reason: %s\n", reason.Summary())
+			fmt.Printf("UnrelatedLimitedSupportExists: cluster is in limited support for unrelated reason: %s\n", reason.Summary())
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// LimitedSupportReasonExists takes a cluster id and limited support reason
+// Returns true if the limited support reason exists on the cluster
+func (c Client) LimitedSupportReasonExists(ls LimitedSupportReason, clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("LimitedSupportReasonExists: failed to list current limited support reasons: %w", err)
+	}
+	if len(reasons) == 0 {
+		return false, nil
+	}
+
+	for _, reason := range reasons {
+		if c.reasonsMatch(ls, reason) {
+			fmt.Printf("LimitedSupportReasonExists: cluster is in limited support for reason: %s\n", reason.Summary())
 			return true, nil
 		}
 	}

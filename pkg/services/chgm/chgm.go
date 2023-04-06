@@ -62,8 +62,9 @@ type Service interface {
 	// OCM
 	GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error)
 	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
-	LimitedSupportReasonsExist(clusterID string) (bool, error)
+	IsInLimitedSupport(clusterID string) (bool, error)
 	UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
+	LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
 	// PD
 	SilenceAlert(notes string) error
@@ -90,7 +91,7 @@ func (c *Client) Triggered() error {
 
 	fmt.Printf("the investigation returned %#v\n", res)
 
-	lsExists, err := c.LimitedSupportReasonsExist(c.Cluster.ID())
+	lsExists, err := c.IsInLimitedSupport(c.Cluster.ID())
 	if err != nil {
 		return c.UpdateAndEscalateAlert(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
 	}
@@ -116,6 +117,21 @@ func (c *Client) Triggered() error {
 
 // Resolved will take appropriate action against a cluster whose CHGM incident has resolved.
 func (c *Client) Resolved() error {
+
+	// Check if CAD put the cluster in CHGM LS. If it didn't, we don't need a resolve investigation, as
+	// either way it would be a NOOP for CAD (no LS to remove).
+	// This is the case most of the time, so it saves us a lot of long pipeline runs.
+	chgmLsExists, err := c.LimitedSupportReasonExists(chgmLimitedSupport, c.Cluster.ID())
+	if err != nil {
+		// The check is just to allow returning early, as we don't need an investigation if CAD didn't put the cluster in LS.
+		// If this fails, it's not a big issue. We can skip the check and proceed with the resolve investigation.
+		fmt.Println("Unable to determine whether or not the cluster was put in limited support by CAD. Proceeding with investigation anyway...")
+	}
+	if !chgmLsExists {
+		fmt.Println("Skipping resolve investigation, as no actions were taking on this cluster by CAD.")
+		return nil
+	}
+
 	res, err := c.investigateRestoredCluster()
 
 	// The investigation encountered an error & never completed - alert Primary and report the error
