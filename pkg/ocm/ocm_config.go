@@ -12,6 +12,7 @@ import (
 
 // Config is the type used to store the configuration of the client.
 // There's no way to line-split or predefine tags, so...
+//
 //nolint:lll
 type Config struct {
 	// TODO(efried): Better docs for things like AccessToken
