@@ -5,10 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"time"
@@ -27,69 +24,177 @@ const (
 	CADEmailAddress = "sd-sre-platform+pagerduty-configuration-anomaly-detection-agent@redhat.com"
 	// CADIntegrationName is the name of the PD integration used to escalate alerts to Primary.
 	CADIntegrationName = "Dead Man's Snitch"
+	// possible event types of the incident
+	// https://support.pagerduty.com/docs/webhooks#supported-resources-and-event-types
+	// add others when needed
+
+	// IncidentResolved is an incident event type
+	IncidentResolved = "incident.resolved"
+	// IncidentTriggered is an incident event type
+	IncidentTriggered = "incident.triggered"
+	// IncidentEscalated is an incident event type
+	IncidentEscalated = "incident.escalated"
+	// IncidentReopened is an incident event type
+	IncidentReopened = "incident.reopened"
 )
 
 // Client will hold all the required fields for any Client Operation
 type Client struct {
 	// c is the PagerDuty client
-	c *sdk.Client
+	sdkClient *sdk.Client
 	// currentUserEmail is the current logged-in user's email
 	currentUserEmail string
 	// escalationPolicy
 	escalationPolicy string
 	// silentPolicy
 	silentPolicy string
+	// parsedPayload holds some of the webhook payloads fields ( add more if needed )
+	parsedPayload WebhookPayload
+	// externalClusterID ( only gets initialized after the first GetExternalClusterID call )
+	externalClusterID *string
+}
+
+// WebhookPayload is a struct to fill with information we parse out of the webhook
+// The data field schema can differ depending on the event type that triggered the webhook.
+// https://developer.pagerduty.com/docs/db0fa8c8984fc-overview#event-data-types
+// We only use event types that return a webhook with 'incident' as data field for now.
+type WebhookPayload struct {
+	Event struct {
+		EventType string `json:"event_type"`
+		Data      struct {
+			Service struct {
+				ServiceID string `json:"id"`
+				Summary   string `json:"summary"`
+			} `json:"service"`
+			Title      string `json:"title"`
+			IncidentID string `json:"id"`
+		} `json:"data"`
+	} `json:"event"`
+}
+
+// Unmarshal wraps the json.Unmarshal to do some sanity checks
+// it may be worth to do a proper schema and validation
+func (c *WebhookPayload) Unmarshal(data []byte) error {
+	err := json.Unmarshal(data, c)
+	if err != nil {
+		return err
+	}
+
+	if c.Event.EventType == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: event_type")}
+	}
+	if c.Event.Data.Service.ServiceID == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: ServiceID")}
+	}
+	if c.Event.Data.Service.Summary == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Summary")}
+	}
+	if c.Event.Data.Title == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Title")}
+	}
+	if c.Event.Data.IncidentID == "" {
+		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: IncidentID")}
+	}
+	return nil
 }
 
 // NewWithToken is similar to New, but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
-func NewWithToken(authToken, escalationPolicy, silentPolicy string) (Client, error) {
+func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (Client, error) {
+	parsedPayload := WebhookPayload{}
+	err := parsedPayload.Unmarshal(webhookPayload)
+	if err != nil {
+		return Client{}, UnmarshalErr{Err: err}
+	}
 	c := Client{
-		c:                sdk.NewClient(authToken),
+		sdkClient:        sdk.NewClient(authToken, options...),
 		escalationPolicy: escalationPolicy,
 		silentPolicy:     silentPolicy,
+		parsedPayload:    parsedPayload,
 	}
 	return c, nil
 }
 
-// New will create a PagerDuty struct with all the required fields
-func New(client *sdk.Client) (Client, error) {
-	sdkUser, err := getCurrentUser(client)
-	if err != nil {
-		return Client{}, fmt.Errorf("could not create a new client: %w", err)
-	}
+// GetEventType returns the event type of the webhook
+func (c *Client) GetEventType() string {
+	return c.parsedPayload.Event.EventType
+}
 
-	resp := Client{
-		c:                client,
-		currentUserEmail: sdkUser.Email,
-		// TODO: insert missing policies. Do we even need this function?
-	}
+// GetServiceID returns the event type of the webhook
+func (c *Client) GetServiceID() string {
+	return c.parsedPayload.Event.Data.Service.ServiceID
+}
 
-	return resp, nil
+// GetServiceName returns the event type of the webhook
+func (c *Client) GetServiceName() string {
+	return c.parsedPayload.Event.Data.Service.Summary
+}
+
+// GetTitle returns the event type of the webhook
+func (c *Client) GetTitle() string {
+	return c.parsedPayload.Event.Data.Title
+}
+
+// GetIncidentID returns the event type of the webhook
+func (c *Client) GetIncidentID() string {
+	return c.parsedPayload.Event.Data.IncidentID
 }
 
 // GetEscalationPolicy returns the set escalation policy
-func (c Client) GetEscalationPolicy() string {
+func (c *Client) GetEscalationPolicy() string {
 	return c.escalationPolicy
 }
 
 // GetSilentPolicy returns the set policy for silencing alerts
-func (c Client) GetSilentPolicy() string {
+func (c *Client) GetSilentPolicy() string {
 	return c.silentPolicy
 }
 
+// RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
+// retrieve the externalClusterID from pagerduty, and update the client.
+func (c *Client) RetrieveExternalClusterID() (string, error) {
+
+	// Only do the api call to pagerduty once
+	if c.externalClusterID != nil {
+		return *c.externalClusterID, nil
+	}
+
+	incidentID := c.GetIncidentID()
+
+	// pulls alerts from pagerduty
+	alerts, err := c.GetAlerts()
+	if err != nil {
+		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
+	}
+
+	// there should be only one alert
+	if len(alerts) > 1 {
+		fmt.Printf("warning: there should be only one alert on each incident, taking the first result of incident: %s", incidentID)
+	}
+
+	for _, a := range alerts {
+		// that one alert should have a valid ExternalID
+		if a.ExternalID != "" {
+			c.externalClusterID = &a.ExternalID
+			return *c.externalClusterID, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
+}
+
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
-func (c Client) MoveToEscalationPolicy(incidentID string, escalationPolicyID string) error {
+func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 	o := []sdk.ManageIncidentsOptions{
 		{
-			ID: incidentID,
+			ID: c.GetIncidentID(),
 			EscalationPolicy: &sdk.APIReference{
 				Type: "escalation_policy_reference",
 				ID:   escalationPolicyID,
 			},
 		},
 	}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not update the escalation policy: %w", err)
 	}
@@ -97,9 +202,10 @@ func (c Client) MoveToEscalationPolicy(incidentID string, escalationPolicyID str
 }
 
 // AssignToUser will assign the incident to the provided user
-func (c Client) AssignToUser(incidentID string, userID string) error {
+// This is currently not needed by anything
+func (c *Client) AssignToUser(userID string) error {
 	o := []sdk.ManageIncidentsOptions{{
-		ID: incidentID,
+		ID: c.GetIncidentID(),
 		Assignments: []sdk.Assignee{{
 			Assignee: sdk.APIObject{
 				Type: "user_reference",
@@ -107,7 +213,7 @@ func (c Client) AssignToUser(incidentID string, userID string) error {
 			},
 		}},
 	}}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not assign to user: %w", err)
 	}
@@ -115,26 +221,50 @@ func (c Client) AssignToUser(incidentID string, userID string) error {
 }
 
 // AcknowledgeIncident will acknowledge an incident
-func (c Client) AcknowledgeIncident(incidentID string) error {
+// This is currently not needed by anything
+func (c *Client) AcknowledgeIncident() error {
 	o := []sdk.ManageIncidentsOptions{
 		{
-			ID:     incidentID,
+			ID:     c.GetIncidentID(),
 			Status: "acknowledged",
 		},
 	}
-	err := c.manageIncident(o)
+	err := c.updateIncident(o)
 	if err != nil {
 		return fmt.Errorf("could not acknowledge the incident: %w", err)
 	}
 	return nil
 }
 
+// updateIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
+// the reason we send an array instead of a single item is to be compatible with the sdk
+// the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
+func (c *Client) updateIncident(o []sdk.ManageIncidentsOptions) error {
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+	_, err := c.sdkClient.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
+
+	sdkErr := sdk.APIError{}
+	if errors.As(err, &sdkErr) {
+		commonErr := commonErrorHandling(err, sdkErr)
+		if commonErr != nil {
+			return commonErr
+		}
+	}
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // AddNote will add a note to an incident
-func (c Client) AddNote(incidentID string, noteContent string) error {
+func (c *Client) AddNote(noteContent string) error {
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
-	_, err := c.c.CreateIncidentNoteWithContext(context.TODO(), incidentID, sdkNote)
+	_, err := c.sdkClient.CreateIncidentNoteWithContext(context.TODO(), c.GetIncidentID(), sdkNote)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -155,14 +285,61 @@ func (c Client) AddNote(incidentID string, noteContent string) error {
 	return nil
 }
 
+// CreateNewAlert triggers an alert using the Deadmanssnitch integration for the given service.
+// If the provided service does not have a DMS integration, an error is returned
+func (c *Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
+	service, err := c.sdkClient.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
+	if err != nil {
+		return ServiceNotFoundErr{Err: err}
+	}
+
+	integration, err := c.getCADIntegrationFromService(service)
+	if err != nil {
+		return IntegrationNotFoundErr{Err: err}
+	}
+
+	// Current DMS integration requires us to use v1 events
+	event := sdk.Event{
+		ServiceKey:  integration.IntegrationKey,
+		Type:        "trigger",
+		Description: newAlert.Description,
+		Details:     newAlert.Details,
+		Client:      CADEmailAddress,
+	}
+
+	response, err := sdk.CreateEventWithHTTPClient(event, c.sdkClient.HTTPClient)
+	if err != nil {
+		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
+	}
+	fmt.Printf("Alert has been created %s\n", newAlert.Description)
+	return nil
+}
+
+// getCADIntegrationFromService retrieves the PagerDuty integration used by CAD from the given service.
+// If the integration CAD expects is not found, an error is returned
+func (c *Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
+	// For some reason the .Integrations array in the Service object does not contain any usable data,
+	// aside from the ID, so we have to re-grab each integration separately to examine them
+	for _, brokenIntegration := range service.Integrations {
+		realIntegration, err := c.sdkClient.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
+		if err != nil {
+			return sdk.Integration{}, fmt.Errorf("failed to retrieve integration '%s' for service '%s': %w", brokenIntegration.ID, service.ID, err)
+		}
+		if realIntegration.Name == CADIntegrationName {
+			return *realIntegration, nil
+		}
+	}
+	return sdk.Integration{}, fmt.Errorf("no integration '%s' exists for service '%s'", CADIntegrationName, service.Name)
+}
+
 // GetAlerts will retrieve the alerts for a specific incident
-func (c Client) GetAlerts(incidentID string) ([]Alert, error) {
+func (c *Client) GetAlerts() ([]Alert, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
 	o := sdk.ListIncidentAlertsOptions{}
 
-	alerts, err := c.c.ListIncidentAlertsWithContext(ctx, incidentID, o)
+	alerts, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, c.GetIncidentID(), o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -190,55 +367,9 @@ func (c Client) GetAlerts(incidentID string) ([]Alert, error) {
 	return res, nil
 }
 
-// CreateNewAlert triggers an alert using the Deadmanssnitch integration for the given service.
-// If the provided service does not have a DMS integration, an error is returned
-func (c Client) CreateNewAlert(description string, details interface{}, serviceID string) error {
-	service, err := c.c.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
-	if err != nil {
-		return ServiceNotFoundErr{Err: err}
-	}
-
-	integration, err := c.getCADIntegrationFromService(service)
-	if err != nil {
-		return IntegrationNotFoundErr{Err: err}
-	}
-
-	// Current DMS integration requires us to use v1 events
-	event := sdk.Event{
-		ServiceKey: integration.IntegrationKey,
-		Type: "trigger",
-		Description: description,
-		Details: details,
-		Client: CADEmailAddress,
-	}
-
-	response, err := sdk.CreateEventWithHTTPClient(event, c.c.HTTPClient)
-	if err != nil {
-		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
-	}
-	return nil
-}
-
-// getCADIntegrationFromService retrieves the PagerDuty integration used by CAD from the given service.
-// If the integration CAD expects is not found, an error is returned
-func (c Client) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
-	// For some reason the .Integrations array in the Service object does not contain any usable data,
-	// aside from the ID, so we have to re-grab each integration separately to examine them
-	for _, brokenIntegration := range service.Integrations {
-		realIntegration, err := c.c.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
-		if err != nil {
-			return sdk.Integration{}, fmt.Errorf("failed to retrieve integration '%s' for service '%s': %w", brokenIntegration.ID, service.ID, err)
-		}
-		if realIntegration.Name == CADIntegrationName {
-			return *realIntegration, nil
-		}
-	}
-	return sdk.Integration{}, fmt.Errorf("no integration '%s' exists for service '%s'", CADIntegrationName, service.Name)
-}
-
-// ExtractIDFromCHGM extracts from an Alert body until an external ID
+// extractExternalIDFromAlertBody extracts from an Alert body until an external ID
 // the function is a member function but doesn't use any of the other functions / types in the PagerDuty struct
-func (Client) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
+func extractExternalIDFromAlertBody(data map[string]interface{}) (string, error) {
 	var err error
 
 	externalBody, err := extractNotesFromBody(data)
@@ -267,188 +398,6 @@ func (Client) ExtractIDFromCHGM(data map[string]interface{}) (string, error) {
 	}
 
 	return internalBody.ClusterID, nil
-}
-
-// FileReader will wrap the os or fstest.MapFS structs so we are not locked in
-type FileReader interface {
-	ReadFile(name string) ([]byte, error)
-}
-
-// RealFileReader will allow for reading a file
-type RealFileReader struct{}
-
-// ReadFile implements the Reader interface to allow for mocking this later
-func (RealFileReader) ReadFile(name string) ([]byte, error) {
-	target, err := os.ReadFile(filepath.Clean(name))
-	if err != nil {
-		return []byte{}, err
-	}
-	return target, nil
-}
-
-// WebhookPayloadToIncidentID is a generated struct used to extract the incident id out
-type WebhookPayloadToIncidentID struct {
-	Event struct {
-		Data struct {
-			ID       string `json:"id"`
-			Incident struct {
-				ID string `json:"id"`
-			} `json:"incident"`
-		} `json:"data"`
-	} `json:"event"`
-}
-
-// ExtractExternalIDFromPayload will retrieve the payloadFilePath and return the externalID
-func (c Client) ExtractExternalIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
-	data, err := readPayloadFile(payloadFilePath, reader)
-	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
-	if err != nil {
-		return "", fmt.Errorf("could not read the externalid from the payloadFile: %w", err)
-	}
-	return c.ExtractExternalIDFromBytes(data)
-}
-
-// ExtractIncidentIDFromPayload will retrieve the payloadFilePath and return the incidentID
-func (c Client) ExtractIncidentIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
-	data, err := readPayloadFile(payloadFilePath, reader)
-	// TODO: if need be, extract the next steps into 'func ExtractExternalIDFromPayload(payload []byte) (string, error)'
-	if err != nil {
-		return "", fmt.Errorf("could not read the incidentid from the payloadFile: %w", err)
-	}
-	return c.ExtractIncidentIDFromBytes(data)
-}
-
-// ExtractExternalIDFromBytes will return the externalID from the bytes[] data
-func (c Client) ExtractExternalIDFromBytes(data []byte) (string, error) {
-	var err error
-	w := WebhookPayloadToIncidentID{}
-	err = json.Unmarshal(data, &w)
-	if err != nil {
-		return "", UnmarshalErr{Err: err}
-	}
-	incidentID := w.Event.Data.ID
-	if w.Event.Data.Incident.ID != "" {
-		incidentID = w.Event.Data.Incident.ID
-	}
-
-	if incidentID == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract externalID from '%s'", data)}
-	}
-
-	alerts, err := c.GetAlerts(incidentID)
-	if err != nil {
-		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
-	}
-
-	// there should be only one alert
-	for _, a := range alerts {
-		// that one alert should have a valid ExternalID
-		//TODO: validate the alert has the same externalid as the incident
-		if a.ExternalID != "" {
-			return a.ExternalID, nil
-		}
-	}
-
-	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
-}
-
-// ExtractIncidentIDFromBytes will return the incidentID from the bytes[] data
-func (c Client) ExtractIncidentIDFromBytes(data []byte) (string, error) {
-	var err error
-	w := WebhookPayloadToIncidentID{}
-	err = json.Unmarshal(data, &w)
-	if err != nil {
-		return "", UnmarshalErr{Err: err}
-	}
-	incidentID := w.Event.Data.ID
-	if w.Event.Data.Incident.ID != "" {
-		incidentID = w.Event.Data.Incident.ID
-	}
-
-	if incidentID == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract incidentID from '%s'", data)}
-	}
-	return incidentID, nil
-}
-
-// WebhookPayloadToEventType is a generated struct used to extract the event type out
-type WebhookPayloadToEventType struct {
-	Event struct {
-		Type string `json:"event_type"`
-	} `json:"event"`
-}
-
-// ExtractEventTypeFromPayload will retrieve the payloadFilePath and return the eventType
-func (c Client) ExtractEventTypeFromPayload(payloadFilePath string, reader FileReader) (string, error) {
-	data, err := readPayloadFile(payloadFilePath, reader)
-	if err != nil {
-		return "", fmt.Errorf("could not read the event type from the payloadFile: %w", err)
-	}
-	return c.ExtractEventTypeFromBytes(data)
-}
-
-// ExtractEventTypeFromBytes will return the eventType from the bytes[] data
-func (c Client) ExtractEventTypeFromBytes(data []byte) (string, error) {
-	w := WebhookPayloadToEventType{}
-	err := json.Unmarshal(data, &w)
-	if err != nil {
-		return "", UnmarshalErr{Err: err}
-	}
-
-	eventType := w.Event.Type
-	if eventType == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract event_type from '%s'", data)}
-	}
-	return eventType, nil
-}
-
-// WebhookPayloadToServiceID is a generated struct used to extract the service id from the webhook payload
-type WebhookPayloadToServiceID struct {
-	Event struct {
-		Data struct {
-			Service struct {
-				ID string
-			} `json:"service"`
-		} `json:"data"`
-	} `json:"event"`
-}
-
-// ExtractServiceIDFromPayload will retrieve the payloadFilePath and return the service ID
-func (c Client) ExtractServiceIDFromPayload(payloadFilePath string, reader FileReader) (string, error) {
-	data, err := readPayloadFile(payloadFilePath, reader)
-	if err != nil {
-		return "", fmt.Errorf("could not read the service from the payloadFile: %w", err)
-	}
-	return c.ExtractServiceIDFromBytes(data)
-}
-
-// ExtractServiceIDFromBytes will return the service id from the bytes[] data
-func (c Client) ExtractServiceIDFromBytes(data []byte) (string, error) {
-	w := WebhookPayloadToServiceID{}
-	err := json.Unmarshal(data, &w)
-	if err != nil {
-		return "", UnmarshalErr{Err: err}
-	}
-
-	serviceID := w.Event.Data.Service.ID
-	if serviceID == "" {
-		return "", UnmarshalErr{Err: fmt.Errorf("could not extract service.id from '%s'", data)}
-	}
-	return serviceID, nil
-}
-
-// readPayloadFile is a temporary function solely responsible to retrieve the payload data from somewhere.
-// if we choose to pivot and use a different way of pulling the payload data we can change this function and ExtractExternalIDFromPayload inputs
-func readPayloadFile(payloadFilePath string, reader FileReader) ([]byte, error) {
-	data, err := reader.ReadFile(payloadFilePath)
-	if err != nil {
-		ok := isPathError(err)
-		if ok {
-			return nil, FileNotFoundErr{FilePath: payloadFilePath, Err: err}
-		}
-		return nil, err
-	}
-	return data, nil
 }
 
 // extractNotesFromBody will extract from map[string]interface{} the '.details.notes' while doing type checks
@@ -496,48 +445,17 @@ type internalCHGMAlertBody struct {
 	ClusterID string `yaml:"cluster_id"`
 }
 
-// manageIncident will run the API call to PagerDuty for updating the incident, and handle the error codes that arise
-// the reason we send an array instead of a single item is to be compatible with the sdk
-// the customErrorString is a nice touch so when the error bubbles up it's clear who called it (if it's an unknown error)
-func (c Client) manageIncident(o []sdk.ManageIncidentsOptions) error {
-	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
-	defer cancel()
-	_, err := c.c.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
-
-	sdkErr := sdk.APIError{}
-	if errors.As(err, &sdkErr) {
-		commonErr := commonErrorHandling(err, sdkErr)
-		if commonErr != nil {
-			return commonErr
-		}
-	}
-
+// toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
+func (c *Client) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
+	externalID, err := extractExternalIDFromAlertBody(sdkAlert.Body)
 	if err != nil {
-		return err
+		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
 	}
-
-	return nil
-}
-
-// getCurrentUser retrieves the current pagerduty user
-func getCurrentUser(client *sdk.Client) (*sdk.User, error) {
-	opts := sdk.GetCurrentUserOptions{}
-	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
-	defer cancel()
-	user, err := client.GetCurrentUserWithContext(ctx, opts)
-
-	sdkErr := sdk.APIError{}
-	if errors.As(err, &sdkErr) {
-		if sdkErr.StatusCode == http.StatusUnauthorized {
-			return nil, InvalidTokenErr{Err: err}
-		}
+	alert := Alert{
+		ID:         sdkAlert.APIObject.ID,
+		ExternalID: externalID,
 	}
-
-	if err != nil {
-
-		return nil, fmt.Errorf("could not retrieve the current user: %w", err)
-	}
-	return user, nil
+	return alert, nil
 }
 
 // commonErrorHandling will take a sdk.APIError and check it on common known errors.
@@ -556,20 +474,32 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 	return nil
 }
 
-// toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
-func (c Client) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
-	externalID, err := c.ExtractIDFromCHGM(sdkAlert.Body)
-	if err != nil {
-		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
-	}
-	alert := Alert{
-		ID:         sdkAlert.APIObject.ID,
-		ExternalID: externalID,
-	}
-	return alert, nil
+// UpdateAndEscalateAlert will ensure that an incident informs a SRE.
+// Optionally notes can be added to the incident
+func (c *Client) UpdateAndEscalateAlert(notes string) error {
+	return c.updatePagerduty(notes, c.GetEscalationPolicy())
 }
 
-func isPathError(err error) bool {
-	_, ok := err.(*fs.PathError)
-	return ok
+// SilenceAlert annotates the PagerDuty alert with the given notes and silences it via
+// assigning the "Silent Test" escalation policy
+func (c *Client) SilenceAlert(notes string) error {
+	fmt.Println("Silencing alert")
+	return c.updatePagerduty(notes, c.GetSilentPolicy())
+}
+
+// updatePagerduty attaches notes to an incident and moves it to a escalation policy
+func (c *Client) updatePagerduty(notes, escalationPolicy string) error {
+	if notes != "" {
+		fmt.Println("Attaching Note")
+		err := c.AddNote(notes)
+		if err != nil {
+			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
+		}
+	}
+	fmt.Printf("Move to escalation policy: %s", escalationPolicy)
+	err := c.MoveToEscalationPolicy(escalationPolicy)
+	if err != nil {
+		return fmt.Errorf("failed to change incident escalation policy: %w", err)
+	}
+	return nil
 }

@@ -15,26 +15,11 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
-type limitedSupportReasonTemplate struct {
+// LimitedSupportReason is the internal representation of a limited support reason
+type LimitedSupportReason struct {
 	Details string
 	Summary string
 }
-
-// NOTE: USE CAUTION WHEN CHANGING THESE TEMPLATES!!
-// Changing the templates' summaries will likely prevent CAD from removing clusters with these Limited Support reasons in the future, since it identifies which reasons to delete via their summaries.
-// If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
-// reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
-var chgmLimitedSupport = limitedSupportReasonTemplate{
-	Summary: "Cluster not checking in",
-	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
-}
-
-var ccamLimitedSupport = limitedSupportReasonTemplate{
-	Summary: "Restore missing cloud credentials",
-	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
-}
-
-// CAUTION!!
 
 // Client is the ocm client with which we can run the commands
 // currently we do not need to export the connection or the config, as we create the Client using the New func
@@ -176,13 +161,12 @@ func (c Client) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeploymen
 
 // GetClusterMachinePools get the machine pools for a given cluster
 func (c Client) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
-    response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
-    if err != nil {
-        return nil, err
-    }
-    return response.Items().Slice(), nil
+	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
+	if err != nil {
+		return nil, err
+	}
+	return response.Items().Slice(), nil
 }
-
 
 // getClusterResource allows to load different cluster resources
 func (c Client) getClusterResource(clusterID string, resourceKey string) (string, error) {
@@ -211,37 +195,25 @@ func (c Client) GetCloudProviderID(identifier string) (string, error) {
 	return cloudProviderID, nil
 }
 
-// PostCHGMLimitedSupportReason will post a CCAM limited support reason for a cluster
-// On success, it returns true
-func (c Client) PostCHGMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
-	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(chgmLimitedSupport), clusterID)
-}
-
-// PostCCAMLimitedSupportReason will post a CCAM limited support reason for a cluster
-// On success, it returns true
-func (c Client) PostCCAMLimitedSupportReason(clusterID string) (*v1.LimitedSupportReason, error) {
-	return c.postLimitedSupportReason(c.newLimitedSupportReasonBuilder(ccamLimitedSupport), clusterID)
-}
-
-// postLimitedSupportReason allows to post a generic limited support reason to a cluster
-// On success, returns sent limited support reason
-func (c Client) postLimitedSupportReason(builder *v1.LimitedSupportReasonBuilder, clusterID string) (*v1.LimitedSupportReason, error) {
-	ls, err := builder.Build()
+// PostLimitedSupportReason allows to post a generic limited support reason to a cluster
+func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error {
+	ls, err := c.newLimitedSupportReasonBuilder(limitedSupportReason).Build()
 	if err != nil {
-		return nil, fmt.Errorf("could not create post request: %w", err)
+		return fmt.Errorf("could not create post request: %w", err)
 	}
 
 	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
 	if err != nil {
-		return nil, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
+		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
-	return ls, nil
+
+	return nil
 }
 
 // newLimitedSupportReasonBuilder creates a Limited Support reason
-func (c Client) newLimitedSupportReasonBuilder(ls limitedSupportReasonTemplate) *v1.LimitedSupportReasonBuilder {
+func (c Client) newLimitedSupportReasonBuilder(ls LimitedSupportReason) *v1.LimitedSupportReasonBuilder {
 	builder := v1.NewLimitedSupportReason()
 	builder.Summary(ls.Summary)
 	builder.Details(ls.Details)
@@ -249,68 +221,54 @@ func (c Client) newLimitedSupportReasonBuilder(ls limitedSupportReasonTemplate) 
 	return builder
 }
 
-// CCAMLimitedSupportExists indicates whether CAD has posted a CCAM LS reason to the given cluster already
-func (c Client) CCAMLimitedSupportExists(clusterID string) (bool, error) {
-	return c.limitedSupportExists(ccamLimitedSupport, clusterID)
-}
-
-// CHGMLimitedSupportExists indicates whether CAD has posted a CHGM LS reason to the given cluster already
-func (c Client) CHGMLimitedSupportExists(clusterID string) (bool, error) {
-	return c.limitedSupportExists(chgmLimitedSupport, clusterID)
-}
-
-// limitedSupportExists returns true if the provided limitedSupportReasonTemplate's summary and details fields match an existing
-// reason on the given cluster
-func (c Client) limitedSupportExists(ls limitedSupportReasonTemplate, clusterID string) (bool, error) {
+// LimitedSupportExists takes a LimitedSupportReason and matches the Summary against
+// a clusters limited support reasons
+// Returns true if any match is found
+func (c Client) LimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
 	}
 	for _, reason := range reasons {
-		if c.reasonsMatch(ls, reason){
+		if c.reasonsMatch(ls, reason) {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-// DeleteCCAMLimitedSupportReason removes the CCAM-specific limited support reasons from a cluster, returning true if any reasons were removed
-func (c Client) DeleteCCAMLimitedSupportReason(clusterID string) (bool, error) {
-	return c.deleteLimitedSupportReasons(ccamLimitedSupport.Summary, clusterID)
-}
-
-// DeleteCHGMLimitedSupportReason removes the CHGM-specific limited support reasons from a cluster, returning true if any reasons were removed
-func (c Client) DeleteCHGMLimitedSupportReason(clusterID string) (bool, error) {
-	return c.deleteLimitedSupportReasons(chgmLimitedSupport.Summary, clusterID)
-}
-
-// deleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
-func (c Client) deleteLimitedSupportReasons(summaryToDelete, clusterID string) (bool, error) {
+// DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
+func (c Client) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID string) error {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
-		return false, fmt.Errorf("could not list current limited support reasons: %w", err)
+		return fmt.Errorf("could not list current limited support reasons: %w", err)
 	}
 
 	// Remove each limited support reason matching the given template
 	removedReasons := false
 	for _, reason := range reasons {
-		if reason.Summary() == summaryToDelete {
+		if c.reasonsMatch(ls, reason) {
 			reasonID, ok := reason.GetID()
 			if !ok {
-				return false, fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
+				return fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
 			}
 			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
 			if err != nil {
-				return false, fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
+				return fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
 			}
 			removedReasons = true
 		}
 	}
-	return removedReasons, nil
+	if removedReasons {
+		fmt.Printf("Removed limited support reason %s\n", ls.Summary)
+	} else {
+		fmt.Printf("Found no limited support reason to remove\n")
+	}
+	return nil
 }
 
-// LimitedSupportReasonsExist indicates whether any LS reasons exist on a given cluster
-func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
+// IsInLimitedSupport indicates whether any LS reasons exist on a given cluster
+func (c Client) IsInLimitedSupport(clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
 		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
@@ -321,26 +279,47 @@ func (c Client) LimitedSupportReasonsExist(clusterID string) (bool, error) {
 	return true, nil
 }
 
-// NonCADLimitedSupportExists returns true if the given cluster has a limited support reason that doesn't appear to be one of CAD's
-func (c Client) NonCADLimitedSupportExists(clusterID string) (bool, error) {
+// UnrelatedLimitedSupportExists takes a cluster id and limited support reason
+// Returns true if any other limited support reason than the given one exists on the cluster
+func (c Client) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(clusterID)
 	if err != nil {
-		return false, fmt.Errorf("failed to list current limited support reasons: %w", err)
+		return false, fmt.Errorf("UnrelatedLimitedSupportExists: failed to list current limited support reasons: %w", err)
 	}
 	if len(reasons) == 0 {
 		return false, nil
 	}
 
 	for _, reason := range reasons {
-		if !c.reasonsMatch(ccamLimitedSupport, reason) && !c.reasonsMatch(chgmLimitedSupport, reason) {
-				// Reason differs from CAD's reasons - cluster is in LS for something else
-				return true, nil
+		if !c.reasonsMatch(ls, reason) {
+			fmt.Printf("UnrelatedLimitedSupportExists: cluster is in limited support for unrelated reason: %s\n", reason.Summary())
+			return true, nil
 		}
 	}
 	return false, nil
 }
 
-func (c Client) reasonsMatch(template limitedSupportReasonTemplate, reason *v1.LimitedSupportReason) bool {
+// LimitedSupportReasonExists takes a cluster id and limited support reason
+// Returns true if the limited support reason exists on the cluster
+func (c Client) LimitedSupportReasonExists(ls LimitedSupportReason, clusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("LimitedSupportReasonExists: failed to list current limited support reasons: %w", err)
+	}
+	if len(reasons) == 0 {
+		return false, nil
+	}
+
+	for _, reason := range reasons {
+		if c.reasonsMatch(ls, reason) {
+			fmt.Printf("LimitedSupportReasonExists: cluster is in limited support for reason: %s\n", reason.Summary())
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (c Client) reasonsMatch(template LimitedSupportReason, reason *v1.LimitedSupportReason) bool {
 	return reason.Summary() == template.Summary && reason.Details() == template.Details
 }
 
