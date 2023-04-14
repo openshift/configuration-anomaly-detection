@@ -29,3 +29,5 @@ linters:
     - typecheck
     - unused
     - varcheck
+    - gofmt
+    
