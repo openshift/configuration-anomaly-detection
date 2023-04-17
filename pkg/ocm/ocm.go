@@ -260,9 +260,9 @@ func (c Client) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID s
 		}
 	}
 	if removedReasons {
-		fmt.Printf("Removed limited support reason %s\n", ls.Summary)
+		fmt.Printf("Removed limited support reason `%s`\n", ls.Summary)
 	} else {
-		fmt.Printf("Found no limited support reason to remove\n")
+		fmt.Printf("Found no limited support reason to remove for `%s`\n", ls.Summary)
 	}
 	return nil
 }
