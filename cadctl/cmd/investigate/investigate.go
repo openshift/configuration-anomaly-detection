@@ -80,14 +80,21 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
 	}
 
-	awsClient, err := GetAWSClient()
-	if err != nil {
-		return fmt.Errorf("could not initialize aws client: %w", err)
-	}
-
 	ocmClient, err := GetOCMClient()
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
+	}
+
+	// We currently have no investigations supporting GCP. In the future, this check should be moved on
+	// the investigation level, and we should be GCP or AWSClient based on this.
+	_, err = checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
+	if err != nil {
+		return fmt.Errorf("failed cloud provider check: %w", err)
+	}
+
+	awsClient, err := GetAWSClient()
+	if err != nil {
+		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
 
 	cluster, err := ocmClient.GetClusterInfo(externalClusterID)
@@ -117,11 +124,6 @@ func run(cmd *cobra.Command, args []string) error {
 	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
-		_, err = checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
-		if err != nil {
-			return fmt.Errorf("failed cloud provider check: %w", err)
-		}
-
 		investigationClient = investigation.Client{
 			Investigation: &chgm.Client{
 				Service: chgm.Provider{
