@@ -230,7 +230,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
 
 	// Users are represented by Username in cloudtrail events
-	allowPartialStringUsers := []string{
+	allowedUsersPartialStrings := []string{
 		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
 		"openshift-machine-api-aws", // Infra nodes/Autoscaling
 
@@ -241,14 +241,14 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		"RH-SRE-",
 	}
 
-	for _, allowedPartialUserString := range allowPartialStringUsers {
-		if strings.Contains(username, allowedPartialUserString) {
+	for _, partialUserString := range allowedUsersPartialStrings {
+		if strings.Contains(username, partialUserString) {
 			return true
 		}
 	}
 
 	// Roles are represented by issuerUsername in cloudtrail events
-	allowPartialStringRoles := []string{
+	allowedRolesPartialStrings := []string{
 		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
 		"openshift-machine-api-aws", // Infra nodes/Autoscaling
 
@@ -258,8 +258,8 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		"OrganizationAccountAccessRole", // This is SRE for on-CCS, and the user for ROSA - we consider cluster flavor with https://issues.redhat.com/browse/OSD-15569
 	}
 
-	for _, allowPartialRoleString := range allowPartialStringRoles {
-		if strings.Contains(issuerUsername, allowPartialRoleString) {
+	for _, partialRoleString := range allowedRolesPartialStrings {
+		if strings.Contains(issuerUsername, partialRoleString) {
 			return true
 		}
 	}
