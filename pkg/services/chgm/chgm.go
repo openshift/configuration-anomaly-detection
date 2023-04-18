@@ -255,7 +255,7 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		"-Installer-Role",               // ROSA-STS - install/uninstall node run/terminate
 		"-Support-Role",                 // ROSA-STS - SRE work
 		"ManagedOpenShift-Support-",     // ROSA- non-STS - SRE work
-		"OrganizationAccountAccessRole", // This is SRE for on-CCS, and the user for ROSA
+		"OrganizationAccountAccessRole", // This is SRE for on-CCS, and the user for ROSA - we consider cluster flavor with https://issues.redhat.com/browse/OSD-15569
 	}
 
 	for _, allowPartialRoleString := range allowPartialStringRoles {
