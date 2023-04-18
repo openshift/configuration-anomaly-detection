@@ -217,12 +217,82 @@ var _ = Describe("chgm", func() {
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
-		When("the returned CloudTrailEvent has a matching valid operatorname", func() {
+		When("issuer user is authorized (customprefix-Installer-Role)", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/customprefix-Installer-Role/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/customprefix-Installer-Role","accountId":"1234567","userName":"customprefix-Installer-Role"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("issuer user is authorized (ManagedOpenShift-Support-.*)", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/ManagedOpenShift-Support-v3218/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/ManagedOpenShift-Support-v3218","accountId":"1234567","userName":"ManagedOpenShift-Support-v3218"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("issuer user is authorized (.*-Support-Role)", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/johnnycustom-Support-Role/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/johnnycustom-Support-Role","accountId":"1234567","userName":"johnnycustom-Support-Role"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("the returned CloudTrailEvent has a matching whitelisted user (osdManagedAdmin-.*)", func() {
 			It("should update and escalate to primary", func() {
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				event.Username = aws.String("osdManagedAdmin-abcd")
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("the returned CloudTrailEvent has a matching whitelisted user (osdCcsAdmin)", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.Username = aws.String("osdCcsAdmin")
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+		When("the returned CloudTrailEvent has a matching whitelisted user (.*openshift-machine-api-aws.*)", func() {
+			It("should update and escalate to primary", func() {
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.Username = aws.String("test-openshift-machine-api-aws-test")
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
