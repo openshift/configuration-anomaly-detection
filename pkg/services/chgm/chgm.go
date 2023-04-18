@@ -225,55 +225,46 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 }
 
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
+// For this, we use a whitelist of partial strings that can be SRE
+// based on findings in https://issues.redhat.com/browse/OSD-16042
 func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
-	// operatorIamNames will hold all of the iam names that are allowed to stop instances
-	// TODO: (remove when there is more than one item) holds only one item to allow adding IAM stuff later
-	// pulled by:
-	// 1. logging (via osdctl account cli) into an aws cluster
-	// 2. running the command "aws iam list-users --query 'Users[?starts_with(UserName,`<INFRA_ID>`)].UserName'"
-	// 3. trimming the infra id from the front and the uuid from the back
-	// 4. curate the list down until you have only the required api's
-	operatorIamNames := []string{
-		"openshift-machine-api-aws",
+
+	// Users are represented by Username in cloudtrail events
+	allowedUsersPartialStrings := []string{
+		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
+		"openshift-machine-api-aws", // Infra nodes/Autoscaling
+
+		"osdCcsAdmin",     // ROSA-STS - doesn't start/stop instances but is our user
+		"osdManagedAdmin", // ROSA non-STS, OSD non-CCS - install/uninstall node run/terminate
+
+		// Might not exist - better safe than sorry
+		"RH-SRE-",
 	}
 
-	for _, operatorIamName := range operatorIamNames {
-		// HOTFIX(OSD-15308): the value of `username` is not clearly documented and is obtained from the
-		// API call made to fetch cloudtrail events. (see https://docs.aws.amazon.com/sdk-for-go/api/service/cloudtrail/#Event)
-		// The `openshift-machine-api-aws` operator uses `assumeRole` to perform the node stops/terminations,
-		// therefore it is contained in the `issuerUserName` field.
-		// To not break anything with this hotfix, we're adding the check on top of the currently likely
-		// broken `strings.Contains(username, operatorIamName)`.
-		if strings.Contains(issuerUsername, operatorIamName) || strings.Contains(username, operatorIamName) {
+	for _, partialUserString := range allowedUsersPartialStrings {
+		if strings.Contains(username, partialUserString) {
 			return true
 		}
 	}
 
-	if strings.HasPrefix(username, "osdManagedAdmin") {
-		return true
+	// Roles are represented by issuerUsername in cloudtrail events
+	allowedRolesPartialStrings := []string{
+		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
+		"openshift-machine-api-aws", // Infra nodes/Autoscaling
+
+		"-Installer-Role",               // ROSA-STS - install/uninstall node run/terminate
+		"-Support-Role",                 // ROSA-STS - SRE work
+		"ManagedOpenShift-Support-",     // ROSA- non-STS - SRE work
+		"OrganizationAccountAccessRole", // This is SRE for on-CCS, and the user for ROSA - we consider cluster flavor with https://issues.redhat.com/browse/OSD-15569
 	}
 
-	// add RH-SRE-* users to authenticated users to escalate the incident for validation.
-	// The RH SRE on call should verify if the RH SRE was allowed to shutdown the node instance
-	if strings.HasPrefix(username, "RH-SRE-") {
-		return true
+	for _, partialRoleString := range allowedRolesPartialStrings {
+		if strings.Contains(issuerUsername, partialRoleString) {
+			return true
+		}
 	}
 
-	// The ManagedOpenshift Installer Role is allowed to shutdown instances, such as the bootstrap instance
-	if issuerUsername == "ManagedOpenShift-Installer-Role" {
-		return true
-	}
-
-	// "OrganizationAccountAccessRole" could be an SRE based on the cluster type
-	// - NON-CCS: "OrganizationAccountAccessRole" can only be SRE
-	// - CCS: "OrganizationAccountAccessRole" can only be customer
-	//
-	// We currently flag all stopped/terminated instances by an user that assumesRoles "OrganizationAccountAccessRole"
-	// as authorized, to avoid putting anything in limited support (we don't know if it's SRE).
-	//
-	// We could change the logic to know whether or not it was an SRE in the future,
-	// as to not unnecessarily page for all "OrganizationAccountAccessRole" instance stops.
-	return assumedRoleOfName("OrganizationAccountAccessRole", userDetails)
+	return false
 }
 
 // UserInfo will hold the extracted user details
@@ -667,24 +658,6 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 		return CloudTrailEventRaw{}, fmt.Errorf("event version differs from saved one (got %s, want %s) , not sure it's the same schema", res.EventVersion, supportedEventVersion)
 	}
 	return res, nil
-}
-
-// assumedRoleOfName will verify the SessionIssuer UserName is the same as the provided role
-func assumedRoleOfName(role string, userDetails CloudTrailEventRaw) bool {
-	userType := userDetails.UserIdentity.Type
-	// if the user doing the action is a normal user (not an assumed role), stop processing
-	if userType == "IAMUser" {
-		return false
-	}
-	// to make logic less nested, and as the current flow doesn't support other types, stopping on anything not an assumed role
-	if userType != "AssumedRole" {
-		return false
-	}
-	// if the type is not role, it's not supported for now
-	if userDetails.UserIdentity.SessionContext.SessionIssuer.Type != "Role" {
-		return false
-	}
-	return userDetails.UserIdentity.SessionContext.SessionIssuer.UserName == role
 }
 
 // PostLimitedSupport will put the cluster into limited support
