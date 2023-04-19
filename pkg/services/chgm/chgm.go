@@ -257,7 +257,6 @@ func (c *Client) isUserAllowedToStop(username, issuerUsername string, userDetail
 		"ManagedOpenShift-Support-", // ROSA- non-STS - SRE work
 	}
 
-	fmt.Println(c.Cluster.CCS().Enabled())
 	// Check cluster flavor, as 'OrganizationAccountAccessRole' is SRE for non-CCS and the user for ROSA
 	if !c.Cluster.CCS().Enabled() {
 		allowedRolesPartialStrings = append(allowedRolesPartialStrings, "OrganizationAccountAccessRole")
