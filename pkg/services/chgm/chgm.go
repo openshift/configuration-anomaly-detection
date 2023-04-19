@@ -227,7 +227,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 // For this, we use a whitelist of partial strings that can be SRE
 // based on findings in https://issues.redhat.com/browse/OSD-16042
-func (c *Client) isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
+func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string, cluster *v1.Cluster) bool {
 
 	// Users are represented by Username in cloudtrail events
 	allowedUsersPartialStrings := []string{
@@ -258,7 +258,7 @@ func (c *Client) isUserAllowedToStop(username, issuerUsername string, userDetail
 	}
 
 	// Check cluster flavor, as 'OrganizationAccountAccessRole' is SRE for non-CCS and the user for ROSA
-	if !c.Cluster.CCS().Enabled() {
+	if !cluster.CCS().Enabled() {
 		allowedRolesPartialStrings = append(allowedRolesPartialStrings, "OrganizationAccountAccessRole")
 	}
 
@@ -403,7 +403,7 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
 
-		if !c.isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID) {
+		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID, c.Cluster) {
 			output.UserAuthorized = false
 
 			// Return early with `output` containing the first unauthorized user.
