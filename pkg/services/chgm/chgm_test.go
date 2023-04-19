@@ -188,7 +188,7 @@ var _ = Describe("chgm", func() {
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
-		When("username role is OrganizationAccountAccessRole", func() {
+		When("username role is OrganizationAccountAccessRole on a non CCS cluster", func() {
 			It("should update and escalate to primary", func() {
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
@@ -197,6 +197,31 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().UpdateAndEscalateAlert(gomock.Any()).Return(nil)
+
+				gotErr := isRunning.Triggered()
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
+
+		When("username role is OrganizationAccountAccessRole on a CCS cluster", func() {
+			It("should be put into limited support", func() {
+				cluster, err := v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(v1.ClusterStateReady).CCS(v1.NewCCS().Enabled(true)).Build()
+				Expect(err).ToNot(HaveOccurred())
+
+				isRunning = chgm.Client{
+					Service:           mockClient,
+					Cluster:           cluster,
+					ClusterDeployment: &clusterDeployment,
+				}
+
+				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				mockClient.EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
+				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
+				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
+				mockClient.EXPECT().SilenceAlert(gomock.Any()).Return(nil)
 
 				gotErr := isRunning.Triggered()
 				Expect(gotErr).NotTo(HaveOccurred())
