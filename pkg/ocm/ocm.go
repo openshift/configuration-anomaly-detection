@@ -197,6 +197,8 @@ func (c Client) GetCloudProviderID(identifier string) (string, error) {
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
 func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error {
+	fmt.Printf("Sending limited support reason: %s\n", limitedSupportReason.Summary)
+
 	ls, err := c.newLimitedSupportReasonBuilder(limitedSupportReason).Build()
 	if err != nil {
 		return fmt.Errorf("could not create post request: %w", err)

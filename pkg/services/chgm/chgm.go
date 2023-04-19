@@ -107,9 +107,9 @@ func (c *Client) Triggered() error {
 		return c.UpdateAndEscalateAlert(res.String())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport
+
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
-	fmt.Printf("Sending limited support reason: %s\n", chgmLimitedSupport.Summary)
 	return utils.WithRetries(func() error {
 		return c.PostLimitedSupport(res.String())
 	})
