@@ -229,7 +229,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 // For this, we use a whitelist of partial strings that can be SRE
 // based on findings in https://issues.redhat.com/browse/OSD-16042
-func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string) bool {
+func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string, cluster *v1.Cluster) bool {
 
 	// Users are represented by Username in cloudtrail events
 	allowedUsersPartialStrings := []string{
@@ -254,10 +254,14 @@ func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrail
 		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
 		"openshift-machine-api-aws", // Infra nodes/Autoscaling
 
-		"-Installer-Role",               // ROSA-STS - install/uninstall node run/terminate
-		"-Support-Role",                 // ROSA-STS - SRE work
-		"ManagedOpenShift-Support-",     // ROSA- non-STS - SRE work
-		"OrganizationAccountAccessRole", // This is SRE for on-CCS, and the user for ROSA - we consider cluster flavor with https://issues.redhat.com/browse/OSD-15569
+		"-Installer-Role",           // ROSA-STS - install/uninstall node run/terminate
+		"-Support-Role",             // ROSA-STS - SRE work
+		"ManagedOpenShift-Support-", // ROSA- non-STS - SRE work
+	}
+
+	// Check cluster flavor, as 'OrganizationAccountAccessRole' is SRE for non-CCS and the user for ROSA
+	if !cluster.CCS().Enabled() {
+		allowedRolesPartialStrings = append(allowedRolesPartialStrings, "OrganizationAccountAccessRole")
 	}
 
 	for _, partialRoleString := range allowedRolesPartialStrings {
@@ -401,7 +405,7 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
 
-		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID) {
+		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID, c.Cluster) {
 			output.UserAuthorized = false
 
 			// Return early with `output` containing the first unauthorized user.
