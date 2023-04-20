@@ -141,12 +141,14 @@ func (c *Client) Resolved() error {
 
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
-		fmt.Printf("Cluster has state '%s' in OCM, and so investigation is not need\n", res.ClusterState)
+		investigationNotNeededNote := fmt.Sprintf("Cluster has state '%s' in OCM, and so investigation is not needed:\n", res.ClusterState)
+		fmt.Printf("Adding note: %s", investigationNotNeededNote)
+
 		err = utils.WithRetries(func() error {
-			return c.AddNote(res.String())
+			return c.AddNote(investigationNotNeededNote)
 		})
 		if err != nil {
-			fmt.Printf("Failed to add notes to incident: %s\n", res.String())
+			fmt.Printf("Failed to add note '%s' to incident: %s\n", investigationNotNeededNote, err)
 			return nil
 		}
 		return nil
