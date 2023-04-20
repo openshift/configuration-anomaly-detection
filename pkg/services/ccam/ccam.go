@@ -97,14 +97,17 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 	if err != nil {
 		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
+
+	note := fmt.Sprintf("Cluster already has limited support for '%s'. Silencing alert.\n", ccamLimitedSupport.Summary)
+
 	if !lsExists {
 		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.Cluster.ID())
 		if err != nil {
 			return fmt.Errorf("could not post limited support reason for %s: %w", c.Cluster.Name(), err)
 		}
-
+		note = fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport)
 	}
-	return c.SilenceAlert(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v\n", ccamLimitedSupport))
+	return c.SilenceAlert(note)
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
