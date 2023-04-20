@@ -496,9 +496,15 @@ func (c *Client) updatePagerduty(notes, escalationPolicy string) error {
 			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
 		}
 	}
-	fmt.Printf("Move to escalation policy: %s", escalationPolicy)
+	fmt.Printf("Moving to escalation policy: %s\n", escalationPolicy)
 	err := c.MoveToEscalationPolicy(escalationPolicy)
 	if err != nil {
+		// Changing the escalation policy of a resolved alert results in an error such as:
+		// HTTP response failed with status code 400, message: Invalid Input Provided (code: 2001): Incident Already Resolved
+		if strings.Contains(err.Error(), "Incident Already Resolved") {
+			fmt.Printf("Skipped moving alert to escalation policy '%s', alert is already resolved.\n", escalationPolicy)
+			return nil
+		}
 		return fmt.Errorf("failed to change incident escalation policy: %w", err)
 	}
 	return nil
