@@ -99,6 +99,7 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 	}
 
 	if lsExists {
+		fmt.Printf("Cluster is already in limited support for '%s', skipping sending it again.\n", ccamLimitedSupport.Summary)
 		return nil
 	} else {
 		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.Cluster.ID())
