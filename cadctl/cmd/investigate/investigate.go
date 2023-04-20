@@ -154,6 +154,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	eventType := pdClient.GetEventType()
+	fmt.Printf("Starting investigation for %s with event type %s\n", alertType, eventType)
+
 	switch eventType {
 	case pagerduty.IncidentTriggered:
 		return investigationClient.Investigation.Triggered()
