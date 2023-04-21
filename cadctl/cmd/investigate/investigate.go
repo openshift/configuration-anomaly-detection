@@ -49,7 +49,7 @@ func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 }
 
-func run(cmd *cobra.Command, args []string) error {
+func run(_ *cobra.Command, _ []string) error {
 
 	fmt.Println("Running CAD with webhook payload:")
 	payload, err := os.ReadFile(payloadPath)
@@ -89,7 +89,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	cloudProviderSupported, err := checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
+	cloudProviderSupported, err := checkCloudProviderSupported(&ocmClient, externalClusterID, []string{"aws"})
 	if err != nil {
 		return err
 	}
@@ -216,7 +216,7 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 	if err != nil {
 		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
 		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
-		return aws.Client{}, ccamClient.Evaluate(err, externalClusterID, pdClient.GetIncidentID())
+		return aws.Client{}, ccamClient.Evaluate(err, pdClient.GetIncidentID())
 	}
 	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
 	return customerAwsClient, ccamClient.RemoveLimitedSupport()
@@ -294,7 +294,7 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 
 // checkCloudProviderSupported takes a list of supported providers and checks if the
 // cluster to investigate's provider is supported
-func checkCloudProviderSupported(ocmClient *ocm.Client, pdClient *pagerduty.Client, externalClusterID string, supportedProviders []string) (bool, error) {
+func checkCloudProviderSupported(ocmClient *ocm.Client, externalClusterID string, supportedProviders []string) (bool, error) {
 	cloudProvider, err := ocmClient.GetCloudProviderID(externalClusterID)
 	if err != nil {
 		return false, err

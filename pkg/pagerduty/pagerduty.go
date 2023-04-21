@@ -1,3 +1,4 @@
+// Package pagerduty contains wrappers for pagerduty api calls
 package pagerduty
 
 import (

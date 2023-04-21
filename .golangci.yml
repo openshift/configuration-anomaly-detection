@@ -14,7 +14,6 @@ issues:
 linters:
   disable-all: true
   enable:
-    - deadcode
     - errcheck
     - gocritic
     - gocyclo
@@ -25,9 +24,7 @@ linters:
     - misspell
     - revive
     - staticcheck
-    - structcheck
     - typecheck
     - unused
-    - varcheck
     - gofmt
     

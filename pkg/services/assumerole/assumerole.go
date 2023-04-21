@@ -1,3 +1,4 @@
+// Package assumerole contains functions needed to assumeRole jump into an aws account
 package assumerole
 
 import (

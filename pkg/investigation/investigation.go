@@ -1,3 +1,4 @@
+// Package investigation contains base functions for investigations
 package investigation
 
 import (

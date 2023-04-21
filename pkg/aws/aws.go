@@ -1,8 +1,9 @@
+// Package aws contains functions related to aws sdk
 package aws
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -88,12 +89,12 @@ func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 	dir = filepath.Clean(dir)
 
 	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
-	accessKeyBytes, err := ioutil.ReadFile(accessKeyBytesPath)
+	accessKeyBytes, err := os.ReadFile(accessKeyBytesPath)
 	if err != nil {
 		return Client{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
 	}
 	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
-	secretKeyBytes, err := ioutil.ReadFile(secretKeyBytesPath)
+	secretKeyBytes, err := os.ReadFile(secretKeyBytesPath)
 	if err != nil {
 		return Client{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
 	}

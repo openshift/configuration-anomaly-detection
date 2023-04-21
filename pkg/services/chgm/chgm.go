@@ -1,3 +1,4 @@
+// Package chgm contains functionality for the chgm investigation
 package chgm
 
 import (
@@ -229,7 +230,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 // For this, we use a whitelist of partial strings that can be SRE
 // based on findings in https://issues.redhat.com/browse/OSD-16042
-func isUserAllowedToStop(username, issuerUsername string, userDetails CloudTrailEventRaw, infraID string, cluster *v1.Cluster) bool {
+func isUserAllowedToStop(username, issuerUsername string, cluster *v1.Cluster) bool {
 
 	// Users are represented by Username in cloudtrail events
 	allowedUsersPartialStrings := []string{
@@ -405,7 +406,7 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
 
-		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, userDetails, infraID, c.Cluster) {
+		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, c.Cluster) {
 			output.UserAuthorized = false
 
 			// Return early with `output` containing the first unauthorized user.
