@@ -44,10 +44,10 @@ type Client struct {
 	sdkClient *sdk.Client
 	// currentUserEmail is the current logged-in user's email
 	currentUserEmail string
-	// escalationPolicy
-	escalationPolicy string
-	// silentPolicy
-	silentPolicy string
+	// onCallEscalationPolicy
+	onCallEscalationPolicy string
+	// silentEscalationPolicy
+	silentEscalationPolicy string
 	// parsedPayload holds some of the webhook payloads fields ( add more if needed )
 	parsedPayload WebhookPayload
 	// externalClusterID ( only gets initialized after the first GetExternalClusterID call )
@@ -107,10 +107,10 @@ func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload [
 		return Client{}, UnmarshalErr{Err: err}
 	}
 	c := Client{
-		sdkClient:        sdk.NewClient(authToken, options...),
-		escalationPolicy: escalationPolicy,
-		silentPolicy:     silentPolicy,
-		parsedPayload:    parsedPayload,
+		sdkClient:              sdk.NewClient(authToken, options...),
+		onCallEscalationPolicy: escalationPolicy,
+		silentEscalationPolicy: silentPolicy,
+		parsedPayload:          parsedPayload,
 	}
 	return c, nil
 }
@@ -140,14 +140,14 @@ func (c *Client) GetIncidentID() string {
 	return c.parsedPayload.Event.Data.IncidentID
 }
 
-// GetEscalationPolicy returns the set escalation policy
-func (c *Client) GetEscalationPolicy() string {
-	return c.escalationPolicy
+// GetOnCallEscalationPolicy returns the set on call escalation policy
+func (c *Client) GetOnCallEscalationPolicy() string {
+	return c.onCallEscalationPolicy
 }
 
-// GetSilentPolicy returns the set policy for silencing alerts
-func (c *Client) GetSilentPolicy() string {
-	return c.silentPolicy
+// GetSilentEscalationPolicy returns the set policy for silencing alerts
+func (c *Client) GetSilentEscalationPolicy() string {
+	return c.silentEscalationPolicy
 }
 
 // RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
@@ -185,6 +185,8 @@ func (c *Client) RetrieveExternalClusterID() (string, error) {
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
 func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
+	fmt.Printf("Moving to escalation policy: %s\n", escalationPolicyID)
+
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID: c.GetIncidentID(),
@@ -194,8 +196,13 @@ func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 			},
 		},
 	}
+
 	err := c.updateIncident(o)
 	if err != nil {
+		if strings.Contains(err.Error(), "Incident Already Resolved") {
+			fmt.Printf("Skipped moving alert to escalation policy '%s', alert is already resolved.\n", escalationPolicyID)
+			return nil
+		}
 		return fmt.Errorf("could not update the escalation policy: %w", err)
 	}
 	return nil
@@ -261,6 +268,7 @@ func (c *Client) updateIncident(o []sdk.ManageIncidentsOptions) error {
 
 // AddNote will add a note to an incident
 func (c *Client) AddNote(noteContent string) error {
+	fmt.Println("Attaching Note...")
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
@@ -474,38 +482,35 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 	return nil
 }
 
-// UpdateAndEscalateAlert will ensure that an incident informs a SRE.
-// Optionally notes can be added to the incident
-func (c *Client) UpdateAndEscalateAlert(notes string) error {
-	return c.updatePagerduty(notes, c.GetEscalationPolicy())
+// SilenceAlert silences the alert by assigning the "Silent Test" escalation policy
+func (c *Client) SilenceAlert() error {
+	return c.MoveToEscalationPolicy(c.GetSilentEscalationPolicy())
 }
 
-// SilenceAlert annotates the PagerDuty alert with the given notes and silences it via
+// SilenceAlert annotates the PagerDuty alert with the given notes and silences it by
 // assigning the "Silent Test" escalation policy
-func (c *Client) SilenceAlert(notes string) error {
-	fmt.Println("Silencing alert")
-	return c.updatePagerduty(notes, c.GetSilentPolicy())
+func (c *Client) SilenceAlertWithNote(notes string) error {
+	return c.addNoteAndEscalate(notes, c.GetSilentEscalationPolicy())
 }
 
-// updatePagerduty attaches notes to an incident and moves it to a escalation policy
-func (c *Client) updatePagerduty(notes, escalationPolicy string) error {
+// EscalateAlert escalates the alert to the on call escalation policy
+func (c *Client) EscalateAlert() error {
+	return c.MoveToEscalationPolicy(c.GetOnCallEscalationPolicy())
+}
+
+// EscalateAlert annotates the PagerDuty alert with the given notes and escalates it by
+// assigning to the on call escalation policy
+func (c *Client) EscalateAlertWithNote(notes string) error {
+	return c.addNoteAndEscalate(notes, c.GetOnCallEscalationPolicy())
+}
+
+// addNoteAndEscalate attaches notes to an incident and moves it to the given escalation policy
+func (c *Client) addNoteAndEscalate(notes, escalationPolicy string) error {
 	if notes != "" {
-		fmt.Println("Attaching Note")
 		err := c.AddNote(notes)
 		if err != nil {
 			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
 		}
 	}
-	fmt.Printf("Moving to escalation policy: %s\n", escalationPolicy)
-	err := c.MoveToEscalationPolicy(escalationPolicy)
-	if err != nil {
-		// Changing the escalation policy of a resolved alert results in an error such as:
-		// HTTP response failed with status code 400, message: Invalid Input Provided (code: 2001): Incident Already Resolved
-		if strings.Contains(err.Error(), "Incident Already Resolved") {
-			fmt.Printf("Skipped moving alert to escalation policy '%s', alert is already resolved.\n", escalationPolicy)
-			return nil
-		}
-		return fmt.Errorf("failed to change incident escalation policy: %w", err)
-	}
-	return nil
+	return c.MoveToEscalationPolicy(escalationPolicy)
 }
