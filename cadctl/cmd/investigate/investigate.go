@@ -97,7 +97,7 @@ func run(cmd *cobra.Command, args []string) error {
 	// We currently have no investigations supporting GCP. In the future, this check should be moved on
 	// the investigation level, and we should be GCP or AWSClient based on this.
 	if !cloudProviderSupported {
-		err = pdClient.EscalateAlertWithNote(fmt.Sprintf("CAD Investigation skipped: cloud provider is not supported."))
+		err = pdClient.EscalateAlertWithNote("CAD Investigation skipped: cloud provider is not supported.")
 		if err != nil {
 			return err
 		}
