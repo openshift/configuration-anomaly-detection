@@ -68,7 +68,11 @@ func run(cmd *cobra.Command, args []string) error {
 	alertType := isAlertSupported(pdClient.GetTitle(), pdClient.GetServiceName())
 	if alertType == "" {
 		fmt.Printf("Alert is not supported by CAD: %s", pdClient.GetTitle())
-		pdClient.EscalateAlert()
+		err = pdClient.EscalateAlert()
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}
 
@@ -93,7 +97,11 @@ func run(cmd *cobra.Command, args []string) error {
 	// We currently have no investigations supporting GCP. In the future, this check should be moved on
 	// the investigation level, and we should be GCP or AWSClient based on this.
 	if !cloudProviderSupported {
-		pdClient.EscalateAlertWithNote(fmt.Sprintf("CAD Investigation skipped: cloud provider is not supported."))
+		err = pdClient.EscalateAlertWithNote(fmt.Sprintf("CAD Investigation skipped: cloud provider is not supported."))
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}
 
