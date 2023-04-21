@@ -30,7 +30,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/spf13/cobra"
 )
@@ -69,6 +68,11 @@ func run(cmd *cobra.Command, args []string) error {
 	alertType := isAlertSupported(pdClient.GetTitle(), pdClient.GetServiceName())
 	if alertType == "" {
 		fmt.Printf("Alert is not supported by CAD: %s", pdClient.GetTitle())
+		err = pdClient.EscalateAlert()
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}
 
@@ -85,11 +89,20 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
+	cloudProviderSupported, err := checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
+	if err != nil {
+		return err
+	}
+
 	// We currently have no investigations supporting GCP. In the future, this check should be moved on
 	// the investigation level, and we should be GCP or AWSClient based on this.
-	_, err = checkCloudProviderSupported(&ocmClient, &pdClient, externalClusterID, []string{"aws"})
-	if err != nil {
-		return fmt.Errorf("failed cloud provider check: %w", err)
+	if !cloudProviderSupported {
+		err = pdClient.EscalateAlertWithNote("CAD Investigation skipped: cloud provider is not supported.")
+		if err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	awsClient, err := GetAWSClient()
@@ -279,29 +292,20 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 	return client, nil
 }
 
-// checkCloudProviderSupported takes a list of supported providers
-// and retrieves the clusters cloud provider. It will
-// - return the cloud provider if it matches one contained in the supportedProviders list
-// - add a note to pagerduty and return an error if it is not on the supportedProviders list
-func checkCloudProviderSupported(ocmClient *ocm.Client, pdClient *pagerduty.Client, externalClusterID string, supportedProviders []string) (string, error) {
+// checkCloudProviderSupported takes a list of supported providers and checks if the
+// cluster to investigate's provider is supported
+func checkCloudProviderSupported(ocmClient *ocm.Client, pdClient *pagerduty.Client, externalClusterID string, supportedProviders []string) (bool, error) {
 	cloudProvider, err := ocmClient.GetCloudProviderID(externalClusterID)
 	if err != nil {
-		return "", err
+		return false, err
 	}
 
 	for _, provider := range supportedProviders {
 		if cloudProvider == provider {
-			return cloudProvider, nil
+			return true, nil
 		}
 	}
 
-	// CloudProvider doesn't match, try to add a note to pagerduty
-	err = utils.WithRetries(func() error {
-		return pdClient.AddNote("Skipping investigation: no implementation for cloud provider " + cloudProvider)
-	})
-	if err != nil {
-		fmt.Println("Error while posting pagerduty note:", err)
-	}
-
-	return "", fmt.Errorf("the clusters cloud provider is not supported for this CAD investigation")
+	fmt.Printf("Unsupported cloud provider: %s", cloudProvider)
+	return false, nil
 }
