@@ -487,7 +487,7 @@ func (c *Client) SilenceAlert() error {
 	return c.MoveToEscalationPolicy(c.GetSilentEscalationPolicy())
 }
 
-// SilenceAlert annotates the PagerDuty alert with the given notes and silences it by
+// SilenceAlertWithNote annotates the PagerDuty alert with the given notes and silences it by
 // assigning the "Silent Test" escalation policy
 func (c *Client) SilenceAlertWithNote(notes string) error {
 	return c.addNoteAndEscalate(notes, c.GetSilentEscalationPolicy())
@@ -498,7 +498,7 @@ func (c *Client) EscalateAlert() error {
 	return c.MoveToEscalationPolicy(c.GetOnCallEscalationPolicy())
 }
 
-// EscalateAlert annotates the PagerDuty alert with the given notes and escalates it by
+// EscalateAlertWithNote annotates the PagerDuty alert with the given notes and escalates it by
 // assigning to the on call escalation policy
 func (c *Client) EscalateAlertWithNote(notes string) error {
 	return c.addNoteAndEscalate(notes, c.GetOnCallEscalationPolicy())
