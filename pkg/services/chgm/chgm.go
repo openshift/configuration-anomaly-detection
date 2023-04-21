@@ -67,11 +67,11 @@ type Service interface {
 	LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
 	// PD
-	SilenceAlert(notes string) error
+	SilenceAlertWithNote(notes string) error
 	AddNote(notes string) error
 	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
 	GetServiceID() string
-	UpdateAndEscalateAlert(notes string) error
+	EscalateAlertWithNote(notes string) error
 }
 
 // Client for the chgm investigation
@@ -86,25 +86,25 @@ type Client struct {
 func (c *Client) Triggered() error {
 	res, err := c.investigateStoppedInstances()
 	if err != nil {
-		return c.UpdateAndEscalateAlert(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
+		return c.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 
 	fmt.Printf("the investigation returned %#v\n", res)
 
 	lsExists, err := c.IsInLimitedSupport(c.Cluster.ID())
 	if err != nil {
-		return c.UpdateAndEscalateAlert(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
+		return c.EscalateAlertWithNote(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
 	}
 
 	// if lsExists, silence alert and add investigation to notes
 	if lsExists {
 		fmt.Println("Unrelated limited support reason present on cluster, silencing")
-		return c.SilenceAlert(res.String() + "Unrelated limited support reason present on cluster, silenced.")
+		return c.SilenceAlertWithNote(res.String() + "Unrelated limited support reason present on cluster, silenced.")
 	}
 
 	if res.UserAuthorized {
 		fmt.Println("The node shutdown was not the customer. Should alert SRE")
-		return c.UpdateAndEscalateAlert(res.String())
+		return c.EscalateAlertWithNote(res.String())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport
 
@@ -676,5 +676,5 @@ func (c *Client) PostLimitedSupport(notes string) error {
 	}
 	// we need to aditionally silence here, as dms service keeps firing
 	// even when we put in limited support
-	return c.SilenceAlert(string(notes))
+	return c.SilenceAlertWithNote(string(notes))
 }

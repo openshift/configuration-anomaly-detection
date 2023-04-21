@@ -80,6 +80,20 @@ func (mr *MockServiceMockRecorder) DeleteLimitedSupportReasons(ls, clusterID int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLimitedSupportReasons", reflect.TypeOf((*MockService)(nil).DeleteLimitedSupportReasons), ls, clusterID)
 }
 
+// EscalateAlertWithNote mocks base method.
+func (m *MockService) EscalateAlertWithNote(notes string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EscalateAlertWithNote", notes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EscalateAlertWithNote indicates an expected call of EscalateAlertWithNote.
+func (mr *MockServiceMockRecorder) EscalateAlertWithNote(notes interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateAlertWithNote", reflect.TypeOf((*MockService)(nil).EscalateAlertWithNote), notes)
+}
+
 // GetClusterMachinePools mocks base method.
 func (m *MockService) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
 	m.ctrl.T.Helper()
@@ -198,18 +212,18 @@ func (mr *MockServiceMockRecorder) PostLimitedSupportReason(limitedSupportReason
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockService)(nil).PostLimitedSupportReason), limitedSupportReason, clusterID)
 }
 
-// SilenceAlert mocks base method.
-func (m *MockService) SilenceAlert(notes string) error {
+// SilenceAlertWithNote mocks base method.
+func (m *MockService) SilenceAlertWithNote(notes string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SilenceAlert", notes)
+	ret := m.ctrl.Call(m, "SilenceAlertWithNote", notes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SilenceAlert indicates an expected call of SilenceAlert.
-func (mr *MockServiceMockRecorder) SilenceAlert(notes interface{}) *gomock.Call {
+// SilenceAlertWithNote indicates an expected call of SilenceAlertWithNote.
+func (mr *MockServiceMockRecorder) SilenceAlertWithNote(notes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceAlert", reflect.TypeOf((*MockService)(nil).SilenceAlert), notes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceAlertWithNote", reflect.TypeOf((*MockService)(nil).SilenceAlertWithNote), notes)
 }
 
 // UnrelatedLimitedSupportExists mocks base method.
@@ -225,18 +239,4 @@ func (m *MockService) UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason,
 func (mr *MockServiceMockRecorder) UnrelatedLimitedSupportExists(ls, clusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnrelatedLimitedSupportExists", reflect.TypeOf((*MockService)(nil).UnrelatedLimitedSupportExists), ls, clusterID)
-}
-
-// UpdateAndEscalateAlert mocks base method.
-func (m *MockService) UpdateAndEscalateAlert(notes string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAndEscalateAlert", notes)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// UpdateAndEscalateAlert indicates an expected call of UpdateAndEscalateAlert.
-func (mr *MockServiceMockRecorder) UpdateAndEscalateAlert(notes interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAndEscalateAlert", reflect.TypeOf((*MockService)(nil).UpdateAndEscalateAlert), notes)
 }

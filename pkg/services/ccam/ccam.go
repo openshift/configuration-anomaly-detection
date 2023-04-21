@@ -53,10 +53,9 @@ type Service interface {
 	// PD
 	AddNote(noteContent string) error
 	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
-	SilenceAlert(notes string) error
+	SilenceAlertWithNote(notes string) error
 	MoveToEscalationPolicy(escalationPolicyID string) error
-	GetEscalationPolicy() string
-	GetSilentPolicy() string
+	GetOnCallEscalationPolicy() string
 	GetServiceID() string
 }
 
@@ -107,7 +106,7 @@ func (c Client) Evaluate(awsError error, externalClusterID string, incidentID st
 		}
 		note = fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport)
 	}
-	return c.SilenceAlert(note)
+	return c.SilenceAlertWithNote(note)
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
