@@ -1,15 +1,14 @@
 include project.mk
 include boilerplate/generated-includes.mk
 
+GOLANGCI_LINT_VERSION=v1.52.2
+
 # Binaries used in Makefile
 bin/cobra:
 	GOBIN=$(PWD)/bin go install -mod=readonly $(shell go list -m -f '{{ .Path}}/cobra@{{ .Version }}' github.com/spf13/cobra)
 
 bin/embedmd:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/campoy/embedmd@v1.0.0
-
-bin/golangci-lint:
-	GOBIN=$(PWD)/bin go install -mod=readonly github.com/golangci/golangci-lint/cmd/golangci-lint@v1.45.2
 
 bin/gosec:
 	GOBIN=$(PWD)/bin go install -mod=readonly github.com/securego/gosec/v2/cmd/gosec@v2.10.0
@@ -19,6 +18,11 @@ bin/mockgen:
 
 cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
 	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w" -mod=readonly -trimpath $(PWD)/cadctl
+
+# Installed using instructions from: https://golangci-lint.run/usage/install/#linux-and-windows
+getlint:
+	@mkdir -p $(GOPATH)/bin
+	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo "Installing golangci-lint..." && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION))
 
 ## make all binaries be used before any other commands
 # Required as mockgen is running without a relative path
@@ -41,12 +45,12 @@ test:
 	go test -race -mod=readonly ./...
 
 .PHONY: lint
-lint: bin/golangci-lint lint-only-hack
-	GOLANGCI_LINT_CACHE=$(shell mktemp -d) ./bin/golangci-lint run
+lint: getlint lint-only-hack
+	GOLANGCI_LINT_CACHE=$(shell mktemp -d)  $(GOPATH)/bin/golangci-lint run
 
 .PHONY: lint-only-hack
-lint-only-hack: bin/golangci-lint
-	cd hack/update-template/ &&  GOLANGCI_LINT_CACHE=$(shell mktemp -d) ../../bin/golangci-lint run -c ../../.golangci.yml
+lint-only-hack: getlint
+	cd hack/update-template/ && GOLANGCI_LINT_CACHE=$(shell mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: test-with-race
 test-with-race:

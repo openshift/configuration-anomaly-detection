@@ -3,7 +3,6 @@ package ocm
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -47,7 +46,7 @@ func Load() (cfg *Config, err error) {
 		return
 	}
 	// #nosec G304
-	data, err := ioutil.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		err = fmt.Errorf("can't read config file '%s': %v", file, err)
 		return
