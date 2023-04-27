@@ -72,7 +72,7 @@ cadctl-install-local-force:
 	rm cadctl/cadctl >/dev/null 2>&1 || true
 	make cadctl-install-local
 
-# generate-markdown will update the existing markdown files with the contents of the embededed files.
+# generate-markdown will update the existing markdown files with the contents of the embedded files.
 # -w will write the changes to disk instead of presenting them.
 MARKDOWN_SOURCES := $(shell find $(SOURCEDIR) -name '*.md')
 .PHONY: generate-markdown

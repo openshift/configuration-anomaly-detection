@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	"github.com/openshift/configuration-anomaly-detection/cadctl/cmd/checks"
 	"os"
 
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
@@ -40,4 +41,5 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(investigate.InvestigateCmd)
+	rootCmd.AddCommand(checks.Cmd)
 }

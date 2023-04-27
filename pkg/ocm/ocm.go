@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
@@ -23,14 +24,30 @@ type LimitedSupportReason struct {
 }
 
 // Client is the ocm client with which we can run the commands
-// currently we do not need to export the connection or the config, as we create the Client using the New func
+// currently we do not need to export the connection or the config, as we create the Client using the NewClient func
 type Client struct {
 	conn *sdk.Connection
 }
 
-// New will create a new ocm client by using the path to a config file
+// GetClient will retrieve an ocm client using NewClient with an opinionated set of configuration and defaults.
+func GetClient() (Client, error) {
+	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
+
+	_, err := os.Stat(cadOcmFilePath)
+	if os.IsNotExist(err) {
+		configDir, err := os.UserConfigDir()
+		if err != nil {
+			return Client{}, err
+		}
+		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
+	}
+
+	return NewClient(cadOcmFilePath)
+}
+
+// NewClient will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
-func New(ocmConfigFile string) (Client, error) {
+func NewClient(ocmConfigFile string) (Client, error) {
 	var err error
 	client := Client{}
 
@@ -96,6 +113,11 @@ func newConnectionFromClientPair() (*sdk.Connection, error) {
 		return nil, fmt.Errorf("missing environment variables: CAD_OCM_CLIENT_ID CAD_OCM_CLIENT_SECRET CAD_OCM_URL")
 	}
 	return sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(false).Build()
+}
+
+func (c Client) ListManagedClusters(size int, page int) (*v1.ClustersListResponse, error) {
+	request := c.conn.ClustersMgmt().V1().Clusters().List().Search("managed='t'").Size(size).Page(page)
+	return request.Send()
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID

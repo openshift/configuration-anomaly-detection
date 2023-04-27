@@ -36,28 +36,27 @@ See [investigation.go](../../cadctl/cmd/investigate/investigate.go) for an examp
 
 	In your code, you can import envvars like in this example:
 
-
-	[embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetAWSClient/ /^}$/)
-	```go
-	// GetAWSClient will retrieve the AwsClient from the 'aws' package
-	func GetAWSClient() (aws.Client, error) {
-		awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
-		awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-		awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
-		awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
-		if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
-			return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
-		}
-		if !hasAwsSessionToken {
-			fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
-		}
-		if !hasAwsDefaultRegion {
-			awsDefaultRegion = "us-east-1"
-		}
-
-		return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
+[embedmd]:# (./aws.go /\/\/ GetClient/ /^}$/)
+```go
+// GetClient will retrieve an aws client using NewClient with an opinionated set of configuration and defaults.
+func GetClient() (Client, error) {
+	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
+	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
+	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
+	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
+	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
+		return Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
 	}
-	```
+	if !hasAwsSessionToken {
+		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
+	}
+	if !hasAwsDefaultRegion {
+		awsDefaultRegion = "us-east-1"
+	}
+
+	return NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
+}
+```
 
 6. Execute the command:x``
 

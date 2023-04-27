@@ -3,6 +3,9 @@ package ccam
 
 import (
 	"fmt"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
+	"os"
 	"regexp"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -65,8 +68,41 @@ type Client struct {
 	Cluster *v1.Cluster
 }
 
+// InvestigateCCAM performs a full investigation a cluster's credentials. It will return an aws client or an error after trying to jump into support role.
+// It will also place the cluster into limited support or remove the cluster from limited support if appropriate.
+func InvestigateCCAM(awsClient aws.Client, ocmClient OcmClient, pdClient PdClient, cluster *v1.Cluster) (aws.Client, error) {
+	// Try to get cloud credentials
+	arClient := assumerole.Client{
+		Service: assumerole.Provider{
+			AwsClient: awsClient,
+			OcmClient: ocmClient,
+		},
+	}
+
+	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
+	if !ok {
+		return aws.Client{}, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
+	}
+
+	supportRole, ok := os.LookupEnv("CAD_AWS_SUPPORT_JUMPROLE")
+	if !ok {
+		return aws.Client{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
+	}
+
+	ccamClient := New(&ocmClient, &pdClient, cluster)
+
+	customerAwsClient, err := arClient.AssumeSupportRoleChain(cluster.ExternalID(), cssJumprole, supportRole)
+	if err != nil {
+		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
+		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
+		return aws.Client{}, ccamClient.Evaluate(err)
+	}
+	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
+	return customerAwsClient, ccamClient.RemoveLimitedSupport()
+}
+
 // New creates a new CCAM client and gets the cluster object from ocm for the internal id
-func New(ocmClient *OcmClient, pdClient *PdClient, cluster *v1.Cluster) (Client, error) {
+func New(ocmClient *OcmClient, pdClient *PdClient, cluster *v1.Cluster) Client {
 	client := Client{
 		Service: Provider{
 			OcmClient: ocmClient,
@@ -74,7 +110,7 @@ func New(ocmClient *OcmClient, pdClient *PdClient, cluster *v1.Cluster) (Client,
 		},
 		Cluster: cluster,
 	}
-	return client, nil
+	return client
 }
 
 // checkMissing checks for missing credentials that are required for assuming
@@ -87,7 +123,7 @@ func (c Client) checkMissing(err error) bool {
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
-func (c Client) Evaluate(awsError error, _ string) error {
+func (c Client) Evaluate(awsError error) error {
 	if !c.checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}

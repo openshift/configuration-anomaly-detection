@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ type Client struct {
 	onCallEscalationPolicy string
 	// silentEscalationPolicy
 	silentEscalationPolicy string
-	// parsedPayload holds some of the webhook payloads fields ( add more if needed )
+	// parsedPayload holds the webhook payloads fields ( add more if needed )
 	parsedPayload WebhookPayload
 	// externalClusterID ( only gets initialized after the first GetExternalClusterID call )
 	externalClusterID *string
@@ -99,13 +100,38 @@ func (c *WebhookPayload) Unmarshal(data []byte) error {
 	return nil
 }
 
+// GetClientNoWebhook is a convenience function for `GetClient(nil)`
+func GetClientNoWebhook() (Client, error) {
+	return GetClient(nil)
+}
+
+// GetClient will retrieve a PagerDuty client using NewWithToken with an opinionated set of configuration and defaults.
+func GetClient(webhookPayload []byte) (Client, error) {
+	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
+	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
+	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
+
+	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
+		return Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
+	}
+
+	client, err := NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
+	if err != nil {
+		return Client{}, fmt.Errorf("could not initialize the client: %w", err)
+	}
+
+	return client, nil
+}
+
 // NewWithToken is similar to New, but you only need to supply to authentication token to start
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
 func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (Client, error) {
 	parsedPayload := WebhookPayload{}
-	err := parsedPayload.Unmarshal(webhookPayload)
-	if err != nil {
-		return Client{}, UnmarshalErr{Err: err}
+	if webhookPayload != nil {
+		err := parsedPayload.Unmarshal(webhookPayload)
+		if err != nil {
+			return Client{}, UnmarshalErr{Err: err}
+		}
 	}
 	c := Client{
 		sdkClient:              sdk.NewClient(authToken, options...),

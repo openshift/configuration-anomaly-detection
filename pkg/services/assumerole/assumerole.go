@@ -3,7 +3,6 @@ package assumerole
 
 import (
 	"fmt"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 

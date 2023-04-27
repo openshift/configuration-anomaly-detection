@@ -19,15 +19,12 @@ package investigate
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
-	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 
@@ -58,7 +55,7 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 	fmt.Println(string(payload))
 
-	pdClient, err := GetPDClient(payload)
+	pdClient, err := pagerduty.GetClient(payload)
 	if err != nil {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
@@ -84,7 +81,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("GetExternalID failed on: %w", err)
 	}
 
-	ocmClient, err := GetOCMClient()
+	ocmClient, err := ocm.GetClient()
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
@@ -105,7 +102,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	awsClient, err := GetAWSClient()
+	awsClient, err := aws.GetClient()
 	if err != nil {
 		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
@@ -121,12 +118,11 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	// Try to jump into support role
-	customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
-		externalClusterID, cluster)
+	customerAwsClient, err := ccam.InvestigateCCAM(awsClient, ocmClient, pdClient, cluster)
 	if err != nil {
 		return err
 	}
-	// If jumpRoles does not return an aws.Client and there was no error
+	// If InvestigateCCAM does not return an aws.Client and there was no error
 	// then cluster is in limited support for missing cloud credentials
 	if customerAwsClient == (aws.Client{}) {
 		return nil
@@ -182,46 +178,6 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 }
 
-// jumpRoles will return an aws client or an error after trying to jump into
-// support role
-func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client,
-	externalClusterID string, cluster *v1.Cluster) (aws.Client, error) {
-	// Try to get cloud credentials
-	arClient := assumerole.Client{
-		Service: assumerole.Provider{
-			AwsClient: awsClient,
-			OcmClient: ocmClient,
-		},
-	}
-
-	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
-	if !ok {
-		return aws.Client{}, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
-	}
-
-	supportRole, ok := os.LookupEnv("CAD_AWS_SUPPORT_JUMPROLE")
-	if !ok {
-		return aws.Client{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
-	}
-
-	ccamClient := ccam.Client{
-		Service: ccam.Provider{
-			OcmClient: &ocmClient,
-			PdClient:  &pdClient,
-		},
-		Cluster: cluster,
-	}
-
-	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
-	if err != nil {
-		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
-		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
-		return aws.Client{}, ccamClient.Evaluate(err, pdClient.GetIncidentID())
-	}
-	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
-	return customerAwsClient, ccamClient.RemoveLimitedSupport()
-}
-
 // isAlertSupported will return a normalized form of the alertname as string or
 // an empty string if the alert is not supported
 func isAlertSupported(alertTitle string, service string) string {
@@ -237,59 +193,6 @@ func isAlertSupported(alertTitle string, service string) string {
 	// 	return "ClusterProvisioningDelay"
 	// }
 	return ""
-}
-
-// GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (ocm.Client, error) {
-	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
-
-	_, err := os.Stat(cadOcmFilePath)
-	if os.IsNotExist(err) {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return ocm.Client{}, err
-		}
-		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
-	}
-
-	return ocm.New(cadOcmFilePath)
-}
-
-// GetAWSClient will retrieve the AwsClient from the 'aws' package
-func GetAWSClient() (aws.Client, error) {
-	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
-	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
-	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
-		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
-	}
-	if !hasAwsSessionToken {
-		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
-	}
-	if !hasAwsDefaultRegion {
-		awsDefaultRegion = "us-east-1"
-	}
-
-	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
-}
-
-// GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
-	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
-	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
-	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
-
-	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
-	}
-
-	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
-	if err != nil {
-		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
-	}
-
-	return client, nil
 }
 
 // checkCloudProviderSupported takes a list of supported providers and checks if the
