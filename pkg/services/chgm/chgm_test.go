@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -22,6 +23,7 @@ var _ = Describe("chgm", func() {
 	var (
 		mockCtrl           *gomock.Controller
 		mockClient         *mock.MockService
+		mockVerifier       *networkverifier.Client
 		isRunning          chgm.Client
 		cluster            *v1.Cluster
 		clusterDeployment  hivev1.ClusterDeployment
@@ -38,6 +40,7 @@ var _ = Describe("chgm", func() {
 	BeforeEach(func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockClient = mock.NewMockService(mockCtrl)
+		mockVerifier = &networkverifier.Client{}
 
 		chgmLimitedSupport = ocm.LimitedSupportReason{
 			Summary: "Cluster not checking in",
@@ -103,7 +106,7 @@ var _ = Describe("chgm", func() {
 				// TODO discuss to which degree we want to mock
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any())
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
@@ -113,7 +116,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fakeErr)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
@@ -125,7 +128,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 			})
@@ -139,7 +142,7 @@ var _ = Describe("chgm", func() {
 
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).ToNot(HaveOccurred())
 			})
 		})
@@ -152,7 +155,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 				// Act
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).ToNot(HaveOccurred())
 			})
 		})
@@ -168,7 +171,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
 				// Act
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				// Assert
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
@@ -184,7 +187,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -198,7 +201,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -223,7 +226,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -238,7 +241,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -252,7 +255,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -266,7 +269,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -280,7 +283,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -294,7 +297,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -308,7 +311,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -322,7 +325,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -337,7 +340,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -352,7 +355,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -367,7 +370,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -381,7 +384,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -397,7 +400,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -413,7 +416,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -428,7 +431,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -443,7 +446,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -458,7 +461,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -473,7 +476,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
@@ -488,7 +491,7 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().EscalateAlertWithNote(gomock.Any()).Return(nil)
 
-				gotErr := isRunning.Triggered()
+				gotErr := isRunning.Triggered(mockVerifier)
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})

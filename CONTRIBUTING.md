@@ -25,6 +25,8 @@ To integrate a new alert:
 
 ## Testing
 
+To generate mocks go:generate `mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/interfaces.go -package mock`
+
 To test an investigation, it may be sufficient to run CAD locally. A payload with an incident ID from PD should be used as an argument. However, make sure to trigger the particular incident in a cluster first. That way, when it becomes available in Pagerduty,  a cloud infrastructure for the test investigation to run on exists. Otherwise, the test will be cut off by either CAD not being able to find the PD incident, or CAD being unable to log in to the cloud provider. 
 
 Try to add as many unit tests as possible to the functions you are writing. Have a look into the other investigations about how the dependencies are mocked away. Think of the happy as well as unhappy paths.

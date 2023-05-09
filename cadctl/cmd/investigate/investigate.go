@@ -30,6 +30,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 
 	"github.com/spf13/cobra"
 )
@@ -133,7 +134,7 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	investigationClient := investigation.Client{}
-
+	networkVerifierClient := networkverifier.Client{}
 	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
@@ -146,6 +147,13 @@ func run(_ *cobra.Command, _ []string) error {
 				},
 				Cluster:           cluster,
 				ClusterDeployment: clusterDeployment,
+			},
+		}
+		networkVerifierClient = networkverifier.Client{
+			Service: networkverifier.Provider{
+				AwsClient: &customerAwsClient,
+				OcmClient: &ocmClient,
+				PdClient:  &pdClient,
 			},
 		}
 	// this comment highlights how the upcoming CPD integration could look like
@@ -171,7 +179,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		return investigationClient.Investigation.Triggered()
+		return investigationClient.Investigation.Triggered(&networkVerifierClient)
 	case pagerduty.IncidentResolved:
 		return investigationClient.Investigation.Resolved()
 		// do we always want to alert primary if a resolve fails?

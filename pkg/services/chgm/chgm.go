@@ -11,6 +11,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
@@ -84,7 +85,7 @@ type Client struct {
 }
 
 // Triggered will analyse chgm incidents that are newly created
-func (c *Client) Triggered() error {
+func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error {
 	res, err := c.investigateStoppedInstances()
 	if err != nil {
 		return c.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
@@ -104,7 +105,33 @@ func (c *Client) Triggered() error {
 	}
 
 	if res.UserAuthorized {
-		fmt.Println("The node shutdown was not the customer. Should alert SRE")
+		fmt.Println("The customer has not stopped/terminated any nodes. Running network verifier...")
+		// Run network verifier
+		verifierResult, failureReason, err := networkVerifierClient.RunNetworkVerifier(c.Cluster.ID())
+		if err != nil {
+			// Forward to on call, set err as note to pagerduty incident
+			fmt.Println("Error running network verifier, escalating to SRE.")
+			err = c.AddNote(fmt.Sprintf("Networkverifier failed to run:\n\t %s", err))
+			if err != nil {
+				fmt.Println("could not add to incident notes")
+			}
+			return c.EscalateAlertWithNote(res.String())
+		}
+
+		if verifierResult == networkverifier.Failure {
+			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s", failureReason))
+			if err != nil {
+				fmt.Println("could not add to incident notes")
+			}
+			// Change this to put the cluster into limited support after some time
+			return c.EscalateAlertWithNote(res.String())
+		}
+
+		fmt.Println("Network verifier passed. Escalating to SRE")
+		err = c.AddNote(fmt.Sprintln("Network verifier passed."))
+		if err != nil {
+			fmt.Println("could not add to incident notes")
+		}
 		return c.EscalateAlertWithNote(res.String())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport

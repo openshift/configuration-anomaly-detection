@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 )
 
 // Investigation wraps all possible event types and serves as a parent class
@@ -17,7 +18,7 @@ import (
 // update the webhook parsing in the pagerduty service accordingly
 // https://developer.pagerduty.com/docs/db0fa8c8984fc-overview#event-data-types
 type Investigation interface {
-	Triggered() error
+	Triggered(networkVerifierClient *networkverifier.Client) error
 	Resolved() error
 	// Reopened() (InvestigationOutput, error)
 	// Escalated() (InvestigationOutput, error)
@@ -31,7 +32,7 @@ type Client struct {
 var webhookMisconfigurationMsg = "Please review the webhook configuration and exclude or implement the event type."
 
 // Triggered is the Client behavior in case the investigation does not implement event type Triggered
-func (c *Client) Triggered() error {
+func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error {
 	return fmt.Errorf("event type 'incident.triggered' is not implemented for this alert" + webhookMisconfigurationMsg)
 }
 
