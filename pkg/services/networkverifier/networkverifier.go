@@ -47,13 +47,6 @@ type Service interface {
 	// OCM
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
-	//TODO add network verifier limited support exists
-	//TODO add network verifier limited support reason
-	// PD
-	// AddNote(notes string) error
-	// MoveToEscalationPolicy(escalationPolicyID string) error
-	// GetEscalationPolicy() string
-	// GetSilentPolicy() string
 	// AWS
 	GetSubnetId(infraID string) ([]string, error)
 	GetSecurityGroupId(infraID string) (string, error)
@@ -190,9 +183,6 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
 	if len(verifierExceptions) != 0 && len(verifierErrors) != 0 {
-
-		// Create our text for the output string
-		// TODO create Pseudo- Summary() string to return
 		exceptionsSummary := verifierExceptions[0].Error()
 		errorsSummary := verifierErrors[0].Error()
 		//AddNote
