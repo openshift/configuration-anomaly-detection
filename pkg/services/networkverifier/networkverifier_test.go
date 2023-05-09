@@ -15,7 +15,7 @@ var _ = Describe("RunVerifier", func() {
 	Describe("AreAllInstancesRunning", func() {
 
 		// this is a var but I use it as a const
-		var fakeErr = fmt.Errorf("test triggered")
+		var fakeErr = fmt.Errorf("verifier test triggered")
 		var (
 			mockCtrl   *gomock.Controller
 			mockClient *mock.MockService

@@ -113,7 +113,7 @@ func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error 
 			fmt.Println("Error running network verifier, escalating to SRE.")
 			err = c.AddNote(fmt.Sprintf("Networkverifier failed to run:\n\t %s", err))
 			if err != nil {
-				fmt.Println("could not add to incident notes")
+				fmt.Println("could not add failure reason incident notes")
 			}
 			return c.EscalateAlertWithNote(res.String())
 		}
@@ -121,7 +121,7 @@ func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error 
 		if verifierResult == networkverifier.Failure {
 			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s", failureReason))
 			if err != nil {
-				fmt.Println("could not add to incident notes")
+				fmt.Println("could not add issues to incident notes")
 			}
 			// Change this to put the cluster into limited support after some time
 			return c.EscalateAlertWithNote(res.String())
@@ -130,7 +130,7 @@ func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error 
 		fmt.Println("Network verifier passed. Escalating to SRE")
 		err = c.AddNote(fmt.Sprintln("Network verifier passed."))
 		if err != nil {
-			fmt.Println("could not add to incident notes")
+			fmt.Println("could not add passed message to incident notes")
 		}
 		return c.EscalateAlertWithNote(res.String())
 	}
