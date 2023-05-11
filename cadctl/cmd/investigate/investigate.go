@@ -134,26 +134,26 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	investigationClient := investigation.Client{}
-	networkVerifierClient := networkverifier.Client{}
+	networkVerifierClient := networkverifier.Client{
+		Service: networkverifier.Provider{
+			AwsClient: &customerAwsClient,
+			OcmClient: &ocmClient,
+			PdClient:  &pdClient,
+		},
+	}
 	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
 		investigationClient = investigation.Client{
 			Investigation: &chgm.Client{
 				Service: chgm.Provider{
-					AwsClient: &customerAwsClient,
-					OcmClient: &ocmClient,
-					PdClient:  &pdClient,
+					AwsClient:             &customerAwsClient,
+					OcmClient:             &ocmClient,
+					PdClient:              &pdClient,
+					NetworkverifierClient: &networkVerifierClient,
 				},
 				Cluster:           cluster,
 				ClusterDeployment: clusterDeployment,
-			},
-		}
-		networkVerifierClient = networkverifier.Client{
-			Service: networkverifier.Provider{
-				AwsClient: &customerAwsClient,
-				OcmClient: &ocmClient,
-				PdClient:  &pdClient,
 			},
 		}
 	// this comment highlights how the upcoming CPD integration could look like
@@ -179,7 +179,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		return investigationClient.Investigation.Triggered(&networkVerifierClient)
+		return investigationClient.Investigation.Triggered()
 	case pagerduty.IncidentResolved:
 		return investigationClient.Investigation.Resolved()
 		// do we always want to alert primary if a resolve fails?

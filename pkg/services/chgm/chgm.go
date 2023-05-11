@@ -45,11 +45,14 @@ type OcmClient = ocm.Client
 // PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
+type NetworkverifierClient = networkverifier.Client
+
 // Provider should have all the functions that ChgmService is implementing
 type Provider struct {
 	*AwsClient
 	*OcmClient
 	*PdClient
+	*NetworkverifierClient
 }
 
 // This will generate mocks for the interfaces in this file
@@ -74,6 +77,8 @@ type Service interface {
 	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
 	GetServiceID() string
 	EscalateAlertWithNote(notes string) error
+	// NetworkVerifier
+	RunNetworkVerifier(clusterID string) (networkverifier.VerifierResult, string, error)
 }
 
 // Client for the chgm investigation
@@ -85,7 +90,7 @@ type Client struct {
 }
 
 // Triggered will analyse chgm incidents that are newly created
-func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error {
+func (c *Client) Triggered() error {
 	res, err := c.investigateStoppedInstances()
 	if err != nil {
 		return c.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
@@ -107,7 +112,7 @@ func (c *Client) Triggered(networkVerifierClient *networkverifier.Client) error 
 	if res.UserAuthorized {
 		fmt.Println("The customer has not stopped/terminated any nodes. Running network verifier...")
 		// Run network verifier
-		verifierResult, failureReason, err := networkVerifierClient.RunNetworkVerifier(c.Cluster.ID())
+		verifierResult, failureReason, err := c.RunNetworkVerifier(c.Cluster.ID())
 		if err != nil {
 			// Forward to on call, set err as note to pagerduty incident
 			fmt.Println("Error running network verifier, escalating to SRE.")

@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier/mock"
+	mock_networkverifier "github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier/mock"
 )
 
 var _ = Describe("RunVerifier", func() {
@@ -18,7 +18,7 @@ var _ = Describe("RunVerifier", func() {
 		var fakeErr = fmt.Errorf("verifier test triggered")
 		var (
 			mockCtrl   *gomock.Controller
-			mockClient *mock.MockService
+			mockClient *mock_networkverifier.MockService
 			isRunning  networkverifier.Client
 			cluster    *v1.Cluster
 			//clusterDeployment hivev1.ClusterDeployment
@@ -28,7 +28,7 @@ var _ = Describe("RunVerifier", func() {
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
-			mockClient = mock.NewMockService(mockCtrl)
+			mockClient = mock_networkverifier.NewMockService(mockCtrl)
 			isRunning = networkverifier.Client{Service: mockClient}
 			var err error
 			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Build()
