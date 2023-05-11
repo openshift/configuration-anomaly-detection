@@ -465,6 +465,7 @@ func (c Client) GetSubnetId(infraID string) ([]string, error) {
 	return []string{*out.Subnets[0].SubnetId}, nil
 }
 
+// IsSubnetPrivate checks if the provided subnet is private
 func (c Client) IsSubnetPrivate(subnet string) bool {
 	in := &ec2.DescribeSubnetsInput{
 		SubnetIds: []*string{aws.String(subnet)},
