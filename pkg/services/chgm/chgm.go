@@ -45,6 +45,7 @@ type OcmClient = ocm.Client
 // PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
+// NetworkverifierClient is a wrapper around the networkverifier client, and is used to import the received functions into the Provider
 type NetworkverifierClient = networkverifier.Client
 
 // Provider should have all the functions that ChgmService is implementing
