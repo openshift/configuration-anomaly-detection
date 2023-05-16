@@ -1,10 +1,9 @@
+// package networkverifier contains functionality for running the network verifier
 package networkverifier
 
 import (
 	"context"
 	"fmt"
-
-	//	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -48,8 +47,8 @@ type Service interface {
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error)
 	// AWS
-	GetSubnetId(infraID string) ([]string, error)
-	GetSecurityGroupId(infraID string) (string, error)
+	GetSubnetID(infraID string) ([]string, error)
+	GetSecurityGroupID(infraID string) (string, error)
 	GetAWSCredentials() (credentials.Value, error)
 	IsSubnetPrivate(subnet string) bool
 }
@@ -84,26 +83,22 @@ func (c *Client) populateStructWith(externalID string) error {
 }
 
 type egressConfig struct {
-	//vpcSubnetID  string
 	cloudImageID string
 	instanceType string
-	//securityGroupId string
-	cloudTags map[string]string
-	//debug           bool
-	//region          string
-	timeout    time.Duration
-	kmsKeyID   string
-	httpProxy  string
-	httpsProxy string
-	CaCert     string
-	noTls      bool
-	//awsProfile      string
+	cloudTags    map[string]string
+	timeout      time.Duration
+	kmsKeyID     string
+	httpProxy    string
+	httpsProxy   string
+	CaCert       string
+	noTls        bool
 }
 
 var (
 	awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
 )
 
+// VerifierResult
 type VerifierResult int
 
 const (
@@ -136,7 +131,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		NoTls:      config.noTls,
 	}
 
-	securityGroupId, err := c.GetSecurityGroupId(infraID)
+	securityGroupId, err := c.GetSecurityGroupID(infraID)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to get SecurityGroupId: %w", err)
 	}
@@ -196,10 +191,11 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 	return Success, "", nil
 }
 
+// GetSubnets gets the private subnets for the cluster based on cluster type
 func (c Client) GetSubnets(infraID string) ([]string, error) {
 	// For non-BYOVPC clusters, retrieve private subnets by tag
 	if len(c.cluster.AWS().SubnetIDs()) == 0 {
-		subnets, _ := c.GetSubnetId(infraID)
+		subnets, _ := c.GetSubnetID(infraID)
 		return subnets, nil
 	}
 	// For PrivateLink clusters, any provided subnet is considered a private subnet

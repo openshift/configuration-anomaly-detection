@@ -81,34 +81,34 @@ func (mr *MockServiceMockRecorder) GetClusterInfo(identifier interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockService)(nil).GetClusterInfo), identifier)
 }
 
-// GetSecurityGroupId mocks base method.
-func (m *MockService) GetSecurityGroupId(infraID string) (string, error) {
+// GetSecurityGroupID mocks base method.
+func (m *MockService) GetSecurityGroupID(infraID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSecurityGroupId", infraID)
+	ret := m.ctrl.Call(m, "GetSecurityGroupID", infraID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSecurityGroupId indicates an expected call of GetSecurityGroupId.
-func (mr *MockServiceMockRecorder) GetSecurityGroupId(infraID interface{}) *gomock.Call {
+// GetSecurityGroupID indicates an expected call of GetSecurityGroupID.
+func (mr *MockServiceMockRecorder) GetSecurityGroupID(infraID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupId", reflect.TypeOf((*MockService)(nil).GetSecurityGroupId), infraID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupID", reflect.TypeOf((*MockService)(nil).GetSecurityGroupID), infraID)
 }
 
-// GetSubnetId mocks base method.
-func (m *MockService) GetSubnetId(infraID string) ([]string, error) {
+// GetSubnetID mocks base method.
+func (m *MockService) GetSubnetID(infraID string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSubnetId", infraID)
+	ret := m.ctrl.Call(m, "GetSubnetID", infraID)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSubnetId indicates an expected call of GetSubnetId.
-func (mr *MockServiceMockRecorder) GetSubnetId(infraID interface{}) *gomock.Call {
+// GetSubnetID indicates an expected call of GetSubnetID.
+func (mr *MockServiceMockRecorder) GetSubnetID(infraID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnetId", reflect.TypeOf((*MockService)(nil).GetSubnetId), infraID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnetID", reflect.TypeOf((*MockService)(nil).GetSubnetID), infraID)
 }
 
 // IsSubnetPrivate mocks base method.

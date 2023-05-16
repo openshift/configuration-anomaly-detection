@@ -105,6 +105,7 @@ func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 	return NewClient(accessKeyID, secretKeyID, "", region)
 }
 
+// GetAWSCredentials gets the AWS credentials
 func (c Client) GetAWSCredentials() (credentials.Value, error) {
 	return c.awsConfig.Credentials.Get()
 }
@@ -418,8 +419,8 @@ func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*c
 	return out.Events, nil
 }
 
-// GetSecurityGroupId will return the security group id needed for the network verifier
-func (c Client) GetSecurityGroupId(infraID string) (string, error) {
+// GetSecurityGroupID will return the security group id needed for the network verifier
+func (c Client) GetSecurityGroupID(infraID string) (string, error) {
 	in := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -441,8 +442,8 @@ func (c Client) GetSecurityGroupId(infraID string) (string, error) {
 	return *out.SecurityGroups[0].GroupId, nil
 }
 
-// GetSubnetId will return the private subnets needed for the network verifier
-func (c Client) GetSubnetId(infraID string) ([]string, error) {
+// GetSubnetID will return the private subnets needed for the network verifier
+func (c Client) GetSubnetID(infraID string) ([]string, error) {
 	in := &ec2.DescribeSubnetsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -475,8 +476,6 @@ func (c Client) IsSubnetPrivate(subnet string) bool {
 
 	if *out.Subnets[0].MapPublicIpOnLaunch {
 		return false
-	} else {
-		return true
 	}
-
+	return true
 }
