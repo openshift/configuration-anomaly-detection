@@ -1,4 +1,4 @@
-// package networkverifier contains functionality for running the network verifier
+// Package networkverifier contains functionality for running the network verifier
 package networkverifier
 
 import (
@@ -98,16 +98,17 @@ var (
 	awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
 )
 
-// VerifierResult
+// VerifierResult type
 type VerifierResult int
 
+// Verifier outcomes
 const (
 	Undefined VerifierResult = 0
 	Failure
 	Success
 )
 
-//runNetworkVerifier runs the network verifier tool to check for network misconfigurations
+// RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
 func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, string, error) {
 	fmt.Printf("Running Network Verifier...\n")
 	err := c.populateStructWith(externalClusterID)
@@ -131,7 +132,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		NoTls:      config.noTls,
 	}
 
-	securityGroupId, err := c.GetSecurityGroupID(infraID)
+	securityGroupID, err := c.GetSecurityGroupID(infraID)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to get SecurityGroupId: %w", err)
 	}
@@ -142,7 +143,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		return Undefined, "", fmt.Errorf("failed to get Subnets: %w", err)
 	}
 
-	fmt.Printf("Using Security Group ID: %s\n", securityGroupId)
+	fmt.Printf("Using Security Group ID: %s\n", securityGroupID)
 	fmt.Printf("Using SubnetID: %s\n", subnet)
 
 	// setup non cloud config options
@@ -160,10 +161,10 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		vei.Tags = awsDefaultTags
 	}
 
-	//Setup AWS Specific Configs
+	// Setup AWS Specific Configs
 	vei.AWS = verifier.AwsEgressConfig{
 		KmsKeyID:        config.kmsKeyID,
-		SecurityGroupId: securityGroupId,
+		SecurityGroupId: securityGroupID,
 	}
 
 	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, c.cluster.Region().ID(), "", true)
@@ -180,7 +181,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 	if len(verifierExceptions) != 0 && len(verifierErrors) != 0 {
 		exceptionsSummary := verifierExceptions[0].Error()
 		errorsSummary := verifierErrors[0].Error()
-		//AddNote
+		// AddNote
 		return Undefined, "", fmt.Errorf(exceptionsSummary, errorsSummary)
 	}
 

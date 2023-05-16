@@ -476,6 +476,7 @@ func (c Client) IsSubnetPrivate(subnet string) bool {
 
 	if *out.Subnets[0].MapPublicIpOnLaunch {
 		return false
+	} else {
+		return true
 	}
-	return true
 }
