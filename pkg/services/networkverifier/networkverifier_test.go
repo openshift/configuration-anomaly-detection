@@ -21,7 +21,7 @@ var _ = Describe("RunVerifier", func() {
 			mockClient *mock_networkverifier.MockService
 			isRunning  networkverifier.Client
 			cluster    *v1.Cluster
-			//clusterDeployment hivev1.ClusterDeployment
+			// clusterDeployment hivev1.ClusterDeployment
 			// infraID           string
 			// instance          ec2.Instance
 			// securitygroup     ec2.SecurityGroup
@@ -38,9 +38,9 @@ var _ = Describe("RunVerifier", func() {
 			// 		ClusterMetadata: &hivev1.ClusterMetadata{
 			// 			InfraID: "12345",
 			// 		}}}
-			//infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
-			//instance = ec2.Instance{InstanceId: aws.String("12345")}
-			//securitygroup = ec2.SecurityGroup{GroupName: aws.String("12345-worker-sg")}
+			// infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
+			// instance = ec2.Instance{InstanceId: aws.String("12345")}
+			// securitygroup = ec2.SecurityGroup{GroupName: aws.String("12345-worker-sg")}
 		})
 		AfterEach(func() {
 			mockCtrl.Finish()

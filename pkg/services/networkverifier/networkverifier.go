@@ -91,7 +91,7 @@ type egressConfig struct {
 	httpProxy    string
 	httpsProxy   string
 	CaCert       string
-	noTls        bool
+	noTLS        bool
 }
 
 var (
@@ -129,7 +129,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		HttpProxy:  config.httpProxy,
 		HttpsProxy: config.httpsProxy,
 		Cacert:     config.CaCert,
-		NoTls:      config.noTls,
+		NoTls:      config.noTLS,
 	}
 
 	securityGroupID, err := c.GetSecurityGroupID(infraID)
