@@ -96,7 +96,21 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// We currently have no investigations supporting GCP. In the future, this check should be moved on
 	// the investigation level, and we should be GCP or AWSClient based on this.
+	// For now, we can silence alerts for clusters that are already in limited support and not handled by CAD
 	if !cloudProviderSupported {
+		fmt.Println("Cloud provider is not supported, checking for limited support...")
+		ls, err := ocmClient.IsInLimitedSupport(externalClusterID)
+		if err != nil {
+			err = pdClient.EscalateAlertWithNote(fmt.Sprintf("could not determine if cluster is in limited support: %s", err.Error()))
+			if err != nil {
+				return err
+			}
+		}
+		if ls {
+			fmt.Println("cluster is in limited support, silencing")
+			return pdClient.SilenceAlertWithNote("cluster is in limited support, silencing alert.")
+		}
+
 		err = pdClient.EscalateAlertWithNote("CAD Investigation skipped: cloud provider is not supported.")
 		if err != nil {
 			return err
@@ -306,6 +320,6 @@ func checkCloudProviderSupported(ocmClient *ocm.Client, externalClusterID string
 		}
 	}
 
-	fmt.Printf("Unsupported cloud provider: %s", cloudProvider)
+	fmt.Printf("Unsupported cloud provider: %s\n", cloudProvider)
 	return false, nil
 }
