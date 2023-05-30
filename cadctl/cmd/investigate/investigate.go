@@ -138,7 +138,6 @@ func run(_ *cobra.Command, _ []string) error {
 		Service: networkverifier.Provider{
 			AwsClient: &customerAwsClient,
 			OcmClient: &ocmClient,
-			PdClient:  &pdClient,
 		},
 	}
 	// Alert specific setup of investigationClient

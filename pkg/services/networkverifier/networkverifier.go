@@ -38,7 +38,6 @@ type Provider struct {
 	// aws.AwsClient feel a bit redundant\
 	*AwsClient
 	*OcmClient
-	*PdClient
 }
 
 // Service will wrap all the required commands the client needs to run its operations
@@ -56,27 +55,28 @@ type Service interface {
 // Client refers to the networkverifier client
 type Client struct {
 	Service
-	cluster *v1.Cluster
-	cd      *hivev1.ClusterDeployment
+	Cluster           *v1.Cluster
+	ClusterDeployment *hivev1.ClusterDeployment
 }
 
 func (c *Client) populateStructWith(externalID string) error {
-	if c.cluster == nil {
+	if c.Cluster == nil {
 		cluster, err := c.GetClusterInfo(externalID)
 		if err != nil {
 			return fmt.Errorf("could not retrieve cluster info for %s: %w", externalID, err)
 		}
 		// fmt.Printf("cluster ::: %v\n", cluster)
-		c.cluster = cluster
+		c.Cluster = cluster
 	}
-	id := c.cluster.ID()
 
-	if c.cd == nil {
+	id := c.Cluster.ID()
+
+	if c.ClusterDeployment == nil {
 		cd, err := c.GetClusterDeployment(id)
 		if err != nil {
 			return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", id, err)
 		}
-		c.cd = cd
+		c.ClusterDeployment = cd
 	}
 	// fmt.Printf("cd ::: %v\n", cd)
 	return nil
@@ -98,7 +98,7 @@ var (
 	awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
 )
 
-// VerifierResult type
+// VerifierResult type contains the verifier outcomes
 type VerifierResult int
 
 // Verifier outcomes
@@ -116,7 +116,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		return Undefined, "", fmt.Errorf("failed to populate struct in runNetworkVerifier in networkverifier step: %w", err)
 	}
 
-	infraID := c.cd.Spec.ClusterMetadata.InfraID
+	infraID := c.ClusterDeployment.Spec.ClusterMetadata.InfraID
 
 	credentials, err := c.GetAWSCredentials()
 	if err != nil {
@@ -138,6 +138,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 	}
 
 	subnets, err := c.GetSubnets(infraID)
+	// If multiple private subnets are found the networkverifier will run on the first subnet
 	subnet := subnets[0]
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to get Subnets: %w", err)
@@ -147,7 +148,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 	fmt.Printf("Using SubnetID: %s\n", subnet)
 
 	// setup non cloud config options
-	vei := verifier.ValidateEgressInput{
+	validateEgressInput := verifier.ValidateEgressInput{
 		Ctx:          context.TODO(),
 		SubnetID:     subnet,
 		CloudImageID: config.cloudImageID,
@@ -157,31 +158,30 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 		Proxy:        p,
 	}
 
-	if len(vei.Tags) == 0 {
-		vei.Tags = awsDefaultTags
+	if len(validateEgressInput.Tags) == 0 {
+		validateEgressInput.Tags = awsDefaultTags
 	}
 
 	// Setup AWS Specific Configs
-	vei.AWS = verifier.AwsEgressConfig{
+	validateEgressInput.AWS = verifier.AwsEgressConfig{
 		KmsKeyID:        config.kmsKeyID,
 		SecurityGroupId: securityGroupID,
 	}
 
-	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, c.cluster.Region().ID(), "", true)
+	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, c.Cluster.Region().ID(), "", true)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %v", err)
 	}
 
-	awsVerifier.Logger.Warn(context.TODO(), "Using region: %s", c.cluster.Region().ID())
+	fmt.Printf("Using region: %s", c.Cluster.Region().ID())
 
-	out := verifier.ValidateEgress(awsVerifier, vei)
+	out := verifier.ValidateEgress(awsVerifier, validateEgressInput)
 
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
 	if len(verifierExceptions) != 0 && len(verifierErrors) != 0 {
 		exceptionsSummary := verifierExceptions[0].Error()
 		errorsSummary := verifierErrors[0].Error()
-		// AddNote
 		return Undefined, "", fmt.Errorf(exceptionsSummary, errorsSummary)
 	}
 
@@ -195,21 +195,21 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 // GetSubnets gets the private subnets for the cluster based on cluster type
 func (c Client) GetSubnets(infraID string) ([]string, error) {
 	// For non-BYOVPC clusters, retrieve private subnets by tag
-	if len(c.cluster.AWS().SubnetIDs()) == 0 {
+	if len(c.Cluster.AWS().SubnetIDs()) == 0 {
 		subnets, _ := c.GetSubnetID(infraID)
 		return subnets, nil
 	}
 	// For PrivateLink clusters, any provided subnet is considered a private subnet
-	if c.cluster.AWS().PrivateLink() {
-		if len(c.cluster.AWS().SubnetIDs()) == 0 {
+	if c.Cluster.AWS().PrivateLink() {
+		if len(c.Cluster.AWS().SubnetIDs()) == 0 {
 			return nil, fmt.Errorf("unexpected error: %s is a PrivateLink cluster, but no subnets in OCM", infraID)
 		}
-		subnets := c.cluster.AWS().SubnetIDs()
+		subnets := c.Cluster.AWS().SubnetIDs()
 		return subnets, nil
 	}
 	// For non-PrivateLink BYOVPC clusters get subnets from OCM and determine which is private
-	if !c.cluster.AWS().PrivateLink() && len(c.cluster.AWS().SubnetIDs()) != 0 {
-		subnets := c.cluster.AWS().SubnetIDs()
+	if !c.Cluster.AWS().PrivateLink() && len(c.Cluster.AWS().SubnetIDs()) != 0 {
+		subnets := c.Cluster.AWS().SubnetIDs()
 		for _, subnet := range subnets {
 			if c.IsSubnetPrivate(subnet) {
 				return []string{subnet}, nil

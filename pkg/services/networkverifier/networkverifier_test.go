@@ -21,10 +21,6 @@ var _ = Describe("RunVerifier", func() {
 			mockClient *mock_networkverifier.MockService
 			isRunning  networkverifier.Client
 			cluster    *v1.Cluster
-			// clusterDeployment hivev1.ClusterDeployment
-			// infraID           string
-			// instance          ec2.Instance
-			// securitygroup     ec2.SecurityGroup
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
@@ -33,14 +29,6 @@ var _ = Describe("RunVerifier", func() {
 			var err error
 			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Build()
 			Expect(err).ToNot(HaveOccurred())
-			// clusterDeployment = hivev1.ClusterDeployment{
-			// 	Spec: hivev1.ClusterDeploymentSpec{
-			// 		ClusterMetadata: &hivev1.ClusterMetadata{
-			// 			InfraID: "12345",
-			// 		}}}
-			// infraID = clusterDeployment.Spec.ClusterMetadata.InfraID
-			// instance = ec2.Instance{InstanceId: aws.String("12345")}
-			// securitygroup = ec2.SecurityGroup{GroupName: aws.String("12345-worker-sg")}
 		})
 		AfterEach(func() {
 			mockCtrl.Finish()
@@ -56,16 +44,5 @@ var _ = Describe("RunVerifier", func() {
 				Expect(gotErr).To(HaveOccurred())
 			})
 		})
-		// When("GetAwsVerifier fails", func() {
-		// 	It("Should bubble up the error", func() {
-		// 		// Arrange
-		// 		mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, fakeErr)
-		// 		mockClient.EXPECT().GetAwsVerifier(gomock.Any()).Return(nil, fakeErr)
-		// 		// Act
-		// 		gotErr := isRunning.RunNetworkVerifier(cluster.InfraID())
-		// 		// Assert
-		// 		Expect(gotErr).To(HaveOccurred())
-		// 	})
-		// })
 	})
 })

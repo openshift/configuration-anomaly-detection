@@ -125,7 +125,7 @@ func (c *Client) Triggered() error {
 		}
 
 		if verifierResult == networkverifier.Failure {
-			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s", failureReason))
+			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s \n\t Verify and send service log if necessary - https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json", failureReason))
 			if err != nil {
 				fmt.Println("could not add issues to incident notes")
 			}
