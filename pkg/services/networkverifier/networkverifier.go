@@ -102,7 +102,7 @@ const (
 )
 
 // RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
-func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierResult, whatisthis string, name error) { // TODO
+func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierResult, failures string, name error) { // TODO
 	fmt.Printf("Running Network Verifier...\n")
 	err := c.populateStructWith(externalClusterID)
 	if err != nil {
