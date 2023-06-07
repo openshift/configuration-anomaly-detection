@@ -30,6 +30,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 
 	"github.com/spf13/cobra"
 )
@@ -147,16 +148,22 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	investigationClient := investigation.Client{}
-
+	networkVerifierClient := networkverifier.Client{
+		Service: networkverifier.Provider{
+			AwsClient: &customerAwsClient,
+			OcmClient: &ocmClient,
+		},
+	}
 	// Alert specific setup of investigationClient
 	switch alertType {
 	case "ClusterHasGoneMissing":
 		investigationClient = investigation.Client{
 			Investigation: &chgm.Client{
 				Service: chgm.Provider{
-					AwsClient: &customerAwsClient,
-					OcmClient: &ocmClient,
-					PdClient:  &pdClient,
+					AwsClient:             &customerAwsClient,
+					OcmClient:             &ocmClient,
+					PdClient:              &pdClient,
+					NetworkVerifierClient: &networkVerifierClient,
 				},
 				Cluster:           cluster,
 				ClusterDeployment: clusterDeployment,

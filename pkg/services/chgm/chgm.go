@@ -11,6 +11,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
@@ -44,11 +45,15 @@ type OcmClient = ocm.Client
 // PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
+// NetworkVerifierClient is a wrapper around the networkverifier client, and is used to import the received functions into the Provider
+type NetworkVerifierClient = networkverifier.Client
+
 // Provider should have all the functions that ChgmService is implementing
 type Provider struct {
 	*AwsClient
 	*OcmClient
 	*PdClient
+	*NetworkVerifierClient
 }
 
 // This will generate mocks for the interfaces in this file
@@ -73,6 +78,8 @@ type Service interface {
 	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
 	GetServiceID() string
 	EscalateAlertWithNote(notes string) error
+	// NetworkVerifier
+	RunNetworkVerifier(clusterID string) (networkverifier.VerifierResult, string, error)
 }
 
 // Client for the chgm investigation
@@ -104,7 +111,33 @@ func (c *Client) Triggered() error {
 	}
 
 	if res.UserAuthorized {
-		fmt.Println("The node shutdown was not the customer. Should alert SRE")
+		fmt.Println("The customer has not stopped/terminated any nodes. Running network verifier...")
+		// Run network verifier
+		verifierResult, failureReason, err := c.RunNetworkVerifier(c.Cluster.ID())
+		if err != nil {
+			// Forward to on call, set err as note to pagerduty incident
+			fmt.Println("Error running network verifier, escalating to SRE.")
+			err = c.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
+			if err != nil {
+				fmt.Println("could not add failure reason incident notes")
+			}
+			return c.EscalateAlertWithNote(res.String())
+		}
+
+		if verifierResult == networkverifier.Failure {
+			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s \n\t Verify and send service log if necessary - https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json", failureReason))
+			if err != nil {
+				fmt.Println("could not add issues to incident notes")
+			}
+			// Change this to put the cluster into limited support after some time
+			return c.EscalateAlertWithNote(res.String())
+		}
+
+		fmt.Println("Network verifier passed. Escalating to SRE")
+		err = c.AddNote(fmt.Sprintln("Network verifier passed."))
+		if err != nil {
+			fmt.Println("could not add passed message to incident notes")
+		}
 		return c.EscalateAlertWithNote(res.String())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport

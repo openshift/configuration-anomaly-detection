@@ -45,6 +45,7 @@ type Client struct {
 	StsClient        stsiface.STSAPI
 	Ec2Client        ec2iface.EC2API
 	CloudTrailClient cloudtrailiface.CloudTrailAPI
+	Credentials      credentials.Value
 }
 
 // NewClient creates a new client and is used when we already know the secrets and region,
@@ -75,12 +76,23 @@ func NewClient(accessID, accessSecret, token, region string) (Client, error) {
 		return Client{}, err
 	}
 
+	credentials, err := awsConfig.Credentials.Get()
+	if err != nil {
+		return Client{}, err
+	}
+
 	return Client{
 		Region:           *aws.String(region),
 		StsClient:        sts.New(s),
 		Ec2Client:        ec2.New(ec2Sess),
 		CloudTrailClient: cloudtrail.New(cloudTrailSess),
+		Credentials:      credentials,
 	}, nil
+}
+
+// GetAWSCredentials gets the AWS credentials
+func (c Client) GetAWSCredentials() credentials.Value {
+	return c.Credentials
 }
 
 // NewClientFromFileCredentials creates a new client by reading credentials from a file
@@ -410,4 +422,62 @@ func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*c
 		return nil, err
 	}
 	return out.Events, nil
+}
+
+// GetSecurityGroupID will return the security group id needed for the network verifier
+func (c Client) GetSecurityGroupID(infraID string) (string, error) {
+	in := &ec2.DescribeSecurityGroupsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("tag:Name"),
+				Values: []*string{aws.String(fmt.Sprintf("%s-worker-sg", infraID))},
+			},
+		},
+	}
+	out, err := c.Ec2Client.DescribeSecurityGroups(in)
+	if err != nil {
+		return "", fmt.Errorf("failed to list security group: %w", err)
+	}
+	if out.SecurityGroups == nil {
+		return "", fmt.Errorf("security groups are empty")
+	}
+	if len(*out.SecurityGroups[0].GroupId) == 0 {
+		return "", fmt.Errorf("failed to list security group %s-worker-sg", infraID)
+	}
+	return *out.SecurityGroups[0].GroupId, nil
+}
+
+// GetSubnetID will return the private subnets needed for the network verifier
+func (c Client) GetSubnetID(infraID string) ([]string, error) {
+	in := &ec2.DescribeSubnetsInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String(fmt.Sprintf("tag:kubernetes.io/cluster/%s", infraID)),
+				Values: []*string{aws.String("owned")},
+			},
+			{
+				Name:   aws.String("tag-key"),
+				Values: []*string{aws.String("kubernetes.io/role/internal-elb")},
+			},
+		},
+	}
+	out, err := c.Ec2Client.DescribeSubnets(in)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find private subnet for %s: %w", infraID, err)
+	}
+	if len(out.Subnets) == 0 {
+		return nil, fmt.Errorf("found 0 subnets with kubernetes.io/cluster/%s=owned and kubernetes.io/role/internal-elb", infraID)
+	}
+	return []string{*out.Subnets[0].SubnetId}, nil
+}
+
+// IsSubnetPrivate checks if the provided subnet is private
+func (c Client) IsSubnetPrivate(subnet string) bool {
+	in := &ec2.DescribeSubnetsInput{
+		SubnetIds: []*string{aws.String(subnet)},
+	}
+
+	out, _ := c.Ec2Client.DescribeSubnets(in)
+
+	return !*out.Subnets[0].MapPublicIpOnLaunch
 }
