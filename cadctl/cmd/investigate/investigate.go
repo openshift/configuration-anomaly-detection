@@ -149,7 +149,7 @@ func run(_ *cobra.Command, _ []string) error {
 					AwsClient:             &customerAwsClient,
 					OcmClient:             &ocmClient,
 					PdClient:              &pdClient,
-					NetworkverifierClient: &networkVerifierClient,
+					NetworkVerifierClient: &networkVerifierClient,
 				},
 				Cluster:           cluster,
 				ClusterDeployment: clusterDeployment,
