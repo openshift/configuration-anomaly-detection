@@ -45,15 +45,15 @@ type OcmClient = ocm.Client
 // PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
 type PdClient = pagerduty.Client
 
-// NetworkverifierClient is a wrapper around the networkverifier client, and is used to import the received functions into the Provider
-type NetworkverifierClient = networkverifier.Client
+// NetworkVerifierClient is a wrapper around the networkverifier client, and is used to import the received functions into the Provider
+type NetworkVerifierClient = networkverifier.Client
 
 // Provider should have all the functions that ChgmService is implementing
 type Provider struct {
 	*AwsClient
 	*OcmClient
 	*PdClient
-	*NetworkverifierClient
+	*NetworkVerifierClient
 }
 
 // This will generate mocks for the interfaces in this file
@@ -117,7 +117,7 @@ func (c *Client) Triggered() error {
 		if err != nil {
 			// Forward to on call, set err as note to pagerduty incident
 			fmt.Println("Error running network verifier, escalating to SRE.")
-			err = c.AddNote(fmt.Sprintf("Networkverifier failed to run:\n\t %s", err))
+			err = c.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
 			if err != nil {
 				fmt.Println("could not add failure reason incident notes")
 			}

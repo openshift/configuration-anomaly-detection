@@ -37,12 +37,11 @@ func (m *MockService) EXPECT() *MockServiceMockRecorder {
 }
 
 // GetAWSCredentials mocks base method.
-func (m *MockService) GetAWSCredentials() (credentials.Value, error) {
+func (m *MockService) GetAWSCredentials() credentials.Value {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAWSCredentials")
 	ret0, _ := ret[0].(credentials.Value)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetAWSCredentials indicates an expected call of GetAWSCredentials.

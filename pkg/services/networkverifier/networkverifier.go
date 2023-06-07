@@ -12,7 +12,6 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
 	"github.com/openshift/osd-network-verifier/pkg/verifier"
@@ -24,9 +23,6 @@ type AwsClient = aws.Client
 
 // OcmClient is a wrapper around the ocm client, and is used to import the received functions into the Provider
 type OcmClient = ocm.Client
-
-// PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
-type PdClient = pagerduty.Client
 
 // Provider should have all the functions that ChgmService is implementing
 type Provider struct {
@@ -48,7 +44,7 @@ type Service interface {
 	// AWS
 	GetSubnetID(infraID string) ([]string, error)
 	GetSecurityGroupID(infraID string) (string, error)
-	GetAWSCredentials() (credentials.Value, error)
+	GetAWSCredentials() credentials.Value
 	IsSubnetPrivate(subnet string) bool
 }
 
@@ -60,25 +56,22 @@ type Client struct {
 }
 
 func (c *Client) populateStructWith(externalID string) error {
+	var err error
+
 	if c.Cluster == nil {
-		cluster, err := c.GetClusterInfo(externalID)
+		c.Cluster, err = c.GetClusterInfo(externalID)
 		if err != nil {
 			return fmt.Errorf("could not retrieve cluster info for %s: %w", externalID, err)
 		}
-		// fmt.Printf("cluster ::: %v\n", cluster)
-		c.Cluster = cluster
 	}
 
-	id := c.Cluster.ID()
-
 	if c.ClusterDeployment == nil {
-		cd, err := c.GetClusterDeployment(id)
+		id := c.Cluster.ID()
+		c.ClusterDeployment, err = c.GetClusterDeployment(id)
 		if err != nil {
 			return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", id, err)
 		}
-		c.ClusterDeployment = cd
 	}
-	// fmt.Printf("cd ::: %v\n", cd)
 	return nil
 }
 
@@ -109,7 +102,7 @@ const (
 )
 
 // RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
-func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, string, error) {
+func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierResult, whatisthis string, name error) { // TODO
 	fmt.Printf("Running Network Verifier...\n")
 	err := c.populateStructWith(externalClusterID)
 	if err != nil {
@@ -118,7 +111,7 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (VerifierResult, st
 
 	infraID := c.ClusterDeployment.Spec.ClusterMetadata.InfraID
 
-	credentials, err := c.GetAWSCredentials()
+	credentials := c.GetAWSCredentials()
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to get AWS Credentials: %w", err)
 	}

@@ -45,7 +45,7 @@ type Client struct {
 	StsClient        stsiface.STSAPI
 	Ec2Client        ec2iface.EC2API
 	CloudTrailClient cloudtrailiface.CloudTrailAPI
-	awsConfig        *aws.Config
+	Credentials      credentials.Value
 }
 
 // NewClient creates a new client and is used when we already know the secrets and region,
@@ -76,13 +76,23 @@ func NewClient(accessID, accessSecret, token, region string) (Client, error) {
 		return Client{}, err
 	}
 
+	credentials, err := awsConfig.Credentials.Get()
+	if err != nil {
+		return Client{}, err
+	}
+
 	return Client{
 		Region:           *aws.String(region),
 		StsClient:        sts.New(s),
 		Ec2Client:        ec2.New(ec2Sess),
 		CloudTrailClient: cloudtrail.New(cloudTrailSess),
-		awsConfig:        awsConfig,
+		Credentials:      credentials,
 	}, nil
+}
+
+// GetAWSCredentials gets the AWS credentials
+func (c Client) GetAWSCredentials() credentials.Value {
+	return c.Credentials
 }
 
 // NewClientFromFileCredentials creates a new client by reading credentials from a file
@@ -103,11 +113,6 @@ func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
 	return NewClient(accessKeyID, secretKeyID, "", region)
-}
-
-// GetAWSCredentials gets the AWS credentials
-func (c Client) GetAWSCredentials() (credentials.Value, error) {
-	return c.awsConfig.Credentials.Get()
 }
 
 // AssumeRole returns you a new client in the account specified in the roleARN
