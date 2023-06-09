@@ -99,7 +99,7 @@ type VerifierResult int
 const (
 	Undefined VerifierResult = 0
 	Failure   VerifierResult = 1
-	Success   VerifierResult = 0
+	Success   VerifierResult = 2
 )
 
 // RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
