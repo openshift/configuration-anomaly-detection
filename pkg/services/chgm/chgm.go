@@ -111,7 +111,7 @@ func (c *Client) Triggered() error {
 	}
 
 	if res.UserAuthorized {
-		fmt.Println("The customer has not stopped/terminated any nodes. Running network verifier...")
+		fmt.Println("The customer has not stopped/terminated any nodes.")
 		// Run network verifier
 		verifierResult, failureReason, err := c.RunNetworkVerifier(c.Cluster.ID())
 		if err != nil {
@@ -125,7 +125,7 @@ func (c *Client) Triggered() error {
 		}
 
 		if verifierResult == networkverifier.Failure {
-			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n\t %s \n\t Verify and send service log if necessary - https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json", failureReason))
+			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, c.Cluster.ID(), failureReason))
 			if err != nil {
 				fmt.Println("could not add issues to incident notes")
 			}

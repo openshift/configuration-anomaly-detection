@@ -4,6 +4,7 @@ package networkverifier
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -97,8 +98,8 @@ type VerifierResult int
 // Verifier outcomes
 const (
 	Undefined VerifierResult = 0
-	Failure
-	Success
+	Failure   VerifierResult = 1
+	Success   VerifierResult = 2
 )
 
 // RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
@@ -166,22 +167,27 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierRes
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %v", err)
 	}
 
-	fmt.Printf("Using region: %s", c.Cluster.Region().ID())
+	fmt.Printf("Using region: %s\n", c.Cluster.Region().ID())
 
 	out := verifier.ValidateEgress(awsVerifier, validateEgressInput)
 
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
-	if len(verifierExceptions) != 0 && len(verifierErrors) != 0 {
+	if len(verifierExceptions) != 0 || len(verifierErrors) != 0 {
 		exceptionsSummary := verifierExceptions[0].Error()
 		errorsSummary := verifierErrors[0].Error()
 		return Undefined, "", fmt.Errorf(exceptionsSummary, errorsSummary)
 	}
 
 	if !out.IsSuccessful() {
-		failureSummary := verifierFailures[0].Error() // create from verifierFailures
-		return Failure, failureSummary, nil
+		failureSummary := ""
+		for _, failure := range verifierFailures {
+			failureSummary = failureSummary + failure.Error() + ","
+		}
+
+		return Failure, strings.TrimSuffix(strings.ReplaceAll(failureSummary, "egressURL error: ", ""), ","), nil
 	}
+
 	return Success, "", nil
 }
 
