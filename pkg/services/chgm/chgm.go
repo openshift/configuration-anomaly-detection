@@ -69,6 +69,7 @@ type Service interface {
 	GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error)
 	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
 	IsInLimitedSupport(clusterID string) (bool, error)
+	IsLimitedSupportAllowed(clusterID string) (bool, error)
 	UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
 	LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
@@ -141,6 +142,15 @@ func (c *Client) Triggered() error {
 		return c.EscalateAlertWithNote(res.String())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport
+
+	// Check if limited support can be set on the cluster
+	allowed, err := c.IsLimitedSupportAllowed(c.Cluster.ID())
+	if err != nil {
+		return c.EscalateAlertWithNote(fmt.Errorf("failed to determine if the cluster can be set to limited support: %w", err).Error())
+	}
+	if !allowed {
+		return c.EscalateAlertWithNote("cluster state does not allow limited support to be set")
+	}
 
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes

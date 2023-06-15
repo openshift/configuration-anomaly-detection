@@ -48,6 +48,7 @@ type Service interface {
 	// OCM
 	GetClusterInfo(identifier string) (*v1.Cluster, error)
 	LimitedSupportExists(limitedSupportReason ocm.LimitedSupportReason, clusterID string) (bool, error)
+	IsLimitedSupportAllowed(clusterID string) (bool, error)
 	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
 	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
 	// PD
@@ -90,6 +91,14 @@ func (c Client) checkMissing(err error) bool {
 func (c Client) Evaluate(awsError error, _ string) error {
 	if !c.checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
+	}
+
+	allowed, err := c.IsLimitedSupportAllowed(c.Cluster.ID())
+	if err != nil {
+		return fmt.Errorf("failed to determine if the cluster can be set to limited support: %w", err)
+	}
+	if !allowed {
+		return fmt.Errorf("cluster state does not allow limited support to be set")
 	}
 
 	lsExists, err := c.LimitedSupportExists(ccamLimitedSupport, c.Cluster.ID())

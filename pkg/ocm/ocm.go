@@ -322,6 +322,17 @@ func (c Client) LimitedSupportReasonExists(ls LimitedSupportReason, clusterID st
 	return false, nil
 }
 
+// IsLimitedSupportAllowed returns true if the cluster can be set to limited support
+func (c Client) IsLimitedSupportAllowed(clusterID string) (bool, error) {
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return false, fmt.Errorf("could not retrieve current cluster state for %s: %w", clusterID, err)
+	}
+
+	return cluster.State() != v1.ClusterStatePending && cluster.State() != v1.ClusterStateInstalling &&
+		cluster.State() != v1.ClusterStateUnknown && cluster.State() != v1.ClusterStateUninstalling, nil
+}
+
 func (c Client) reasonsMatch(template LimitedSupportReason, reason *v1.LimitedSupportReason) bool {
 	return reason.Summary() == template.Summary && reason.Details() == template.Details
 }

@@ -139,6 +139,21 @@ func (mr *MockServiceMockRecorder) IsInLimitedSupport(clusterID interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInLimitedSupport", reflect.TypeOf((*MockService)(nil).IsInLimitedSupport), clusterID)
 }
 
+// IsLimitedSupportAllowed mocks base method.
+func (m *MockService) IsLimitedSupportAllowed(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsLimitedSupportAllowed", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsLimitedSupportAllowed indicates an expected call of IsLimitedSupportAllowed.
+func (mr *MockServiceMockRecorder) IsLimitedSupportAllowed(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsLimitedSupportAllowed", reflect.TypeOf((*MockService)(nil).IsLimitedSupportAllowed), clusterID)
+}
+
 // LimitedSupportReasonExists mocks base method.
 func (m *MockService) LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error) {
 	m.ctrl.T.Helper()
