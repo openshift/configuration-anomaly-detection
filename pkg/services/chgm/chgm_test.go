@@ -100,7 +100,6 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				// TODO discuss to which degree we want to mock
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any())
@@ -169,7 +168,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -230,7 +228,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -359,7 +356,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -375,7 +371,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"REDACTED:OCM","arn":"arn:aws:sts::1234:assumed-role/testuser/OCM","accountId":"1234","accessKeyId":"REDACTED","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"REDACTED","arn":"arn:aws:iam::1234:role/testuser","accountId":"1234","userName":"testuser"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:08:01Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:10:40Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.168.0.0","userAgent":"aws-sdk-go-v2/1.17.3 os/linux lang/go/1.19.5 md/GOOS/linux md/GOARCH/amd64 api/ec2/1.25.0","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-00c1f1234567"}]}},"responseElements":{"requestId":"credacted","instancesSet":{"items":[{"instanceId":"i-00c1f1234567","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"credacted","eventID":"e55a8a64-9949-47a9-9fff-12345678","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -391,7 +386,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"test"}}}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -406,7 +400,6 @@ var _ = Describe("chgm", func() {
 				mockClient.EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -423,7 +416,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
@@ -440,7 +432,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"IAMUser"}}`)
 				mockClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				mockClient.EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				mockClient.EXPECT().IsLimitedSupportAllowed(gomock.Eq(cluster.ID())).Return(true, nil)
 				mockClient.EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
 				mockClient.EXPECT().SilenceAlertWithNote(gomock.Any()).Return(nil)
 
