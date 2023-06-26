@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -226,52 +227,52 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 		return nil, fmt.Errorf("could not populate the idToCloudtrailEvent map: %w", err)
 	}
 
-	fmt.Println("Following instances are not running:")
+	logging.Info("Following instances are not running:")
 	for k, v := range idToStopTime {
-		fmt.Printf("%s, stopped running at %s\n", k, v.String())
+		logging.Infof("%s, stopped running at %s", k, v.String())
 	}
-	fmt.Println("Investigating reason...")
+	logging.Info("Investigating stopped reason via cloudtrail events...")
 	idToCloudtrailEvent := make(map[string]*cloudtrail.Event)
 
 	var executionError error
 	err = wait.ExponentialBackoff(backoffOptions, func() (bool, error) {
 		executionError = nil
 
-		localStopEvents, err := c.ListAllInstanceStopEvents()
+		stoppedInstanceEvents, err := c.ListAllInstanceStopEvents()
 		if err != nil {
 			executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
 			return false, nil
 		}
-		fmt.Println("successfully ListAllInstanceStopEvents")
 
-		localTerminatedEvents, err := c.ListAllTerminatedInstances()
+		terminatedInstanceEvents, err := c.ListAllTerminatedInstances()
 		if err != nil {
-			executionError = fmt.Errorf("an error occurred in ListAAllTerminatedInstances: %w", err)
+			executionError = fmt.Errorf("an error occurred in ListAllTerminatedInstances: %w", err)
 			return false, nil
 		}
-		fmt.Println("successfully ListAllTerminatedInstances")
 
 		// only add events to our investigation, if these events contain
 		// at least one of our cluster instances.
-		var localEvents []*cloudtrail.Event
-		for _, event := range localStopEvents {
+		var clusterInstanceEvents []*cloudtrail.Event
+		for _, event := range stoppedInstanceEvents {
 			if eventContainsInstances(instances, event) {
-				localEvents = append(localEvents, event)
+				clusterInstanceEvents = append(clusterInstanceEvents, event)
 				continue
 			}
-			fmt.Printf("event lists only foreign instances: %#v\n", event)
+			// Event is not for one of our cluster instances.
+			logging.Infof("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
 
-		for _, event := range localTerminatedEvents {
+		for _, event := range terminatedInstanceEvents {
 			if eventContainsInstances(instances, event) {
-				localEvents = append(localEvents, event)
+				clusterInstanceEvents = append(clusterInstanceEvents, event)
 				continue
 			}
-			fmt.Printf("event lists only foreign instances: %#v\n", event)
+			// Event is not for one of our cluster instances.
+			logging.Infof("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
 
-		// here we just loop over all stop and terminated events
-		for _, event := range localEvents {
+		// Loop over all stopped and terminate events for our cluster instancs
+		for _, event := range clusterInstanceEvents {
 			// we have to loop over each resource in each event
 			for _, resource := range event.Resources {
 				instanceID := *resource.ResourceName
@@ -289,7 +290,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 				}
 			}
 		}
-		fmt.Printf("%+v\n", idToCloudtrailEvent)
+		logging.Infof("%+v", idToCloudtrailEvent)
 		for _, instance := range instances {
 			instanceID := *instance.InstanceId
 			event, ok := idToCloudtrailEvent[instanceID]
@@ -297,7 +298,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 				executionError = fmt.Errorf("the stopped instance %s does not have a StopInstanceEvent", instanceID)
 				return false, nil
 			}
-			fmt.Println("event in idToCloudtrailEvent[instanceID]", instanceID)
+			logging.Debug("event in idToCloudtrailEvent[instanceID]", instanceID)
 
 			// not checking if the item is in the array as it's a 1-1 mapping
 			extractedTime := idToStopTime[instanceID]
@@ -316,7 +317,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 
 		return true, nil
 	})
-	fmt.Printf("%+v\n", idToCloudtrailEvent)
+	logging.Infof("%+v", idToCloudtrailEvent)
 
 	if err != nil || executionError != nil {
 		if executionError == nil {

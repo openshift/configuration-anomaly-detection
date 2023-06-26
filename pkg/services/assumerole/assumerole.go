@@ -6,6 +6,7 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
@@ -81,7 +82,7 @@ func (c Client) AssumeSupportRoleChain(identifier, ccsJumpRole, supportRole stri
 		return aws.Client{}, fmt.Errorf("5 failed to assume into support-role: %w", err)
 	}
 
-	fmt.Printf("Successfully logged into customer account with role: %s\n", customerRole)
+	logging.Infof("Successfully logged into customer account with role: %s", customerRole)
 
 	return customerClient, nil
 }

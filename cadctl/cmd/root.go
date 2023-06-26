@@ -17,9 +17,8 @@ limitations under the License.
 package cmd
 
 import (
-	"os"
-
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ var rootCmd = &cobra.Command{
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		logging.Fatal(err)
 	}
 }
 

@@ -4,6 +4,8 @@ package utils
 import (
 	"fmt"
 	"time"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 )
 
 // WithRetries runs a function with up to 10 retries on error
@@ -19,7 +21,7 @@ func WithRetriesConfigurable(count int, initialBackoff time.Duration, fn func() 
 	var err error
 	for i := 0; i < count; i++ {
 		if i > 0 {
-			fmt.Printf("Retry %d: %s \n", i, err.Error())
+			logging.Warnf("Retry %d: %s \n", i, err.Error())
 			time.Sleep(initialBackoff)
 			initialBackoff *= 2
 		}

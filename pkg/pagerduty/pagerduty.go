@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+
 	sdk "github.com/PagerDuty/go-pagerduty"
 	"gopkg.in/yaml.v2"
 )
@@ -170,7 +172,7 @@ func (c *Client) RetrieveExternalClusterID() (string, error) {
 
 	// there should be only one alert
 	if len(alerts) > 1 {
-		fmt.Printf("warning: there should be only one alert on each incident, taking the first result of incident: %s", incidentID)
+		logging.Warnf("There should be only one alert on each incident, taking the first result of incident: %s", incidentID)
 	}
 
 	for _, a := range alerts {
@@ -186,7 +188,7 @@ func (c *Client) RetrieveExternalClusterID() (string, error) {
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
 func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
-	fmt.Printf("Moving to escalation policy: %s\n", escalationPolicyID)
+	logging.Infof("Moving to escalation policy: %s", escalationPolicyID)
 
 	o := []sdk.ManageIncidentsOptions{
 		{
@@ -201,7 +203,7 @@ func (c *Client) MoveToEscalationPolicy(escalationPolicyID string) error {
 	err := c.updateIncident(o)
 	if err != nil {
 		if strings.Contains(err.Error(), "Incident Already Resolved") {
-			fmt.Printf("Skipped moving alert to escalation policy '%s', alert is already resolved.\n", escalationPolicyID)
+			logging.Infof("Skipped moving alert to escalation policy '%s', alert is already resolved.", escalationPolicyID)
 			return nil
 		}
 		return fmt.Errorf("could not update the escalation policy: %w", err)
@@ -269,7 +271,7 @@ func (c *Client) updateIncident(o []sdk.ManageIncidentsOptions) error {
 
 // AddNote will add a note to an incident
 func (c *Client) AddNote(noteContent string) error {
-	fmt.Println("Attaching Note...")
+	logging.Info("Attaching Note...")
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
@@ -320,7 +322,7 @@ func (c *Client) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 	if err != nil {
 		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
 	}
-	fmt.Printf("Alert has been created %s\n", newAlert.Description)
+	logging.Infof("Alert has been created %s", newAlert.Description)
 	return nil
 }
 

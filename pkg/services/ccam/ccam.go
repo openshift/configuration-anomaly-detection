@@ -8,6 +8,7 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 )
 
@@ -88,6 +89,8 @@ func (c Client) checkMissing(err error) bool {
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
 func (c Client) Evaluate(awsError error, _ string) error {
+
+	logging.Info("Investigating possible missing cloud credentials...")
 	if !c.checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
@@ -117,16 +120,16 @@ func (c Client) RemoveLimitedSupport() error {
 		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
-		fmt.Println("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
+		logging.Errorf("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
 		originalErr := err
 		err := utils.WithRetries(func() error {
 			return c.CreateNewAlert(c.buildAlertForCCAM(originalErr), c.GetServiceID())
 		})
 		if err != nil {
-			fmt.Println("Failed to alert Primary")
+			logging.Errorf("Failed to alert Primary")
 			return err
 		}
-		fmt.Println("Primary has been alerted")
+		logging.Info("Primary has been alerted")
 		return nil
 	}
 	return nil
