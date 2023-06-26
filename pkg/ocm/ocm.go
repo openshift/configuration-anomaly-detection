@@ -14,6 +14,7 @@ import (
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsv1alpha1 "github.com/openshift/aws-account-operator/pkg/apis/aws/v1alpha1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -199,7 +200,7 @@ func (c Client) GetCloudProviderID(identifier string) (string, error) {
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
 func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error {
-	fmt.Printf("Sending limited support reason: %s\n", limitedSupportReason.Summary)
+	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
 
 	ls, err := c.newLimitedSupportReasonBuilder(limitedSupportReason).Build()
 	if err != nil {
@@ -264,9 +265,9 @@ func (c Client) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID s
 		}
 	}
 	if removedReasons {
-		fmt.Printf("Removed limited support reason `%s`\n", ls.Summary)
+		logging.Infof("Removed limited support reason `%s`", ls.Summary)
 	} else {
-		fmt.Printf("Found no limited support reason to remove for `%s`\n", ls.Summary)
+		logging.Infof("Found no limited support reason to remove for `%s`", ls.Summary)
 	}
 	return nil
 }
@@ -296,7 +297,7 @@ func (c Client) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID
 
 	for _, reason := range reasons {
 		if !c.reasonsMatch(ls, reason) {
-			fmt.Printf("UnrelatedLimitedSupportExists: cluster is in limited support for unrelated reason: %s\n", reason.Summary())
+			logging.Infof("UnrelatedLimitedSupportExists: cluster is in limited support for unrelated reason: %s", reason.Summary())
 			return true, nil
 		}
 	}
@@ -316,7 +317,7 @@ func (c Client) LimitedSupportReasonExists(ls LimitedSupportReason, clusterID st
 
 	for _, reason := range reasons {
 		if c.reasonsMatch(ls, reason) {
-			fmt.Printf("LimitedSupportReasonExists: cluster is in limited support for reason: %s\n", reason.Summary())
+			logging.Infof("LimitedSupportReasonExists: cluster is in limited support for reason: %s", reason.Summary())
 			return true, nil
 		}
 	}

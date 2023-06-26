@@ -11,6 +11,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 
@@ -97,7 +98,7 @@ func (c *Client) Triggered() error {
 		return c.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 
-	fmt.Printf("the investigation returned %#v\n", res)
+	logging.Infof("the investigation returned %#v", res)
 
 	lsExists, err := c.IsInLimitedSupport(c.Cluster.ID())
 	if err != nil {
@@ -106,20 +107,20 @@ func (c *Client) Triggered() error {
 
 	// if lsExists, silence alert and add investigation to notes
 	if lsExists {
-		fmt.Println("Unrelated limited support reason present on cluster, silencing")
+		logging.Info("Unrelated limited support reason present on cluster, silencing")
 		return c.SilenceAlertWithNote(res.String() + "Unrelated limited support reason present on cluster, silenced.")
 	}
 
 	if res.UserAuthorized {
-		fmt.Println("The customer has not stopped/terminated any nodes.")
+		logging.Info("The customer has not stopped/terminated any nodes.")
 		// Run network verifier
 		verifierResult, failureReason, err := c.RunNetworkVerifier(c.Cluster.ID())
 		if err != nil {
 			// Forward to on call, set err as note to pagerduty incident
-			fmt.Println("Error running network verifier, escalating to SRE.")
+			logging.Error("Error running network verifier, escalating to SRE.")
 			err = c.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
 			if err != nil {
-				fmt.Println("could not add failure reason incident notes")
+				logging.Error("could not add failure reason incident notes")
 			}
 			return c.EscalateAlertWithNote(res.String())
 		}
@@ -127,16 +128,16 @@ func (c *Client) Triggered() error {
 		if verifierResult == networkverifier.Failure {
 			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, c.Cluster.ID(), failureReason))
 			if err != nil {
-				fmt.Println("could not add issues to incident notes")
+				logging.Error("could not add issues to incident notes")
 			}
 			// Change this to put the cluster into limited support after some time
 			return c.EscalateAlertWithNote(res.String())
 		}
 
-		fmt.Println("Network verifier passed. Escalating to SRE")
+		logging.Info("Network verifier passed. Escalating to SRE")
 		err = c.AddNote(fmt.Sprintln("Network verifier passed."))
 		if err != nil {
-			fmt.Println("could not add passed message to incident notes")
+			logging.Error("could not add passed message to incident notes")
 		}
 		return c.EscalateAlertWithNote(res.String())
 	}
@@ -159,10 +160,10 @@ func (c *Client) Resolved() error {
 	if err != nil {
 		// The check is just to allow returning early, as we don't need an investigation if CAD didn't put the cluster in LS.
 		// If this fails, it's not a big issue. We can skip the check and proceed with the resolve investigation.
-		fmt.Println("Unable to determine whether or not the cluster was put in limited support by CAD. Proceeding with investigation anyway...")
+		logging.Warn("Unable to determine whether or not the cluster was put in limited support by CAD. Proceeding with investigation anyway...")
 	}
 	if !chgmLsExists {
-		fmt.Println("Skipping resolve investigation, as no actions were taking on this cluster by CAD.")
+		logging.Info("Skipping resolve investigation, as no actions were taking on this cluster by CAD.")
 		return nil
 	}
 
@@ -176,13 +177,13 @@ func (c *Client) Resolved() error {
 	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
 	if res.ClusterNotEvaluated {
 		investigationNotNeededNote := fmt.Sprintf("Cluster has state '%s' in OCM, and so investigation is not needed:\n", res.ClusterState)
-		fmt.Printf("Adding note: %s", investigationNotNeededNote)
+		logging.Infof("Adding note: %s", investigationNotNeededNote)
 
 		err = utils.WithRetries(func() error {
 			return c.AddNote(investigationNotNeededNote)
 		})
 		if err != nil {
-			fmt.Printf("Failed to add note '%s' to incident: %s\n", investigationNotNeededNote, err)
+			logging.Errorf("Failed to add note '%s' to incident: %s", investigationNotNeededNote, err)
 			return nil
 		}
 		return nil
@@ -191,8 +192,8 @@ func (c *Client) Resolved() error {
 	// Investigation completed, but an error was encountered.
 	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
 	if res.Error != "" {
-		fmt.Printf("Cluster failed alert resolution check. Result: %#v\n", res)
-		fmt.Printf("Waiting %d seconds before rechecking cluster\n", restoredClusterRetryDelaySeconds)
+		logging.Warnf("Cluster failed alert resolution check. Result: %#v", res)
+		logging.Infof("Waiting %d seconds before rechecking cluster", restoredClusterRetryDelaySeconds)
 
 		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
 
@@ -201,16 +202,16 @@ func (c *Client) Resolved() error {
 			return fmt.Errorf("failure while re-investigating cluster: %w", err)
 		}
 		if res.ClusterNotEvaluated {
-			fmt.Printf("Investigation not required, cluster has the following condition: %s", res.ClusterState)
+			logging.Infof("Investigation not required, cluster has the following condition: %s", res.ClusterState)
 			return nil
 		}
 		if res.Error != "" {
-			fmt.Printf("investigation completed, but cluster has not been restored properly\n")
+			logging.Warnf("investigation completed, but cluster has not been restored properly")
 			err = utils.WithRetries(func() error {
 				return c.AddNote(res.String())
 			})
 			if err != nil {
-				fmt.Printf("failed to add notes to incident: %s\n", res.String())
+				logging.Errorf("failed to add notes to incident: %s", res.String())
 			}
 
 			return utils.WithRetries(func() error {
@@ -218,19 +219,19 @@ func (c *Client) Resolved() error {
 			})
 		}
 	}
-	fmt.Println("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
+	logging.Info("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
 	err = utils.WithRetries(func() error {
 		return c.DeleteLimitedSupportReasons(chgmLimitedSupport, c.Cluster.ID())
 	})
 	if err != nil {
-		fmt.Println("failed to remove limited support")
+		logging.Error("failed to remove limited support")
 		err = utils.WithRetries(func() error {
 			return c.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create alert: %w", err)
 		}
-		fmt.Println("Alert has been sent")
+		logging.Info("Alert has been sent")
 		return nil
 	}
 	return nil
@@ -242,17 +243,17 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 	res, err = c.investigateStartedInstances()
 	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
 	if err != nil {
-		fmt.Printf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v\n", c.Cluster.ExternalID(), err)
+		logging.Warnf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v", c.Cluster.ExternalID(), err)
 		originalErr := err
 		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
 		if err != nil {
-			fmt.Println("could not update incident notes")
+			logging.Error("could not update incident notes")
 		}
 		err = utils.WithRetries(func() error {
 			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
 		})
 		if err != nil {
-			fmt.Println("failed to alert primary: %w", err)
+			logging.Errorf("failed to alert primary: %w", err)
 		}
 		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", c.Cluster.ExternalID(), originalErr)
 	}
@@ -423,7 +424,6 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 		ExpectedInstances:   *expectedNodesCount,
 	}
 	for _, event := range stoppedInstancesEvents {
-		// fmt.Printf("the event is %#v\n", event)
 		userDetails, err := extractUserDetails(event.CloudTrailEvent)
 		if err != nil {
 			resourceData := "with no resources"
@@ -555,17 +555,17 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 	nodes, ok := c.Cluster.GetNodes()
 	if !ok {
 		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
-		fmt.Printf("node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("node data is missing, dumping cluster object: %#v", c.Cluster)
 		return nil, fmt.Errorf("failed to retrieve cluster node data")
 	}
 	masterCount, ok := nodes.GetMaster()
 	if !ok {
-		fmt.Printf("master node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("master node data is missing, dumping cluster object: %#v", c.Cluster)
 		return nil, fmt.Errorf("failed to retrieve master node data")
 	}
 	infraCount, ok := nodes.GetInfra()
 	if !ok {
-		fmt.Printf("infra node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("infra node data is missing, dumping cluster object: %#v", c.Cluster)
 		return nil, fmt.Errorf("failed to retrieve infra node data")
 	}
 
@@ -579,13 +579,13 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 	if autoscaleComputeOk {
 		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
 		if !ok {
-			fmt.Printf("autoscale min replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			logging.Errorf("autoscale min replicas data is missing, dumping cluster object: %v#", c.Cluster)
 			return nil, fmt.Errorf("failed to retrieve min replicas from autoscale compute data")
 		}
 
 		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
 		if !ok {
-			fmt.Printf("autoscale max replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			logging.Errorf("autoscale max replicas data is missing, dumping cluster object: %v#", c.Cluster)
 			return nil, fmt.Errorf("failed to retrieve max replicas from autoscale compute data")
 		}
 
@@ -593,14 +593,14 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		maxWorkerCount += maxReplicasCount
 	}
 	if !computeCountOk && !autoscaleComputeOk {
-		fmt.Printf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.Cluster)
+		logging.Errorf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.Cluster)
 		return nil, fmt.Errorf("failed to retrieve cluster compute and autoscale compute data")
 	}
 
 	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
 	machinePools, err := c.GetClusterMachinePools(c.Cluster.ID())
 	if err != nil {
-		fmt.Printf("machine pools data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("machine pools data is missing, dumping cluster object: %#v", c.Cluster)
 		return nil, fmt.Errorf("failed to retrieve machine pools data")
 	}
 	for _, pool := range machinePools {
@@ -614,13 +614,13 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		if autoscalingOk {
 			minReplicasCount, ok := autoscaling.GetMinReplicas()
 			if !ok {
-				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				logging.Errorf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
 				return nil, fmt.Errorf("failed to retrieve min replicas data from autoscaling pool")
 			}
 
 			maxReplicasCount, ok := autoscaling.GetMaxReplicas()
 			if !ok {
-				fmt.Printf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				logging.Errorf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
 				return nil, fmt.Errorf("failed to retrieve max replicas data from autoscaling pool")
 			}
 
@@ -629,7 +629,7 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		}
 
 		if !replicasCountOk && !autoscalingOk {
-			fmt.Printf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
+			logging.Errorf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
 			return nil, fmt.Errorf("failed to retrieve replicas and autoscaling data from autoscaling pool")
 		}
 	}

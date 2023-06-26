@@ -30,8 +30,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
-
 	"github.com/spf13/cobra"
 )
 
@@ -43,32 +43,41 @@ var InvestigateCmd = &cobra.Command{
 }
 
 var (
-	payloadPath = "./payload.json"
+	logLevelString = "info"
+	payloadPath    = "./payload.json"
 )
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
+	InvestigateCmd.Flags().StringVarP(&logLevelString, "log-level", "l", logLevelString, "the log level [debug,info,warn,error,fatal], default = info")
 }
 
 func run(_ *cobra.Command, _ []string) error {
 
-	fmt.Println("Running CAD with webhook payload:")
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
 	}
-	fmt.Println(string(payload))
+	logging.Info("Running CAD with webhook payload:", string(payload))
 
 	pdClient, err := GetPDClient(payload)
 	if err != nil {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
 
+	externalClusterID, err := pdClient.RetrieveExternalClusterID()
+	if err != nil {
+		return fmt.Errorf("GetExternalID failed on: %w", err)
+	}
+
+	// initialize logger for the cluster-id context
+	logging.RawLogger = logging.InitLogger(logLevelString, externalClusterID)
+
 	// After this point we know CAD will investigate the alert
 	// so we can initialize the other clients
 	alertType := isAlertSupported(pdClient.GetTitle(), pdClient.GetServiceName())
 	if alertType == "" {
-		fmt.Printf("Alert is not supported by CAD: %s", pdClient.GetTitle())
+		logging.Infof("Alert is not supported by CAD: %s", pdClient.GetTitle())
 		err = pdClient.EscalateAlert()
 		if err != nil {
 			return err
@@ -77,13 +86,8 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	fmt.Printf("AlertType is '%s'\n", alertType)
-	fmt.Printf("Incident ID is: %s\n", pdClient.GetIncidentID())
-
-	externalClusterID, err := pdClient.RetrieveExternalClusterID()
-	if err != nil {
-		return fmt.Errorf("GetExternalID failed on: %w", err)
-	}
+	logging.Infof("AlertType is '%s'", alertType)
+	logging.Infof("Incident ID is: %s", pdClient.GetIncidentID())
 
 	ocmClient, err := GetOCMClient()
 	if err != nil {
@@ -99,7 +103,10 @@ func run(_ *cobra.Command, _ []string) error {
 	// the investigation level, and we should be GCP or AWSClient based on this.
 	// For now, we can silence alerts for clusters that are already in limited support and not handled by CAD
 	if !cloudProviderSupported {
-		fmt.Println("Cloud provider is not supported, checking for limited support...")
+
+		// We forward everything CAD doesn't support investigations for to primary, as long as the clusters
+		// aren't in limited support.
+		logging.Info("Cloud provider is not supported, checking for limited support...")
 		ls, err := ocmClient.IsInLimitedSupport(externalClusterID)
 		if err != nil {
 			err = pdClient.EscalateAlertWithNote(fmt.Sprintf("could not determine if cluster is in limited support: %s", err.Error()))
@@ -108,7 +115,7 @@ func run(_ *cobra.Command, _ []string) error {
 			}
 		}
 		if ls {
-			fmt.Println("cluster is in limited support, silencing")
+			logging.Info("cluster is in limited support, silencing")
 			return pdClient.SilenceAlertWithNote("cluster is in limited support, silencing alert.")
 		}
 
@@ -169,7 +176,7 @@ func run(_ *cobra.Command, _ []string) error {
 				ClusterDeployment: clusterDeployment,
 			},
 		}
-	// this comment highlights how the upcoming CPD integration could look like
+	// CPD could look like this:
 	// case "ClusterProvisioningDelay":
 	// client = investigation.Client{
 	// 	Service: &cpd.Client{
@@ -182,29 +189,25 @@ func run(_ *cobra.Command, _ []string) error {
 	// 	},
 	// }
 
-	// this should never happen as GetAlertType should fail on unsupported alerts
 	default:
+		// Should never happen as GetAlertType should fail on unsupported alerts
 		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
 	}
 
 	eventType := pdClient.GetEventType()
-	fmt.Printf("Starting investigation for %s with event type %s\n", alertType, eventType)
+	logging.Infof("Starting investigation for %s with event type %s", alertType, eventType)
 
 	switch eventType {
 	case pagerduty.IncidentTriggered:
 		return investigationClient.Investigation.Triggered()
 	case pagerduty.IncidentResolved:
 		return investigationClient.Investigation.Resolved()
-		// do we always want to alert primary if a resolve fails?
-		// if we put a cluster in limited support and fail to remove it
-		// the cluster owner can follow normal limited support flow to get it removed
 	default:
 		return fmt.Errorf("event type '%s' is not supported", eventType)
 	}
 }
 
-// jumpRoles will return an aws client or an error after trying to jump into
-// support role
+// jumpRoles will return an aws client or an error after trying to jump into support role
 func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client,
 	externalClusterID string, cluster *v1.Cluster) (aws.Client, error) {
 	// Try to get cloud credentials
@@ -235,11 +238,13 @@ func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Cl
 
 	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
 	if err != nil {
-		fmt.Println("Assuming role failed, potential CCAM alert. Investigating... error: ", err.Error())
-		// if assumeSupportRoleChain fails, we will evaluate if the credentials are missing
+		logging.Info("Failed assumeRole chain: ", err.Error())
+
+		// If assumeSupportRoleChain fails, we evaluate if the credentials are missing based on the error message,
+		// it is also possible the assumeSupportRoleChain failed for another reason (e.g. API errors)
 		return aws.Client{}, ccamClient.Evaluate(err, pdClient.GetIncidentID())
 	}
-	fmt.Println("Got cloud credentials, removing 'Cloud Credentials Are Missing' limited Support reasons if any")
+	logging.Info("Successfully jumpRoled into the customer account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
 	return customerAwsClient, ccamClient.RemoveLimitedSupport()
 }
 
@@ -280,13 +285,10 @@ func GetOCMClient() (ocm.Client, error) {
 func GetAWSClient() (aws.Client, error) {
 	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
 	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-	awsSessionToken, hasAwsSessionToken := os.LookupEnv("AWS_SESSION_TOKEN")
+	awsSessionToken, _ := os.LookupEnv("AWS_SESSION_TOKEN") // AWS_SESSION_TOKEN is optional
 	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
 	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
 		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
-	}
-	if !hasAwsSessionToken {
-		fmt.Println("AWS_SESSION_TOKEN not provided, but is not required ")
 	}
 	if !hasAwsDefaultRegion {
 		awsDefaultRegion = "us-east-1"
@@ -302,7 +304,7 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAP_PD_TOKEN)' is missing")
+		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
@@ -327,6 +329,6 @@ func checkCloudProviderSupported(ocmClient *ocm.Client, externalClusterID string
 		}
 	}
 
-	fmt.Printf("Unsupported cloud provider: %s\n", cloudProvider)
+	logging.Infof("Unsupported cloud provider: %s", cloudProvider)
 	return false, nil
 }
