@@ -36,7 +36,7 @@ func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
 		log.Fatal(err)
 	}
 
-	logger.With(zap.Field{Key: "cluster_id", Type: zapcore.StringType, String: clusterID},
+	logger = logger.With(zap.Field{Key: "cluster_id", Type: zapcore.StringType, String: clusterID},
 		zap.Field{Key: "pipeline_name", Type: zapcore.StringType, String: pipelineName})
 
 	return logger.Sugar()
