@@ -80,6 +80,8 @@ objects:
       params:
       - name: payload
         value: $(params.payload)
+      - name: pipeline-name
+        value: $(context.pipelineRun.name)
       taskRef:
         name: cad-checks
 - apiVersion: v1
@@ -168,6 +170,9 @@ objects:
     - description: Json string of the event data
       name: payload
       type: string
+    - description: The pipelinerun name
+      name: pipeline-name
+      type: string
     steps:
     - args:
       - |-
@@ -178,7 +183,7 @@ objects:
         $(params.payload)
         EOF
         # run the cadctl command
-        cadctl investigate --payload-path $file
+        PIPELINE_NAME=$(params.pipeline-name) cadctl investigate --payload-path $file
       command:
       - /bin/bash
       - -c
