@@ -31,5 +31,7 @@ spec:
       params:
         - name: payload
           value: $(params.payload)
+        - name: pipeline-name
+          value: $(context.pipelineRun.name)
       taskRef:
         name: cad-checks

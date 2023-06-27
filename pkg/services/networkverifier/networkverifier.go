@@ -13,6 +13,7 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
 	"github.com/openshift/osd-network-verifier/pkg/verifier"
@@ -104,7 +105,7 @@ const (
 
 // RunNetworkVerifier runs the network verifier tool to check for network misconfigurations
 func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierResult, failures string, name error) { // TODO
-	fmt.Printf("Running Network Verifier...\n")
+	logging.Info("Running Network Verifier...")
 	err := c.populateStructWith(externalClusterID)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to populate struct in runNetworkVerifier in networkverifier step: %w", err)
@@ -138,8 +139,8 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierRes
 		return Undefined, "", fmt.Errorf("failed to get Subnets: %w", err)
 	}
 
-	fmt.Printf("Using Security Group ID: %s\n", securityGroupID)
-	fmt.Printf("Using SubnetID: %s\n", subnet)
+	logging.Infof("Using Security Group ID: %s", securityGroupID)
+	logging.Infof("Using SubnetID: %s", subnet)
 
 	// setup non cloud config options
 	validateEgressInput := verifier.ValidateEgressInput{
@@ -162,12 +163,12 @@ func (c Client) RunNetworkVerifier(externalClusterID string) (result VerifierRes
 		SecurityGroupId: securityGroupID,
 	}
 
-	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, c.Cluster.Region().ID(), "", true)
+	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, c.Cluster.Region().ID(), "", false)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %v", err)
 	}
 
-	fmt.Printf("Using region: %s\n", c.Cluster.Region().ID())
+	logging.Infof("Using region: %s", c.Cluster.Region().ID())
 
 	out := verifier.ValidateEgress(awsVerifier, validateEgressInput)
 

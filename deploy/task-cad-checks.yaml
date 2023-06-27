@@ -7,6 +7,9 @@ spec:
     - name: payload
       type: string
       description: Json string of the event data
+    - name: pipeline-name
+      type: string
+      description: The pipelinerun name
   steps:
     - name: check-infrastructure
       # this sha is broken, should fix when we onboard
@@ -23,7 +26,7 @@ spec:
           $(params.payload)
           EOF
           # run the cadctl command
-          cadctl investigate --payload-path $file
+          PIPELINE_NAME=$(params.pipeline-name) cadctl investigate --payload-path $file
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
