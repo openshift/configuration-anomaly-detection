@@ -20,65 +20,74 @@ func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
 		log.Fatalln("Invalid log level:", logLevelString)
 	}
 
-	pipelineRunID := os.Getenv("PIPELINE_RUN_ID")
-	if pipelineRunID == "" {
+	pipelineName := os.Getenv("PIPELINE_NAME")
+	if pipelineName == "" {
 		fmt.Println("Warning: Unable to retrieve the pipeline ID on logger creation. Continuing with empty value.")
 	}
 
-	config := zap.NewProductionEncoderConfig()
-	config.EncodeTime = zapcore.RFC3339TimeEncoder
-	consoleEncoder := zapcore.NewJSONEncoder(config)
-	core := zapcore.NewTee(zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), logLevel))
-	return zap.New(core).With(zap.Field{Key: "cluster_id", Type: zapcore.StringType, String: clusterID},
-		zap.Field{Key: "pipeline_id", Type: zapcore.StringType, String: pipelineRunID}).Sugar()
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.TimeKey = "timestamp"
+	config.Level = logLevel
+	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+	config.EncoderConfig.StacktraceKey = "" // to hide stacktrace info
+
+	logger, err := config.Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	logger.With(zap.Field{Key: "cluster_id", Type: zapcore.StringType, String: clusterID},
+		zap.Field{Key: "pipeline_name", Type: zapcore.StringType, String: pipelineName})
+
+	return logger.Sugar()
 }
 
 // Info wraps zap's SugaredLogger.Info()
 func Info(args ...interface{}) {
-	RawLogger.Info(args)
+	RawLogger.Info(args...)
 }
 
 // Debug wraps zap's SugaredLogger.Debug()
 func Debug(args ...interface{}) {
-	RawLogger.Debug(args)
+	RawLogger.Debug(args...)
 }
 
 // Warn wraps zap's SugaredLogger.Warn()
 func Warn(args ...interface{}) {
-	RawLogger.Warn(args)
+	RawLogger.Warn(args...)
 }
 
 // Error wraps zap's SugaredLogger.Error()
 func Error(args ...interface{}) {
-	RawLogger.Error(args)
+	RawLogger.Error(args...)
 }
 
 // Fatal wraps zap's SugaredLogger.Fatal()
 func Fatal(args ...interface{}) {
-	RawLogger.Fatal(args)
+	RawLogger.Fatal(args...)
 }
 
 // Infof wraps zap's SugaredLogger.Infof()
 func Infof(template string, args ...interface{}) {
-	RawLogger.Infof(template, args)
+	RawLogger.Infof(template, args...)
 }
 
 // Debugf wraps zap's SugaredLogger.Debugf()
 func Debugf(template string, args ...interface{}) {
-	RawLogger.Debugf(template, args)
+	RawLogger.Debugf(template, args...)
 }
 
 // Warnf wraps zap's SugaredLogger.Warnf()
 func Warnf(template string, args ...interface{}) {
-	RawLogger.Warnf(template, args)
+	RawLogger.Warnf(template, args...)
 }
 
 // Errorf wraps zap's SugaredLogger.Errorf()
 func Errorf(template string, args ...interface{}) {
-	RawLogger.Errorf(template, args)
+	RawLogger.Errorf(template, args...)
 }
 
 // Fatalf wraps zap's SugaredLogger.Fatalf()
 func Fatalf(template string, args ...interface{}) {
-	RawLogger.Fatalf(template, args)
+	RawLogger.Fatalf(template, args...)
 }
