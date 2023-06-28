@@ -36,12 +36,25 @@ var (
 	stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
 )
 
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/ec2mock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/cloudtrailmock.go -package $GOPACKAGE github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package awsmock github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/ec2mock.go -package awsmock github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
+//go:generate mockgen --build_flags=--mod=readonly -destination mock/cloudtrailmock.go -package awsmock github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
+//go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/aws.go -package awsmock
 
-// Client is a representation of the AWS Client
-type Client struct {
+// Client is the interface exposing Aws related functions
+type Client interface {
+	ListRunningInstances(infraID string) ([]*ec2.Instance, error)
+	ListNonRunningInstances(infraID string) ([]*ec2.Instance, error)
+	PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error)
+	GetAWSCredentials() credentials.Value
+	GetSecurityGroupID(infraID string) (string, error)
+	GetSubnetID(infraID string) ([]string, error)
+	IsSubnetPrivate(subnet string) bool
+	AssumeRole(roleARN, region string) (*SdkClient, error)
+}
+
+// SdkClient is a representation of the AWS Client
+type SdkClient struct {
 	Region           string
 	StsClient        stsiface.STSAPI
 	Ec2Client        ec2iface.EC2API
@@ -51,7 +64,7 @@ type Client struct {
 
 // NewClient creates a new client and is used when we already know the secrets and region,
 // without any need to do any lookup.
-func NewClient(accessID, accessSecret, token, region string) (Client, error) {
+func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error) {
 	awsConfig := &aws.Config{
 		Region:                        aws.String(region),
 		Credentials:                   credentials.NewStaticCredentials(accessID, accessSecret, token),
@@ -64,25 +77,25 @@ func NewClient(accessID, accessSecret, token, region string) (Client, error) {
 
 	s, err := session.NewSession(awsConfig)
 	if err != nil {
-		return Client{}, err
+		return &SdkClient{}, err
 	}
 
 	ec2Sess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return Client{}, err
+		return &SdkClient{}, err
 	}
 
 	cloudTrailSess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return Client{}, err
+		return &SdkClient{}, err
 	}
 
 	credentials, err := awsConfig.Credentials.Get()
 	if err != nil {
-		return Client{}, err
+		return &SdkClient{}, err
 	}
 
-	return Client{
+	return &SdkClient{
 		Region:           *aws.String(region),
 		StsClient:        sts.New(s),
 		Ec2Client:        ec2.New(ec2Sess),
@@ -92,24 +105,24 @@ func NewClient(accessID, accessSecret, token, region string) (Client, error) {
 }
 
 // GetAWSCredentials gets the AWS credentials
-func (c Client) GetAWSCredentials() credentials.Value {
+func (c *SdkClient) GetAWSCredentials() credentials.Value {
 	return c.Credentials
 }
 
 // NewClientFromFileCredentials creates a new client by reading credentials from a file
-func NewClientFromFileCredentials(dir string, region string) (Client, error) {
+func NewClientFromFileCredentials(dir string, region string) (*SdkClient, error) {
 	dir = strings.TrimSuffix(dir, "/")
 	dir = filepath.Clean(dir)
 
 	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
 	accessKeyBytes, err := os.ReadFile(accessKeyBytesPath)
 	if err != nil {
-		return Client{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
+		return &SdkClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
 	}
 	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
 	secretKeyBytes, err := os.ReadFile(secretKeyBytesPath)
 	if err != nil {
-		return Client{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
+		return &SdkClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
 	}
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
@@ -117,14 +130,14 @@ func NewClientFromFileCredentials(dir string, region string) (Client, error) {
 }
 
 // AssumeRole returns you a new client in the account specified in the roleARN
-func (c Client) AssumeRole(roleARN, region string) (Client, error) {
+func (c *SdkClient) AssumeRole(roleARN, region string) (*SdkClient, error) {
 	input := &sts.AssumeRoleInput{
 		RoleArn:         &roleARN,
 		RoleSessionName: aws.String("CAD"),
 	}
 	out, err := c.StsClient.AssumeRole(input)
 	if err != nil {
-		return Client{}, err
+		return &SdkClient{}, err
 	}
 	if region == "" {
 		region = c.Region
@@ -136,7 +149,7 @@ func (c Client) AssumeRole(roleARN, region string) (Client, error) {
 }
 
 // ListRunningInstances lists all running or starting instances that belong to a cluster
-func (c Client) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
+func (c *SdkClient) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
 			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
@@ -151,7 +164,7 @@ func (c Client) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
 }
 
 // ListNonRunningInstances lists all non running instances that belong to a cluster
-func (c Client) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
+func (c *SdkClient) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
 			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
@@ -171,7 +184,7 @@ func (c Client) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error)
 }
 
 // ListInstances lists all stopped instances that belong to a cluster
-func (c Client) ListInstances(infraID string) ([]*ec2.Instance, error) {
+func (c *SdkClient) ListInstances(infraID string) ([]*ec2.Instance, error) {
 	filters := []*ec2.Filter{
 		{
 			Name:   aws.String("tag:kubernetes.io/cluster/" + infraID),
@@ -182,7 +195,7 @@ func (c Client) ListInstances(infraID string) ([]*ec2.Instance, error) {
 }
 
 // listInstancesWithFilter will return a list of ec2 instance by applying a filter
-func (c Client) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance, error) {
+func (c *SdkClient) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance, error) {
 	in := &ec2.DescribeInstancesInput{
 		Filters: filters,
 	}
@@ -206,7 +219,7 @@ func (c Client) listInstancesWithFilter(filters []*ec2.Filter) ([]*ec2.Instance,
 
 // PollInstanceStopEventsFor will poll the ListAllInstanceStopEvents, and retry on various cases
 // the returned events are unique per instance and are the most up to date that exist
-func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error) {
+func (c *SdkClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error) {
 	if len(instances) == 0 {
 		return nil, nil
 	}
@@ -259,7 +272,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 				continue
 			}
 			// Event is not for one of our cluster instances.
-			logging.Infof("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
+			logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
 
 		for _, event := range terminatedInstanceEvents {
@@ -268,7 +281,7 @@ func (c Client) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes 
 				continue
 			}
 			// Event is not for one of our cluster instances.
-			logging.Infof("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
+			logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
 
 		// Loop over all stopped and terminate events for our cluster instancs
@@ -391,7 +404,7 @@ func getTime(rawReason string) (time.Time, error) {
 }
 
 // ListAllInstanceStopEvents lists StopInstances events from CloudTrail
-func (c Client) ListAllInstanceStopEvents() ([]*cloudtrail.Event, error) {
+func (c *SdkClient) ListAllInstanceStopEvents() ([]*cloudtrail.Event, error) {
 	att := &cloudtrail.LookupAttribute{
 		AttributeKey:   aws.String("EventName"),
 		AttributeValue: aws.String("StopInstances"),
@@ -400,7 +413,7 @@ func (c Client) ListAllInstanceStopEvents() ([]*cloudtrail.Event, error) {
 }
 
 // ListAllTerminatedInstances lists TerminatedInstances events from CloudTrail
-func (c Client) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
+func (c *SdkClient) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
 	att := &cloudtrail.LookupAttribute{
 		AttributeKey:   aws.String("EventName"),
 		AttributeValue: aws.String("TerminateInstances"),
@@ -408,7 +421,7 @@ func (c Client) ListAllTerminatedInstances() ([]*cloudtrail.Event, error) {
 	return c.listAllInstancesAttribute(att)
 }
 
-func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*cloudtrail.Event, error) {
+func (c *SdkClient) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*cloudtrail.Event, error) {
 	// We only look up events that are not older than 2 hours
 	since := time.Now().UTC().Add(time.Duration(-2) * time.Hour)
 	// We only look up 1000 events maximum
@@ -426,7 +439,7 @@ func (c Client) listAllInstancesAttribute(att *cloudtrail.LookupAttribute) ([]*c
 }
 
 // GetSecurityGroupID will return the security group id needed for the network verifier
-func (c Client) GetSecurityGroupID(infraID string) (string, error) {
+func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 	in := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -449,7 +462,7 @@ func (c Client) GetSecurityGroupID(infraID string) (string, error) {
 }
 
 // GetSubnetID will return the private subnets needed for the network verifier
-func (c Client) GetSubnetID(infraID string) ([]string, error) {
+func (c *SdkClient) GetSubnetID(infraID string) ([]string, error) {
 	in := &ec2.DescribeSubnetsInput{
 		Filters: []*ec2.Filter{
 			{
@@ -473,7 +486,7 @@ func (c Client) GetSubnetID(infraID string) ([]string, error) {
 }
 
 // IsSubnetPrivate checks if the provided subnet is private
-func (c Client) IsSubnetPrivate(subnet string) bool {
+func (c *SdkClient) IsSubnetPrivate(subnet string) bool {
 	in := &ec2.DescribeSubnetsInput{
 		SubnetIds: []*string{aws.String(subnet)},
 	}

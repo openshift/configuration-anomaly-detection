@@ -31,7 +31,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/spf13/cobra"
 )
 
@@ -94,7 +93,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	cloudProviderSupported, err := checkCloudProviderSupported(&ocmClient, externalClusterID, []string{"aws"})
+	cloudProviderSupported, err := checkCloudProviderSupported(ocmClient, externalClusterID, []string{"aws"})
 	if err != nil {
 		return err
 	}
@@ -127,7 +126,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	awsClient, err := GetAWSClient()
+	baseAwsClient, err := GetAWSClient()
 	if err != nil {
 		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
@@ -143,52 +142,25 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	// Try to jump into support role
-	customerAwsClient, err := jumpRoles(awsClient, ocmClient, pdClient,
-		externalClusterID, cluster)
+	// This triggers a cloud-credentials-are-missing investigation in case the jumpRole fails.
+	customerAwsClient, err := jumpRoles(cluster, baseAwsClient, ocmClient, pdClient)
 	if err != nil {
 		return err
 	}
 	// If jumpRoles does not return an aws.Client and there was no error
 	// then cluster is in limited support for missing cloud credentials
-	if customerAwsClient == (aws.Client{}) {
+	if customerAwsClient == (&aws.SdkClient{}) {
 		return nil
 	}
 
-	investigationClient := investigation.Client{}
-	networkVerifierClient := networkverifier.Client{
-		Service: networkverifier.Provider{
-			AwsClient: &customerAwsClient,
-			OcmClient: &ocmClient,
-		},
-	}
-	// Alert specific setup of investigationClient
+	investigationResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
+
+	investigation := investigation.NewInvestigation()
+
 	switch alertType {
 	case "ClusterHasGoneMissing":
-		investigationClient = investigation.Client{
-			Investigation: &chgm.Client{
-				Service: chgm.Provider{
-					AwsClient:             &customerAwsClient,
-					OcmClient:             &ocmClient,
-					PdClient:              &pdClient,
-					NetworkVerifierClient: &networkVerifierClient,
-				},
-				Cluster:           cluster,
-				ClusterDeployment: clusterDeployment,
-			},
-		}
-	// CPD could look like this:
-	// case "ClusterProvisioningDelay":
-	// client = investigation.Client{
-	// 	Service: &cpd.Client{
-	// 		Service: cpd.Provider{
-	// 			AwsClient: customerAwsClient,
-	// 			OcmClient: ocmClient,
-	// 			PdClient:  pdClient,
-	// 		},
-	// 		Alert: alert,
-	// 	},
-	// }
-
+		investigation.Triggered = chgm.InvestigateTriggered
+		investigation.Resolved = chgm.InvestigateResolved
 	default:
 		// Should never happen as GetAlertType should fail on unsupported alerts
 		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
@@ -199,53 +171,41 @@ func run(_ *cobra.Command, _ []string) error {
 
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		return investigationClient.Investigation.Triggered()
+		return investigation.Triggered(investigationResources)
 	case pagerduty.IncidentResolved:
-		return investigationClient.Investigation.Resolved()
+		return investigation.Resolved(investigationResources)
+	case pagerduty.IncidentReopened:
+		return investigation.Reopened(investigationResources)
+	case pagerduty.IncidentEscalated:
+		return investigation.Escalated(investigationResources)
 	default:
 		return fmt.Errorf("event type '%s' is not supported", eventType)
 	}
 }
 
 // jumpRoles will return an aws client or an error after trying to jump into support role
-func jumpRoles(awsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client,
-	externalClusterID string, cluster *v1.Cluster) (aws.Client, error) {
-	// Try to get cloud credentials
-	arClient := assumerole.Client{
-		Service: assumerole.Provider{
-			AwsClient: awsClient,
-			OcmClient: ocmClient,
-		},
-	}
+func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) (*aws.SdkClient, error) {
 
 	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
 	if !ok {
-		return aws.Client{}, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
+		return &aws.SdkClient{}, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
 	}
 
 	supportRole, ok := os.LookupEnv("CAD_AWS_SUPPORT_JUMPROLE")
 	if !ok {
-		return aws.Client{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
+		return &aws.SdkClient{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
-	ccamClient := ccam.Client{
-		Service: ccam.Provider{
-			OcmClient: &ocmClient,
-			PdClient:  &pdClient,
-		},
-		Cluster: cluster,
-	}
-
-	customerAwsClient, err := arClient.AssumeSupportRoleChain(externalClusterID, cssJumprole, supportRole)
+	customerAwsClient, err := assumerole.AssumeSupportRoleChain(baseAwsClient, ocmClient, cluster, cssJumprole, supportRole)
 	if err != nil {
 		logging.Info("Failed assumeRole chain: ", err.Error())
 
 		// If assumeSupportRoleChain fails, we evaluate if the credentials are missing based on the error message,
 		// it is also possible the assumeSupportRoleChain failed for another reason (e.g. API errors)
-		return aws.Client{}, ccamClient.Evaluate(err, pdClient.GetIncidentID())
+		return &aws.SdkClient{}, ccam.Evaluate(cluster, err, ocmClient, pdClient)
 	}
 	logging.Info("Successfully jumpRoled into the customer account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
-	return customerAwsClient, ccamClient.RemoveLimitedSupport()
+	return customerAwsClient, ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient)
 }
 
 // isAlertSupported will return a normalized form of the alertname as string or
@@ -266,14 +226,14 @@ func isAlertSupported(alertTitle string, service string) string {
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (ocm.Client, error) {
+func GetOCMClient() (*ocm.SdkClient, error) {
 	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
 	_, err := os.Stat(cadOcmFilePath)
 	if os.IsNotExist(err) {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			return ocm.Client{}, err
+			return &ocm.SdkClient{}, err
 		}
 		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
 	}
@@ -282,13 +242,13 @@ func GetOCMClient() (ocm.Client, error) {
 }
 
 // GetAWSClient will retrieve the AwsClient from the 'aws' package
-func GetAWSClient() (aws.Client, error) {
+func GetAWSClient() (*aws.SdkClient, error) {
 	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
 	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
 	awsSessionToken, _ := os.LookupEnv("AWS_SESSION_TOKEN") // AWS_SESSION_TOKEN is optional
 	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
 	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
-		return aws.Client{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
+		return &aws.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
 	}
 	if !hasAwsDefaultRegion {
 		awsDefaultRegion = "us-east-1"
@@ -298,18 +258,18 @@ func GetAWSClient() (aws.Client, error) {
 }
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
+func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+		return &pagerduty.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
-		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
+		return &pagerduty.SdkClient{}, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil
@@ -317,7 +277,7 @@ func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
 
 // checkCloudProviderSupported takes a list of supported providers and checks if the
 // cluster to investigate's provider is supported
-func checkCloudProviderSupported(ocmClient *ocm.Client, externalClusterID string, supportedProviders []string) (bool, error) {
+func checkCloudProviderSupported(ocmClient *ocm.SdkClient, externalClusterID string, supportedProviders []string) (bool, error) {
 	cloudProvider, err := ocmClient.GetCloudProviderID(externalClusterID)
 	if err != nil {
 		return false, err

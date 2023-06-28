@@ -5,14 +5,14 @@ Use the `ocm.New` to create an OCM client. It will provide functions to interact
 [embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetOCMClient/ /^}$/)
 ```go
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (ocm.Client, error) {
+func GetOCMClient() (*ocm.SdkClient, error) {
 	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
 	_, err := os.Stat(cadOcmFilePath)
 	if os.IsNotExist(err) {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			return ocm.Client{}, err
+			return &ocm.SdkClient{}, err
 		}
 		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
 	}
