@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
+	"regexp"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -210,7 +210,8 @@ func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReas
 	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
-	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'installing' state") {
+    r := regexp.MustCompile("Operation is not allowed for a cluster in '[a-zA-z]+' state")
+	if err != nil && !r.MatchString(err.Error()) {
 		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
 
