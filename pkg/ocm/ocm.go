@@ -210,7 +210,7 @@ func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReas
 	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
-    r := regexp.MustCompile("Operation is not allowed for a cluster in '[a-zA-z]+' state")
+	r := regexp.MustCompile("Operation is not allowed for a cluster in '[a-zA-z]+' state")
 	if err != nil && !r.MatchString(err.Error()) {
 		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
