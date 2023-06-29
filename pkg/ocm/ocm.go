@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"regexp"
+	"strconv"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
