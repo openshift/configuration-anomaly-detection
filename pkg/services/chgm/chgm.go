@@ -14,12 +14,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
-	"github.com/aws/aws-sdk-go/service/cloudtrail"
 	"github.com/aws/aws-sdk-go/service/ec2"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
 const restoredClusterRetryDelaySeconds = 1200
@@ -33,130 +32,74 @@ var chgmLimitedSupport = ocm.LimitedSupportReason{
 	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 }
 
-// CAUTION!!
+// CAUTION
 
-// these type aliases are here to make the types unique and unambiguous when used inside the struct
-
-// AwsClient is a wrapper around the aws client, and is used to import the received functions into the Provider
-type AwsClient = aws.Client
-
-// OcmClient is a wrapper around the ocm client, and is used to import the received functions into the Provider
-type OcmClient = ocm.Client
-
-// PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
-type PdClient = pagerduty.Client
-
-// NetworkVerifierClient is a wrapper around the networkverifier client, and is used to import the received functions into the Provider
-type NetworkVerifierClient = networkverifier.Client
-
-// Provider should have all the functions that ChgmService is implementing
-type Provider struct {
-	*AwsClient
-	*OcmClient
-	*PdClient
-	*NetworkVerifierClient
-}
-
-// This will generate mocks for the interfaces in this file
-//go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/interfaces.go -package mock
-
-// Service will wrap all the required commands the client needs to run its operations
-type Service interface {
-	// AWS
-	ListRunningInstances(infraID string) ([]*ec2.Instance, error)
-	ListNonRunningInstances(infraID string) ([]*ec2.Instance, error)
-	PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error)
-	// OCM
-	GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
-	IsInLimitedSupport(clusterID string) (bool, error)
-	UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
-	LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error)
-	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
-	// PD
-	SilenceAlertWithNote(notes string) error
-	AddNote(notes string) error
-	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
-	GetServiceID() string
-	EscalateAlertWithNote(notes string) error
-	// NetworkVerifier
-	RunNetworkVerifier(clusterID string) (networkverifier.VerifierResult, string, error)
-}
-
-// Client for the chgm investigation
-type Client struct {
-	Service
-	Cluster           *v1.Cluster
-	ClusterDeployment *hivev1.ClusterDeployment
-	*investigation.Client
-}
-
-// Triggered will analyse chgm incidents that are newly created
-func (c *Client) Triggered() error {
-	res, err := c.investigateStoppedInstances()
+// InvestigateTriggered runs the investigation for a triggered chgm pagerduty event
+func InvestigateTriggered(r *investigation.Resources) error {
+	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
-		return c.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
+		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 
 	logging.Infof("the investigation returned %#v", res)
 
-	lsExists, err := c.IsInLimitedSupport(c.Cluster.ID())
+	lsExists, err := r.OcmClient.IsInLimitedSupport(r.Cluster.ID())
 	if err != nil {
-		return c.EscalateAlertWithNote(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
+		return r.PdClient.EscalateAlertWithNote(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
 	}
 
 	// if lsExists, silence alert and add investigation to notes
 	if lsExists {
 		logging.Info("Unrelated limited support reason present on cluster, silencing")
-		return c.SilenceAlertWithNote(res.String() + "Unrelated limited support reason present on cluster, silenced.")
+		return r.PdClient.SilenceAlertWithNote(res.string() + "Unrelated limited support reason present on cluster, silenced.")
 	}
 
 	if res.UserAuthorized {
 		logging.Info("The customer has not stopped/terminated any nodes.")
 		// Run network verifier
-		verifierResult, failureReason, err := c.RunNetworkVerifier(c.Cluster.ID())
+		verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 		if err != nil {
 			// Forward to on call, set err as note to pagerduty incident
 			logging.Error("Error running network verifier, escalating to SRE.")
-			err = c.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
+			err = r.PdClient.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
 			if err != nil {
 				logging.Error("could not add failure reason incident notes")
 			}
-			return c.EscalateAlertWithNote(res.String())
+			return r.PdClient.EscalateAlertWithNote(res.string())
 		}
 
 		if verifierResult == networkverifier.Failure {
-			err = c.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, c.Cluster.ID(), failureReason))
+			err = r.PdClient.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, r.Cluster.ID(), failureReason))
 			if err != nil {
 				logging.Error("could not add issues to incident notes")
 			}
 			// Change this to put the cluster into limited support after some time
-			return c.EscalateAlertWithNote(res.String())
+			return r.PdClient.EscalateAlertWithNote(res.string())
 		}
 
 		logging.Info("Network verifier passed. Escalating to SRE")
-		err = c.AddNote(fmt.Sprintln("Network verifier passed."))
+		err = r.PdClient.AddNote(fmt.Sprintln("Network verifier passed."))
 		if err != nil {
 			logging.Error("could not add passed message to incident notes")
 		}
-		return c.EscalateAlertWithNote(res.String())
+		return r.PdClient.EscalateAlertWithNote(res.string())
 	}
 	res.LimitedSupportReason = chgmLimitedSupport
 
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
 	return utils.WithRetries(func() error {
-		return c.PostLimitedSupport(res.String())
+		return postLimitedSupport(r.Cluster.ID(), res.string(), r.OcmClient, r.PdClient)
 	})
 }
 
-// Resolved will take appropriate action against a cluster whose CHGM incident has resolved.
-func (c *Client) Resolved() error {
+// InvestigateResolved runs the investigation for a resolved chgm pagerduty event
+func InvestigateResolved(r *investigation.Resources) error {
 
 	// Check if CAD put the cluster in CHGM LS. If it didn't, we don't need a resolve investigation, as
 	// either way it would be a NOOP for CAD (no LS to remove).
 	// This is the case most of the time, so it saves us a lot of long pipeline runs.
-	chgmLsExists, err := c.LimitedSupportReasonExists(chgmLimitedSupport, c.Cluster.ID())
+	chgmLsExists, err := r.OcmClient.LimitedSupportReasonExists(chgmLimitedSupport, r.Cluster.ID())
 	if err != nil {
 		// The check is just to allow returning early, as we don't need an investigation if CAD didn't put the cluster in LS.
 		// If this fails, it's not a big issue. We can skip the check and proceed with the resolve investigation.
@@ -167,7 +110,7 @@ func (c *Client) Resolved() error {
 		return nil
 	}
 
-	res, err := c.investigateRestoredCluster()
+	res, err := investigateRestoredCluster(r)
 
 	// The investigation encountered an error & never completed - alert Primary and report the error
 	if err != nil {
@@ -180,7 +123,7 @@ func (c *Client) Resolved() error {
 		logging.Infof("Adding note: %s", investigationNotNeededNote)
 
 		err = utils.WithRetries(func() error {
-			return c.AddNote(investigationNotNeededNote)
+			return r.PdClient.AddNote(investigationNotNeededNote)
 		})
 		if err != nil {
 			logging.Errorf("Failed to add note '%s' to incident: %s", investigationNotNeededNote, err)
@@ -197,7 +140,7 @@ func (c *Client) Resolved() error {
 
 		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
 
-		res, err = c.investigateRestoredCluster()
+		res, err = investigateRestoredCluster(r)
 		if err != nil {
 			return fmt.Errorf("failure while re-investigating cluster: %w", err)
 		}
@@ -208,25 +151,25 @@ func (c *Client) Resolved() error {
 		if res.Error != "" {
 			logging.Warnf("investigation completed, but cluster has not been restored properly")
 			err = utils.WithRetries(func() error {
-				return c.AddNote(res.String())
+				return r.PdClient.AddNote(res.string())
 			})
 			if err != nil {
-				logging.Errorf("failed to add notes to incident: %s", res.String())
+				logging.Errorf("failed to add notes to incident: %s", res.string())
 			}
 
 			return utils.WithRetries(func() error {
-				return c.CreateNewAlert(c.buildAlertForFailedPostCHGM(res.Error), c.GetServiceID())
+				return r.PdClient.CreateNewAlert(buildAlertForFailedPostCHGM(r.Cluster.ID(), res.Error), r.PdClient.GetServiceID())
 			})
 		}
 	}
 	logging.Info("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
 	err = utils.WithRetries(func() error {
-		return c.DeleteLimitedSupportReasons(chgmLimitedSupport, c.Cluster.ID())
+		return r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
 	})
 	if err != nil {
 		logging.Error("failed to remove limited support")
 		err = utils.WithRetries(func() error {
-			return c.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, c.Cluster.ID()), c.GetServiceID())
+			return r.PdClient.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, r.Cluster.ID()), r.PdClient.GetServiceID())
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create alert: %w", err)
@@ -239,23 +182,23 @@ func (c *Client) Resolved() error {
 
 // investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
 // Primary is notified via PagerDuty incident
-func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, err error) {
-	res, err = c.investigateStartedInstances()
+func investigateRestoredCluster(r *investigation.Resources) (res investigateInstancesOutput, err error) {
+	res, err = investigateStartedInstances(r)
 	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
 	if err != nil {
-		logging.Warnf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v", c.Cluster.ExternalID(), err)
+		logging.Warnf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v", r.Cluster.ExternalID(), err)
 		originalErr := err
-		err = c.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
+		err = r.PdClient.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
 		if err != nil {
 			logging.Error("could not update incident notes")
 		}
 		err = utils.WithRetries(func() error {
-			return c.CreateNewAlert(c.buildAlertForInvestigationFailure(originalErr), c.GetServiceID())
+			return r.PdClient.CreateNewAlert(buildAlertForInvestigationFailure(r.Cluster.ID(), originalErr), r.PdClient.GetServiceID())
 		})
 		if err != nil {
 			logging.Errorf("failed to alert primary: %w", err)
 		}
-		return InvestigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", c.Cluster.ExternalID(), originalErr)
+		return investigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", r.Cluster.ExternalID(), originalErr)
 	}
 
 	return res, nil
@@ -264,7 +207,7 @@ func (c *Client) investigateRestoredCluster() (res InvestigateInstancesOutput, e
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
 // For this, we use a whitelist of partial strings that can be SRE
 // based on findings in https://issues.redhat.com/browse/OSD-16042
-func isUserAllowedToStop(username, issuerUsername string, cluster *v1.Cluster) bool {
+func isUserAllowedToStop(username, issuerUsername string, ccsEnabled bool) bool {
 
 	// Users are represented by Username in cloudtrail events
 	allowedUsersPartialStrings := []string{
@@ -295,7 +238,7 @@ func isUserAllowedToStop(username, issuerUsername string, cluster *v1.Cluster) b
 	}
 
 	// Check cluster flavor, as 'OrganizationAccountAccessRole' is SRE for non-CCS and the user for ROSA
-	if !cluster.CCS().Enabled() {
+	if !ccsEnabled {
 		allowedRolesPartialStrings = append(allowedRolesPartialStrings, "OrganizationAccountAccessRole")
 	}
 
@@ -308,33 +251,33 @@ func isUserAllowedToStop(username, issuerUsername string, cluster *v1.Cluster) b
 	return false
 }
 
-// UserInfo will hold the extracted user details
-type UserInfo struct {
+// userInfo will hold the extracted user details
+type userInfo struct {
 	UserName       string
 	IssuerUserName string
 }
 
-// RunningNodesCount holds the number of actual running nodes
-type RunningNodesCount struct {
+// runningNodesCount holds the number of actual running nodes
+type runningNodesCount struct {
 	Master int
 	Infra  int
 	Worker int
 }
 
-// ExpectedNodesCount holds the number of expected running nodes
-type ExpectedNodesCount struct {
+// expectedNodesCount holds the number of expected running nodes
+type expectedNodesCount struct {
 	Master    int
 	Infra     int
 	MinWorker int
 	MaxWorker int
 }
 
-// InvestigateInstancesOutput is the result of the InvestigateInstances command
-type InvestigateInstancesOutput struct {
+// investigateInstancesOutput is the result of the InvestigateInstances command
+type investigateInstancesOutput struct {
 	NonRunningInstances  []*ec2.Instance
-	RunningInstances     RunningNodesCount
-	ExpectedInstances    ExpectedNodesCount
-	User                 UserInfo
+	RunningInstances     runningNodesCount
+	ExpectedInstances    expectedNodesCount
+	User                 userInfo
 	UserAuthorized       bool
 	ClusterState         string
 	ClusterNotEvaluated  bool
@@ -342,8 +285,8 @@ type InvestigateInstancesOutput struct {
 	Error                string
 }
 
-// String implements the stringer interface for InvestigateInstancesOutput
-func (i InvestigateInstancesOutput) String() string {
+// string implements the stringer interface for InvestigateInstancesOutput
+func (i investigateInstancesOutput) string() string {
 	msg := ""
 	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
 	// TODO: check if %v is the best formatting for UserInfo
@@ -379,45 +322,45 @@ func (i InvestigateInstancesOutput) String() string {
 	return msg
 }
 
-func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, error) {
-	if c.ClusterDeployment == nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
+func investigateStoppedInstances(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {
+	if clusterDeployment == nil {
+		return investigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
 	}
 
-	infraID := c.ClusterDeployment.Spec.ClusterMetadata.InfraID
+	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
 
-	stoppedInstances, err := c.ListNonRunningInstances(infraID)
+	stoppedInstances, err := awsCli.ListNonRunningInstances(infraID)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err)
 	}
 
-	runningNodesCount, err := c.GetRunningNodesCount(infraID)
+	runningNodesCount, err := getRunningNodesCount(infraID, awsCli)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err)
 	}
 
 	// evaluate number of all supposed nodes
-	expectedNodesCount, err := c.GetExpectedNodesCount()
+	expectedNodesCount, err := getExpectedNodesCount(cluster, ocmCli)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err)
 	}
 
 	if len(stoppedInstances) == 0 {
 		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return InvestigateInstancesOutput{UserAuthorized: true, RunningInstances: *runningNodesCount,
+		return investigateInstancesOutput{UserAuthorized: true, RunningInstances: *runningNodesCount,
 			ExpectedInstances: *expectedNodesCount, Error: "no non running instances found, terminated instances may have already expired"}, nil
 	}
 
-	stoppedInstancesEvents, err := c.PollInstanceStopEventsFor(stoppedInstances, 15)
+	stoppedInstancesEvents, err := awsCli.PollInstanceStopEventsFor(stoppedInstances, 15)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
 	}
 
 	if len(stoppedInstancesEvents) == 0 {
-		return InvestigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
+		return investigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
 	}
 
-	output := InvestigateInstancesOutput{
+	output := investigateInstancesOutput{
 		NonRunningInstances: stoppedInstances,
 		UserAuthorized:      true,
 		RunningInstances:    *runningNodesCount,
@@ -431,15 +374,15 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 				resourceData = fmt.Sprintf("with resource %v", event.Resources[0].ResourceName)
 			}
 
-			return InvestigateInstancesOutput{}, fmt.Errorf("could not extractUserDetails for event %s: %w", resourceData, err)
+			return investigateInstancesOutput{}, fmt.Errorf("could not extractUserDetails for event %s: %w", resourceData, err)
 		}
 
-		output.User = UserInfo{
+		output.User = userInfo{
 			UserName:       *event.Username,
 			IssuerUserName: userDetails.UserIdentity.SessionContext.SessionIssuer.UserName,
 		}
 
-		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, c.Cluster) {
+		if !isUserAllowedToStop(*event.Username, output.User.IssuerUserName, cluster.CCS().Enabled()) {
 			output.UserAuthorized = false
 
 			// Return early with `output` containing the first unauthorized user.
@@ -456,32 +399,32 @@ func (c *Client) investigateStoppedInstances() (InvestigateInstancesOutput, erro
 
 // investigateStartedInstances is the internal version of InvestigateStartedInstances operating on the read-only
 // version of Client.
-func (c *Client) investigateStartedInstances() (InvestigateInstancesOutput, error) {
-	if c.ClusterDeployment == nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating started instances, did not populate the instance before")
+func investigateStartedInstances(r *investigation.Resources) (investigateInstancesOutput, error) {
+	if r.ClusterDeployment == nil {
+		return investigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating started instances, did not populate the instance before")
 	}
 
-	infraID := c.ClusterDeployment.Spec.ClusterMetadata.InfraID
+	infraID := r.ClusterDeployment.Spec.ClusterMetadata.InfraID
 
 	// Verify cluster is in a valid state to be investigated (ie - not hibernating, powering down, or being deleted)
-	state, ok := c.Cluster.GetState()
+	state, ok := r.Cluster.GetState()
 	if !ok {
-		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", c.Cluster.ID())
+		return investigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", r.Cluster.ID())
 	}
 	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := InvestigateInstancesOutput{
+		output := investigateInstancesOutput{
 			ClusterState:        string(state),
 			ClusterNotEvaluated: true,
 		}
 		return output, nil
 	}
 
-	lsExists, err := c.UnrelatedLimitedSupportExists(chgmLimitedSupport, c.Cluster.ID())
+	lsExists, err := r.OcmClient.UnrelatedLimitedSupportExists(chgmLimitedSupport, r.Cluster.ID())
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
+		return investigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
 	}
 	if lsExists {
-		output := InvestigateInstancesOutput{
+		output := investigateInstancesOutput{
 			ClusterState:        "unrelated limited support reasons present on cluster",
 			ClusterNotEvaluated: true,
 		}
@@ -489,25 +432,25 @@ func (c *Client) investigateStartedInstances() (InvestigateInstancesOutput, erro
 	}
 
 	// Verify cluster has expected number of nodes running
-	runningNodesCount, err := c.GetRunningNodesCount(infraID)
+	runningNodesCount, err := getRunningNodesCount(infraID, r.AwsClient)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating started instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating started instances for %s: %w", infraID, err)
 	}
 
-	expectedNodesCount, err := c.GetExpectedNodesCount()
+	expectedNodesCount, err := getExpectedNodesCount(r.Cluster, r.OcmClient)
 	if err != nil {
-		return InvestigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
 	}
 
 	// Check for mistmach in running nodes and expected nodes
 	if runningNodesCount.Master != expectedNodesCount.Master {
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
+		return investigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
 	if runningNodesCount.Infra != expectedNodesCount.Infra {
-		return InvestigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
+		return investigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
 	}
 
-	output := InvestigateInstancesOutput{
+	output := investigateInstancesOutput{
 		UserAuthorized:    true,
 		ExpectedInstances: *expectedNodesCount,
 		RunningInstances:  *runningNodesCount,
@@ -516,13 +459,13 @@ func (c *Client) investigateStartedInstances() (InvestigateInstancesOutput, erro
 }
 
 // GetRunningNodesCount return the number of running nodes that are currently running in the cluster
-func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error) {
-	instances, err := c.ListRunningInstances(infraID)
+func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount, error) {
+	instances, err := awsCli.ListRunningInstances(infraID)
 	if err != nil {
 		return nil, err
 	}
 
-	runningNodesCount := &RunningNodesCount{
+	runningNodesCount := &runningNodesCount{
 		Master: 0,
 		Infra:  0,
 		Worker: 0,
@@ -551,21 +494,21 @@ func (c Client) GetRunningNodesCount(infraID string) (*RunningNodesCount, error)
 
 // GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
 // We do not use nodes.GetTotal() here, because total seems to be always 0.
-func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
-	nodes, ok := c.Cluster.GetNodes()
+func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNodesCount, error) {
+	nodes, ok := cluster.GetNodes()
 	if !ok {
 		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
-		logging.Errorf("node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("node data is missing, dumping cluster object: %#v", cluster)
 		return nil, fmt.Errorf("failed to retrieve cluster node data")
 	}
 	masterCount, ok := nodes.GetMaster()
 	if !ok {
-		logging.Errorf("master node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("master node data is missing, dumping cluster object: %#v", cluster)
 		return nil, fmt.Errorf("failed to retrieve master node data")
 	}
 	infraCount, ok := nodes.GetInfra()
 	if !ok {
-		logging.Errorf("infra node data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("infra node data is missing, dumping cluster object: %#v", cluster)
 		return nil, fmt.Errorf("failed to retrieve infra node data")
 	}
 
@@ -579,13 +522,13 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 	if autoscaleComputeOk {
 		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
 		if !ok {
-			logging.Errorf("autoscale min replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			logging.Errorf("autoscale min replicas data is missing, dumping cluster object: %v#", cluster)
 			return nil, fmt.Errorf("failed to retrieve min replicas from autoscale compute data")
 		}
 
 		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
 		if !ok {
-			logging.Errorf("autoscale max replicas data is missing, dumping cluster object: %v#", c.Cluster)
+			logging.Errorf("autoscale max replicas data is missing, dumping cluster object: %v#", cluster)
 			return nil, fmt.Errorf("failed to retrieve max replicas from autoscale compute data")
 		}
 
@@ -593,14 +536,14 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		maxWorkerCount += maxReplicasCount
 	}
 	if !computeCountOk && !autoscaleComputeOk {
-		logging.Errorf("compute and autoscale compute data are missing, dumping cluster object: %v#", c.Cluster)
+		logging.Errorf("compute and autoscale compute data are missing, dumping cluster object: %v#", cluster)
 		return nil, fmt.Errorf("failed to retrieve cluster compute and autoscale compute data")
 	}
 
 	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
-	machinePools, err := c.GetClusterMachinePools(c.Cluster.ID())
+	machinePools, err := ocmCli.GetClusterMachinePools(cluster.ID())
 	if err != nil {
-		logging.Errorf("machine pools data is missing, dumping cluster object: %#v", c.Cluster)
+		logging.Errorf("machine pools data is missing, dumping cluster object: %#v", cluster)
 		return nil, fmt.Errorf("failed to retrieve machine pools data")
 	}
 	for _, pool := range machinePools {
@@ -634,7 +577,7 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 		}
 	}
 
-	nodeCount := &ExpectedNodesCount{
+	nodeCount := &expectedNodesCount{
 		Master:    masterCount,
 		Infra:     infraCount,
 		MinWorker: minWorkerCount + poolMinWorkersCount,
@@ -645,11 +588,11 @@ func (c Client) GetExpectedNodesCount() (*ExpectedNodesCount, error) {
 
 // buildAlertForFailedPostCHGM returns an alert for a cluster that resolved its chgm alert but somehow is still failing CAD checks
 // This is potentially very noisy and led to some confusion for primary already
-func (c *Client) buildAlertForFailedPostCHGM(investigationErr string) pagerduty.NewAlert {
+func buildAlertForFailedPostCHGM(clusterID string, investigationErr string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", c.Cluster.ID()),
+		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", clusterID),
 		Details: pagerduty.NewAlertDetails{
-			ClusterID:  c.Cluster.ID(),
+			ClusterID:  clusterID,
 			Error:      investigationErr,
 			Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
@@ -657,11 +600,11 @@ func (c *Client) buildAlertForFailedPostCHGM(investigationErr string) pagerduty.
 }
 
 // buildAlertForInvestigationFailure returns an alert for a cluster that could not be properly investigated
-func (c *Client) buildAlertForInvestigationFailure(investigationErr error) pagerduty.NewAlert {
+func buildAlertForInvestigationFailure(clusterID string, investigationErr error) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", c.Cluster.ID()),
+		Description: fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", clusterID),
 		Details: pagerduty.NewAlertDetails{
-			ClusterID:  c.Cluster.ID(),
+			ClusterID:  clusterID,
 			Error:      investigationErr.Error(),
 			Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
@@ -703,12 +646,12 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 // PostLimitedSupport will put the cluster into limited support
 // As the deadmanssnitch operator is not silenced on limited support
 // the alert is updated with notes and silenced
-func (c *Client) PostLimitedSupport(notes string) error {
-	err := c.PostLimitedSupportReason(chgmLimitedSupport, c.Cluster.ID())
+func postLimitedSupport(clusterID string, notes string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
+	err := ocmCli.PostLimitedSupportReason(chgmLimitedSupport, clusterID)
 	if err != nil {
 		return fmt.Errorf("failed posting limited support reason: %w", err)
 	}
 	// we need to aditionally silence here, as dms service keeps firing
 	// even when we put in limited support
-	return c.SilenceAlertWithNote(string(notes))
+	return pdCli.SilenceAlertWithNote(string(notes))
 }

@@ -17,7 +17,7 @@ var _ = Describe("Pagerduty", func() {
 	var (
 		mux                *http.ServeMux
 		server             *httptest.Server
-		p                  pagerduty.Client
+		p                  *pagerduty.SdkClient
 		incidentID         string
 		escalationPolicyID string
 		silencePolicyID    string

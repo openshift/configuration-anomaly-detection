@@ -4,18 +4,18 @@ Use the `pagerduty.NewWithToken` to create the PagerDuty client, and use the fun
 [embedmd]:# (../../cadctl/cmd/investigate/investigate.go /\/\/ GetPDClient/ /^}$/)
 ```go
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient(webhookPayload []byte) (pagerduty.Client, error) {
+func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
 	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return pagerduty.Client{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+		return &pagerduty.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
-		return pagerduty.Client{}, fmt.Errorf("could not initialize the client: %w", err)
+		return &pagerduty.SdkClient{}, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil

@@ -1,47 +1,56 @@
 package networkverifier_test
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
-	mock_networkverifier "github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier/mock"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
 var _ = Describe("RunVerifier", func() {
 	Describe("AreAllInstancesRunning", func() {
-
-		// this is a var but I use it as a const
-		var fakeErr = fmt.Errorf("verifier test triggered")
 		var (
-			mockCtrl   *gomock.Controller
-			mockClient *mock_networkverifier.MockService
-			isRunning  networkverifier.Client
-			cluster    *v1.Cluster
+			mockCtrl          *gomock.Controller
+			cluster           *v1.Cluster
+			clusterDeployment *hivev1.ClusterDeployment
+			awsCli            *awsmock.MockClient
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
-			mockClient = mock_networkverifier.NewMockService(mockCtrl)
-			isRunning = networkverifier.Client{Service: mockClient}
+
+			awsCli = awsmock.NewMockClient(mockCtrl)
+
 			var err error
 			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Build()
+
+			clusterDeployment := &hivev1.ClusterDeployment{}
+			clusterDeployment.Spec.ClusterMetadata.InfraID = "infra_id"
+
 			Expect(err).ToNot(HaveOccurred())
 		})
 		AfterEach(func() {
 			mockCtrl.Finish()
 		})
-		When("GetClusterInfo fails", func() {
-			It("Should bubble up the error", func() {
+		// This test is pretty useless but illustrates what tests for networkverifier should look like
+		When("Getting security group ids", func() {
+			It("Should return the error failed to get SecurityGroupId", func() {
+
+				expectedError := errors.New("failed to get SecurityGroupId: errormessage")
 				// Arrange
-				mockClient.EXPECT().GetClusterInfo(gomock.Any()).Return(cluster, fakeErr)
+				awsCli.EXPECT().GetSecurityGroupID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return(nil, expectedError)
 				// Act
-				result, failures, gotErr := isRunning.RunNetworkVerifier(cluster.InfraID())
+				result, failures, gotErr := networkverifier.Run(cluster, clusterDeployment, awsCli)
+
 				fmt.Printf("result %v, failures %v", result, failures)
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
+				Expect(gotErr.Error()).To(BeIdenticalTo(expectedError))
 			})
 		})
 	})

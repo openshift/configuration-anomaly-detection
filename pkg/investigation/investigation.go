@@ -2,9 +2,14 @@
 package investigation
 
 import (
+	"errors"
 	"fmt"
 
+	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
 // Investigation wraps all possible event types and serves as a parent class
@@ -16,39 +21,30 @@ import (
 // Important: If you add an event type that can return a different data field type
 // update the webhook parsing in the pagerduty service accordingly
 // https://developer.pagerduty.com/docs/db0fa8c8984fc-overview#event-data-types
-type Investigation interface {
-	Triggered() error
-	Resolved() error
-	// Reopened() (InvestigationOutput, error)
-	// Escalated() (InvestigationOutput, error)
+type Investigation struct {
+	Triggered func(resources *Resources) error
+	Resolved  func(resources *Resources) error
+	Reopened  func(resources *Resources) error
+	Escalated func(resources *Resources) error
 }
 
-// Client is the investigation client
-type Client struct {
-	Investigation
+// NewInvestigation creates a new investigation with default functions that return errors in case they are not overwritten
+func NewInvestigation() *Investigation {
+	unimplementedFunc := func(resources *Resources) error {
+		return errors.New("Investigation not implemented for this alert state")
+	}
+
+	return &Investigation{unimplementedFunc, unimplementedFunc, unimplementedFunc, unimplementedFunc}
 }
 
-var webhookMisconfigurationMsg = "Please review the webhook configuration and exclude or implement the event type."
-
-// Triggered is the Client behavior in case the investigation does not implement event type Triggered
-func (c *Client) Triggered() error {
-	return fmt.Errorf("event type 'incident.triggered' is not implemented for this alert" + webhookMisconfigurationMsg)
+// Resources holds all resources/tools required for alert investigations
+type Resources struct {
+	Cluster           *v1.Cluster
+	ClusterDeployment *hivev1.ClusterDeployment
+	AwsClient         aws.Client
+	OcmClient         ocm.Client
+	PdClient          pagerduty.Client
 }
-
-// Resolved is the Client behavior in case the investigation does not implement event type Resolved
-func (c *Client) Resolved() error {
-	return fmt.Errorf("event type 'incident.resolved' is not implemented for this alert" + webhookMisconfigurationMsg)
-}
-
-// // Reopened is the Client behavior in case the investigation does not implement event type Reopened
-// func (c *Client) Reopened() (InvestigationOutput, error) {
-// 	return InvestigationOutput{}, fmt.Errorf("event type 'incident.reopened' is not implemented for this alert" + webhookMisconfigurationMsg)
-// }
-
-// // Escalated is the Client behavior in case the investigation does not implement event type Reopened
-// func (c *Client) Escalated() (InvestigationOutput, error) {
-// 	return InvestigationOutput{}, fmt.Errorf("event type 'incident.escalated' is not implemented for this alert" + webhookMisconfigurationMsg)
-// }
 
 // BuildAlertForLimitedSupportRemovalFailure populates the alert template that is used in case of failure to remove a limited support reason that was
 // previously added by CAD

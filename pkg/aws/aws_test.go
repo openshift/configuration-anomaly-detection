@@ -20,14 +20,14 @@ var _ = Describe("Aws", func() {
 	var (
 		errOcc           error
 		mockCtrl         *gomock.Controller
-		client           *aws.Client
+		client           *aws.SdkClient
 		mockSdkStsClient *mocks.MockSTSAPI
 	)
 	BeforeEach(func() {
 		errOcc = fmt.Errorf("something happened")
 		mockCtrl = gomock.NewController(GinkgoT())
 		mockSdkStsClient = mocks.NewMockSTSAPI(mockCtrl)
-		client = &aws.Client{
+		client = &aws.SdkClient{
 			Region:    "us-east-1",
 			StsClient: mockSdkStsClient,
 		}
@@ -50,7 +50,7 @@ var _ = Describe("Aws", func() {
 					}, nil).Times(1)
 				c, err := client.AssumeRole(roleARN, "eu-west-1")
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(c).ShouldNot(Equal(aws.Client{}))
+				Expect(c).ShouldNot(Equal(aws.SdkClient{}))
 			})
 		})
 		When("the client fails for arbitrary reason", func() {
@@ -63,21 +63,21 @@ var _ = Describe("Aws", func() {
 				c, err := client.AssumeRole(roleARN, "eu-west-1")
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(Equal(errOcc))
-				Expect(c).Should(Equal(aws.Client{}))
+				Expect(c).Should(Equal(&aws.SdkClient{}))
 			})
 		})
 	})
 	Describe("When listing EC2 Instances", func() {
 		var (
 			mockCtrl            *gomock.Controller
-			client              *aws.Client
+			client              *aws.SdkClient
 			mockSdkEc2Client    *mocks.MockEC2API
 			describeInstanceOut *ec2.DescribeInstancesOutput
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
 			mockSdkEc2Client = mocks.NewMockEC2API(mockCtrl)
-			client = &aws.Client{
+			client = &aws.SdkClient{
 				Region:    "us-east-1",
 				Ec2Client: mockSdkEc2Client,
 			}
@@ -134,14 +134,14 @@ var _ = Describe("Aws", func() {
 	Describe("When listing CloudTrail StoppedInstances events", func() {
 		var (
 			mockCtrl             *gomock.Controller
-			client               *aws.Client
+			client               *aws.SdkClient
 			mockCloudTrailClient *mocks.MockCloudTrailAPI
 			lookupEventOut       *cloudtrail.LookupEventsOutput
 		)
 		BeforeEach(func() {
 			mockCtrl = gomock.NewController(GinkgoT())
 			mockCloudTrailClient = mocks.NewMockCloudTrailAPI(mockCtrl)
-			client = &aws.Client{
+			client = &aws.SdkClient{
 				Region:           "us-east-1",
 				CloudTrailClient: mockCloudTrailClient,
 			}

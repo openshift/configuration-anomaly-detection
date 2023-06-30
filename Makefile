@@ -100,7 +100,6 @@ checks:  check-duplicate-error-messages
 # check-duplicate-error-messages will conform with 
 .PHONY: check-duplicate-error-messages
 check-duplicate-error-messages:
-	@(test $$(grep -Ir errors.New . | grep -v -e .*.md | wc -l) -eq 0) || (echo "please use fmt.Errorf and not errors.New" >&2 && exit 1)
 	@(test $$(grep -Ir 'fmt.Errorf("' . | grep -v -e './.git' -e .*.md | sed 's/\(.*\)\(fmt.Errorf.*\)/\2/' | sort | uniq -c | awk '$$1 != "1"' | wc -l) -eq 0) || (echo "There are duplicate error values, please consolidate them or make them unique" >&2 && exit 1)
 
 .PHONY: boilerplate-update

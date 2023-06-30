@@ -26,76 +26,24 @@ var ccamLimitedSupport = ocm.LimitedSupportReason{
 
 var accessDeniedRegex = regexp.MustCompile(`failed to assume into support-role: AccessDenied`)
 
-// OcmClient is a wrapper around the ocm client, and is used to import the received functions into the Provider
-type OcmClient = ocm.Client
-
-// PdClient is a wrapper around the pagerduty client, and is used to import the received functions into the Provider
-type PdClient = pagerduty.Client
-
-// Provider should have all the functions that ChgmService is implementing
-type Provider struct {
-	// having awsClient and ocmClient this way
-	// allows for all the method receivers defined on them to be passed into the parent struct,
-	// thus making it more composable than just having each func redefined here
-	//
-	// a different solution is to have the structs have unique names to begin with, which makes the code
-	// aws.AwsClient feel a bit redundant
-	*OcmClient
-	*PdClient
-}
-
-// Service will wrap all the required commands the client needs to run its operations
-type Service interface {
-	// OCM
-	GetClusterInfo(identifier string) (*v1.Cluster, error)
-	LimitedSupportExists(limitedSupportReason ocm.LimitedSupportReason, clusterID string) (bool, error)
-	PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error
-	DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error
-	// PD
-	AddNote(noteContent string) error
-	CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error
-	SilenceAlertWithNote(notes string) error
-	MoveToEscalationPolicy(escalationPolicyID string) error
-	GetOnCallEscalationPolicy() string
-	GetServiceID() string
-}
-
-// Client refers to the CCAM client
-type Client struct {
-	Service
-	Cluster *v1.Cluster
-}
-
-// New creates a new CCAM client and gets the cluster object from ocm for the internal id
-func New(ocmClient *OcmClient, pdClient *PdClient, cluster *v1.Cluster) (Client, error) {
-	client := Client{
-		Service: Provider{
-			OcmClient: ocmClient,
-			PdClient:  pdClient,
-		},
-		Cluster: cluster,
-	}
-	return client, nil
-}
-
 // checkMissing checks for missing credentials that are required for assuming
 // into the support-role. If these credentials are missing we can silence the
 // alert and post limited support reason.
-func (c Client) checkMissing(err error) bool {
+func checkMissing(err error) bool {
 	return accessDeniedRegex.MatchString(err.Error())
 }
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
-func (c Client) Evaluate(awsError error, _ string) error {
+func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client) error {
 
 	logging.Info("Investigating possible missing cloud credentials...")
-	if !c.checkMissing(awsError) {
+	if checkMissing(awsError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
 
-	lsExists, err := c.LimitedSupportExists(ccamLimitedSupport, c.Cluster.ID())
+	lsExists, err := ocmClient.LimitedSupportReasonExists(ccamLimitedSupport, cluster.ID())
 	if err != nil {
 		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
@@ -103,27 +51,27 @@ func (c Client) Evaluate(awsError error, _ string) error {
 	note := fmt.Sprintf("Cluster already has limited support for '%s'. Silencing alert.\n", ccamLimitedSupport.Summary)
 
 	if !lsExists {
-		err = c.PostLimitedSupportReason(ccamLimitedSupport, c.Cluster.ID())
+		err = ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
 		if err != nil {
-			return fmt.Errorf("could not post limited support reason for %s: %w", c.Cluster.Name(), err)
+			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
 		note = fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport)
 	}
-	return c.SilenceAlertWithNote(note)
+	return pdClient.SilenceAlertWithNote(note)
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
 // if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
-func (c Client) RemoveLimitedSupport() error {
+func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pagerduty.Client) error {
 	err := utils.WithRetries(func() error {
-		return c.DeleteLimitedSupportReasons(ccamLimitedSupport, c.Cluster.ID())
+		return ocmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, cluster.ID())
 	})
 	if err != nil {
 		logging.Errorf("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
 		originalErr := err
 		err := utils.WithRetries(func() error {
-			return c.CreateNewAlert(c.buildAlertForCCAM(originalErr), c.GetServiceID())
+			return pdClient.CreateNewAlert(buildAlertForCCAM(originalErr, cluster.ID()), pdClient.GetServiceID())
 		})
 		if err != nil {
 			logging.Errorf("Failed to alert Primary")
@@ -136,11 +84,11 @@ func (c Client) RemoveLimitedSupport() error {
 }
 
 // buildAlertForCCAM will return a NewAlert populated with cluster id and the specific error
-func (c Client) buildAlertForCCAM(lsError error) pagerduty.NewAlert {
+func buildAlertForCCAM(lsError error, clusterID string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", c.Cluster.ID()),
+		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", clusterID),
 		Details: pagerduty.NewAlertDetails{
-			ClusterID:  c.Cluster.ID(),
+			ClusterID:  clusterID,
 			Error:      lsError.Error(),
 			Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
