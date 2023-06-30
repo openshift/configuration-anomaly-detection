@@ -77,22 +77,22 @@ func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error)
 
 	s, err := session.NewSession(awsConfig)
 	if err != nil {
-		return &SdkClient{}, err
+		return nil, err
 	}
 
 	ec2Sess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return &SdkClient{}, err
+		return nil, err
 	}
 
 	cloudTrailSess, err := session.NewSession(awsConfig)
 	if err != nil {
-		return &SdkClient{}, err
+		return nil, err
 	}
 
 	credentials, err := awsConfig.Credentials.Get()
 	if err != nil {
-		return &SdkClient{}, err
+		return nil, err
 	}
 
 	return &SdkClient{
@@ -117,12 +117,12 @@ func NewClientFromFileCredentials(dir string, region string) (*SdkClient, error)
 	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
 	accessKeyBytes, err := os.ReadFile(accessKeyBytesPath)
 	if err != nil {
-		return &SdkClient{}, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
+		return nil, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
 	}
 	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
 	secretKeyBytes, err := os.ReadFile(secretKeyBytesPath)
 	if err != nil {
-		return &SdkClient{}, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
+		return nil, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
 	}
 	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
 	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
@@ -137,7 +137,7 @@ func (c *SdkClient) AssumeRole(roleARN, region string) (*SdkClient, error) {
 	}
 	out, err := c.StsClient.AssumeRole(input)
 	if err != nil {
-		return &SdkClient{}, err
+		return nil, err
 	}
 	if region == "" {
 		region = c.Region

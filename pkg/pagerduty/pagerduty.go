@@ -118,7 +118,7 @@ func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload [
 	parsedPayload := WebhookPayload{}
 	err := parsedPayload.Unmarshal(webhookPayload)
 	if err != nil {
-		return &SdkClient{}, UnmarshalErr{Err: err}
+		return nil, UnmarshalErr{Err: err}
 	}
 	c := SdkClient{
 		sdkClient:              sdk.NewClient(authToken, options...),

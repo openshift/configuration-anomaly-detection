@@ -62,20 +62,20 @@ func New(ocmConfigFile string) (*SdkClient, error) {
 
 	debugEnabled, err := strconv.ParseBool(debugMode)
 	if err != nil {
-		return &client, fmt.Errorf("failed to parse CAD_DEBUG value '%s': %w", debugMode, err)
+		return nil, fmt.Errorf("failed to parse CAD_DEBUG value '%s': %w", debugMode, err)
 	}
 
 	if debugEnabled {
 		client.conn, err = newConnectionFromFile(ocmConfigFile)
 		if err != nil {
-			return &client, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
+			return nil, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
 		}
 		return &client, nil
 	}
 
 	client.conn, err = newConnectionFromClientPair()
 	if err != nil {
-		return &client, fmt.Errorf("failed to create connection from client key pair: %w", err)
+		return nil, fmt.Errorf("failed to create connection from client key pair: %w", err)
 	}
 
 	return &client, nil

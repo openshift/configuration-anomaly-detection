@@ -12,7 +12,7 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 	if os.IsNotExist(err) {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			return &ocm.SdkClient{}, err
+			return nil, err
 		}
 		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
 	}
