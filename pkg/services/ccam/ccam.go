@@ -3,7 +3,7 @@ package ccam
 
 import (
 	"fmt"
-	"regexp"
+	"strings"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -24,14 +24,7 @@ var ccamLimitedSupport = ocm.LimitedSupportReason{
 
 // CAUTION!!
 
-var accessDeniedRegex = regexp.MustCompile(`failed to assume into support-role: AccessDenied`)
-
-// checkMissing checks for missing credentials that are required for assuming
-// into the support-role. If these credentials are missing we can silence the
-// alert and post limited support reason.
-func checkMissing(err error) bool {
-	return accessDeniedRegex.MatchString(err.Error())
-}
+const accessDeniedError string = "failed to assume into support-role: AccessDenied"
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
@@ -39,7 +32,8 @@ func checkMissing(err error) bool {
 func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client) error {
 
 	logging.Info("Investigating possible missing cloud credentials...")
-	if checkMissing(awsError) {
+
+	if !strings.Contains(awsError.Error(), accessDeniedError) {
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
 
