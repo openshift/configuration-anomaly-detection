@@ -210,7 +210,7 @@ func (c Client) PostLimitedSupportReason(limitedSupportReason LimitedSupportReas
 	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
-	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'installing' state") {
+	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'uninstalling' state") {
 		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
 
