@@ -18,21 +18,21 @@ func AssumeSupportRoleChain(baseClient aws.Client, ocmClient ocm.Client, cluster
 
 	tempClient, err := baseClient.AssumeRole(ccsJumpRole, region)
 	if err != nil {
-		return &aws.SdkClient{}, fmt.Errorf("2 failed to assume into jump-role: %w", err)
+		return nil, fmt.Errorf("2 failed to assume into jump-role: %w", err)
 	}
 
 	jumpRoleClient, err := tempClient.AssumeRole(supportRole, region)
 	if err != nil {
-		return &aws.SdkClient{}, fmt.Errorf("3 failed to assume into jump-role: %w", err)
+		return nil, fmt.Errorf("3 failed to assume into jump-role: %w", err)
 	}
 	customerRole, err := ocmClient.GetSupportRoleARN(internalID)
 	if err != nil {
-		return &aws.SdkClient{}, fmt.Errorf("4 failed to get support Role: %w", err)
+		return nil, fmt.Errorf("4 failed to get support Role: %w", err)
 	}
 
 	customerClient, err := jumpRoleClient.AssumeRole(customerRole, region)
 	if err != nil {
-		return &aws.SdkClient{}, fmt.Errorf("5 failed to assume into support-role: %w", err)
+		return nil, fmt.Errorf("5 failed to assume into support-role: %w", err)
 	}
 
 	logging.Infof("Successfully logged into customer account with role: %s", customerRole)

@@ -10,12 +10,12 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return &pagerduty.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
-		return &pagerduty.SdkClient{}, fmt.Errorf("could not initialize the client: %w", err)
+		return nil, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil

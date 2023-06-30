@@ -54,7 +54,7 @@ var _ = Describe("Aws", func() {
 			})
 		})
 		When("the client fails for arbitrary reason", func() {
-			It("the error is propagated and empty client returned", func() {
+			It("the error is propagated and nil is returned", func() {
 				mockSdkStsClient.EXPECT().AssumeRole(gomock.Any()).Return(
 					&sts.AssumeRoleOutput{}, errOcc).Times(1).Do(
 					func(input *sts.AssumeRoleInput) {
@@ -63,7 +63,7 @@ var _ = Describe("Aws", func() {
 				c, err := client.AssumeRole(roleARN, "eu-west-1")
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(Equal(errOcc))
-				Expect(c).Should(Equal(&aws.SdkClient{}))
+				Expect(c).To(BeNil())
 			})
 		})
 	})

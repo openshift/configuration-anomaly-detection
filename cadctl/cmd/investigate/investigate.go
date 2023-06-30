@@ -147,9 +147,9 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	// If jumpRoles does not return an aws.Client and there was no error
+	// If jumpRoles does not return an *aws.Client and there was no error
 	// then cluster is in limited support for missing cloud credentials
-	if customerAwsClient == (&aws.SdkClient{}) {
+	if customerAwsClient == nil {
 		return nil
 	}
 
@@ -188,12 +188,12 @@ func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Clie
 
 	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
 	if !ok {
-		return &aws.SdkClient{}, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
+		return nil, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
 	}
 
 	supportRole, ok := os.LookupEnv("CAD_AWS_SUPPORT_JUMPROLE")
 	if !ok {
-		return &aws.SdkClient{}, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
+		return nil, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
 	customerAwsClient, err := assumerole.AssumeSupportRoleChain(baseAwsClient, ocmClient, cluster, cssJumprole, supportRole)
@@ -202,7 +202,7 @@ func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Clie
 
 		// If assumeSupportRoleChain fails, we evaluate if the credentials are missing based on the error message,
 		// it is also possible the assumeSupportRoleChain failed for another reason (e.g. API errors)
-		return &aws.SdkClient{}, ccam.Evaluate(cluster, err, ocmClient, pdClient)
+		return nil, ccam.Evaluate(cluster, err, ocmClient, pdClient)
 	}
 	logging.Info("Successfully jumpRoled into the customer account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
 	return customerAwsClient, ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient)
@@ -233,7 +233,7 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 	if os.IsNotExist(err) {
 		configDir, err := os.UserConfigDir()
 		if err != nil {
-			return &ocm.SdkClient{}, err
+			return nil, err
 		}
 		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
 	}
@@ -248,7 +248,7 @@ func GetAWSClient() (*aws.SdkClient, error) {
 	awsSessionToken, _ := os.LookupEnv("AWS_SESSION_TOKEN") // AWS_SESSION_TOKEN is optional
 	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
 	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
-		return &aws.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
+		return nil, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
 	}
 	if !hasAwsDefaultRegion {
 		awsDefaultRegion = "us-east-1"
@@ -264,12 +264,12 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
 	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return &pagerduty.SdkClient{}, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
 	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
-		return &pagerduty.SdkClient{}, fmt.Errorf("could not initialize the client: %w", err)
+		return nil, fmt.Errorf("could not initialize the client: %w", err)
 	}
 
 	return client, nil
