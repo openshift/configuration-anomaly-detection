@@ -34,7 +34,6 @@ func GetCPDAlertInternalID(alertTitle string) (string, error) {
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
 func InvestigateTriggered(r *investigation.Resources) error {
-
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
@@ -43,7 +42,6 @@ func InvestigateTriggered(r *investigation.Resources) error {
 			// We do not return as we want the alert to be escalated either no matter what.
 			logging.Error("could not add failure reason incident notes")
 		}
-
 	}
 
 	switch verifierResult {

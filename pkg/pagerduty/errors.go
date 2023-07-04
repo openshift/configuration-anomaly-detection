@@ -1,114 +1,109 @@
 package pagerduty
 
 import (
+	"errors"
 	"fmt"
 )
 
-// InvalidTokenErr wraps the PagerDuty token invalid error
-type InvalidTokenErr struct {
+// InvalidTokenError wraps the PagerDuty token invalid error
+type InvalidTokenError struct {
 	Err error
 }
 
 // Error prints the wrapped error and the original one
-func (i InvalidTokenErr) Error() string {
+func (i InvalidTokenError) Error() string {
 	err := fmt.Errorf("the authToken that was provided is invalid: %w", i.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (InvalidTokenErr) Is(target error) bool {
-	_, ok := target.(InvalidTokenErr)
-	return ok
+func (InvalidTokenError) Is(target error) bool {
+	return errors.Is(target, InvalidTokenError{})
 }
 
-// InvalidInputParamsErr wraps the PagerDuty Invalid parameters error
+// InvalidInputParamsError wraps the PagerDuty Invalid parameters error
 // TODO: the API also returns any other error in here, if this persists, think on renaming to "ClientMisconfiguration"
-type InvalidInputParamsErr struct {
+type InvalidInputParamsError struct {
 	Err error
 }
 
 // Error prints the wrapped error and the original one
-func (i InvalidInputParamsErr) Error() string {
+func (i InvalidInputParamsError) Error() string {
 	err := fmt.Errorf("the escalation policy or incident id are invalid: %w", i.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (InvalidInputParamsErr) Is(target error) bool {
-	_, ok := target.(InvalidInputParamsErr)
-	return ok
+func (InvalidInputParamsError) Is(target error) bool {
+	return errors.Is(target, InvalidInputParamsError{})
 }
 
-// IncidentNotFoundErr wraps the PagerDuty not found error while adding notes to an incident
-type IncidentNotFoundErr struct {
+// IncidentNotFoundError wraps the PagerDuty not found error while adding notes to an incident
+type IncidentNotFoundError struct {
 	Err error
 }
 
 // Error prints the wrapped error and the original one
-func (i IncidentNotFoundErr) Error() string {
+func (i IncidentNotFoundError) Error() string {
 	err := fmt.Errorf("the given incident was not found: %w", i.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (IncidentNotFoundErr) Is(target error) bool {
-	_, ok := target.(IncidentNotFoundErr)
-	return ok
+func (IncidentNotFoundError) Is(target error) bool {
+	return errors.Is(target, IncidentNotFoundError{})
 }
 
-// ServiceNotFoundErr wraps the errors returned when PagerDuty services cannot be retrieved
-type ServiceNotFoundErr struct {
+// ServiceNotFoundError wraps the errors returned when PagerDuty services cannot be retrieved
+type ServiceNotFoundError struct {
 	Err error
 }
 
 // Error prints the wrapped and original error
-func (s ServiceNotFoundErr) Error() string {
+func (s ServiceNotFoundError) Error() string {
 	err := fmt.Errorf("the given service was not found: %w", s.Err)
 	return err.Error()
 }
 
-// Is indicates whether the supplied error is a ServiceNotFoundErr
-func (ServiceNotFoundErr) Is(target error) bool {
-	_, ok := target.(ServiceNotFoundErr)
-	return ok
+// Is indicates whether the supplied error is a ServiceNotFoundError
+func (ServiceNotFoundError) Is(target error) bool {
+	return errors.Is(target, ServiceNotFoundError{})
 }
 
-// IntegrationNotFoundErr wraps the errors returned when a PagerDuty service's integration cannot be found
-type IntegrationNotFoundErr struct {
+// IntegrationNotFoundError wraps the errors returned when a PagerDuty service's integration cannot be found
+type IntegrationNotFoundError struct {
 	Err error
 }
 
 // Error prints the wrapped and original error
-func (i IntegrationNotFoundErr) Error() string {
+func (i IntegrationNotFoundError) Error() string {
 	err := fmt.Errorf("the given integration was not found: %w", i.Err)
 	return err.Error()
 }
 
-// Is indicates whether the supplied error is an IntegrationNotFoundErr
-func (IntegrationNotFoundErr) Is(target error) bool {
-	_, ok := target.(IntegrationNotFoundErr)
-	return ok
+// Is indicates whether the supplied error is an IntegrationNotFoundError
+func (IntegrationNotFoundError) Is(target error) bool {
+	return errors.Is(target, IntegrationNotFoundError{})
 }
 
-// CreateEventErr wraps the errors returned when failing to create a PagerDuty event
-type CreateEventErr struct {
+// CreateEventError wraps the errors returned when failing to create a PagerDuty event
+type CreateEventError struct {
 	Err error
 }
 
 // Error prints the wrapped and original error
-func (c CreateEventErr) Error() string {
+func (c CreateEventError) Error() string {
 	err := fmt.Errorf("failed to create event: %w", c.Err)
 	return err.Error()
 }
 
-// Is indicates whether the supplied error is a CreateEventErr
-func (CreateEventErr) Is(target error) bool {
-	_, ok := target.(CreateEventErr)
-	return ok
+// Is indicates whether the supplied error is a CreateEventError
+func (CreateEventError) Is(target error) bool {
+	return errors.Is(target, CreateEventError{})
 }
 
-// AlertBodyExternalCastErr denotes the fact the alert's body field could not be converted correctly
-type AlertBodyExternalCastErr struct {
+// AlertBodyExternalCastError denotes the fact the alert's body field could not be converted correctly
+type AlertBodyExternalCastError struct {
 	FailedProperty     string
 	ExpectedType       string
 	ActualType         string
@@ -116,7 +111,7 @@ type AlertBodyExternalCastErr struct {
 }
 
 // Error prints data (to conform to the other errors in the package
-func (a AlertBodyExternalCastErr) Error() string {
+func (a AlertBodyExternalCastError) Error() string {
 	err := fmt.Errorf("'%s' field is not '%s' it is '%s', the resource is '%s' ",
 		a.FailedProperty,
 		a.ExpectedType,
@@ -126,85 +121,82 @@ func (a AlertBodyExternalCastErr) Error() string {
 	return err.Error()
 }
 
-// AlertBodyExternalParseErr denotes the fact the alert's body could not be parsed correctly
-type AlertBodyExternalParseErr struct {
+// AlertBodyExternalParseError denotes the fact the alert's body could not be parsed correctly
+type AlertBodyExternalParseError struct {
 	FailedProperty string
 }
 
 // Error prints data (to conform to the other errors in the package
-func (a AlertBodyExternalParseErr) Error() string {
+func (a AlertBodyExternalParseError) Error() string {
 	err := fmt.Errorf("cannot find '%s' in body", a.FailedProperty)
 	return err.Error()
 }
 
-// AlertBodyDoesNotHaveNotesFieldErr denotes the fact the alert's body does not have a notes field
+// AlertBodyDoesNotHaveNotesFieldError denotes the fact the alert's body does not have a notes field
 // this is needed as the extracted notes body is a map[string]interface{} so marshalling it will
 // not always populate the field
-type AlertBodyDoesNotHaveNotesFieldErr struct{}
+type AlertBodyDoesNotHaveNotesFieldError struct{}
 
 // Error prints data (to conform to the other errors in the package
-func (AlertBodyDoesNotHaveNotesFieldErr) Error() string {
+func (AlertBodyDoesNotHaveNotesFieldError) Error() string {
 	err := fmt.Errorf("decoded resource does not have a .details.notes field, stopping")
 	return err.Error()
 }
 
-// AlertNotesDoesNotHaveClusterIDFieldErr denotes the fact the alert's notes does not have a '.cluster_id' field
-type AlertNotesDoesNotHaveClusterIDFieldErr struct{}
+// AlertNotesDoesNotHaveClusterIDFieldError denotes the fact the alert's notes does not have a '.cluster_id' field
+type AlertNotesDoesNotHaveClusterIDFieldError struct{}
 
 // Error prints data (to conform to the other errors in the package
-func (AlertNotesDoesNotHaveClusterIDFieldErr) Error() string {
+func (AlertNotesDoesNotHaveClusterIDFieldError) Error() string {
 	err := fmt.Errorf("decoded internal resource does not have '.cluster_id' field , stopping")
 	return err.Error()
 }
 
-// NotesParseErr wraps the yaml parse errors
-type NotesParseErr struct {
+// NotesParseError wraps the yaml parse errors
+type NotesParseError struct {
 	Err error
 }
 
 // Error prints the wrapped error and the original one
-func (n NotesParseErr) Error() string {
+func (n NotesParseError) Error() string {
 	err := fmt.Errorf("the notes object could not be marshalled into internalCHGMAlertBody: %w", n.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (NotesParseErr) Is(target error) bool {
-	_, ok := target.(NotesParseErr)
-	return ok
+func (NotesParseError) Is(target error) bool {
+	return errors.Is(target, NotesParseError{})
 }
 
-// FileNotFoundErr wraps the filesystem NotFound Error
-type FileNotFoundErr struct {
+// FileNotFoundError wraps the filesystem NotFound Error
+type FileNotFoundError struct {
 	Err      error
 	FilePath string
 }
 
 // Error prints the wrapped error and the original one
-func (f FileNotFoundErr) Error() string {
+func (f FileNotFoundError) Error() string {
 	err := fmt.Errorf("the file '%s' was not found in the filesystem: %w", f.FilePath, f.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (f FileNotFoundErr) Is(target error) bool {
-	_, ok := target.(FileNotFoundErr)
-	return ok
+func (f FileNotFoundError) Is(target error) bool {
+	return errors.Is(target, FileNotFoundError{})
 }
 
-// UnmarshalErr wraps JSON's json.SyntaxError
-type UnmarshalErr struct {
+// UnmarshalError wraps JSON's json.SyntaxError
+type UnmarshalError struct {
 	Err error
 }
 
 // Error prints the wrapped error and the original one
-func (u UnmarshalErr) Error() string {
+func (u UnmarshalError) Error() string {
 	err := fmt.Errorf("could not unmarshal the payloadFile: %w", u.Err)
 	return err.Error()
 }
 
 // Is ignores the internal error, thus making errors.Is work (as by default it compares the internal objects)
-func (u UnmarshalErr) Is(target error) bool {
-	_, ok := target.(UnmarshalErr)
-	return ok
+func (u UnmarshalError) Is(target error) bool {
+	return errors.Is(target, UnmarshalError{})
 }

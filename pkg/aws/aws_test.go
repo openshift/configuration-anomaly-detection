@@ -33,9 +33,7 @@ var _ = Describe("Aws", func() {
 		}
 	})
 	Describe("When assuming a Role", func() {
-		var (
-			roleARN string
-		)
+		var roleARN string
 		BeforeEach(func() {
 			roleARN = "aws:iam:sts:231254123:test-acc"
 		})
@@ -46,7 +44,8 @@ var _ = Describe("Aws", func() {
 						Credentials: &sts.Credentials{
 							AccessKeyId:     awsSDK.String("testId"),
 							SecretAccessKey: awsSDK.String("testSec"),
-							SessionToken:    awsSDK.String("token")},
+							SessionToken:    awsSDK.String("token"),
+						},
 					}, nil).Times(1)
 				c, err := client.AssumeRole(roleARN, "eu-west-1")
 				Expect(err).ShouldNot(HaveOccurred())
@@ -110,7 +109,7 @@ var _ = Describe("Aws", func() {
 
 				c, err := client.ListInstances("cluster-s3v21l")
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(len(c)).Should(Equal(nrPages))
+				Expect(c).Should(HaveLen(nrPages))
 			})
 		})
 		When("the full list is on one page", func() {
@@ -118,7 +117,7 @@ var _ = Describe("Aws", func() {
 				mockSdkEc2Client.EXPECT().DescribeInstances(gomock.Any()).Return(describeInstanceOut, nil).Times(1)
 				c, err := client.ListInstances("cluster-s3v21l")
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(len(c)).Should(Equal(1))
+				Expect(c).Should(HaveLen(1))
 			})
 		})
 		When("the client fails with an arbitrary error", func() {
@@ -127,7 +126,7 @@ var _ = Describe("Aws", func() {
 				c, err := client.ListInstances("cluster-s3v21l")
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(Equal(errOcc))
-				Expect(len(c)).Should(Equal(0))
+				Expect(c).Should(BeEmpty())
 			})
 		})
 	})
@@ -158,7 +157,7 @@ var _ = Describe("Aws", func() {
 				mockCloudTrailClient.EXPECT().LookupEvents(gomock.Any()).Return(lookupEventOut, nil).Times(1)
 				c, err := client.ListAllInstanceStopEvents()
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(len(c)).Should(Equal(1))
+				Expect(c).Should(HaveLen(1))
 			})
 		})
 		When("the client fails with an arbitrary error", func() {
@@ -167,7 +166,7 @@ var _ = Describe("Aws", func() {
 				c, err := client.ListAllInstanceStopEvents()
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(Equal(errOcc))
-				Expect(len(c)).Should(Equal(0))
+				Expect(c).Should(BeEmpty())
 			})
 		})
 		Describe("When Polling StoppedInstances events as a unique array", func() {
@@ -224,7 +223,6 @@ var _ = Describe("Aws", func() {
 					Expect(err).Should(MatchError(errOcc))
 				})
 			})
-
 		})
 	})
 })

@@ -31,7 +31,6 @@ const accessDeniedError string = "failed to assume into support-role: AccessDeni
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
 func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client) error {
-
 	logging.Info("Investigating possible missing cloud credentials...")
 
 	// We aren't able to jumpRole because of an error that is different than

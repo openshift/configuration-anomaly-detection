@@ -42,13 +42,13 @@ func Load() (cfg *Config, err error) {
 		return
 	}
 	if err != nil {
-		err = fmt.Errorf("can't check if config file '%s' exists: %v", file, err)
+		err = fmt.Errorf("can't check if config file '%s' exists: %w", file, err)
 		return
 	}
 	// #nosec G304
 	data, err := os.ReadFile(file)
 	if err != nil {
-		err = fmt.Errorf("can't read config file '%s': %v", file, err)
+		err = fmt.Errorf("can't read config file '%s': %w", file, err)
 		return
 	}
 	cfg = &Config{}
@@ -57,7 +57,7 @@ func Load() (cfg *Config, err error) {
 	}
 	err = json.Unmarshal(data, cfg)
 	if err != nil {
-		err = fmt.Errorf("can't parse config file '%s': %v", file, err)
+		err = fmt.Errorf("can't parse config file '%s': %w", file, err)
 		return
 	}
 	return

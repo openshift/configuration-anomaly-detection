@@ -40,7 +40,6 @@ var _ = Describe("RunVerifier", func() {
 		// This test is pretty useless but illustrates what tests for networkverifier should look like
 		When("Getting security group ids", func() {
 			It("Should return the error failed to get SecurityGroupId", func() {
-
 				expectedError := errors.New("failed to get SecurityGroupId: errormessage")
 				// Arrange
 				awsCli.EXPECT().GetSecurityGroupID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return(nil, expectedError)
