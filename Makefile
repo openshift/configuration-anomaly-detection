@@ -1,7 +1,9 @@
 include project.mk
 include boilerplate/generated-includes.mk
 
-GOLANGCI_LINT_VERSION=v1.52.2
+GOLANGCI_LINT_VERSION=v1.53.3
+PRE_COMMIT_HOOK = .git/hooks/pre-commit
+PRE_COMMIT_SCRIPT = hack/pre-commit.sh
 
 # Binaries used in Makefile
 bin/cobra:
@@ -28,10 +30,11 @@ getlint:
 # Required as mockgen is running without a relative path
 export PATH := $(PWD)/bin:$(PATH)
 
+
 # Actions
 .DEFAULT_GOAL := all
 .PHONY: all
-all: build lint test generate-markdown
+all: build lint test generate-markdown pre-commit
 
 # build uses the following Go flags:
 # -s -w for stripping the binary (making it smaller)
@@ -68,7 +71,7 @@ test-with-coverage:
 cadctl-install-local: cadctl/cadctl
 
 .PHONY: cadctl-install-local-force
-cadctl-install-local-force: 
+cadctl-install-local-force:
 	rm cadctl/cadctl >/dev/null 2>&1 || true
 	make cadctl-install-local
 
@@ -77,9 +80,9 @@ cadctl-install-local-force:
 MARKDOWN_SOURCES := $(shell find $(SOURCEDIR) -name '*.md')
 .PHONY: generate-markdown
 generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
-	./bin/embedmd -w $(MARKDOWN_SOURCES) 
+	./bin/embedmd -w $(MARKDOWN_SOURCES)
 
-## CI actions 
+## CI actions
 
 .PHONY: coverage
 coverage: hack/codecov.sh
@@ -97,7 +100,7 @@ validate: build generate checks isclean
 .PHONY: checks
 checks:  check-duplicate-error-messages
 
-# check-duplicate-error-messages will conform with 
+# check-duplicate-error-messages will conform with
 .PHONY: check-duplicate-error-messages
 check-duplicate-error-messages:
 	@(test $$(grep -Ir 'fmt.Errorf("' . | grep -v -e './.git' -e .*.md | sed 's/\(.*\)\(fmt.Errorf.*\)/\2/' | sort | uniq -c | awk '$$1 != "1"' | wc -l) -eq 0) || (echo "There are duplicate error values, please consolidate them or make them unique" >&2 && exit 1)
@@ -105,3 +108,8 @@ check-duplicate-error-messages:
 .PHONY: boilerplate-update
 boilerplate-update:
 	@boilerplate/update
+
+.PHONY: pre-commit
+pre-commit:
+	@cp $(PRE_COMMIT_SCRIPT) $(PRE_COMMIT_HOOK)
+	@chmod +x $(PRE_COMMIT_HOOK)
