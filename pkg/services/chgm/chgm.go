@@ -95,7 +95,6 @@ func InvestigateTriggered(r *investigation.Resources) error {
 
 // InvestigateResolved runs the investigation for a resolved chgm pagerduty event
 func InvestigateResolved(r *investigation.Resources) error {
-
 	// Check if CAD put the cluster in CHGM LS. If it didn't, we don't need a resolve investigation, as
 	// either way it would be a NOOP for CAD (no LS to remove).
 	// This is the case most of the time, so it saves us a lot of long pipeline runs.
@@ -111,7 +110,6 @@ func InvestigateResolved(r *investigation.Resources) error {
 	}
 
 	res, err := investigateRestoredCluster(r)
-
 	// The investigation encountered an error & never completed - alert Primary and report the error
 	if err != nil {
 		return err
@@ -127,7 +125,7 @@ func InvestigateResolved(r *investigation.Resources) error {
 		})
 		if err != nil {
 			logging.Errorf("Failed to add note '%s' to incident: %s", investigationNotNeededNote, err)
-			return nil
+			return err
 		}
 		return nil
 	}
@@ -208,7 +206,6 @@ func investigateRestoredCluster(r *investigation.Resources) (res investigateInst
 // For this, we use a whitelist of partial strings that can be SRE
 // based on findings in https://issues.redhat.com/browse/OSD-16042
 func isUserAllowedToStop(username, issuerUsername string, ccsEnabled bool) bool {
-
 	// Users are represented by Username in cloudtrail events
 	allowedUsersPartialStrings := []string{
 		// 'openshift-machine-api-aws' is a role for STS, and a user for ROSA non-STS and non-CCS
@@ -301,10 +298,11 @@ func (i investigateInstancesOutput) string() string {
 		i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
 	msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
 		i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
-	var ids []string
-	for _, nonRunningInstance := range i.NonRunningInstances {
+	// var ids []string
+	ids := make([]string, len(i.NonRunningInstances))
+	for i, nonRunningInstance := range i.NonRunningInstances {
 		// TODO: add also the StateTransitionReason to the output if needed
-		ids = append(ids, *nonRunningInstance.InstanceId)
+		ids[i] = *nonRunningInstance.InstanceId
 	}
 	if len(i.NonRunningInstances) > 0 {
 		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
@@ -347,8 +345,10 @@ func investigateStoppedInstances(cluster *v1.Cluster, clusterDeployment *hivev1.
 
 	if len(stoppedInstances) == 0 {
 		// UserAuthorized: true so SRE will still be alerted for manual investigation
-		return investigateInstancesOutput{UserAuthorized: true, RunningInstances: *runningNodesCount,
-			ExpectedInstances: *expectedNodesCount, Error: "no non running instances found, terminated instances may have already expired"}, nil
+		return investigateInstancesOutput{
+			UserAuthorized: true, RunningInstances: *runningNodesCount,
+			ExpectedInstances: *expectedNodesCount, Error: "no non running instances found, terminated instances may have already expired",
+		}, nil
 	}
 
 	stoppedInstancesEvents, err := awsCli.PollInstanceStopEventsFor(stoppedInstances, 15)
@@ -486,7 +486,6 @@ func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount
 				}
 			}
 		}
-
 	}
 
 	return runningNodesCount, nil
@@ -596,7 +595,8 @@ func buildAlertForFailedPostCHGM(clusterID string, investigationErr string) page
 			Error:      investigationErr,
 			Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
-		}}
+		},
+	}
 }
 
 // buildAlertForInvestigationFailure returns an alert for a cluster that could not be properly investigated
@@ -608,7 +608,8 @@ func buildAlertForInvestigationFailure(clusterID string, investigationErr error)
 			Error:      investigationErr.Error(),
 			Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",
 			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
-		}}
+		},
+	}
 }
 
 // CloudTrailEventRaw will help marshal the cloudtrail.Event.CloudTrailEvent string
@@ -653,5 +654,5 @@ func postLimitedSupport(clusterID string, notes string, ocmCli ocm.Client, pdCli
 	}
 	// we need to aditionally silence here, as dms service keeps firing
 	// even when we put in limited support
-	return pdCli.SilenceAlertWithNote(string(notes))
+	return pdCli.SilenceAlertWithNote(notes)
 }

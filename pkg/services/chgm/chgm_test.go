@@ -23,7 +23,7 @@ import (
 
 var _ = Describe("chgm", func() {
 	// this is a var but I use it as a const
-	var fakeErr = fmt.Errorf("test triggered")
+	fakeErr := fmt.Errorf("test triggered")
 	var (
 		r                  *investigation.Resources
 		mockCtrl           *gomock.Controller
@@ -40,7 +40,6 @@ var _ = Describe("chgm", func() {
 		event              cloudtrail.Event
 	)
 	BeforeEach(func() {
-
 		logging.InitLogger("fatal", "") // Mute logger for the tests
 
 		mockCtrl = gomock.NewController(GinkgoT())
@@ -93,7 +92,6 @@ var _ = Describe("chgm", func() {
 		r.PdClient = pdmock.NewMockClient(mockCtrl)
 
 		fmt.Println(instance, event)
-
 	})
 	AfterEach(func() {
 		mockCtrl.Finish()
@@ -541,7 +539,6 @@ var _ = Describe("chgm", func() {
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
-
 	})
 	Describe("Resolved", func() {
 		var err error

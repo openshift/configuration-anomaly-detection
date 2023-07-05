@@ -60,7 +60,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.MoveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
 			})
 		})
 
@@ -78,8 +78,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
 			})
 		})
 
@@ -94,14 +93,11 @@ var _ = Describe("Pagerduty", func() {
 				err := p.MoveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(err).Should(BeNil())
 			})
 		})
 	})
 	Describe("AssignToUser", func() {
-		var (
-			userID string
-		)
+		var userID string
 		BeforeEach(func() {
 			userID = "1234"
 		})
@@ -117,7 +113,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AssignToUser(userID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
 			})
 		})
 
@@ -135,8 +131,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
 			})
 		})
 
@@ -150,9 +145,7 @@ var _ = Describe("Pagerduty", func() {
 				// Act
 				err := p.AssignToUser(userID)
 				// Assert
-				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(err).Should(BeNil())
 			})
 		})
 	})
@@ -171,7 +164,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AcknowledgeIncident()
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
 			})
 		})
 
@@ -189,8 +182,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
 			})
 		})
 
@@ -205,20 +197,16 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AcknowledgeIncident()
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(err).Should(BeNil())
 			})
 		})
 	})
 
 	Describe("AddNote", func() {
-		var (
-			noteContent string
-		)
+		var noteContent string
 		BeforeEach(func() {
 			noteContent = "this is a test"
 			// this is the only place that actually required a value to be set for the incidentID
 			incidentID = "1234"
-
 		})
 
 		When("The authentication token that is sent is invalid", func() {
@@ -234,7 +222,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
 			})
 		})
 
@@ -252,8 +240,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
 			})
 		})
 
@@ -268,8 +255,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
 			})
 		})
 
@@ -284,7 +270,6 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(err).Should(BeNil())
 			})
 		})
 	})
@@ -307,7 +292,7 @@ var _ = Describe("Pagerduty", func() {
 				_, err := p.GetAlerts()
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenErr{}))
+				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
 			})
 		})
 
@@ -325,8 +310,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsErr{}))
-
+				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
 			})
 		})
 
@@ -344,7 +328,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
+				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
 			})
 		})
 
@@ -359,11 +343,9 @@ var _ = Describe("Pagerduty", func() {
 				res, err := p.GetAlerts()
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(err).Should(BeNil())
 				Expect(res).Should(HaveLen(1))
 				Expect(res[0].ID).Should(Equal("123456"))
 				Expect(res[0].ExternalID).Should(Equal("123456"))
-
 			})
 		})
 	})
@@ -384,27 +366,28 @@ var _ = Describe("Pagerduty", func() {
 					Error:      "",
 					Resolution: "",
 					SOP:        "",
-				}}
+				},
+			}
 		})
 		When("The service cannot be retrieved", func() {
-			It("should return a ServiceNotFoundErr", func() {
+			It("should return a ServiceNotFoundError", func() {
 				err := p.CreateNewAlert(newAlert, serviceID)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.ServiceNotFoundErr{}))
+				Expect(err).To(MatchError(pagerduty.ServiceNotFoundError{}))
 			})
 		})
 		When("The service has no Dead Man's Snitch integrations", func() {
-			It("should return an IntegrationNotFoundErr", func() {
+			It("should return an IntegrationNotFoundError", func() {
 				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
 					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[]}}`, serviceID)
 				})
 				err := p.CreateNewAlert(newAlert, serviceID)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.IntegrationNotFoundErr{}))
+				Expect(err).To(MatchError(pagerduty.IntegrationNotFoundError{}))
 			})
 		})
 		When("The event creation fails", func() {
-			It("should return a CreateEventErr", func() {
+			It("should return a CreateEventError", func() {
 				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
 					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[{"id":"%s"}]}}`, serviceID, dmsIntegrationID)
 				})
@@ -413,13 +396,13 @@ var _ = Describe("Pagerduty", func() {
 				})
 				err := p.CreateNewAlert(newAlert, serviceID)
 				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.CreateEventErr{}))
+				Expect(err).To(MatchError(pagerduty.CreateEventError{}))
 			})
 		})
 	})
 	Describe("NewWithToken", func() {
 		When("the payload is empty", func() {
-			It("should fail on UnmarshalErr", func() {
+			It("should fail on UnmarshalError", func() {
 				_, err := pagerduty.NewWithToken(
 					escalationPolicyID,
 					silencePolicyID,
@@ -441,7 +424,7 @@ var _ = Describe("Pagerduty", func() {
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
 			})
 		})
 		When("the payload is missing the event type", func() {
@@ -454,7 +437,7 @@ var _ = Describe("Pagerduty", func() {
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
 			})
 		})
 		When("the payload is missing the data field", func() {
@@ -467,7 +450,7 @@ var _ = Describe("Pagerduty", func() {
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalErr{}))
+				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
 			})
 		})
 	})
@@ -479,12 +462,12 @@ var _ = Describe("Pagerduty", func() {
 	// 	})
 
 	// 	When("the '.details' field is of the wrong type", func() {
-	// 		It("should raise a 'AlertBodyExternalCastErr' error", func() {
+	// 		It("should raise a 'AlertBodyExternalCastError' error", func() {
 	// 			// Arrange
 	// 			alertBody = map[string]interface{}{
 	// 				"details": "bad details",
 	// 			}
-	// 			expectedErr := pagerduty.AlertBodyExternalCastErr{
+	// 			expectedErr := pagerduty.AlertBodyExternalCastError{
 	// 				FailedProperty:     ".details",
 	// 				ExpectedType:       "map[string]interface{}",
 	// 				ActualType:         "string",
@@ -498,7 +481,7 @@ var _ = Describe("Pagerduty", func() {
 	// 		})
 	// 	})
 	// 	When("the '.details.notes' field is of the wrong type", func() {
-	// 		It("should raise a 'AlertBodyExternalCastErr' error", func() {
+	// 		It("should raise a 'AlertBodyExternalCastError' error", func() {
 	// 			// Arrange
 	// 			alertBody = map[string]interface{}{
 	// 				"details": map[string]interface{}{
@@ -507,7 +490,7 @@ var _ = Describe("Pagerduty", func() {
 	// 					},
 	// 				},
 	// 			}
-	// 			expectedErr := pagerduty.AlertBodyExternalCastErr{
+	// 			expectedErr := pagerduty.AlertBodyExternalCastError{
 	// 				FailedProperty:     ".details.notes",
 	// 				ExpectedType:       "string",
 	// 				ActualType:         "map[string]interface {}",
@@ -522,7 +505,7 @@ var _ = Describe("Pagerduty", func() {
 	// 	})
 
 	// 	When("the notes field is improperly parsed by the 'yaml' package", func() {
-	// 		It("should raise a 'NotesParseErr' error", func() {
+	// 		It("should raise a 'NotesParseError' error", func() {
 	// 			// Arrange
 	// 			alertBody = map[string]interface{}{
 	// 				"details": map[string]interface{}{
@@ -533,7 +516,7 @@ var _ = Describe("Pagerduty", func() {
 	// 			_, err := p.ExtractIDFromCHGM(alertBody)
 	// 			// Assert
 	// 			Expect(err).Should(HaveOccurred())
-	// 			Expect(err).Should(MatchError(pagerduty.NotesParseErr{}))
+	// 			Expect(err).Should(MatchError(pagerduty.NotesParseError{}))
 	// 		})
 	// 	})
 
@@ -569,7 +552,7 @@ var _ = Describe("Pagerduty", func() {
 					// Act
 					_, err := p.RetrieveExternalClusterID()
 					// Assert
-					Expect(err).Should(MatchError(pagerduty.IncidentNotFoundErr{}))
+					Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
 				})
 			})
 			When("the payload is valid and the api does have the alert + incident", func() {
@@ -596,15 +579,15 @@ var _ = Describe("Pagerduty", func() {
 					_, err := p.RetrieveExternalClusterID()
 					// Assert
 					Expect(err).Should(HaveOccurred())
-					Expect(err).Should(MatchError(pagerduty.AlertBodyExternalParseErr{FailedProperty: ".details"}))
+					Expect(err).Should(MatchError(pagerduty.AlertBodyExternalParseError{FailedProperty: ".details"}))
 				})
 			})
 			When("the '.details' field is of the wrong type", func() {
-				It("should raise a 'AlertBodyExternalCastErr' error", func() {
+				It("should raise a 'AlertBodyExternalCastError' error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
 					})
-					expectedErr := pagerduty.AlertBodyExternalCastErr{
+					expectedErr := pagerduty.AlertBodyExternalCastError{
 						FailedProperty:     ".details",
 						ExpectedType:       "map[string]interface{}",
 						ActualType:         "string",
@@ -616,7 +599,6 @@ var _ = Describe("Pagerduty", func() {
 					Expect(err).Should(HaveOccurred())
 					Expect(err).Should(MatchError(expectedErr))
 				})
-
 			})
 		})
 	})

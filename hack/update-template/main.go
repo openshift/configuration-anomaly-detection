@@ -20,21 +20,19 @@ const (
 	outputTemplateFile = "../../openshift/template.yaml"
 )
 
-var (
-	// this holds all the info that is static in the template. update this as needed
-	saasTemplateFile = Template{
-		APIVersion: "template.openshift.io/v1",
-		Kind:       "Template",
-		Metadata: Metadata{
-			Name: "configuration-anomaly-detection-template",
-		},
-		Parameters: []Parameter{
-			{Name: "IMAGE_TAG", Value: "v0.0.0"},
-			{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/configuration-anomaly-detection"},
-			{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
-		},
-	}
-)
+// this holds all the info that is static in the template. update this as needed
+var saasTemplateFile = Template{
+	APIVersion: "template.openshift.io/v1",
+	Kind:       "Template",
+	Metadata: Metadata{
+		Name: "configuration-anomaly-detection-template",
+	},
+	Parameters: []Parameter{
+		{Name: "IMAGE_TAG", Value: "v0.0.0"},
+		{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/configuration-anomaly-detection"},
+		{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
+	},
+}
 
 func main() {
 	ex, getExecutableErr := os.Executable()
@@ -133,7 +131,7 @@ func main() {
 	// marshal back into bytes
 	saasTemplateFileAsBytes, marshalBackErr := yaml.Marshal(&saasTemplateFile)
 	if marshalBackErr != nil {
-		panic(fmt.Errorf("could not marshal the bigMapping back: %v", marshalBackErr))
+		panic(fmt.Errorf("could not marshal the bigMapping back: %w", marshalBackErr))
 	}
 	// print to stdout just so we know something happened and the code isn't broken
 	fmt.Printf("---\n%s\n", string(saasTemplateFileAsBytes))
@@ -158,6 +156,7 @@ func main() {
 		panic(fmt.Errorf("could not write marshalled data into file '%s': %w", outputFile, writeErr))
 	}
 }
+
 func fixRoleOrClusterRoleBinding(fileAsMap map[interface{}]interface{}) error {
 	subjects, hasSubjects, getNestedSliceErr := mutableNestedSlice(fileAsMap, "subjects")
 	if getNestedSliceErr != nil {

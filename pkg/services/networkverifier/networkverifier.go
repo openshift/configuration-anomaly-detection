@@ -29,9 +29,7 @@ type egressConfig struct {
 	noTLS        bool
 }
 
-var (
-	awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
-)
+var awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
 
 // VerifierResult type contains the verifier outcomes
 type VerifierResult int
@@ -97,7 +95,7 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 
 	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
 	if err != nil {
-		return Undefined, "", fmt.Errorf("could not build awsVerifier %v", err)
+		return Undefined, "", fmt.Errorf("could not build awsVerifier %w", err)
 	}
 
 	logging.Infof("Using region: %s", cluster.Region().ID())
@@ -107,7 +105,6 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
 	if len(verifierExceptions) != 0 || len(verifierErrors) != 0 {
-
 		exceptionsSummary := ""
 		errorsSummary := ""
 

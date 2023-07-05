@@ -54,7 +54,6 @@ func init() {
 }
 
 func run(_ *cobra.Command, _ []string) error {
-
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -114,7 +113,6 @@ func run(_ *cobra.Command, _ []string) error {
 	// the investigation level, and we should be GCP or AWSClient based on this.
 	// For now, we can silence alerts for clusters that are already in limited support and not handled by CAD
 	if !cloudProviderSupported {
-
 		// We forward everything CAD doesn't support investigations for to primary, as long as the clusters
 		// aren't in limited support.
 		logging.Info("Cloud provider is not supported, checking for limited support...")
@@ -194,7 +192,6 @@ func run(_ *cobra.Command, _ []string) error {
 
 // jumpRoles will return an aws client or an error after trying to jump into support role
 func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client) (*aws.SdkClient, error) {
-
 	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
 	if !ok {
 		return nil, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
@@ -303,7 +300,7 @@ func checkCloudProviderSupported(ocmClient *ocm.SdkClient, externalClusterID str
 // - app-sre-alertmanager contains an internal ID in the title in the format uhc-<env>-<internal-id>
 // - everything else should adhere to being a separate field in the alert note.
 func parseClusterIDFromAlert(pdClient *pagerduty.SdkClient) (string, error) {
-	clusterID := ""
+	var clusterID string
 	var err error
 
 	switch pdClient.GetServiceName() {

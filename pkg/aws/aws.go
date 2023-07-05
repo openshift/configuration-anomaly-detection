@@ -32,9 +32,7 @@ const (
 	backoffUpperLimit                = 5 * time.Minute
 )
 
-var (
-	stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
-)
+var stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
 
 //go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package awsmock github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
 //go:generate mockgen --build_flags=--mod=readonly -destination mock/ec2mock.go -package awsmock github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
@@ -336,7 +334,7 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTi
 		if executionError == nil {
 			return nil, fmt.Errorf("command failed after a pollTimeout of %v: %w", backoffUpperLimit, err)
 		}
-		return nil, fmt.Errorf("command failed after a pollTimeout of %v: %v: %w", backoffUpperLimit, err, executionError)
+		return nil, fmt.Errorf("command failed after a pollTimeout of %v: %v: %w", backoffUpperLimit, err.Error(), executionError)
 	}
 
 	return events, nil
@@ -382,7 +380,6 @@ func populateStopTime(instances []*ec2.Instance) (map[string]time.Time, error) {
 		idToStopTime[instanceID] = extractedTime
 	}
 	return idToStopTime, nil
-
 }
 
 func getTime(rawReason string) (time.Time, error) {

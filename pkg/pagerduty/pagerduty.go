@@ -96,19 +96,19 @@ func (c *WebhookPayload) Unmarshal(data []byte) error {
 	}
 
 	if c.Event.EventType == "" {
-		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: event_type")}
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: event_type")}
 	}
 	if c.Event.Data.Service.ServiceID == "" {
-		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: ServiceID")}
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: ServiceID")}
 	}
 	if c.Event.Data.Service.Summary == "" {
-		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Summary")}
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: Summary")}
 	}
 	if c.Event.Data.Title == "" {
-		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: Title")}
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: Title")}
 	}
 	if c.Event.Data.IncidentID == "" {
-		return UnmarshalErr{Err: fmt.Errorf("payload is missing field: IncidentID")}
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentID")}
 	}
 	return nil
 }
@@ -119,7 +119,7 @@ func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload [
 	parsedPayload := WebhookPayload{}
 	err := parsedPayload.Unmarshal(webhookPayload)
 	if err != nil {
-		return nil, UnmarshalErr{Err: err}
+		return nil, UnmarshalError{Err: err}
 	}
 	c := SdkClient{
 		sdkClient:              sdk.NewClient(authToken, options...),
@@ -168,7 +168,6 @@ func (c *SdkClient) GetSilentEscalationPolicy() string {
 // RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
 // retrieve the externalClusterID from pagerduty, and update the client.
 func (c *SdkClient) RetrieveExternalClusterID() (string, error) {
-
 	// Only do the api call to pagerduty once
 	if c.externalClusterID != nil {
 		return *c.externalClusterID, nil
@@ -188,6 +187,7 @@ func (c *SdkClient) RetrieveExternalClusterID() (string, error) {
 	}
 
 	for _, a := range alerts {
+		a := a
 		// that one alert should have a valid ExternalID
 		if a.ExternalID != "" {
 			c.externalClusterID = &a.ExternalID
@@ -297,7 +297,7 @@ func (c *SdkClient) AddNote(noteContent string) error {
 		}
 		if sdkErr.StatusCode == http.StatusNotFound {
 			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
-			return IncidentNotFoundErr{Err: err}
+			return IncidentNotFoundError{Err: err}
 		}
 	}
 
@@ -313,12 +313,12 @@ func (c *SdkClient) AddNote(noteContent string) error {
 func (c *SdkClient) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 	service, err := c.sdkClient.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
 	if err != nil {
-		return ServiceNotFoundErr{Err: err}
+		return ServiceNotFoundError{Err: err}
 	}
 
 	integration, err := c.getCADIntegrationFromService(service)
 	if err != nil {
-		return IntegrationNotFoundErr{Err: err}
+		return IntegrationNotFoundError{Err: err}
 	}
 
 	// Current DMS integration requires us to use v1 events
@@ -332,7 +332,7 @@ func (c *SdkClient) CreateNewAlert(newAlert NewAlert, serviceID string) error {
 
 	response, err := sdk.CreateEventWithHTTPClient(event, c.sdkClient.HTTPClient)
 	if err != nil {
-		return CreateEventErr{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
+		return CreateEventError{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
 	}
 	logging.Infof("Alert has been created %s", newAlert.Description)
 	return nil
@@ -372,7 +372,7 @@ func (c *SdkClient) GetAlerts() ([]Alert, error) {
 		}
 		if sdkErr.StatusCode == http.StatusNotFound {
 			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
-			return nil, IncidentNotFoundErr{Err: err}
+			return nil, IncidentNotFoundError{Err: err}
 		}
 	}
 	if err != nil {
@@ -401,7 +401,7 @@ func extractExternalIDFromAlertBody(data map[string]interface{}) (string, error)
 	}
 
 	if externalBody == "" {
-		return "", AlertBodyDoesNotHaveNotesFieldErr{}
+		return "", AlertBodyDoesNotHaveNotesFieldError{}
 	}
 
 	internalBody := internalCHGMAlertBody{}
@@ -412,12 +412,12 @@ func extractExternalIDFromAlertBody(data map[string]interface{}) (string, error)
 		externalBody = strings.ReplaceAll(externalBody, `\n`, "\n")
 		err = yaml.Unmarshal([]byte(externalBody), &internalBody)
 		if err != nil {
-			return "", NotesParseErr{Err: err}
+			return "", NotesParseError{Err: err}
 		}
 	}
 
 	if internalBody.ClusterID == "" {
-		return "", AlertNotesDoesNotHaveClusterIDFieldErr{}
+		return "", AlertNotesDoesNotHaveClusterIDFieldError{}
 	}
 
 	return internalBody.ClusterID, nil
@@ -429,12 +429,12 @@ func extractNotesFromBody(body map[string]interface{}) (string, error) {
 	var ok bool
 	_, ok = body["details"]
 	if !ok {
-		return "", AlertBodyExternalParseErr{FailedProperty: ".details"}
+		return "", AlertBodyExternalParseError{FailedProperty: ".details"}
 	}
 
 	details, ok := body["details"].(map[string]interface{})
 	if !ok {
-		err := AlertBodyExternalCastErr{
+		err := AlertBodyExternalCastError{
 			FailedProperty:     ".details",
 			ExpectedType:       "map[string]interface{}",
 			ActualType:         reflect.TypeOf(body["details"]).String(),
@@ -445,12 +445,12 @@ func extractNotesFromBody(body map[string]interface{}) (string, error) {
 
 	notesInterface, ok := details["notes"]
 	if !ok {
-		return "", AlertBodyExternalParseErr{FailedProperty: ".details.notes"}
+		return "", AlertBodyExternalParseError{FailedProperty: ".details.notes"}
 	}
 
 	notes, ok := notesInterface.(string)
 	if !ok {
-		err := AlertBodyExternalCastErr{
+		err := AlertBodyExternalCastError{
 			FailedProperty:     ".details.notes",
 			ExpectedType:       "string",
 			ActualType:         reflect.TypeOf(details["notes"]).String(),
@@ -486,12 +486,12 @@ func (c *SdkClient) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
 func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 	switch sdkErr.StatusCode {
 	case http.StatusUnauthorized:
-		return InvalidTokenErr{Err: err}
+		return InvalidTokenError{Err: err}
 	case http.StatusBadRequest:
 		isAnInvalidInputErr := sdkErr.APIError.Valid &&
 			sdkErr.APIError.ErrorObject.Code == InvalidInputParamsErrorCode
 		if isAnInvalidInputErr {
-			return InvalidInputParamsErr{Err: err}
+			return InvalidInputParamsError{Err: err}
 		}
 	}
 	return nil
