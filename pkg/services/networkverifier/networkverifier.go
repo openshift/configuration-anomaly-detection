@@ -9,7 +9,7 @@ import (
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/osd-network-verifier/pkg/proxy"

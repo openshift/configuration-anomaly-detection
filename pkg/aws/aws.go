@@ -21,7 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/sts"
 	"github.com/aws/aws-sdk-go/service/sts/stsiface"
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -303,7 +303,7 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTi
 				}
 			}
 		}
-		logging.Infof("%+v", idToCloudtrailEvent)
+		logging.Debugf("%+v", idToCloudtrailEvent)
 		for _, instance := range instances {
 			instanceID := *instance.InstanceId
 			event, ok := idToCloudtrailEvent[instanceID]
@@ -330,7 +330,7 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTi
 
 		return true, nil
 	})
-	logging.Infof("%+v", idToCloudtrailEvent)
+	logging.Debugf("%+v", idToCloudtrailEvent)
 
 	if err != nil || executionError != nil {
 		if executionError == nil {

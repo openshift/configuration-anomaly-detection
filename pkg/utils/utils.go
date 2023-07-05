@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
 // WithRetries runs a function with up to 10 retries on error

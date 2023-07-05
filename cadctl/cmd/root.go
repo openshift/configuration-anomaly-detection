@@ -18,7 +18,7 @@ package cmd
 
 import (
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/spf13/cobra"
 )
 
