@@ -52,6 +52,36 @@ func (mr *MockClientMockRecorder) AssumeRole(roleARN, region interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssumeRole", reflect.TypeOf((*MockClient)(nil).AssumeRole), roleARN, region)
 }
 
+// DescribeRouteTables mocks base method.
+func (m *MockClient) DescribeRouteTables(arg0 *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeRouteTables", arg0)
+	ret0, _ := ret[0].(*ec2.DescribeRouteTablesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeRouteTables indicates an expected call of DescribeRouteTables.
+func (mr *MockClientMockRecorder) DescribeRouteTables(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeRouteTables", reflect.TypeOf((*MockClient)(nil).DescribeRouteTables), arg0)
+}
+
+// DescribeSubnets mocks base method.
+func (m *MockClient) DescribeSubnets(arg0 *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeSubnets", arg0)
+	ret0, _ := ret[0].(*ec2.DescribeSubnetsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeSubnets indicates an expected call of DescribeSubnets.
+func (mr *MockClientMockRecorder) DescribeSubnets(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockClient)(nil).DescribeSubnets), arg0)
+}
+
 // GetAWSCredentials mocks base method.
 func (m *MockClient) GetAWSCredentials() credentials.Value {
 	m.ctrl.T.Helper()

@@ -49,6 +49,8 @@ type Client interface {
 	GetSubnetID(infraID string) ([]string, error)
 	IsSubnetPrivate(subnet string) bool
 	AssumeRole(roleARN, region string) (*SdkClient, error)
+	DescribeRouteTables(*ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error)
+	DescribeSubnets(*ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error)
 }
 
 // SdkClient is a representation of the AWS Client
@@ -491,4 +493,14 @@ func (c *SdkClient) IsSubnetPrivate(subnet string) bool {
 	out, _ := c.Ec2Client.DescribeSubnets(in)
 
 	return !*out.Subnets[0].MapPublicIpOnLaunch
+}
+
+// DescribeRouteTables returns DescribeRouteTablesOutput
+func (c *SdkClient) DescribeRouteTables(input *ec2.DescribeRouteTablesInput) (*ec2.DescribeRouteTablesOutput, error) {
+	return c.Ec2Client.DescribeRouteTables(input)
+}
+
+// DescribeSubnets return DescribeSubnetsOutput
+func (c *SdkClient) DescribeSubnets(input *ec2.DescribeSubnetsInput) (*ec2.DescribeSubnetsOutput, error) {
+	return c.Ec2Client.DescribeSubnets(input)
 }
