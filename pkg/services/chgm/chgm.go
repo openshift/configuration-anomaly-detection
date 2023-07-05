@@ -9,9 +9,9 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -41,7 +41,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 
-	logging.Infof("the investigation returned %#v", res)
+	logging.Debugf("the investigation returned %#v", res.string())
 
 	lsExists, err := r.OcmClient.IsInLimitedSupport(r.Cluster.ID())
 	if err != nil {

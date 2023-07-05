@@ -62,6 +62,20 @@ func (mr *MockClientMockRecorder) CreateNewAlert(newAlert, serviceID interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewAlert", reflect.TypeOf((*MockClient)(nil).CreateNewAlert), newAlert, serviceID)
 }
 
+// EscalateAlert mocks base method.
+func (m *MockClient) EscalateAlert() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EscalateAlert")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EscalateAlert indicates an expected call of EscalateAlert.
+func (mr *MockClientMockRecorder) EscalateAlert() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateAlert", reflect.TypeOf((*MockClient)(nil).EscalateAlert))
+}
+
 // EscalateAlertWithNote mocks base method.
 func (m *MockClient) EscalateAlertWithNote(notes string) error {
 	m.ctrl.T.Helper()

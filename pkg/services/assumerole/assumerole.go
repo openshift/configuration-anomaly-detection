@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )

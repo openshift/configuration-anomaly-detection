@@ -17,6 +17,7 @@ limitations under the License.
 package investigate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,12 +26,13 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/services/cpd"
 	"github.com/spf13/cobra"
 )
 
@@ -64,33 +66,43 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
 
-	externalClusterID, err := pdClient.RetrieveExternalClusterID()
+	ocmClient, err := GetOCMClient()
 	if err != nil {
-		return fmt.Errorf("GetExternalID failed on: %w", err)
+		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	// initialize logger for the cluster-id context
-	logging.RawLogger = logging.InitLogger(logLevelString, externalClusterID)
+	// clusterID can end up being either be the internal or external ID.
+	// We don't really care, as we only use this to initialize the cluster object,
+	// which will contain both IDs.
+	clusterID, err := parseClusterIDFromAlert(pdClient)
+	if err != nil {
+		return fmt.Errorf("parseClusterIdFromAlert failed on: %w", err)
+	}
 
 	// After this point we know CAD will investigate the alert
 	// so we can initialize the other clients
-	alertType := isAlertSupported(pdClient.GetTitle(), pdClient.GetServiceName())
-	if alertType == "" {
-		logging.Infof("Alert is not supported by CAD: %s", pdClient.GetTitle())
+	alertType, err := isAlertSupported(pdClient.GetTitle())
+	if err != nil {
 		err = pdClient.EscalateAlert()
 		if err != nil {
-			return err
+			return fmt.Errorf("Could not escalate unsupported alert: %w", err)
 		}
 
 		return nil
 	}
 
-	logging.Infof("AlertType is '%s'", alertType)
-	logging.Infof("Incident ID is: %s", pdClient.GetIncidentID())
-
-	ocmClient, err := GetOCMClient()
+	cluster, err := ocmClient.GetClusterInfo(clusterID)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm client: %w", err)
+		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
+	}
+	externalClusterID := cluster.ExternalID()
+
+	// initialize logger for the external-cluster-id context
+	logging.RawLogger = logging.InitLogger(logLevelString, externalClusterID)
+
+	alertName, err := alertType.String()
+	if err != nil {
+		return err
 	}
 
 	cloudProviderSupported, err := checkCloudProviderSupported(ocmClient, externalClusterID, []string{"aws"})
@@ -131,11 +143,6 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
 
-	cluster, err := ocmClient.GetClusterInfo(externalClusterID)
-	if err != nil {
-		return fmt.Errorf("could not retrieve cluster info for %s: %w", externalClusterID, err)
-	}
-
 	clusterDeployment, err := ocmClient.GetClusterDeployment(cluster.ID())
 	if err != nil {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", cluster.ID(), err)
@@ -155,29 +162,31 @@ func run(_ *cobra.Command, _ []string) error {
 
 	investigationResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
-	investigation := investigation.NewInvestigation()
+	run := investigation.NewInvestigation()
 
 	switch alertType {
-	case "ClusterHasGoneMissing":
-		investigation.Triggered = chgm.InvestigateTriggered
-		investigation.Resolved = chgm.InvestigateResolved
+	case investigation.ClusterHasGoneMissing:
+		run.Triggered = chgm.InvestigateTriggered
+		run.Resolved = chgm.InvestigateResolved
+	case investigation.ClusterProvisioningDelay:
+		run.Triggered = cpd.InvestigateTriggered
 	default:
 		// Should never happen as GetAlertType should fail on unsupported alerts
-		return fmt.Errorf("alert is not supported by CAD: %s", alertType)
+		return errors.New("alert is not supported by CAD")
 	}
 
 	eventType := pdClient.GetEventType()
-	logging.Infof("Starting investigation for %s with event type %s", alertType, eventType)
+	logging.Infof("Starting investigation for %s with event type %s", alertName, eventType)
 
 	switch eventType {
 	case pagerduty.IncidentTriggered:
-		return investigation.Triggered(investigationResources)
+		return run.Triggered(investigationResources)
 	case pagerduty.IncidentResolved:
-		return investigation.Resolved(investigationResources)
+		return run.Resolved(investigationResources)
 	case pagerduty.IncidentReopened:
-		return investigation.Reopened(investigationResources)
+		return run.Reopened(investigationResources)
 	case pagerduty.IncidentEscalated:
-		return investigation.Escalated(investigationResources)
+		return run.Escalated(investigationResources)
 	default:
 		return fmt.Errorf("event type '%s' is not supported", eventType)
 	}
@@ -208,21 +217,18 @@ func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Clie
 	return customerAwsClient, ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient)
 }
 
-// isAlertSupported will return a normalized form of the alertname as string or
-// an empty string if the alert is not supported
-func isAlertSupported(alertTitle string, service string) string {
+// isAlertSupported will return the alertname as enum type of the alert if it is supported, otherwise an error
+func isAlertSupported(alertTitle string) (investigation.AlertType, error) {
+	// We currently map to the alert by using the title, we should use the name in the alert note in the future.
+	// This currently isn't feasible yet, as CPD's alertmanager doesn't allow for the field to exist.
 
-	// TODO change to enum
-	if service == "prod-deadmanssnitch" || service == "stage-deadmanssnitch" {
-		if strings.Contains(alertTitle, "has gone missing") {
-			return "ClusterHasGoneMissing"
-		}
+	if strings.Contains(alertTitle, "has gone missing") {
+		return investigation.ClusterHasGoneMissing, nil
+	} else if strings.Contains(alertTitle, "ClusterProvisioningDelay -") {
+		return investigation.ClusterProvisioningDelay, nil
 	}
-	// this comment highlights how the upcoming CPD integration could look like
-	// if strings.Contains(alertTitle, "ClusterProvisioningDelay") && service == "app-sre-alertmanager {
-	// 	return "ClusterProvisioningDelay"
-	// }
-	return ""
+
+	return investigation.Undefined, fmt.Errorf("Alert is not supported by CAD: %s", alertTitle)
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
@@ -291,4 +297,26 @@ func checkCloudProviderSupported(ocmClient *ocm.SdkClient, externalClusterID str
 
 	logging.Infof("Unsupported cloud provider: %s", cloudProvider)
 	return false, nil
+}
+
+// Returns either the internal or external ID (differs per service)
+// - app-sre-alertmanager contains an internal ID in the title in the format uhc-<env>-<internal-id>
+// - everything else should adhere to being a separate field in the alert note.
+func parseClusterIDFromAlert(pdClient *pagerduty.SdkClient) (string, error) {
+	clusterID := ""
+	var err error
+
+	switch pdClient.GetServiceName() {
+	case "app-sre-alertmanager":
+		clusterID, err = cpd.GetCPDAlertInternalID(pdClient.GetTitle())
+		if err != nil {
+			return "", fmt.Errorf("Failed to get CPD alert internal ID: %w", err)
+		}
+	default:
+		clusterID, err = pdClient.RetrieveExternalClusterID()
+		if err != nil {
+			return "", fmt.Errorf("RetrieveExternalClusterID failed on: %w", err)
+		}
+	}
+	return clusterID, nil
 }

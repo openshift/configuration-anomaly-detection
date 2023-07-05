@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
 	"gopkg.in/yaml.v2"
@@ -50,6 +50,7 @@ type Client interface {
 	CreateNewAlert(newAlert NewAlert, serviceID string) error
 	GetServiceID() string
 	EscalateAlertWithNote(notes string) error
+	EscalateAlert() error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
