@@ -2,7 +2,6 @@
 package ccam
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -63,24 +62,15 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
 
-		err = pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
-		if err != nil {
-			return err
-		}
+		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
 	case v1.ClusterStateUninstalling:
 		// A cluster in uninstalling state should not alert primary - we just skip this
-		err = pdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
-		if err != nil {
-			return err
-		}
+		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
 	default:
 		// Anything else is an unknown state to us and/or requires investigation.
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state)
 		return pdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 	}
-
-	// We never end up here, as all cases are handled
-	return errors.New("cluster has missing cloud credentials and case is not handled")
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
