@@ -93,3 +93,7 @@ linters:
     - usestdlibvars # A linter that detect the possibility to use variables/constants from the Go standard library.
     - wastedassign # Finds wasted assignment statements.
     - whitespace # Tool for detection of leading and trailing whitespace
+
+linters-settings:
+  nestif:
+    min-complexity: 10
