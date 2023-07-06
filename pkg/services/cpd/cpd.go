@@ -65,14 +65,22 @@ func InvestigateTriggered(r *investigation.Resources) error {
 
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
 		logging.Info("Checking BYOVPC to ensure subnets have valid routing")
+		escalate := false
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
 			isValid, err := isSubnetRouteValid(r.AwsClient, subnet)
 			if err != nil {
 				logging.Error(err)
 			}
 			if !isValid {
-				return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("subnet %s does not have a default route to 0.0.0.0/0\n Run the following to send a SerivceLog:\n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json", subnet, r.Cluster.ID()))
+				err = r.PdClient.AddNote(fmt.Sprintf("subnet %s does not have a default route to 0.0.0.0/0\n Run the following to send a SerivceLog:\n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json", subnet, r.Cluster.ID()))
+				if err != nil {
+					logging.Error(err)
+				}
+				escalate = true
 			}
+		}
+		if escalate {
+			return r.PdClient.EscalateAlert()
 		}
 	}
 
