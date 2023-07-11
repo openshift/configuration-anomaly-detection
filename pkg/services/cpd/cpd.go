@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"regexp"
 
-	awsSdk "github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -116,60 +114,12 @@ func InvestigateTriggered(r *investigation.Resources) error {
 }
 
 func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {
-	var routeTable string
-
-	// Try and find a Route Table associated with the given subnet
-	describeRouteTablesOutput, err := awsClient.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   awsSdk.String("association.subnet-id"),
-				Values: []*string{awsSdk.String(subnetID)},
-			},
-		},
-	})
-	if err != nil {
-		return false, fmt.Errorf("failed to describe route tables associated to subnet %s: %w", subnetID, err)
-	}
-
-	// If there are no associated RouteTables, then the subnet uses the default RoutTable for the VPC
-	if len(describeRouteTablesOutput.RouteTables) == 0 {
-		// Get the VPC ID for the subnet
-		describeSubnetOutput, err := awsClient.DescribeSubnets(&ec2.DescribeSubnetsInput{
-			SubnetIds: []*string{&subnetID},
-		})
-		if err != nil {
-			return false, err
-		}
-		if len(describeSubnetOutput.Subnets) == 0 {
-			return false, fmt.Errorf("no subnets returned for subnet id %v", subnetID)
-		}
-
-		vpcID := *describeSubnetOutput.Subnets[0].VpcId
-
-		// Set the route table to the default for the VPC
-		routeTable, err = findDefaultRouteTableForVPC(awsClient, vpcID)
-		if err != nil {
-			return false, err
-		}
-	} else {
-		// Set the route table to the one associated with the subnet
-		routeTable = *describeRouteTablesOutput.RouteTables[0].RouteTableId
-	}
-
-	// Check that the RouteTable for the subnet has a default route to 0.0.0.0/0
-	describeRouteTablesOutput, err = awsClient.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
-		RouteTableIds: []*string{awsSdk.String(routeTable)},
-	})
+	routeTable, err := awsClient.GetRouteTableForSubnet(subnetID)
 	if err != nil {
 		return false, err
 	}
 
-	if len(describeRouteTablesOutput.RouteTables) == 0 {
-		// Shouldn't happen
-		return false, fmt.Errorf("no route tables found for route table id %v", routeTable)
-	}
-
-	for _, route := range describeRouteTablesOutput.RouteTables[0].Routes {
+	for _, route := range routeTable.Routes {
 		// Some routes don't use CIDR blocks as targets, so this needs to be checked
 		if route.DestinationCidrBlock != nil && *route.DestinationCidrBlock == "0.0.0.0/0" {
 			return true, nil
@@ -178,29 +128,4 @@ func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {
 
 	// We haven't found a default route to the internet, so this subnet has an invalid route table
 	return false, nil
-}
-
-// findDefaultRouteTableForVPC returns the AWS Route Table ID of the VPC's default Route Table
-func findDefaultRouteTableForVPC(awsClient aws.Client, vpcID string) (string, error) {
-	describeRouteTablesOutput, err := awsClient.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
-		Filters: []*ec2.Filter{
-			{
-				Name:   awsSdk.String("vpc-id"),
-				Values: []*string{awsSdk.String(vpcID)},
-			},
-		},
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to describe route tables associated with vpc %s: %w", vpcID, err)
-	}
-
-	for _, rt := range describeRouteTablesOutput.RouteTables {
-		for _, assoc := range rt.Associations {
-			if *assoc.Main {
-				return *rt.RouteTableId, nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("no default route table found for vpc: %s", vpcID)
 }
