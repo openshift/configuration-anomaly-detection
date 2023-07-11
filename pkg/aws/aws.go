@@ -504,7 +504,6 @@ func (c *SdkClient) GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, er
 			},
 		},
 	})
-
 	if err != nil {
 		return &ec2.RouteTable{}, fmt.Errorf("failed to describe route tables associated to subnet %s: %w", subnetID, err)
 	}
