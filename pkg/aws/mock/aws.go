@@ -66,6 +66,21 @@ func (mr *MockClientMockRecorder) GetAWSCredentials() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAWSCredentials", reflect.TypeOf((*MockClient)(nil).GetAWSCredentials))
 }
 
+// GetRouteTableForSubnet mocks base method.
+func (m *MockClient) GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRouteTableForSubnet", subnetID)
+	ret0, _ := ret[0].(*ec2.RouteTable)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRouteTableForSubnet indicates an expected call of GetRouteTableForSubnet.
+func (mr *MockClientMockRecorder) GetRouteTableForSubnet(subnetID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRouteTableForSubnet", reflect.TypeOf((*MockClient)(nil).GetRouteTableForSubnet), subnetID)
+}
+
 // GetSecurityGroupID mocks base method.
 func (m *MockClient) GetSecurityGroupID(infraID string) (string, error) {
 	m.ctrl.T.Helper()

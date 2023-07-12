@@ -49,6 +49,7 @@ type Client interface {
 	GetSubnetID(infraID string) ([]string, error)
 	IsSubnetPrivate(subnet string) bool
 	AssumeRole(roleARN, region string) (*SdkClient, error)
+	GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, error)
 }
 
 // SdkClient is a representation of the AWS Client
@@ -491,4 +492,95 @@ func (c *SdkClient) IsSubnetPrivate(subnet string) bool {
 	out, _ := c.Ec2Client.DescribeSubnets(in)
 
 	return !*out.Subnets[0].MapPublicIpOnLaunch
+}
+
+// GetRouteTableForSubnet returns the subnets routeTable
+func (c *SdkClient) GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, error) {
+	out, err := c.Ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("association.subnet-id"),
+				Values: []*string{aws.String(subnetID)},
+			},
+		},
+	})
+	if err != nil {
+		return &ec2.RouteTable{}, fmt.Errorf("failed to describe route tables associated to subnet %s: %w", subnetID, err)
+	}
+
+	var routeTable string
+
+	// If there are no associated RouteTables, then the subnet uses the default RoutTable for the VPC
+	if len(out.RouteTables) == 0 {
+		vpcID, err := c.findVpcIDForSubnet(subnetID)
+		if err != nil {
+			return &ec2.RouteTable{}, err
+		}
+
+		// Set the route table to the default for the VPC
+		routeTable, err = c.findDefaultRouteTableForVPC(vpcID)
+		if err != nil {
+			return &ec2.RouteTable{}, err
+		}
+	} else {
+		// Set the route table to the one associated with the subnet
+		routeTable = *out.RouteTables[0].RouteTableId
+	}
+
+	return c.getRouteTable(routeTable)
+}
+
+// findVpcIDForSubnet returns the VPC ID for the subnet
+func (c *SdkClient) findVpcIDForSubnet(subnetID string) (string, error) {
+	describeSubnetOutput, err := c.Ec2Client.DescribeSubnets(&ec2.DescribeSubnetsInput{
+		SubnetIds: []*string{&subnetID},
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(describeSubnetOutput.Subnets) == 0 {
+		return "", fmt.Errorf("no subnets returned for subnet id %v", subnetID)
+	}
+
+	return *describeSubnetOutput.Subnets[0].VpcId, nil
+}
+
+// findDefaultRouteTableForVPC returns the AWS Route Table ID of the VPC's default Route Table
+func (c *SdkClient) findDefaultRouteTableForVPC(vpcID string) (string, error) {
+	describeRouteTablesOutput, err := c.Ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []*string{aws.String(vpcID)},
+			},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to describe route tables associated with vpc %s: %w", vpcID, err)
+	}
+
+	for _, rt := range describeRouteTablesOutput.RouteTables {
+		for _, assoc := range rt.Associations {
+			if *assoc.Main {
+				return *rt.RouteTableId, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no default route table found for vpc: %s", vpcID)
+}
+
+// GetRouteTable takes a routeTable ID and returns a RouteTablesOutput
+func (c *SdkClient) getRouteTable(routeTableID string) (*ec2.RouteTable, error) {
+	describeRouteTablesOutput, err := c.Ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
+		RouteTableIds: []*string{aws.String(routeTableID)},
+	})
+	if err != nil {
+		return &ec2.RouteTable{}, err
+	}
+
+	if len(describeRouteTablesOutput.RouteTables) == 0 {
+		return &ec2.RouteTable{}, fmt.Errorf("no route tables found for route table id %v", routeTableID)
+	}
+	return describeRouteTablesOutput.RouteTables[0], nil
 }
