@@ -104,7 +104,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	cloudProviderSupported, err := checkCloudProviderSupported(ocmClient, externalClusterID, []string{"aws"})
+	cloudProviderSupported, err := checkCloudProviderSupported(cluster, []string{"aws"})
 	if err != nil {
 		return err
 	}
@@ -280,14 +280,14 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 
 // checkCloudProviderSupported takes a list of supported providers and checks if the
 // cluster to investigate's provider is supported
-func checkCloudProviderSupported(ocmClient *ocm.SdkClient, externalClusterID string, supportedProviders []string) (bool, error) {
-	cloudProvider, err := ocmClient.GetCloudProviderID(externalClusterID)
-	if err != nil {
-		return false, err
+func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []string) (bool, error) {
+	cloudProvider, ok := cluster.GetCloudProvider()
+	if !ok {
+		return false, fmt.Errorf("Failed to get clusters cloud provider")
 	}
 
 	for _, provider := range supportedProviders {
-		if cloudProvider == provider {
+		if cloudProvider.ID() == provider {
 			return true, nil
 		}
 	}
