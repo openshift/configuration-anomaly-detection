@@ -193,24 +193,6 @@ func (c *SdkClient) getClusterResource(clusterID string, resourceKey string) (st
 	return response.Body().Resources()[resourceKey], nil
 }
 
-// GetCloudProviderID returns the cloud provider name for a given cluster as a string
-func (c *SdkClient) GetCloudProviderID(identifier string) (string, error) {
-	cluster, err := c.GetClusterInfo(identifier)
-	if err != nil {
-		return "", fmt.Errorf("GetClusterInfo failed on: %w", err)
-	}
-
-	cloudProvider, ok := cluster.GetCloudProvider()
-	if !ok {
-		return "", fmt.Errorf("could not get clusters cloudProvider")
-	}
-	cloudProviderID, ok := cloudProvider.GetID()
-	if !ok {
-		return "", fmt.Errorf("could not get cloudProvider id")
-	}
-	return cloudProviderID, nil
-}
-
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
 func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error {
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
