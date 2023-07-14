@@ -28,13 +28,13 @@ type LimitedSupportReason struct {
 
 // Client is the interface exposing OCM related functions
 type Client interface {
-	GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error
-	IsInLimitedSupport(clusterID string) (bool, error)
-	UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error)
-	LimitedSupportReasonExists(ls LimitedSupportReason, clusterID string) (bool, error)
-	DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID string) error
-	GetSupportRoleARN(clusterID string) (string, error)
+	GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error)
+	PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error
+	IsInLimitedSupport(internalClusterID string) (bool, error)
+	UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
+	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
+	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) error
+	GetSupportRoleARN(internalClusterID string) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -114,8 +114,8 @@ func newConnectionFromClientPair() (*sdk.Connection, error) {
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID
-func (c *SdkClient) GetSupportRoleARN(clusterID string) (string, error) {
-	claim, err := c.GetAWSAccountClaim(clusterID)
+func (c *SdkClient) GetSupportRoleARN(internalClusterID string) (string, error) {
+	claim, err := c.GetAWSAccountClaim(internalClusterID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get account claim: %w", err)
 	}
@@ -130,9 +130,9 @@ func (c *SdkClient) GetSupportRoleARN(clusterID string) (string, error) {
 }
 
 // GetAWSAccountClaim gets the AWS Account Claim object for a given cluster
-func (c *SdkClient) GetAWSAccountClaim(clusterID string) (*awsv1alpha1.AccountClaim, error) {
+func (c *SdkClient) GetAWSAccountClaim(internalClusterID string) (*awsv1alpha1.AccountClaim, error) {
 	ac := &awsv1alpha1.AccountClaim{}
-	acString, err := c.getClusterResource(clusterID, "aws_account_claim")
+	acString, err := c.getClusterResource(internalClusterID, "aws_account_claim")
 	if err != nil {
 		return ac, fmt.Errorf("client failed to load AWS AccountClaim: %w", err)
 	}
@@ -162,9 +162,9 @@ func (c *SdkClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
 }
 
 // GetClusterDeployment gets the ClusterDeployment object for a given cluster
-func (c *SdkClient) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeployment, error) {
+func (c *SdkClient) GetClusterDeployment(internalClusterID string) (*hivev1.ClusterDeployment, error) {
 	cd := &hivev1.ClusterDeployment{}
-	cdString, err := c.getClusterResource(clusterID, "cluster_deployment")
+	cdString, err := c.getClusterResource(internalClusterID, "cluster_deployment")
 	if err != nil {
 		return cd, fmt.Errorf("client failed to load ClusterDeployment: %w", err)
 	}
@@ -176,8 +176,8 @@ func (c *SdkClient) GetClusterDeployment(clusterID string) (*hivev1.ClusterDeplo
 }
 
 // GetClusterMachinePools get the machine pools for a given cluster
-func (c *SdkClient) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
-	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).MachinePools().List().Page(1).Size(-1).Send()
+func (c *SdkClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
+	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).MachinePools().List().Page(1).Size(-1).Send()
 	if err != nil {
 		return nil, err
 	}
@@ -185,8 +185,8 @@ func (c *SdkClient) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool,
 }
 
 // getClusterResource allows to load different cluster resources
-func (c *SdkClient) getClusterResource(clusterID string, resourceKey string) (string, error) {
-	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).Resources().Live().Get().Send()
+func (c *SdkClient) getClusterResource(internalClusterID string, resourceKey string) (string, error) {
+	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).Resources().Live().Get().Send()
 	if err != nil {
 		return "", err
 	}
@@ -194,7 +194,7 @@ func (c *SdkClient) getClusterResource(clusterID string, resourceKey string) (st
 }
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
-func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, clusterID string) error {
+func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error {
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
@@ -202,7 +202,7 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupport
 		return fmt.Errorf("could not create post request: %w", err)
 	}
 
-	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().Add()
+	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
 	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'uninstalling' state") {
@@ -224,8 +224,8 @@ func newLimitedSupportReasonBuilder(ls LimitedSupportReason) *v1.LimitedSupportR
 // LimitedSupportExists takes a LimitedSupportReason and matches the Summary against
 // a clusters limited support reasons
 // Returns true if any match is found
-func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
 	}
@@ -238,8 +238,8 @@ func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, clusterID stri
 }
 
 // DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
-func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, clusterID string) error {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) error {
+	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return fmt.Errorf("could not list current limited support reasons: %w", err)
 	}
@@ -252,7 +252,7 @@ func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, cluster
 			if !ok {
 				return fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
 			}
-			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
+			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
 			if err != nil {
 				return fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
 			}
@@ -268,8 +268,8 @@ func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, cluster
 }
 
 // IsInLimitedSupport indicates whether any LS reasons exist on a given cluster
-func (c *SdkClient) IsInLimitedSupport(clusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+func (c *SdkClient) IsInLimitedSupport(internalClusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
 	}
@@ -281,8 +281,8 @@ func (c *SdkClient) IsInLimitedSupport(clusterID string) (bool, error) {
 
 // UnrelatedLimitedSupportExists takes a cluster id and limited support reason
 // Returns true if any other limited support reason than the given one exists on the cluster
-func (c *SdkClient) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+func (c *SdkClient) UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return false, fmt.Errorf("UnrelatedLimitedSupportExists: failed to list current limited support reasons: %w", err)
 	}
@@ -301,8 +301,8 @@ func (c *SdkClient) UnrelatedLimitedSupportExists(ls LimitedSupportReason, clust
 
 // LimitedSupportReasonExists takes a cluster id and limited support reason
 // Returns true if the limited support reason exists on the cluster
-func (c *SdkClient) LimitedSupportReasonExists(ls LimitedSupportReason, clusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(clusterID)
+func (c *SdkClient) LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
+	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return false, fmt.Errorf("LimitedSupportReasonExists: failed to list current limited support reasons: %w", err)
 	}
@@ -324,15 +324,9 @@ func reasonsMatch(template LimitedSupportReason, reason *v1.LimitedSupportReason
 }
 
 // listLimitedSupportReasons returns all limited support reasons attached to the given cluster
-func (c *SdkClient) listLimitedSupportReasons(clusterID string) ([]*v1.LimitedSupportReason, error) {
-	// Only the internal cluster ID can be used to retrieve LS reasons currently attached to a cluster
-	cluster, err := c.GetClusterInfo(clusterID)
-	if err != nil {
-		return []*v1.LimitedSupportReason{}, fmt.Errorf("failed to retrieve cluster info from OCM: %w", err)
-	}
-
+func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*v1.LimitedSupportReason, error) {
 	// List reasons
-	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).LimitedSupportReasons()
+	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons()
 	reasons, err := clusterLimitedSupport.List().Send()
 	if err != nil {
 		return []*v1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)

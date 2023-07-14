@@ -36,104 +36,104 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // DeleteLimitedSupportReasons mocks base method.
-func (m *MockClient) DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, clusterID string) error {
+func (m *MockClient) DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, internalClusterID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteLimitedSupportReasons", ls, clusterID)
+	ret := m.ctrl.Call(m, "DeleteLimitedSupportReasons", ls, internalClusterID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteLimitedSupportReasons indicates an expected call of DeleteLimitedSupportReasons.
-func (mr *MockClientMockRecorder) DeleteLimitedSupportReasons(ls, clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) DeleteLimitedSupportReasons(ls, internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLimitedSupportReasons", reflect.TypeOf((*MockClient)(nil).DeleteLimitedSupportReasons), ls, clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteLimitedSupportReasons", reflect.TypeOf((*MockClient)(nil).DeleteLimitedSupportReasons), ls, internalClusterID)
 }
 
 // GetClusterMachinePools mocks base method.
-func (m *MockClient) GetClusterMachinePools(clusterID string) ([]*v1.MachinePool, error) {
+func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMachinePools", clusterID)
+	ret := m.ctrl.Call(m, "GetClusterMachinePools", internalClusterID)
 	ret0, _ := ret[0].([]*v1.MachinePool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMachinePools indicates an expected call of GetClusterMachinePools.
-func (mr *MockClientMockRecorder) GetClusterMachinePools(clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockClient)(nil).GetClusterMachinePools), clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockClient)(nil).GetClusterMachinePools), internalClusterID)
 }
 
 // GetSupportRoleARN mocks base method.
-func (m *MockClient) GetSupportRoleARN(clusterID string) (string, error) {
+func (m *MockClient) GetSupportRoleARN(internalClusterID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSupportRoleARN", clusterID)
+	ret := m.ctrl.Call(m, "GetSupportRoleARN", internalClusterID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSupportRoleARN indicates an expected call of GetSupportRoleARN.
-func (mr *MockClientMockRecorder) GetSupportRoleARN(clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) GetSupportRoleARN(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSupportRoleARN", reflect.TypeOf((*MockClient)(nil).GetSupportRoleARN), clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSupportRoleARN", reflect.TypeOf((*MockClient)(nil).GetSupportRoleARN), internalClusterID)
 }
 
 // IsInLimitedSupport mocks base method.
-func (m *MockClient) IsInLimitedSupport(clusterID string) (bool, error) {
+func (m *MockClient) IsInLimitedSupport(internalClusterID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsInLimitedSupport", clusterID)
+	ret := m.ctrl.Call(m, "IsInLimitedSupport", internalClusterID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsInLimitedSupport indicates an expected call of IsInLimitedSupport.
-func (mr *MockClientMockRecorder) IsInLimitedSupport(clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) IsInLimitedSupport(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInLimitedSupport", reflect.TypeOf((*MockClient)(nil).IsInLimitedSupport), clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsInLimitedSupport", reflect.TypeOf((*MockClient)(nil).IsInLimitedSupport), internalClusterID)
 }
 
 // LimitedSupportReasonExists mocks base method.
-func (m *MockClient) LimitedSupportReasonExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error) {
+func (m *MockClient) LimitedSupportReasonExists(ls ocm.LimitedSupportReason, internalClusterID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LimitedSupportReasonExists", ls, clusterID)
+	ret := m.ctrl.Call(m, "LimitedSupportReasonExists", ls, internalClusterID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LimitedSupportReasonExists indicates an expected call of LimitedSupportReasonExists.
-func (mr *MockClientMockRecorder) LimitedSupportReasonExists(ls, clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) LimitedSupportReasonExists(ls, internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LimitedSupportReasonExists", reflect.TypeOf((*MockClient)(nil).LimitedSupportReasonExists), ls, clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LimitedSupportReasonExists", reflect.TypeOf((*MockClient)(nil).LimitedSupportReasonExists), ls, internalClusterID)
 }
 
 // PostLimitedSupportReason mocks base method.
-func (m *MockClient) PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, clusterID string) error {
+func (m *MockClient) PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, internalClusterID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, clusterID)
+	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, internalClusterID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostLimitedSupportReason indicates an expected call of PostLimitedSupportReason.
-func (mr *MockClientMockRecorder) PostLimitedSupportReason(limitedSupportReason, clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) PostLimitedSupportReason(limitedSupportReason, internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), limitedSupportReason, clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), limitedSupportReason, internalClusterID)
 }
 
 // UnrelatedLimitedSupportExists mocks base method.
-func (m *MockClient) UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, clusterID string) (bool, error) {
+func (m *MockClient) UnrelatedLimitedSupportExists(ls ocm.LimitedSupportReason, internalClusterID string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UnrelatedLimitedSupportExists", ls, clusterID)
+	ret := m.ctrl.Call(m, "UnrelatedLimitedSupportExists", ls, internalClusterID)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UnrelatedLimitedSupportExists indicates an expected call of UnrelatedLimitedSupportExists.
-func (mr *MockClientMockRecorder) UnrelatedLimitedSupportExists(ls, clusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) UnrelatedLimitedSupportExists(ls, internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnrelatedLimitedSupportExists", reflect.TypeOf((*MockClient)(nil).UnrelatedLimitedSupportExists), ls, clusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnrelatedLimitedSupportExists", reflect.TypeOf((*MockClient)(nil).UnrelatedLimitedSupportExists), ls, internalClusterID)
 }

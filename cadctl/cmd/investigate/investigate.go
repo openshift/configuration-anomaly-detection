@@ -94,10 +94,12 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
 	}
-	externalClusterID := cluster.ExternalID()
+	// From this point on, we normalize to internal ID, as this ID always exists.
+	// For installing clusters, externalID can be empty.
+	internalClusterID := cluster.ID()
 
-	// initialize logger for the external-cluster-id context
-	logging.RawLogger = logging.InitLogger(logLevelString, externalClusterID)
+	// initialize logger for the internal-cluster-id context
+	logging.RawLogger = logging.InitLogger(logLevelString, internalClusterID)
 
 	alertName, err := alertType.String()
 	if err != nil {
@@ -116,7 +118,7 @@ func run(_ *cobra.Command, _ []string) error {
 		// We forward everything CAD doesn't support investigations for to primary, as long as the clusters
 		// aren't in limited support.
 		logging.Info("Cloud provider is not supported, checking for limited support...")
-		ls, err := ocmClient.IsInLimitedSupport(externalClusterID)
+		ls, err := ocmClient.IsInLimitedSupport(internalClusterID)
 		if err != nil {
 			err = pdClient.EscalateAlertWithNote(fmt.Sprintf("could not determine if cluster is in limited support: %s", err.Error()))
 			if err != nil {
@@ -141,9 +143,9 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize aws client: %w", err)
 	}
 
-	clusterDeployment, err := ocmClient.GetClusterDeployment(cluster.ID())
+	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
 	if err != nil {
-		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", cluster.ID(), err)
+		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
 	}
 
 	// Try to jump into support role
