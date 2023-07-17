@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
@@ -41,28 +42,36 @@ func GetCPDAlertInternalID(alertTitle string) (string, error) {
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
 func InvestigateTriggered(r *investigation.Resources) error {
+	var notesSb strings.Builder
+
+	notesSb.WriteString("🤖 Automated CPD pre-investigation 🤖\n")
+	notesSb.WriteString("===========================\n")
+
 	if r.Cluster.Status().State() == "ready" {
-		logging.Infof("This cluster is in a ready state and already provisioned")
-		err := r.PdClient.AddNote("This cluster is in a ready state and already provisioned")
+		notesSb.WriteString("⚠️ This cluster is in a ready state, thus provisioning succeeded\n.")
+		err := r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			logging.Error("could not add clusters ready state to incident notes")
 		}
 	}
+	notesSb.WriteString("✅ Cluster installation did not yet finish\n")
 
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
-		note := fmt.Sprintf("DNS not ready. Investigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin\n", r.Cluster.ID())
-		logging.Info(note)
-		return r.PdClient.EscalateAlertWithNote(note)
+		notesSb.WriteString(fmt.Sprintf("⚠️ DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin\n", r.Cluster.ID()))
+		return r.PdClient.EscalateAlertWithNote(notesSb.String())
 	}
+	notesSb.WriteString("✅ Cluster DNS is ready\n")
 
 	// Check if the OCM Error code is a known error
 	if len(r.Cluster.Status().ProvisionErrorCode()) > 0 && r.Cluster.Status().ProvisionErrorCode() != unknownProvisionCode {
-		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("Error code '%s' is known, customer already received Service Log\n", r.Cluster.Status().ProvisionErrorCode()))
+		notesSb.WriteString(fmt.Sprintf("⚠️ Error code '%s' is known, customer already received Service Log\n", r.Cluster.Status().ProvisionErrorCode()))
+		return r.PdClient.EscalateAlertWithNote(notesSb.String())
 	}
+	notesSb.WriteString("✅ OCM Error code is unknown, customer did not receive automated SL from OCM yet.\n")
 
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
-		logging.Info("Checking BYOVPC to ensure subnets have valid routing")
+		logging.Info("Checking BYOVPC to ensure subnets have valid routing...")
 		escalate := false
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
 			isValid, err := isSubnetRouteValid(r.AwsClient, subnet)
@@ -70,7 +79,8 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				logging.Error(err)
 			}
 			if !isValid {
-				err = r.PdClient.AddNote(fmt.Sprintf("subnet %s does not have a default route to 0.0.0.0/0\n Run the following to send a SerivceLog:\n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json", subnet, r.Cluster.ID()))
+				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\nRun the following to send the according ServiceLog:\nosdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json\n", subnet, r.Cluster.ID()))
+				err = r.PdClient.AddNote(notesSb.String())
 				if err != nil {
 					logging.Error(err)
 				}
@@ -81,11 +91,14 @@ func InvestigateTriggered(r *investigation.Resources) error {
 			return r.PdClient.EscalateAlert()
 		}
 	}
+	notesSb.WriteString("✅ BYOVPC has valid routing\n")
 
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		err = r.PdClient.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n\t %s", err))
+
+		err = r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			// We do not return as we want the alert to be escalated either no matter what.
 			logging.Error("could not add failure reason incident notes")
@@ -95,14 +108,16 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
+		notesSb.WriteString(fmt.Sprintf("⚠️ Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", failureReason, r.Cluster.ID(), failureReason))
+
 		// In the future, we want to send a service log in this case
-		err = r.PdClient.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, r.Cluster.ID(), failureReason))
+		err = r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			logging.Error("could not add issues to incident notes")
 		}
 	case networkverifier.Success:
-		logging.Info("Network verifier passed.")
-		err = r.PdClient.AddNote("Network verifier passed.")
+		notesSb.WriteString("✅ Network verifier passed\n")
+		err = r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			logging.Error("could not add passed message to incident notes")
 		}
