@@ -81,8 +81,9 @@ type WebhookPayload struct {
 				ServiceID string `json:"id"`
 				Summary   string `json:"summary"`
 			} `json:"service"`
-			Title      string `json:"title"`
-			IncidentID string `json:"id"`
+			Title       string `json:"title"`
+			IncidentID  string `json:"id"`
+			IncidentRef string `json:"html_url"`
 		} `json:"data"`
 	} `json:"event"`
 }
@@ -109,6 +110,9 @@ func (c *WebhookPayload) Unmarshal(data []byte) error {
 	}
 	if c.Event.Data.IncidentID == "" {
 		return UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentID")}
+	}
+	if c.Event.Data.IncidentRef == "" {
+		return UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentRef")}
 	}
 	return nil
 }
@@ -163,6 +167,11 @@ func (c *SdkClient) GetOnCallEscalationPolicy() string {
 // GetSilentEscalationPolicy returns the set policy for silencing alerts
 func (c *SdkClient) GetSilentEscalationPolicy() string {
 	return c.silentEscalationPolicy
+}
+
+// GetIncidentRef returns a link to the pagerduty incident
+func (c *SdkClient) GetIncidentRef() string {
+	return c.parsedPayload.Event.Data.IncidentRef
 }
 
 // RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will

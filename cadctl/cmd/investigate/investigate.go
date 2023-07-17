@@ -38,9 +38,10 @@ import (
 
 // InvestigateCmd represents the entry point for alert investigation
 var InvestigateCmd = &cobra.Command{
-	Use:   "investigate",
-	Short: "Filter for and investigate supported alerts",
-	RunE:  run,
+	Use:          "investigate",
+	SilenceUsage: true,
+	Short:        "Filter for and investigate supported alerts",
+	RunE:         run,
 }
 
 var (
@@ -51,6 +52,11 @@ var (
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 	InvestigateCmd.Flags().StringVarP(&logLevelString, "log-level", "l", logLevelString, "the log level [debug,info,warn,error,fatal], default = info")
+
+	err := InvestigateCmd.MarkFlagRequired("payload-path")
+	if err != nil {
+		logging.Warn("Could not mark flag 'payload-path' as required")
+	}
 }
 
 func run(_ *cobra.Command, _ []string) error {
@@ -77,6 +83,8 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("parseClusterIdFromAlert failed on: %w", err)
 	}
+
+	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
 	// After this point we know CAD will investigate the alert
 	// so we can initialize the other clients
