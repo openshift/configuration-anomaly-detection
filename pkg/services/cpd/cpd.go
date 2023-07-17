@@ -72,7 +72,6 @@ func InvestigateTriggered(r *investigation.Resources) error {
 
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
 		logging.Info("Checking BYOVPC to ensure subnets have valid routing...")
-		escalate := false
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
 			isValid, err := isSubnetRouteValid(r.AwsClient, subnet)
 			if err != nil {
@@ -84,11 +83,8 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				if err != nil {
 					logging.Error(err)
 				}
-				escalate = true
+				return r.PdClient.EscalateAlert()
 			}
-		}
-		if escalate {
-			return r.PdClient.EscalateAlert()
 		}
 	}
 	notesSb.WriteString("✅ BYOVPC has valid routing\n")
