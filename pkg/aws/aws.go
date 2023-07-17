@@ -442,7 +442,7 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 		Filters: []*ec2.Filter{
 			{
 				Name:   aws.String("tag:Name"),
-				Values: []*string{aws.String(fmt.Sprintf("%s-worker-sg", infraID))},
+				Values: []*string{aws.String(fmt.Sprintf("%s-master-sg", infraID))},
 			},
 		},
 	}
@@ -454,7 +454,7 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 		return "", fmt.Errorf("security groups are empty")
 	}
 	if len(*out.SecurityGroups[0].GroupId) == 0 {
-		return "", fmt.Errorf("failed to list security group %s-worker-sg", infraID)
+		return "", fmt.Errorf("failed to list security group %s-master-sg", infraID)
 	}
 	return *out.SecurityGroups[0].GroupId, nil
 }
