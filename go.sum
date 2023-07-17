@@ -140,6 +140,7 @@ github.com/go-kit/log v0.1.0/go.mod h1:zbhenjAZHb184qTLMA9ZjW7ThYL0H2mk7Q6pNt4vb
 github.com/go-logfmt/logfmt v0.3.0/go.mod h1:Qt1PoO58o5twSAckw1HlFXLmHsOX5/0LbT9GBnD5lWE=
 github.com/go-logfmt/logfmt v0.4.0/go.mod h1:3RMwSq7FuexP4Kalkev3ejPJsZTpXXBr9+V4qmtdjCk=
 github.com/go-logfmt/logfmt v0.5.0/go.mod h1:wCYkCAKZfumFQihp8CzCvQ3paCTfi41vtzG1KdI/P7A=
+github.com/go-logfmt/logfmt v0.5.1/go.mod h1:WYhtIu8zTZfxdn5+rREduYbwxfcBr/Vr6KEVveWlfTs=
 github.com/go-logr/logr v0.1.0/go.mod h1:ixOQHD9gLJUVQQ2ZOR7zLEifBX6tGkNJF4QyIY7sIas=
 github.com/go-logr/logr v0.2.0/go.mod h1:z6/tIYblkpsD+a4lm/fGIIU9mZ+XfAiaFtq7xTgseGU=
 github.com/go-logr/logr v1.2.0 h1:QK40JKJyMdUDz+h+xvCsru/bJhvG0UxvePV0ufL/AcE=
@@ -414,6 +415,8 @@ github.com/openshift/hive/apis v0.0.0-20220225023448-bc126c582d02 h1:f0s3mSIQc4b
 github.com/openshift/hive/apis v0.0.0-20220225023448-bc126c582d02/go.mod h1:E1bgquRiwfugdArdecPbpYIrAdve5kTzMaJb0+8jMXI=
 github.com/openshift/osd-network-verifier v0.2.2 h1:+hU5JMqlQW9QBh1tkchPghC2QRxwnGMnsmpYo273rfE=
 github.com/openshift/osd-network-verifier v0.2.2/go.mod h1:A89hA4CpxJjxx2qNbZVJmJc3MVa+bEWftKadBCJoxw4=
+github.com/openshift/osd-network-verifier v0.3.1 h1:ecqxNthFH3S5akTzBamwJSracmxXEFDZe7YYDh0Ej30=
+github.com/openshift/osd-network-verifier v0.3.1/go.mod h1:A89hA4CpxJjxx2qNbZVJmJc3MVa+bEWftKadBCJoxw4=
 github.com/pkg/errors v0.8.0/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pkg/errors v0.9.1 h1:FEBLx1zS214owpjy7qsBeixbURkuhQAwrK5UwLGTwt4=

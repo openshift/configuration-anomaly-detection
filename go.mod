@@ -11,8 +11,9 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.299
 	github.com/openshift/aws-account-operator/pkg/apis v0.0.0-20220225132100-6b3881514a02
 	github.com/openshift/hive/apis v0.0.0-20220225023448-bc126c582d02
-	github.com/openshift/osd-network-verifier v0.2.2
+	github.com/openshift/osd-network-verifier v0.3.1
 	github.com/spf13/cobra v1.4.0
+	go.uber.org/zap v1.24.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -32,7 +33,6 @@ require (
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	go.uber.org/zap v1.24.0 // indirect
 )
 
 require (
