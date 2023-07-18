@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
+	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 

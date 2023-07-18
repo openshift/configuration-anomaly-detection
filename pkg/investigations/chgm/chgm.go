@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 

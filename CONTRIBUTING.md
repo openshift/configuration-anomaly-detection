@@ -15,11 +15,11 @@ The binary is then available under `./cadctl/cadctl`
 
 ## Integrate a new alert
 
-CAD investigations are triggered by pagerduty webhooks. The required investigation type is identified by CAD based on the title and service extracted from the alert payload.
+CAD investigations are triggered by pagerduty webhooks. The required investigation type is identified by CAD based on the title and pagerduty service extracted from the alert payload.
 As pagerduty itself does not provide finer granularity for webhooks than service-based, CAD must filter out the alerts it should investigate for itself. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To integrate a new alert:
-- add it to the `isAlertSupported` function in `investigate.go` and write a corresponding CAD service.
+- add it to the `isAlertSupported` function in `investigate.go` and write a corresponding CAD investigation.
 - implement functions for the event types (triggered, resolved, escalated...) that require an investigation in a new CAD service.
 - add a webhook to both the stage and production version of the service your alert fires on. E.g. https://redhat.pagerduty.com/integrations/webhooks/PRI7A2P
 
