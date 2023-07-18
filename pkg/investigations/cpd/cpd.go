@@ -8,9 +8,9 @@ import (
 	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/networkverifier"
+	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 )
 
 const unknownProvisionCode = "OCM3999"

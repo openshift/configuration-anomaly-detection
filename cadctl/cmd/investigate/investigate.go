@@ -25,14 +25,14 @@ import (
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws/assumerole"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/assumerole"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/ccam"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/cpd"
 	"github.com/spf13/cobra"
 )
 

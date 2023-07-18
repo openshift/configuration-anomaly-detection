@@ -12,12 +12,12 @@ import (
 	. "github.com/onsi/gomega"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/chgm"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/services/cpd"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 )
 
 func TestNoCPDTitle(t *testing.T) {
