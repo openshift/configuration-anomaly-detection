@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/service/cloudtrail"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/golang/mock/gomock"
@@ -133,7 +132,6 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&masterInstance, &infraInstance}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -196,7 +194,6 @@ var _ = Describe("chgm", func() {
 				event.Username = aws.String("1234567789") // ID of the initial jumprole account
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -214,7 +211,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -236,7 +232,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "OrganizationAccountAccessRole"}}}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -255,7 +250,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/ManagedOpenShift-Installer-Role/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/ManagedOpenShift-Installer-Role","accountId":"1234567","userName":"ManagedOpenShift-Installer-Role"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -273,7 +267,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/customprefix-Installer-Role/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/customprefix-Installer-Role","accountId":"1234567","userName":"customprefix-Installer-Role"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -291,7 +284,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/ManagedOpenShift-Support-v3218/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/ManagedOpenShift-Support-v3218","accountId":"1234567","userName":"ManagedOpenShift-Support-v3218"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -309,7 +301,6 @@ var _ = Describe("chgm", func() {
 				event.CloudTrailEvent = aws.String(`{"eventVersion":"1.08","userIdentity":{"type":"AssumedRole","principalId":"redacted:1234567","arn":"arn:aws:sts::1234567:assumed-role/johnnycustom-Support-Role/1234567","accountId":"1234567","accessKeyId":"redacted","sessionContext":{"sessionIssuer":{"type":"Role","principalId":"redacted","arn":"arn:aws:iam::1234567:role/johnnycustom-Support-Role","accountId":"1234567","userName":"johnnycustom-Support-Role"},"webIdFederationData":{},"attributes":{"creationDate":"2023-02-21T04:33:06Z","mfaAuthenticated":"false"}}},"eventTime":"2023-02-21T04:33:09Z","eventSource":"ec2.amazonaws.com","eventName":"TerminateInstances","awsRegion":"ap-southeast-1","sourceIPAddress":"192.0.0.1","userAgent":"APN/1.0 HashiCorp/1.0 Terraform/1.0.11 (+https://www.terraform.io) terraform-provider-aws/dev (+https://registry.terraform.io/providers/hashicorp/aws) aws-sdk-go/1.43.9 (go1.18.7; linux; amd64) HashiCorp-terraform-exec/0.16.1","requestParameters":{"instancesSet":{"items":[{"instanceId":"i-0c123456"}]}},"responseElements":{"requestId":"bd3900cb-1234567","instancesSet":{"items":[{"instanceId":"i-0c123456","currentState":{"code":32,"name":"shutting-down"},"previousState":{"code":16,"name":"running"}}]}},"requestID":"bd3900cb-1234567","eventID":"7064eae0-1234567","readOnly":false,"eventType":"AwsApiCall","managementEvent":true,"recipientAccountId":"1234","eventCategory":"Management","tlsDetails":{"tlsVersion":"TLSv1.2","cipherSuite":"ECDHE-RSA-AES128-GCM-SHA256","clientProvidedHostHeader":"ec2.ap-southeast-1.amazonaws.com"}}`)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -327,7 +318,6 @@ var _ = Describe("chgm", func() {
 				event.Username = aws.String("osdManagedAdmin-abcd")
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -345,7 +335,6 @@ var _ = Describe("chgm", func() {
 				event.Username = aws.String("osdCcsAdmin")
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
@@ -363,7 +352,6 @@ var _ = Describe("chgm", func() {
 				event.Username = aws.String("test-openshift-machine-api-aws-test")
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().GetAWSCredentials().Return(credentials.Value{})
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSecurityGroupID(gomock.Eq(infraID)).Return(gomock.Any().String(), nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
