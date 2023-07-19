@@ -3,6 +3,7 @@ package networkverifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,24 +13,12 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"github.com/openshift/osd-network-verifier/pkg/helpers"
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
 	"github.com/openshift/osd-network-verifier/pkg/verifier"
-	awsverifier "github.com/openshift/osd-network-verifier/pkg/verifier/aws"
+	onv "github.com/openshift/osd-network-verifier/pkg/verifier"
+	onvAwsClient "github.com/openshift/osd-network-verifier/pkg/verifier/aws"
 )
-
-type egressConfig struct {
-	cloudImageID string
-	instanceType string
-	cloudTags    map[string]string
-	timeout      time.Duration
-	kmsKeyID     string
-	httpProxy    string
-	httpsProxy   string
-	CaCert       string
-	noTLS        bool
-}
-
-var awsDefaultTags = map[string]string{"osd-network-verifier": "owned", "red-hat-managed": "true", "Name": "osd-network-verifier"}
 
 // VerifierResult type contains the verifier outcomes
 type VerifierResult int
@@ -41,66 +30,79 @@ const (
 	Success   VerifierResult = 2
 )
 
-// Run runs the network verifier tool to check for network misconfigurations
-func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) { // TODO
-	logging.Info("Running Network Verifier...")
+func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*onv.ValidateEgressInput, error) {
 	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
-
-	credentials := awsClient.GetAWSCredentials()
-
-	config := egressConfig{}
-
-	p := proxy.ProxyConfig{
-		HttpProxy:  config.httpProxy,
-		HttpsProxy: config.httpsProxy,
-		Cacert:     config.CaCert,
-		NoTls:      config.noTLS,
-	}
-
 	securityGroupID, err := awsClient.GetSecurityGroupID(infraID)
 	if err != nil {
-		return Undefined, "", fmt.Errorf("failed to get SecurityGroupId: %w", err)
+		return nil, fmt.Errorf("failed to get SecurityGroupId: %w", err)
 	}
 
 	subnets, err := getSubnets(infraID, cluster, awsClient)
+
+	if len(subnets) == 0 {
+		return nil, errors.New("failed to find a subnet for this cluster")
+	}
+
 	// If multiple private subnets are found the networkverifier will run on the first subnet
 	subnet := subnets[0]
 	if err != nil {
-		return Undefined, "", fmt.Errorf("failed to get Subnets: %w", err)
+		return nil, fmt.Errorf("failed to get Subnets: %w", err)
 	}
 
-	logging.Infof("Using Security Group ID: %s", securityGroupID)
-	logging.Infof("Using SubnetID: %s", subnet)
+	awsDefaultTags := map[string]string{
+		"osd-network-verifier": "owned",
+		"red-hat-managed":      "true",
+		"Name":                 "osd-network-verifier",
+	}
 
-	// setup non cloud config options
-	validateEgressInput := verifier.ValidateEgressInput{
+	region := cluster.Region().ID()
+	if onvAwsClient.GetAMIForRegion(region) == "" {
+		return nil, fmt.Errorf("unsupported region: %s", region)
+	}
+
+	proxy := proxy.ProxyConfig{}
+	// If the cluster has a cluster-wide proxy, configure it
+	if cluster.Proxy() != nil && !cluster.Proxy().Empty() {
+		proxy.HttpProxy = cluster.Proxy().HTTPProxy()
+		proxy.HttpsProxy = cluster.Proxy().HTTPSProxy()
+	}
+
+	// The actual trust bundle is redacted in OCM - we would have to get it from hive once CAD has backplane access
+	if cluster.AdditionalTrustBundle() != "" {
+		return nil, errors.New("cluster has an additional trust bundle configured - this is currently not supported by CAD's network verifier")
+	}
+
+	return &onv.ValidateEgressInput{
+		Timeout:      2 * time.Second,
 		Ctx:          context.TODO(),
 		SubnetID:     subnet,
-		CloudImageID: config.cloudImageID,
-		Timeout:      config.timeout,
-		Tags:         config.cloudTags,
-		InstanceType: config.instanceType,
-		Proxy:        p,
+		CloudImageID: onvAwsClient.GetAMIForRegion(region),
+		InstanceType: "t3.micro",
+		Proxy:        proxy,
+		PlatformType: helpers.PlatformAWS,
+		Tags:         awsDefaultTags,
+		AWS: onv.AwsEgressConfig{
+			SecurityGroupId: securityGroupID,
+		},
+	}, nil
+}
+
+// Run runs the network verifier tool to check for network misconfigurations
+func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) { // TODO
+	validateEgressInput, err := initializeValidateEgressInput(cluster, clusterDeployment, awsClient)
+	if err != nil {
+		return Undefined, "", fmt.Errorf("failed to initialize validateEgressInput: %w", err)
 	}
 
-	if len(validateEgressInput.Tags) == 0 {
-		validateEgressInput.Tags = awsDefaultTags
-	}
-
-	// Setup AWS Specific Configs
-	validateEgressInput.AWS = verifier.AwsEgressConfig{
-		KmsKeyID:        config.kmsKeyID,
-		SecurityGroupId: securityGroupID,
-	}
-
-	awsVerifier, err := awsverifier.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
+	credentials := awsClient.GetAWSCredentials()
+	awsVerifier, err := onvAwsClient.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %w", err)
 	}
 
-	logging.Infof("Using region: %s", cluster.Region().ID())
+	logging.Infof("Running Network Verifier with security group '%s' - subnet '%s' - region '%s'... ", validateEgressInput.AWS.SecurityGroupId, validateEgressInput.SubnetID, cluster.Region().ID())
 
-	out := verifier.ValidateEgress(awsVerifier, validateEgressInput)
+	out := verifier.ValidateEgress(awsVerifier, *validateEgressInput)
 
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
