@@ -34,10 +34,7 @@ const (
 
 var stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
 
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/stsmock.go -package awsmock github.com/aws/aws-sdk-go/service/sts/stsiface STSAPI
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/ec2mock.go -package awsmock github.com/aws/aws-sdk-go/service/ec2/ec2iface EC2API
-//go:generate mockgen --build_flags=--mod=readonly -destination mock/cloudtrailmock.go -package awsmock github.com/aws/aws-sdk-go/service/cloudtrail/cloudtrailiface CloudTrailAPI
-//go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/aws.go -package awsmock
+//go:generate mockgen -source=aws.go -package=awsmock -destination=mock/aws.go
 
 // Client is the interface exposing Aws related functions
 type Client interface {
