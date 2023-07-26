@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -89,6 +90,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
 	return utils.WithRetries(func() error {
+		metrics.LimitedSupportSet.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
 		return postLimitedSupport(r.Cluster.ID(), res.string(), r.OcmClient, r.PdClient)
 	})
 }
@@ -162,6 +164,7 @@ func InvestigateResolved(r *investigation.Resources) error {
 	}
 	logging.Info("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
 	err = utils.WithRetries(func() error {
+		metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
 		return r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
 	})
 	if err != nil {
