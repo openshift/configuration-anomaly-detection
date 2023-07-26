@@ -2,7 +2,6 @@
 package metrics
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -27,7 +26,6 @@ func Push() {
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(LimitedSupportLifted)
 		promPusher.Collector(ServicelogPrepared)
-		fmt.Printf("promPusher: %v\n", promPusher)
 		err := promPusher.Add()
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
