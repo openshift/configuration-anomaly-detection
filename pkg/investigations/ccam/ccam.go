@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
@@ -29,7 +31,7 @@ const accessDeniedError string = "failed to assume into support-role: AccessDeni
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
-func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client) error {
+func Evaluate(awsError error, r *investigation.Resources) error {
 	logging.Info("Investigating possible missing cloud credentials...")
 
 	// We aren't able to jumpRole because of an error that is different than
@@ -38,7 +40,7 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 		return fmt.Errorf("credentials are there, error is different: %w", awsError)
 	}
 
-	ccamLsExists, err := ocmClient.LimitedSupportReasonExists(ccamLimitedSupport, cluster.ID())
+	ccamLsExists, err := r.OcmClient.LimitedSupportReasonExists(ccamLimitedSupport, r.Cluster.ID())
 	if err != nil {
 		return fmt.Errorf("couldn't determine if limited support reason already exists: %w", err)
 	}
@@ -50,41 +52,43 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 
 	// Case 1
 	if ccamLsExists {
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Cluster already has limited support for '%s'. Silencing alert.\n", ccamLimitedSupport.Summary))
+		return r.PdClient.SilenceAlertWithNote(fmt.Sprintf("Cluster already has limited support for '%s'. Silencing alert.\n", ccamLimitedSupport.Summary))
 	}
 
 	// Case 2
-	switch cluster.State() {
+	switch r.Cluster.State() {
 	case v1.ClusterStateReady:
 		// Cluster is in functional sate but we can't jumprole to it: post limited support
-		err = ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
+		metrics.LimitedSupportSet.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
+		err = r.OcmClient.PostLimitedSupportReason(ccamLimitedSupport, r.Cluster.ID())
 		if err != nil {
-			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
+			return fmt.Errorf("could not post limited support reason for %s: %w", r.Cluster.Name(), err)
 		}
 
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
+		return r.PdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
 	case v1.ClusterStateUninstalling:
 		// A cluster in uninstalling state should not alert primary - we just skip this
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
+		return r.PdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
 	default:
 		// Anything else is an unknown state to us and/or requires investigation.
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state)
-		return pdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
+		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", r.Cluster.State()))
 	}
 }
 
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
 // if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
-func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pagerduty.Client) error {
+func RemoveLimitedSupport(r *investigation.Resources) error {
+	metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
 	err := utils.WithRetries(func() error {
-		return ocmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, cluster.ID())
+		return r.OcmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, r.Cluster.ID())
 	})
 	if err != nil {
 		logging.Errorf("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
 		originalErr := err
 		err := utils.WithRetries(func() error {
-			return pdClient.CreateNewAlert(buildAlertForCCAM(originalErr, cluster.ID()), pdClient.GetServiceID())
+			return r.PdClient.CreateNewAlert(buildAlertForCCAM(originalErr, r.Cluster.ID()), r.PdClient.GetServiceID())
 		})
 		if err != nil {
 			logging.Errorf("Failed to alert Primary")

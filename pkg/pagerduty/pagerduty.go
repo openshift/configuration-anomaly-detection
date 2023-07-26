@@ -49,6 +49,7 @@ type Client interface {
 	AddNote(notes string) error
 	CreateNewAlert(newAlert NewAlert, serviceID string) error
 	GetServiceID() string
+	GetEventType() string
 	EscalateAlertWithNote(notes string) error
 	EscalateAlert() error
 }
