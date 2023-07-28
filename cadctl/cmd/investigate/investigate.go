@@ -307,14 +307,14 @@ func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []strin
 }
 
 // Returns either the internal or external ID (differs per service)
-// - app-sre-alertmanager contains an internal ID in the title in the format uhc-<env>-<internal-id>
+// - app-sre-alertmanager and its stage version contains an internal ID in the title in the format uhc-<env>-<internal-id>
 // - everything else should adhere to being a separate field in the alert note.
 func parseClusterIDFromAlert(pdClient *pagerduty.SdkClient) (string, error) {
 	var clusterID string
 	var err error
 
 	switch pdClient.GetServiceName() {
-	case "app-sre-alertmanager":
+	case "app-sre-alertmanager", "app-sre-alertmanager-stage":
 		clusterID, err = cpd.GetCPDAlertInternalID(pdClient.GetTitle())
 		if err != nil {
 			return "", fmt.Errorf("Failed to get CPD alert internal ID: %w", err)
