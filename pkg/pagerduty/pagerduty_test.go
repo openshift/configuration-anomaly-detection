@@ -289,7 +289,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprint(w, `{}`)
 				})
 				// Act
-				_, err := p.GetAlerts()
+				_, err := p.GetAlerts(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
@@ -306,7 +306,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
-				_, err := p.GetAlerts()
+				_, err := p.GetAlerts(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
@@ -324,7 +324,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprint(w, `{}`)
 				})
 				// Act
-				_, err := p.GetAlerts()
+				_, err := p.GetAlerts(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
@@ -340,7 +340,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"notes":"cluster_id: 123456"}}}]}`)
 				})
 				// Act
-				res, err := p.GetAlerts()
+				res, err := p.GetAlerts(incidentID)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(res).Should(HaveLen(1))
@@ -454,88 +454,6 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 	})
-
-	// Describe("ExtractExternalIDFromCGHMAlertBody", func() {
-	// 	var alertBody map[string]interface{}
-	// 	BeforeEach(func() {
-	// 		alertBody = map[string]interface{}{}
-	// 	})
-
-	// 	When("the '.details' field is of the wrong type", func() {
-	// 		It("should raise a 'AlertBodyExternalCastError' error", func() {
-	// 			// Arrange
-	// 			alertBody = map[string]interface{}{
-	// 				"details": "bad details",
-	// 			}
-	// 			expectedErr := pagerduty.AlertBodyExternalCastError{
-	// 				FailedProperty:     ".details",
-	// 				ExpectedType:       "map[string]interface{}",
-	// 				ActualType:         "string",
-	// 				ActualBodyResource: "bad details",
-	// 			}
-	// 			// Act
-	// 			_, err := p.ExtractIDFromCHGM(alertBody)
-	// 			// Assert
-	// 			Expect(err).Should(HaveOccurred())
-	// 			Expect(err).Should(MatchError(expectedErr))
-	// 		})
-	// 	})
-	// 	When("the '.details.notes' field is of the wrong type", func() {
-	// 		It("should raise a 'AlertBodyExternalCastError' error", func() {
-	// 			// Arrange
-	// 			alertBody = map[string]interface{}{
-	// 				"details": map[string]interface{}{
-	// 					"notes": map[string]interface{}{
-	// 						"hello": "world",
-	// 					},
-	// 				},
-	// 			}
-	// 			expectedErr := pagerduty.AlertBodyExternalCastError{
-	// 				FailedProperty:     ".details.notes",
-	// 				ExpectedType:       "string",
-	// 				ActualType:         "map[string]interface {}",
-	// 				ActualBodyResource: "map[hello:world]",
-	// 			}
-	// 			// Act
-	// 			_, err := p.ExtractIDFromCHGM(alertBody)
-	// 			// Assert
-	// 			Expect(err).Should(HaveOccurred())
-	// 			Expect(err).Should(MatchError(expectedErr))
-	// 		})
-	// 	})
-
-	// 	When("the notes field is improperly parsed by the 'yaml' package", func() {
-	// 		It("should raise a 'NotesParseError' error", func() {
-	// 			// Arrange
-	// 			alertBody = map[string]interface{}{
-	// 				"details": map[string]interface{}{
-	// 					"notes": "chicken",
-	// 				},
-	// 			}
-	// 			// Act
-	// 			_, err := p.ExtractIDFromCHGM(alertBody)
-	// 			// Assert
-	// 			Expect(err).Should(HaveOccurred())
-	// 			Expect(err).Should(MatchError(pagerduty.NotesParseError{}))
-	// 		})
-	// 	})
-
-	// 	When("the notes field has a clusterid", func() {
-	// 		It("should be returned correctly", func() {
-	// 			// Arrange
-	// 			alertBody = map[string]interface{}{
-	// 				"details": map[string]interface{}{
-	// 					"notes": `cluster_id: "12345"`,
-	// 				},
-	// 			}
-	// 			// Act
-	// 			res, err := p.ExtractIDFromCHGM(alertBody)
-	// 			// Assert
-	// 			Expect(err).ShouldNot(HaveOccurred())
-	// 			Expect(res).Should(Equal("12345"))
-	// 		})
-	// 	})
-	// })
 	Describe("Receiver", func() {
 		Describe("RetrieveExternalClusterID", func() {
 			When("the payload path points to a sanitized payload and the api does not have the alert + incident", func() {
@@ -579,25 +497,20 @@ var _ = Describe("Pagerduty", func() {
 					_, err := p.RetrieveExternalClusterID()
 					// Assert
 					Expect(err).Should(HaveOccurred())
-					Expect(err).Should(MatchError(pagerduty.AlertBodyExternalParseError{FailedProperty: ".details"}))
+					Expect(err.Error()).Should(Equal("could not retrieve alerts for incident '1234': could not convert alert toLocalAlert: failed to extractExternalIDFromCHGMAlertBody: cannot marshal externalCHGMAlertBody: cannot find '.details' in body - failed to extractExternalIDFromStandardAlertBody: cannot find '.details' in body"))
 				})
 			})
 			When("the '.details' field is of the wrong type", func() {
-				It("should raise a 'AlertBodyExternalCastError' error", func() {
+				It("should raise wrapped 'AlertBodyExternalCastError' errors", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
 					})
-					expectedErr := pagerduty.AlertBodyExternalCastError{
-						FailedProperty:     ".details",
-						ExpectedType:       "map[string]interface{}",
-						ActualType:         "string",
-						ActualBodyResource: "bad details",
-					}
 
 					_, err := p.RetrieveExternalClusterID()
 
 					Expect(err).Should(HaveOccurred())
-					Expect(err).Should(MatchError(expectedErr))
+					fmt.Println(err.Error())
+					Expect(err.Error()).Should(Equal("could not retrieve alerts for incident '1234': could not convert alert toLocalAlert: failed to extractExternalIDFromCHGMAlertBody: cannot marshal externalCHGMAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details'  - failed to extractExternalIDFromStandardAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details' "))
 				})
 			})
 		})

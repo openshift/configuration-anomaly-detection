@@ -71,6 +71,8 @@ const (
 	ClusterHasGoneMissing
 	// ClusterProvisioningDelay represents the alert type ClusterProvisioningDelay
 	ClusterProvisioningDelay
+	// SilenceAlerts represents the alert type SilenceAlerts
+	SilenceAlerts
 )
 
 func (a AlertType) String() (string, error) {
@@ -79,6 +81,8 @@ func (a AlertType) String() (string, error) {
 		return "ClusterHasGoneMissing", nil
 	case ClusterProvisioningDelay:
 		return "ClusterProvisioningDelay", nil
+	case SilenceAlerts:
+		return "SilenceAlerts", nil
 	}
 	return "", fmt.Errorf("missing implementation: .String() needs to be implemented for alert type '%d'", a)
 }
