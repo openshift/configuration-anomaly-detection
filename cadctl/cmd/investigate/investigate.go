@@ -30,9 +30,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/silencealerts"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+
 	"github.com/spf13/cobra"
 )
 
@@ -71,11 +73,6 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
 
-	ocmClient, err := GetOCMClient()
-	if err != nil {
-		return fmt.Errorf("could not initialize ocm client: %w", err)
-	}
-
 	// clusterID can end up being either be the internal or external ID.
 	// We don't really care, as we only use this to initialize the cluster object,
 	// which will contain both IDs.
@@ -96,6 +93,18 @@ func run(_ *cobra.Command, _ []string) error {
 		}
 
 		return nil
+	}
+
+	// This is an edge case and will likely disapear soon
+	// It is the only investigation for which we can't initialize other clients
+	// Therefore, we need to skip right to it.
+	if alertType == investigation.SilenceAlerts {
+		return silencealerts.ResolveClusterAlerts(clusterID, pdClient)
+	}
+
+	ocmClient, err := GetOCMClient()
+	if err != nil {
+		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
 	cluster, err := ocmClient.GetClusterInfo(clusterID)
@@ -229,10 +238,13 @@ func isAlertSupported(alertTitle string) (investigation.AlertType, error) {
 	// We currently map to the alert by using the title, we should use the name in the alert note in the future.
 	// This currently isn't feasible yet, as CPD's alertmanager doesn't allow for the field to exist.
 
-	if strings.Contains(alertTitle, "has gone missing") {
+	// We can't switch case here as it's strings.Contains.
+	if strings.Contains(alertTitle, "has gone missing") { //nolint:gocritic
 		return investigation.ClusterHasGoneMissing, nil
 	} else if strings.Contains(alertTitle, "ClusterProvisioningDelay -") {
 		return investigation.ClusterProvisioningDelay, nil
+	} else if strings.Contains(alertTitle, "SilenceAlerts") {
+		return investigation.SilenceAlerts, nil
 	}
 
 	return investigation.Undefined, fmt.Errorf("Alert is not supported by CAD: %s", alertTitle)

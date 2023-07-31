@@ -88,7 +88,7 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 }
 
 // Run runs the network verifier tool to check for network misconfigurations
-func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) { // TODO
+func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) {
 	validateEgressInput, err := initializeValidateEgressInput(cluster, clusterDeployment, awsClient)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to initialize validateEgressInput: %w", err)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
+	"github.com/PagerDuty/go-pagerduty"
 	sdk "github.com/PagerDuty/go-pagerduty"
 	"gopkg.in/yaml.v2"
 )
@@ -51,29 +52,75 @@ type Client interface {
 	GetServiceID() string
 	EscalateAlertWithNote(notes string) error
 	EscalateAlert() error
+	ResolveAlertsForCluster(clusterID string) error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
 type SdkClient struct {
 	// c is the PagerDuty client
 	sdkClient *sdk.Client
-	// currentUserEmail is the current logged-in user's email
-	currentUserEmail string
 	// onCallEscalationPolicy
 	onCallEscalationPolicy string
 	// silentEscalationPolicy
 	silentEscalationPolicy string
-	// parsedPayload holds some of the webhook payloads fields ( add more if needed )
-	parsedPayload WebhookPayload
+	// incidentData
+	incidentData *IncidentData
 	// externalClusterID ( only gets initialized after the first GetExternalClusterID call )
 	externalClusterID *string
 }
 
-// WebhookPayload is a struct to fill with information we parse out of the webhook
+// IncidentData represents the data contained in an incident
+type IncidentData struct {
+	IncidentEventType string // e.g. incident.Triggered
+	IncidentTitle     string // e.g. InfraNodesNeedResizingSRE CRITICAL (1)
+	IncidentID        string // e.g. Q2I4AV3ZURABC
+	IncidentRef       string // e.g. https://<>.pagerduty.com/incidents/Q2I4AV3ZURABC
+	ServiceID         string // e.g. PCH1XGB
+	ServiceSummary    string // e.g. prod-deadmanssnitch
+}
+
+func (c *SdkClient) initializeIncidentData(payload []byte) (*IncidentData, error) {
+	incidentData := &IncidentData{}
+
+	logging.Debug("Attempting to unmarshal webhookV3...")
+	unmarshalled, err := unmarshalWebhookV3(payload)
+	if err == nil {
+		incidentData.IncidentEventType = unmarshalled.Event.EventType
+		incidentData.IncidentTitle = unmarshalled.Event.Data.Title
+		incidentData.IncidentID = unmarshalled.Event.Data.IncidentID
+		incidentData.IncidentRef = unmarshalled.Event.Data.IncidentRef
+		incidentData.ServiceID = unmarshalled.Event.Data.Service.ServiceID
+		incidentData.ServiceSummary = unmarshalled.Event.Data.Service.Summary
+		return incidentData, nil
+	}
+
+	logging.Infof("Could not unmarshal as pagerduty webhook V3: %s. re-trying to unmarshall for different payload types...", err.Error())
+
+	logging.Debug("Attempting to unmarshal EventOrchestrationWebhook...")
+	unmarshalled2, err := unmarshalEventOrchestrationWebhook(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	fetchedIncident, err := c.sdkClient.GetIncidentWithContext(context.TODO(), unmarshalled2.PDMetadata.Incident.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	incidentData.IncidentEventType = fetchedIncident.Type
+	incidentData.IncidentTitle = fetchedIncident.Title
+	incidentData.IncidentID = fetchedIncident.ID
+	incidentData.IncidentRef = fetchedIncident.HTMLURL
+	incidentData.ServiceID = fetchedIncident.Service.ID
+	incidentData.ServiceSummary = fetchedIncident.Service.Summary
+	return incidentData, nil
+}
+
+// webhookV3 is a struct to fill with information we parse out of the webhook
 // The data field schema can differ depending on the event type that triggered the webhook.
 // https://developer.pagerduty.com/docs/db0fa8c8984fc-overview#event-data-types
 // We only use event types that return a webhook with 'incident' as data field for now.
-type WebhookPayload struct {
+type webhookV3 struct {
 	Event struct {
 		EventType string `json:"event_type"`
 		Data      struct {
@@ -88,75 +135,113 @@ type WebhookPayload struct {
 	} `json:"event"`
 }
 
-// Unmarshal wraps the json.Unmarshal to do some sanity checks
-// it may be worth to do a proper schema and validation
-func (c *WebhookPayload) Unmarshal(data []byte) error {
-	err := json.Unmarshal(data, c)
+// unmarshalWebhookV3 unmarshals a webhook v3 payload
+// https://support.pagerduty.com/docs/webhooks
+func unmarshalWebhookV3(data []byte) (*webhookV3, error) {
+	unmarshalled := &webhookV3{}
+
+	err := json.Unmarshal(data, unmarshalled)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if c.Event.EventType == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: event_type")}
+	if unmarshalled.Event.EventType == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: event_type")}
 	}
-	if c.Event.Data.Service.ServiceID == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: ServiceID")}
+	if unmarshalled.Event.Data.Service.ServiceID == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: ServiceID")}
 	}
-	if c.Event.Data.Service.Summary == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: Summary")}
+	if unmarshalled.Event.Data.Service.Summary == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: Summary")}
 	}
-	if c.Event.Data.Title == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: Title")}
+	if unmarshalled.Event.Data.Title == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: Title")}
 	}
-	if c.Event.Data.IncidentID == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentID")}
+	if unmarshalled.Event.Data.IncidentID == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentID")}
 	}
-	if c.Event.Data.IncidentRef == "" {
-		return UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentRef")}
+	if unmarshalled.Event.Data.IncidentRef == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: IncidentRef")}
 	}
-	return nil
+	return unmarshalled, nil
 }
 
-// NewWithToken is similar to New, but you only need to supply to authentication token to start
+// eventOrchestrationWebhook is a struct respresentation of a pagerduty event orchestration webhook payload
+// e.g. {"__pd_metadata":{"incident":{"id":"Q0OGN8S5WIM0FX"}}}
+type eventOrchestrationWebhook struct {
+	PDMetadata struct {
+		Incident struct {
+			ID string `json:"id"`
+		} `json:"incident"`
+	} `json:"__pd_metadata"`
+}
+
+func unmarshalEventOrchestrationWebhook(data []byte) (*eventOrchestrationWebhook, error) {
+	unmarshalled := &eventOrchestrationWebhook{}
+	err := json.Unmarshal(data, unmarshalled)
+	if err != nil {
+		return nil, err
+	}
+
+	if unmarshalled.PDMetadata.Incident.ID == "" {
+		return nil, UnmarshalError{Err: fmt.Errorf("payload is missing field: ID")}
+	}
+	return unmarshalled, nil
+}
+
+// NewWithToken initializes a new SdkClient
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
 func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (*SdkClient, error) {
-	parsedPayload := WebhookPayload{}
-	err := parsedPayload.Unmarshal(webhookPayload)
-	if err != nil {
-		return nil, UnmarshalError{Err: err}
-	}
 	c := SdkClient{
-		sdkClient:              sdk.NewClient(authToken, options...),
+		sdkClient: sdk.NewClient(authToken, options...),
+
+		// All three of the below should be moved out of the SDK.
+		// These are static values that should not be part of an sdk
 		onCallEscalationPolicy: escalationPolicy,
 		silentEscalationPolicy: silentPolicy,
-		parsedPayload:          parsedPayload,
+		incidentData:           &IncidentData{},
 	}
+
+	// We first need to initialize the client before we can use initializeIncidentData
+	// as all our calls to the sdk are wrapped within it.
+	incidentData, err := c.initializeIncidentData(webhookPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	c.SetIncidentData(incidentData)
+
 	return &c, nil
+}
+
+// SetIncidentData sets the Client's incidentData
+func (c *SdkClient) SetIncidentData(incidentData *IncidentData) {
+	c.incidentData = incidentData
 }
 
 // GetEventType returns the event type of the webhook
 func (c *SdkClient) GetEventType() string {
-	return c.parsedPayload.Event.EventType
+	return c.incidentData.IncidentEventType
 }
 
 // GetServiceID returns the event type of the webhook
 func (c *SdkClient) GetServiceID() string {
-	return c.parsedPayload.Event.Data.Service.ServiceID
+	return c.incidentData.ServiceID
 }
 
 // GetServiceName returns the event type of the webhook
 func (c *SdkClient) GetServiceName() string {
-	return c.parsedPayload.Event.Data.Service.Summary
+	return c.incidentData.ServiceSummary
 }
 
 // GetTitle returns the event type of the webhook
 func (c *SdkClient) GetTitle() string {
-	return c.parsedPayload.Event.Data.Title
+	return c.incidentData.IncidentTitle
 }
 
 // GetIncidentID returns the event type of the webhook
 func (c *SdkClient) GetIncidentID() string {
-	return c.parsedPayload.Event.Data.IncidentID
+	return c.incidentData.IncidentID
 }
 
 // GetOnCallEscalationPolicy returns the set on call escalation policy
@@ -171,7 +256,7 @@ func (c *SdkClient) GetSilentEscalationPolicy() string {
 
 // GetIncidentRef returns a link to the pagerduty incident
 func (c *SdkClient) GetIncidentRef() string {
-	return c.parsedPayload.Event.Data.IncidentRef
+	return c.incidentData.IncidentRef
 }
 
 // RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
@@ -185,7 +270,7 @@ func (c *SdkClient) RetrieveExternalClusterID() (string, error) {
 	incidentID := c.GetIncidentID()
 
 	// pulls alerts from pagerduty
-	alerts, err := c.GetAlerts()
+	alerts, err := c.GetAlerts(incidentID)
 	if err != nil {
 		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
 	}
@@ -273,7 +358,7 @@ func (c *SdkClient) AcknowledgeIncident() error {
 func (c *SdkClient) updateIncident(o []sdk.ManageIncidentsOptions) error {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
-	_, err := c.sdkClient.ManageIncidentsWithContext(ctx, c.currentUserEmail, o)
+	_, err := c.sdkClient.ManageIncidentsWithContext(ctx, CADEmailAddress, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -290,13 +375,18 @@ func (c *SdkClient) updateIncident(o []sdk.ManageIncidentsOptions) error {
 	return nil
 }
 
-// AddNote will add a note to an incident
+// AddNote will add a note to the incident the client was initialized with
 func (c *SdkClient) AddNote(noteContent string) error {
+	return c.AddNoteToIncident(c.incidentData.IncidentID, noteContent)
+}
+
+// AddNoteToIncident will add a note to an incident
+func (c *SdkClient) AddNoteToIncident(incidentID string, noteContent string) error {
 	logging.Info("Attaching Note...")
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
-	_, err := c.sdkClient.CreateIncidentNoteWithContext(context.TODO(), c.GetIncidentID(), sdkNote)
+	_, err := c.sdkClient.CreateIncidentNoteWithContext(context.TODO(), incidentID, sdkNote)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -365,13 +455,13 @@ func (c *SdkClient) getCADIntegrationFromService(service *sdk.Service) (sdk.Inte
 }
 
 // GetAlerts will retrieve the alerts for a specific incident
-func (c *SdkClient) GetAlerts() ([]Alert, error) {
+func (c *SdkClient) GetAlerts(incidentID string) ([]Alert, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
 	o := sdk.ListIncidentAlertsOptions{}
 
-	alerts, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, c.GetIncidentID(), o)
+	alerts, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, incidentID, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -399,9 +489,8 @@ func (c *SdkClient) GetAlerts() ([]Alert, error) {
 	return res, nil
 }
 
-// extractExternalIDFromAlertBody extracts from an Alert body until an external ID
-// the function is a member function but doesn't use any of the other functions / types in the PagerDuty struct
-func extractExternalIDFromAlertBody(data map[string]interface{}) (string, error) {
+// extractExternalIDFromCHGMAlertBody extracts from an Alert body until an external ID
+func extractExternalIDFromCHGMAlertBody(data map[string]interface{}) (string, error) {
 	var err error
 
 	externalBody, err := extractNotesFromBody(data)
@@ -430,6 +519,47 @@ func extractExternalIDFromAlertBody(data map[string]interface{}) (string, error)
 	}
 
 	return internalBody.ClusterID, nil
+}
+
+// TODO(Claudio): https://issues.redhat.com/browse/OSD-17557
+// extractExternalIDFromStandardAlertBody extracts the minimal information neededfrom an standard alert's body
+// this should become the default extracting function after we unify all alerts custom details.
+// For now, it's duplicate code with minor tweaks, this will facilitate removal later though.
+func extractExternalIDFromStandardAlertBody(data map[string]interface{}) (string, error) {
+	var ok bool
+	_, ok = data["details"]
+	if !ok {
+		return "", AlertBodyExternalParseError{FailedProperty: ".details"}
+	}
+
+	details, ok := data["details"].(map[string]interface{})
+	if !ok {
+		err := AlertBodyExternalCastError{
+			FailedProperty:     ".details",
+			ExpectedType:       "map[string]interface{}",
+			ActualType:         reflect.TypeOf(data["details"]).String(),
+			ActualBodyResource: fmt.Sprintf("%v", data["details"]),
+		}
+		return "", err
+	}
+
+	notesInterface, ok := details["cluster_id"]
+	if !ok {
+		return "", AlertBodyExternalParseError{FailedProperty: ".details.cluster_id"}
+	}
+
+	notes, ok := notesInterface.(string)
+	if !ok {
+		err := AlertBodyExternalCastError{
+			FailedProperty:     ".details.cluster_id",
+			ExpectedType:       "string",
+			ActualType:         reflect.TypeOf(details["cluster_id"]).String(),
+			ActualBodyResource: fmt.Sprintf("%v", details["cluster_id"]),
+		}
+		return "", err
+	}
+
+	return notes, nil
 }
 
 // extractNotesFromBody will extract from map[string]interface{} the '.details.notes' while doing type checks
@@ -479,10 +609,20 @@ type internalCHGMAlertBody struct {
 
 // toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
 func (c *SdkClient) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
-	externalID, err := extractExternalIDFromAlertBody(sdkAlert.Body)
+	var localErr error
+
+	logging.Debugf("Attempting to extract external ID from CHGM alert body: %s", sdkAlert.Body)
+	externalID, err := extractExternalIDFromCHGMAlertBody(sdkAlert.Body)
 	if err != nil {
-		return Alert{}, fmt.Errorf("could not ExtractIDFromCHGM: %w", err)
+		localErr = err
+
+		logging.Debugf("Attempting to extract external ID from standard alert body: %s", sdkAlert.Body)
+		externalID, err = extractExternalIDFromStandardAlertBody(sdkAlert.Body)
+		if err != nil {
+			return Alert{}, fmt.Errorf("failed to extractExternalIDFromCHGMAlertBody: %s - failed to extractExternalIDFromStandardAlertBody: %s", localErr.Error(), err.Error())
+		}
 	}
+
 	alert := Alert{
 		ID:         sdkAlert.APIObject.ID,
 		ExternalID: externalID,
@@ -537,4 +677,97 @@ func (c *SdkClient) addNoteAndEscalate(notes, escalationPolicy string) error {
 		}
 	}
 	return c.MoveToEscalationPolicy(escalationPolicy)
+}
+
+func (c *SdkClient) listActiveServiceIncidents() ([]pagerduty.Incident, error) {
+	logging.Debug("Fetching active incidents for service...")
+	var incidents []pagerduty.Incident
+
+	opts := sdk.ListIncidentsOptions{
+		ServiceIDs: []string{c.GetServiceID()},
+		Statuses:   []string{"triggered", "acknowledged"},
+	}
+
+	items, err := c.sdkClient.ListIncidentsWithContext(context.Background(), opts)
+	if err != nil {
+		return nil, err
+	}
+	incidents = append(incidents, items.Incidents...)
+
+	for items.APIListObject.More {
+		logging.Debugf("Fetching more incidents (pagination) - currently %d fetched...", len(incidents))
+		opts.Offset = uint(len(incidents))
+		items, err = c.sdkClient.ListIncidentsWithContext(context.Background(), opts)
+		if err != nil {
+			return nil, err
+		}
+		incidents = append(incidents, items.Incidents...)
+	}
+
+	logging.Debugf("listActiveServiceIncidents found %d active incidents for service '%s'", len(incidents), c.GetServiceName())
+
+	return incidents, nil
+}
+
+// ResolveIncident resolves an incident
+func (c *SdkClient) ResolveIncident(incident *pagerduty.Incident) error {
+	opts := pagerduty.ManageIncidentsOptions{
+		ID:     incident.ID,
+		Type:   incident.Type,
+		Status: "resolved",
+	}
+
+	_, err := c.sdkClient.ManageIncidentsWithContext(context.TODO(), CADEmailAddress, []pagerduty.ManageIncidentsOptions{opts})
+
+	return err
+}
+
+// ResolveAlertsForCluster resolve all alerts for client's service
+// with a matching custom details cluster_id field
+func (c *SdkClient) ResolveAlertsForCluster(clusterID string) error {
+	logging.Infof("Resolving incidents related to cluster '%s' on pagerduty service '%s.", clusterID, c.GetServiceName())
+	incidents, err := c.listActiveServiceIncidents()
+	if err != nil {
+		return err
+	}
+
+	for i, incident := range incidents {
+		// We should not resolve the SilenceAlert
+		if incident.ID == c.incidentData.IncidentID {
+			logging.Infof("Skipping incident '%s', as it is the SilenceAlert incident.", incident.ID)
+			continue
+		}
+
+		// Get all alerts contained in the incident
+		incidentAlerts, err := c.GetAlerts(incident.ID)
+		if err != nil {
+			if strings.Contains(err.Error(), "failed to extractExternalIDFromStandardAlertBody") {
+				logging.Debugf("Alert '%s' could not be parsed, alert is possibly in an old format not implemented in CAD. Skipping.", incident.ID)
+				continue
+			}
+
+			return fmt.Errorf("Could not resolve alerts for cluster, failed to get incident alerts: %w", err)
+		}
+		logging.Debugf("Incident '%s' has %d alerts attached to it.", incident.ID, len(incidentAlerts))
+
+		// Resolve all incidents for the same clusterID as the SilenceAlert
+		for _, alert := range incidentAlerts {
+			logging.Debugf("Alert '%s' has custom details clusterID '%s'", alert.ID, alert.ExternalID)
+			if alert.ExternalID != clusterID {
+				logging.Debugf("Skipping resolve of incident '%s', clusterID for alert '%s' contained in the incident did not match: %s and %s.", incident.ID, alert.ID, alert.ExternalID, clusterID)
+				continue
+			}
+			logging.Infof("Resolving incident %s.", incident.ID)
+			err := c.ResolveIncident(&incidents[i])
+			if err != nil {
+				logging.Warnf("Failed to resolve incident '%s': %s. Skipping...", incident.ID, err.Error())
+			}
+
+			err = c.AddNoteToIncident(incident.ID, "🤖 Alert resolved: inhibited by SilenceAlert 🤖\n")
+			if err != nil {
+				logging.Warnf("Failed to attach note to incident '%s': %s. Skipping...", incident.ID, err.Error())
+			}
+		}
+	}
+	return nil
 }

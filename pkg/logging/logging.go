@@ -11,7 +11,7 @@ import (
 )
 
 // RawLogger is the raw global logger object used for calls wrapped by the logging package
-var RawLogger = InitLogger("debug", "")
+var RawLogger = InitLogger("info", "")
 
 // InitLogger initializes a cluster-id specific child logger
 func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
