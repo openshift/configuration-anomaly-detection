@@ -13,8 +13,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 )
 
-const unknownProvisionCode = "OCM3999"
-
 // GetCPDAlertInternalID gets the internal ID from a CPD pagerduty alert's title
 // We need this function as CPD's alert formatting is an edge case to our other alerts.
 func GetCPDAlertInternalID(alertTitle string) (string, error) {
@@ -35,7 +33,6 @@ func GetCPDAlertInternalID(alertTitle string) (string, error) {
 // Currently what this investigation does is:
 // - check cluster state
 // - check DNS
-// - check OcmErrorCode
 // - check subnet routes
 // - run network verifier and add the output as pagerduty note
 // - always escalate the alert to primary
@@ -48,7 +45,9 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	notesSb.WriteString("===========================\n")
 
 	if r.Cluster.Status().State() == "ready" {
-		notesSb.WriteString("⚠️ This cluster is in a ready state, thus provisioning succeeded\n.")
+		// We are unsure when this happens, in theory, if the cluster is ready, the alert shouldn't fire or should autoresolve.
+		// We currently believe this never happens, but want to be made aware if it does.
+		notesSb.WriteString("⚠️ This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future\n")
 		err := r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			logging.Error("could not add clusters ready state to incident notes")
@@ -62,13 +61,6 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		return r.PdClient.EscalateAlertWithNote(notesSb.String())
 	}
 	notesSb.WriteString("✅ Cluster DNS is ready\n")
-
-	// Check if the OCM Error code is a known error
-	if len(r.Cluster.Status().ProvisionErrorCode()) > 0 && r.Cluster.Status().ProvisionErrorCode() != unknownProvisionCode {
-		notesSb.WriteString(fmt.Sprintf("⚠️ Error code '%s' is known, customer already received Service Log\n", r.Cluster.Status().ProvisionErrorCode()))
-		return r.PdClient.EscalateAlertWithNote(notesSb.String())
-	}
-	notesSb.WriteString("✅ OCM Error code is unknown, customer did not receive automated SL from OCM yet.\n")
 
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
 		logging.Info("Checking BYOVPC to ensure subnets have valid routing...")
