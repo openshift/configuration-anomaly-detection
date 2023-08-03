@@ -100,7 +100,7 @@ func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pa
 func buildAlertForCCAM(lsError error, clusterID string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", clusterID),
-		Details: pagerduty.NewAlertDetails{
+		Details: pagerduty.NewAlertCustomDetails{
 			ClusterID:  clusterID,
 			Error:      lsError.Error(),
 			Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",

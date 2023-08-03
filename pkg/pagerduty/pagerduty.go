@@ -15,7 +15,6 @@ import (
 
 	"github.com/PagerDuty/go-pagerduty"
 	sdk "github.com/PagerDuty/go-pagerduty"
-	"gopkg.in/yaml.v2"
 )
 
 //go:generate mockgen --build_flags=--mod=readonly -source $GOFILE -destination ./mock/pagerdutymock.go -package pdmock
@@ -65,8 +64,8 @@ type SdkClient struct {
 	silentEscalationPolicy string
 	// incidentData
 	incidentData *IncidentData
-	// externalClusterID ( only gets initialized after the first GetExternalClusterID call )
-	externalClusterID *string
+	// clusterID ( only gets initialized after the first GetclusterID call )
+	clusterID *string
 }
 
 // IncidentData represents the data contained in an incident
@@ -259,37 +258,42 @@ func (c *SdkClient) GetIncidentRef() string {
 	return c.incidentData.IncidentRef
 }
 
-// RetrieveExternalClusterID returns the externalClusterID. The cluster id is not on the payload so the first time it is called it will
-// retrieve the externalClusterID from pagerduty, and update the client.
-func (c *SdkClient) RetrieveExternalClusterID() (string, error) {
+// RetrieveClusterID returns the clusterID for the current alert context of the SdkClient.
+// The cluster id is not on the payload so the first time it is called it will
+// retrieve the clusterID from pagerduty, and update the client.
+func (c *SdkClient) RetrieveClusterID() (string, error) {
 	// Only do the api call to pagerduty once
-	if c.externalClusterID != nil {
-		return *c.externalClusterID, nil
+	if c.clusterID != nil {
+		return *c.clusterID, nil
 	}
 
 	incidentID := c.GetIncidentID()
 
-	// pulls alerts from pagerduty
-	alerts, err := c.GetAlerts(incidentID)
+	alerts, err := c.GetAlertsForIncident(incidentID)
 	if err != nil {
-		return "", fmt.Errorf("could not retrieve alerts for incident '%s': %w", incidentID, err)
+		return "", err
+	}
+
+	alertDetails, err := c.GetAlertListDetails(alerts)
+	if err != nil {
+		return "", err
 	}
 
 	// there should be only one alert
-	if len(alerts) > 1 {
+	if len(alertDetails) > 1 {
 		logging.Warnf("There should be only one alert on each incident, taking the first result of incident: %s", incidentID)
 	}
 
-	for _, a := range alerts {
+	for _, a := range alertDetails {
 		a := a
-		// that one alert should have a valid ExternalID
-		if a.ExternalID != "" {
-			c.externalClusterID = &a.ExternalID
-			return *c.externalClusterID, nil
+		// that one alert should have a valid clusterID
+		if a.ClusterID != "" {
+			c.clusterID = &a.ClusterID
+			return *c.clusterID, nil
 		}
 	}
 
-	return "", fmt.Errorf("could not find an ExternalID in the given alerts")
+	return "", fmt.Errorf("could not find a clusterID in the given alerts")
 }
 
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
@@ -454,14 +458,14 @@ func (c *SdkClient) getCADIntegrationFromService(service *sdk.Service) (sdk.Inte
 	return sdk.Integration{}, fmt.Errorf("no integration '%s' exists for service '%s'", CADIntegrationName, service.Name)
 }
 
-// GetAlerts will retrieve the alerts for a specific incident
-func (c *SdkClient) GetAlerts(incidentID string) ([]Alert, error) {
+// GetAlertsForIncident gets all alerts that are part of an incident
+func (c *SdkClient) GetAlertsForIncident(incidentID string) (*[]sdk.IncidentAlert, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
 	o := sdk.ListIncidentAlertsOptions{}
 
-	alerts, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, incidentID, o)
+	listIncidentAlertsResponse, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, incidentID, o)
 
 	sdkErr := sdk.APIError{}
 	if errors.As(err, &sdkErr) {
@@ -477,55 +481,24 @@ func (c *SdkClient) GetAlerts(incidentID string) ([]Alert, error) {
 	if err != nil {
 		return nil, err
 	}
+	return &listIncidentAlertsResponse.Alerts, nil
+}
 
-	res := []Alert{}
-	for _, alert := range alerts.Alerts {
-		localAlert, err := c.toLocalAlert(alert)
+// GetAlertListDetails will retrieve the required details for a list of alerts and return an array of alertDetails
+// in the same order
+func (c *SdkClient) GetAlertListDetails(alertList *[]sdk.IncidentAlert) ([]AlertDetails, error) {
+	res := []AlertDetails{}
+	for _, alert := range *alertList {
+		alertDetails, err := extractAlertDetails(alert)
 		if err != nil {
-			return nil, fmt.Errorf("could not convert alert toLocalAlert: %w", err)
+			return nil, fmt.Errorf("could not extract alert details from alert '%s': %w", alert.ID, err)
 		}
-		res = append(res, localAlert)
+		res = append(res, alertDetails)
 	}
 	return res, nil
 }
 
-// extractExternalIDFromCHGMAlertBody extracts from an Alert body until an external ID
-func extractExternalIDFromCHGMAlertBody(data map[string]interface{}) (string, error) {
-	var err error
-
-	externalBody, err := extractNotesFromBody(data)
-	if err != nil {
-		return "", fmt.Errorf("cannot marshal externalCHGMAlertBody: %w", err)
-	}
-
-	if externalBody == "" {
-		return "", AlertBodyDoesNotHaveNotesFieldError{}
-	}
-
-	internalBody := internalCHGMAlertBody{}
-
-	err = yaml.Unmarshal([]byte(externalBody), &internalBody)
-	if err != nil {
-		// TODO: add errcheck for this specific error
-		externalBody = strings.ReplaceAll(externalBody, `\n`, "\n")
-		err = yaml.Unmarshal([]byte(externalBody), &internalBody)
-		if err != nil {
-			return "", NotesParseError{Err: err}
-		}
-	}
-
-	if internalBody.ClusterID == "" {
-		return "", AlertNotesDoesNotHaveClusterIDFieldError{}
-	}
-
-	return internalBody.ClusterID, nil
-}
-
-// TODO(Claudio): https://issues.redhat.com/browse/OSD-17557
-// extractExternalIDFromStandardAlertBody extracts the minimal information neededfrom an standard alert's body
-// this should become the default extracting function after we unify all alerts custom details.
-// For now, it's duplicate code with minor tweaks, this will facilitate removal later though.
-func extractExternalIDFromStandardAlertBody(data map[string]interface{}) (string, error) {
+func extractClusterIDFromAlertBody(data map[string]interface{}) (string, error) {
 	var ok bool
 	_, ok = data["details"]
 	if !ok {
@@ -543,12 +516,12 @@ func extractExternalIDFromStandardAlertBody(data map[string]interface{}) (string
 		return "", err
 	}
 
-	notesInterface, ok := details["cluster_id"]
+	clusterIDInterface, ok := details["cluster_id"]
 	if !ok {
 		return "", AlertBodyExternalParseError{FailedProperty: ".details.cluster_id"}
 	}
 
-	notes, ok := notesInterface.(string)
+	clusterID, ok := clusterIDInterface.(string)
 	if !ok {
 		err := AlertBodyExternalCastError{
 			FailedProperty:     ".details.cluster_id",
@@ -559,75 +532,22 @@ func extractExternalIDFromStandardAlertBody(data map[string]interface{}) (string
 		return "", err
 	}
 
-	return notes, nil
+	return clusterID, nil
 }
 
-// extractNotesFromBody will extract from map[string]interface{} the '.details.notes' while doing type checks
-// this is better than a third party as it is better maintained and required less dependencies
-func extractNotesFromBody(body map[string]interface{}) (string, error) {
-	var ok bool
-	_, ok = body["details"]
-	if !ok {
-		return "", AlertBodyExternalParseError{FailedProperty: ".details"}
-	}
-
-	details, ok := body["details"].(map[string]interface{})
-	if !ok {
-		err := AlertBodyExternalCastError{
-			FailedProperty:     ".details",
-			ExpectedType:       "map[string]interface{}",
-			ActualType:         reflect.TypeOf(body["details"]).String(),
-			ActualBodyResource: fmt.Sprintf("%v", body["details"]),
-		}
-		return "", err
-	}
-
-	notesInterface, ok := details["notes"]
-	if !ok {
-		return "", AlertBodyExternalParseError{FailedProperty: ".details.notes"}
-	}
-
-	notes, ok := notesInterface.(string)
-	if !ok {
-		err := AlertBodyExternalCastError{
-			FailedProperty:     ".details.notes",
-			ExpectedType:       "string",
-			ActualType:         reflect.TypeOf(details["notes"]).String(),
-			ActualBodyResource: fmt.Sprintf("%v", details["notes"]),
-		}
-		return "", err
-	}
-
-	return notes, nil
-}
-
-// internalCHGMAlertBody is a struct for manipulating CHGM from the note until the ClusterID
-type internalCHGMAlertBody struct {
-	// ClusterID in the ExternalId that the notes holds
-	ClusterID string `yaml:"cluster_id"`
-}
-
-// toLocalAlert will convert an sdk.IncidentAlert to a local Alert resource
-func (c *SdkClient) toLocalAlert(sdkAlert sdk.IncidentAlert) (Alert, error) {
-	var localErr error
-
-	logging.Debugf("Attempting to extract external ID from CHGM alert body: %s", sdkAlert.Body)
-	externalID, err := extractExternalIDFromCHGMAlertBody(sdkAlert.Body)
+// extractAlertDetails will extract required details from a sdk.IncidentAlert
+func extractAlertDetails(sdkAlert sdk.IncidentAlert) (AlertDetails, error) {
+	logging.Debugf("Extracting clusterID from alert body: %s", sdkAlert.Body)
+	clusterID, err := extractClusterIDFromAlertBody(sdkAlert.Body)
 	if err != nil {
-		localErr = err
-
-		logging.Debugf("Attempting to extract external ID from standard alert body: %s", sdkAlert.Body)
-		externalID, err = extractExternalIDFromStandardAlertBody(sdkAlert.Body)
-		if err != nil {
-			return Alert{}, fmt.Errorf("failed to extractExternalIDFromCHGMAlertBody: %s - failed to extractExternalIDFromStandardAlertBody: %s", localErr.Error(), err.Error())
-		}
+		return AlertDetails{}, fmt.Errorf("failed to extractClusterIDFromAlertBody: %w", err)
 	}
 
-	alert := Alert{
-		ID:         sdkAlert.APIObject.ID,
-		ExternalID: externalID,
+	alertDetails := AlertDetails{
+		ID:        sdkAlert.APIObject.ID,
+		ClusterID: clusterID,
 	}
-	return alert, nil
+	return alertDetails, nil
 }
 
 // commonErrorHandling will take a sdk.APIError and check it on common known errors.
@@ -673,7 +593,7 @@ func (c *SdkClient) addNoteAndEscalate(notes, escalationPolicy string) error {
 	if notes != "" {
 		err := c.AddNote(notes)
 		if err != nil {
-			return fmt.Errorf("failed to attach notes to CHGM incident: %w", err)
+			return fmt.Errorf("failed to attach notes to incident: %w", err)
 		}
 	}
 	return c.MoveToEscalationPolicy(escalationPolicy)
@@ -739,22 +659,29 @@ func (c *SdkClient) ResolveAlertsForCluster(clusterID string) error {
 		}
 
 		// Get all alerts contained in the incident
-		incidentAlerts, err := c.GetAlerts(incident.ID)
+
+		alerts, err := c.GetAlertsForIncident(incident.ID)
 		if err != nil {
-			if strings.Contains(err.Error(), "failed to extractExternalIDFromStandardAlertBody") {
+			return err
+		}
+
+		alertDetails, err := c.GetAlertListDetails(alerts)
+		if err != nil {
+			if strings.Contains(err.Error(), "failed to extractClusterIDFromAlertBody") {
 				logging.Debugf("Alert '%s' could not be parsed, alert is possibly in an old format not implemented in CAD. Skipping.", incident.ID)
 				continue
 			}
 
-			return fmt.Errorf("Could not resolve alerts for cluster, failed to get incident alerts: %w", err)
+			return fmt.Errorf("Could not resolve alerts for cluster, failed to get details of incident alerts: %w", err)
 		}
-		logging.Debugf("Incident '%s' has %d alerts attached to it.", incident.ID, len(incidentAlerts))
+
+		logging.Debugf("Incident '%s' has %d alerts attached to it.", incident.ID, len(alertDetails))
 
 		// Resolve all incidents for the same clusterID as the SilenceAlert
-		for _, alert := range incidentAlerts {
-			logging.Debugf("Alert '%s' has custom details clusterID '%s'", alert.ID, alert.ExternalID)
-			if alert.ExternalID != clusterID {
-				logging.Debugf("Skipping resolve of incident '%s', clusterID for alert '%s' contained in the incident did not match: %s and %s.", incident.ID, alert.ID, alert.ExternalID, clusterID)
+		for _, alertDetails := range alertDetails {
+			logging.Debugf("Alert '%s' has custom details clusterID '%s'", alertDetails.ID, alertDetails.ClusterID)
+			if alertDetails.ClusterID != clusterID {
+				logging.Debugf("Skipping resolve of incident '%s', clusterID for alert '%s' contained in the incident did not match: %s and %s.", incident.ID, alertDetails.ID, alertDetails.ClusterID, clusterID)
 				continue
 			}
 			logging.Infof("Resolving incident %s.", incident.ID)

@@ -289,7 +289,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprint(w, `{}`)
 				})
 				// Act
-				_, err := p.GetAlerts(incidentID)
+				_, err := p.GetAlertsForIncident(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
@@ -306,7 +306,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
-				_, err := p.GetAlerts(incidentID)
+				_, err := p.GetAlertsForIncident(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
@@ -324,7 +324,7 @@ var _ = Describe("Pagerduty", func() {
 					fmt.Fprint(w, `{}`)
 				})
 				// Act
-				_, err := p.GetAlerts(incidentID)
+				_, err := p.GetAlertsForIncident(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
@@ -332,20 +332,23 @@ var _ = Describe("Pagerduty", func() {
 			})
 		})
 
-		When("The incident alerts (CHGM format) were successfully pulled", func() {
+		When("The incident alerts (standard format with custom_details.cluster_id) were successfully pulled", func() {
 			It("Doesn't trigger an error and extracts the correct data out", func() {
 				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					// CHGM format of
-					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"notes":"cluster_id: 123456"}}}]}`)
+					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"cluster_id": "123456"}}}]}`)
 				})
 				// Act
-				res, err := p.GetAlerts(incidentID)
+				res, err1 := p.GetAlertsForIncident(incidentID)
+				alertsDetails, err2 := p.GetAlertListDetails(res)
+
 				// Assert
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(res).Should(HaveLen(1))
-				Expect(res[0].ID).Should(Equal("123456"))
-				Expect(res[0].ExternalID).Should(Equal("123456"))
+				Expect(err1).ShouldNot(HaveOccurred())
+				Expect(err2).ShouldNot(HaveOccurred())
+				Expect(alertsDetails).Should(HaveLen(1))
+				Expect(alertsDetails[0].ID).Should(Equal("123456"))
+				Expect(alertsDetails[0].ClusterID).Should(Equal("123456"))
 			})
 		})
 	})
@@ -361,7 +364,7 @@ var _ = Describe("Pagerduty", func() {
 			dmsIntegrationID = "integration-id-12345"
 			newAlert = pagerduty.NewAlert{
 				Description: "empty-description",
-				Details: pagerduty.NewAlertDetails{
+				Details: pagerduty.NewAlertCustomDetails{
 					ClusterID:  "testcluster",
 					Error:      "",
 					Resolution: "",
@@ -455,9 +458,9 @@ var _ = Describe("Pagerduty", func() {
 		})
 	})
 	Describe("Receiver", func() {
-		Describe("RetrieveExternalClusterID", func() {
+		Describe("RetrieveClusterID", func() {
 			When("the payload path points to a sanitized payload and the api does not have the alert + incident", func() {
-				It("should succeed and pull the externalid", func() {
+				It("should succeed and pull the clusterid", func() {
 					// Arrange
 					p, _ := pagerduty.NewWithToken(
 						escalationPolicyID,
@@ -468,20 +471,20 @@ var _ = Describe("Pagerduty", func() {
 						sdk.WithV2EventsAPIEndpoint(server.URL),
 					)
 					// Act
-					_, err := p.RetrieveExternalClusterID()
+					_, err := p.RetrieveClusterID()
 					// Assert
 					Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
 				})
 			})
 			When("the payload is valid and the api does have the alert + incident", func() {
-				It("should succeed and pull the externalid", func() {
+				It("should succeed and pull the clusterID", func() {
 					// Arrange
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
-						// CHGM format of
-						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"notes":"cluster_id: 654321"}}}]}`)
+						// Standard alert format of
+						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"cluster_id": "654321"}}}]}`)
 					})
 					// Act
-					res, err := p.RetrieveExternalClusterID()
+					res, err := p.RetrieveClusterID()
 					// Assert
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(res).Should(Equal("654321"))
@@ -490,14 +493,14 @@ var _ = Describe("Pagerduty", func() {
 			When("the alert body does not have a 'details' field", func() {
 				It("should raise an 'AlertBodyDoesNotHaveDetailsFieldErr' error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
-						// CHGM format of
+						// Standard alert format of
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"describe":{"chicken": 1.75},"steak":true}}]}`)
 					})
 					// Act
-					_, err := p.RetrieveExternalClusterID()
+					_, err := p.RetrieveClusterID()
 					// Assert
 					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).Should(Equal("could not retrieve alerts for incident '1234': could not convert alert toLocalAlert: failed to extractExternalIDFromCHGMAlertBody: cannot marshal externalCHGMAlertBody: cannot find '.details' in body - failed to extractExternalIDFromStandardAlertBody: cannot find '.details' in body"))
+					Expect(err.Error()).Should(Equal("could not extract alert details from alert '1234': failed to extractClusterIDFromAlertBody: cannot find '.details' in body"))
 				})
 			})
 			When("the '.details' field is of the wrong type", func() {
@@ -506,11 +509,9 @@ var _ = Describe("Pagerduty", func() {
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
 					})
 
-					_, err := p.RetrieveExternalClusterID()
-
+					_, err := p.RetrieveClusterID()
 					Expect(err).Should(HaveOccurred())
-					fmt.Println(err.Error())
-					Expect(err.Error()).Should(Equal("could not retrieve alerts for incident '1234': could not convert alert toLocalAlert: failed to extractExternalIDFromCHGMAlertBody: cannot marshal externalCHGMAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details'  - failed to extractExternalIDFromStandardAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details' "))
+					Expect(err.Error()).Should(Equal("could not extract alert details from alert '1234': failed to extractClusterIDFromAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details' "))
 				})
 			})
 		})

@@ -76,9 +76,9 @@ func run(_ *cobra.Command, _ []string) error {
 	// clusterID can end up being either be the internal or external ID.
 	// We don't really care, as we only use this to initialize the cluster object,
 	// which will contain both IDs.
-	clusterID, err := parseClusterIDFromAlert(pdClient)
+	clusterID, err := pdClient.RetrieveClusterID()
 	if err != nil {
-		return fmt.Errorf("parseClusterIdFromAlert failed on: %w", err)
+		return err
 	}
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
@@ -316,26 +316,4 @@ func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []strin
 
 	logging.Infof("Unsupported cloud provider: %s", cloudProvider)
 	return false, nil
-}
-
-// Returns either the internal or external ID (differs per service)
-// - app-sre-alertmanager and its stage version contains an internal ID in the title in the format uhc-<env>-<internal-id>
-// - everything else should adhere to being a separate field in the alert note.
-func parseClusterIDFromAlert(pdClient *pagerduty.SdkClient) (string, error) {
-	var clusterID string
-	var err error
-
-	switch pdClient.GetServiceName() {
-	case "app-sre-alertmanager", "app-sre-alertmanager-stage":
-		clusterID, err = cpd.GetCPDAlertInternalID(pdClient.GetTitle())
-		if err != nil {
-			return "", fmt.Errorf("Failed to get CPD alert internal ID: %w", err)
-		}
-	default:
-		clusterID, err = pdClient.RetrieveExternalClusterID()
-		if err != nil {
-			return "", fmt.Errorf("RetrieveExternalClusterID failed on: %w", err)
-		}
-	}
-	return clusterID, nil
 }
