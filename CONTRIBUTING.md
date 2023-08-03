@@ -45,6 +45,7 @@ The dependencies so far are:
 - Pagerduty
 - OCM
 - Tekton
+- osd-network-verifier
   
 To test Tekton and the deployment configuration, put CAD on OpenShift behind a Tekton event-listener and use curl to trigger pipeline runs by using example payloads.
 
@@ -62,8 +63,3 @@ make check-duplicate-error-messages
 ```
 
 Verify that there are no two entries with the same string.
-This also forces us to use `fmt.Errorf` and not a `errors.New`
-
-## Other
-
-additional steps will be added as required
