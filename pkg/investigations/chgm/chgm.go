@@ -590,7 +590,7 @@ func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNod
 func buildAlertForFailedPostCHGM(clusterID string, investigationErr string) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", clusterID),
-		Details: pagerduty.NewAlertDetails{
+		Details: pagerduty.NewAlertCustomDetails{
 			ClusterID:  clusterID,
 			Error:      investigationErr,
 			Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
@@ -603,7 +603,7 @@ func buildAlertForFailedPostCHGM(clusterID string, investigationErr string) page
 func buildAlertForInvestigationFailure(clusterID string, investigationErr error) pagerduty.NewAlert {
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", clusterID),
-		Details: pagerduty.NewAlertDetails{
+		Details: pagerduty.NewAlertCustomDetails{
 			ClusterID:  clusterID,
 			Error:      investigationErr.Error(),
 			Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",

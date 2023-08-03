@@ -2,9 +2,7 @@
 package cpd
 
 import (
-	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -12,22 +10,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 )
-
-// GetCPDAlertInternalID gets the internal ID from a CPD pagerduty alert's title
-// We need this function as CPD's alert formatting is an edge case to our other alerts.
-func GetCPDAlertInternalID(alertTitle string) (string, error) {
-	re := regexp.MustCompile(`uhc-[^\s-]+-([^\s-]+)`)
-	fmt.Println(alertTitle)
-	match := re.FindStringSubmatch(alertTitle)
-
-	// It should have one match and one capturing group:
-	// [uhc-production-1234k6tnqp7306a6sefn4m41sdp7qsh6 1234k6tnqp7306a6sefn4m41sdp7qsh6]
-	if len(match) != 2 {
-		return "", errors.New("getCPDAlertInternalID wasn't able to find the internal ID in the alert title")
-	}
-
-	return match[1], nil // [1] is the capture group.
-}
 
 // InvestigateTriggered runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:

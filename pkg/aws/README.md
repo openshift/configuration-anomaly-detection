@@ -13,11 +13,11 @@ See [investigation.go](../../cadctl/cmd/investigate/investigate.go) for an examp
 	pd incident:list --teams "$TEAM" | grep -i missing
 	```
 
-2. Extract the external ID.
+2. Extract the clusterID.
 
 	```shell
 	I= #Incident ID
-	pd rest:get -e=/incidents/$I/alerts | jq -r '.alerts[].body.details.notes' | yq .cluster_id
+	pd rest:get -e=/incidents/$I/alerts | jq -r '.alerts[].body.details.cluster_id'
 	```
 
 3. Login to the owner cluster.

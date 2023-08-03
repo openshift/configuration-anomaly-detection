@@ -52,7 +52,7 @@ func BuildAlertForLimitedSupportRemovalFailure(lsErr error, internalClusterID st
 	// The alert description acts as a title for the resulting incident
 	return pagerduty.NewAlert{
 		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", internalClusterID),
-		Details: pagerduty.NewAlertDetails{
+		Details: pagerduty.NewAlertCustomDetails{
 			ClusterID:  internalClusterID,
 			Error:      lsErr.Error(),
 			Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
