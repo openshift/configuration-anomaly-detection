@@ -485,7 +485,7 @@ func (c *SdkClient) GetAlertsForIncident(incidentID string) (*[]sdk.IncidentAler
 }
 
 // GetAlertListDetails will retrieve the required details for a list of alerts and return an array of alertDetails
-// in the same array slot sequence
+// in the same order
 func (c *SdkClient) GetAlertListDetails(alertList *[]sdk.IncidentAlert) ([]AlertDetails, error) {
 	res := []AlertDetails{}
 	for _, alert := range *alertList {
