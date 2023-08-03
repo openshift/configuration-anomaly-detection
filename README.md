@@ -9,15 +9,15 @@
   - [Contributing](#contributing)
 - [Documentation](#documentation)
   - [CAD CLI](#cad-cli)
+  - [Investigations](#investigations)
   - [Integrations](#integrations)
   - [Overview](#overview)
-    - [Alert firing investigation](#alert-firing-investigation)
-  - [CHGM investigation overview](#chgm-investigation-overview)
   - [Templates](#templates)
   - [Dashboards](#dashboards)
   - [Deployment](#deployment)
   - [Boilerplate](#boilerplate)
   - [PipelinePruner](#pipelinepruner)
+  - [Required ENV variables](#required-env-variables)
 
 # Configuration Anomaly Detection
 
@@ -25,7 +25,7 @@
 
 ## About
 
-Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE investigation by detecting cluster anomalies and sending relevant communications to the cluster owner.
+Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE effort by pre-investigating alerts, detecting cluster anomalies and sending relevant communications to the cluster owner.
 
 ## Contributing
 
@@ -35,13 +35,20 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 ## CAD CLI
 
-* [cadctl](./cadctl/README.md) -- Performs workflow for 'cluster has gone missing' (CHGM) alerts.
+* [cadctl](./cadctl/README.md) -- Performs investigation workflow.
+
+## Investigations
+
+Every alert managed by CAD corresponds to an investigation, representing the executed code associated with the alert.
+
+Investigation specific documentation can be found in the according investigation folder,  e.g. for [ClusterHasGoneMissing](./pkg/investigations/chgm/README.md).
 
 ## Integrations
 
-* [AWS](./pkg/aws/README.md) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
-* [PagerDuty](./pkg/pagerduty/README.md) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
-* [OCM](./pkg/ocm/README.md) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
+* [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
+* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
+* [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
+* [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 
 ## Overview
 
@@ -52,26 +59,6 @@ To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
 
 ![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
 ![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
-
-### Alert firing investigation
-
-1. PagerDuty webhook receives CHGM alert from Dead Man's Snitch.
-2. CAD Tekton pipeline is triggered via PagerDuty sending a webhook to Tekton EventListener.
-3. Logs into AWS account of cluster and checks for stopped/terminated instances.
-    - If unable to access AWS account, posts "cluster credentials are missing" limited support reason.
-4. If stopped/terminated instances are found, pulls AWS CloudTrail events for those instances.
-    - If no stopped/terminated instances are found, escalates to SRE for further investigation.
-5. If the user of the event is:
-    - Authorized (SRE or OSD managed), runs the network verifier and escalates the alert to SRE for futher investigation.
-        - **Note:** Authorized users have prefix RH-SRE, osdManagedAdmin, or have the ManagedOpenShift-Installer-Role.
-    - Not authorized (not SRE or OSD managed), posts the appropriate limited support reason and silences the alert.
-6. Adds notes with investigation details to the PagerDuty alert.
-
-
-## CHGM investigation overview
-
-![CHGM investigation overview](./images/cad_chgm_investigation/chgm_investigation_dark.png#gh-dark-mode-only)
-![CHGM investigation overview](./images/cad_chgm_investigation/chgm_investigation_light.png#gh-light-mode-only)
 
 ## Templates
 
@@ -95,3 +82,23 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 ## PipelinePruner
 
 * [PipelinePruner](./openshift/PipelinePruning.md) -- Documentation about PipelineRun pruning.
+
+## Required ENV variables
+
+* `CAD_OCM_CLIENT_ID`: refers to the OCM client ID used by CAD to initialize the OCM client
+* `CAD_OCM_CLIENT_SECRET`: refers to the OCM client secret used by CAD to initialize the OCM client
+* `CAD_OCM_URL`: refers to the used OCM url used by CAD to initialize the OCM client
+* `AWS_ACCESS_KEY_ID`: refers to the access key id of the base AWS account used by CAD
+* `AWS_SECRET_ACCESS_KEY`: refers to the secret access key of the base AWS account used by CAD
+* `CAD_AWS_CSS_JUMPROLE`:  refers to the arn of the RH-SRE-CCS-Access jumprole
+* `CAD_AWS_SUPPORT_JUMPROLE`: refers to the arn of the RH-Technical-Support-Access jumprole
+* `CAD_ESCALATION_POLICY`:  refers to the escalation policy CAD should use to escalate the incident to
+* `CAD_PD_EMAIL`: refers  to the email for a login via mail/pw credentials
+* `CAD_PD_PW`: refers to the password for a login via mail/pw credentials
+* `CAD_PD_TOKEN`: refers to the generated private access token for token-based authentication
+* `CAD_PD_USERNAME`: refers to the username of CAD on PagerDuty
+* `CAD_SILENT_POLICY`: refers to the silent policy CAD should use if the incident shall be silent
+* `PD_SIGNATURE`: refers to the PagerDuty webhook signature (HMAC+SHA256)
+* `X_SECRET_TOKEN`: refers to our custom Secret Token for authenticating against our pipeline
+
+For Red Hat employees, these environment variables can be found in the SRE-P vault.
