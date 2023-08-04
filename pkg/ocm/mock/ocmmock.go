@@ -36,11 +36,12 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // DeleteLimitedSupportReasons mocks base method.
-func (m *MockClient) DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, internalClusterID string) error {
+func (m *MockClient) DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, internalClusterID string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteLimitedSupportReasons", ls, internalClusterID)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteLimitedSupportReasons indicates an expected call of DeleteLimitedSupportReasons.

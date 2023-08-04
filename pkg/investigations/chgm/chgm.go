@@ -163,9 +163,11 @@ func InvestigateResolved(r *investigation.Resources) error {
 		}
 	}
 	logging.Info("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
+	removedReasons := false
 	err = utils.WithRetries(func() error {
-		metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
-		return r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
+		var err error
+		removedReasons, err = r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
+		return err
 	})
 	if err != nil {
 		logging.Error("failed to remove limited support")
@@ -177,6 +179,9 @@ func InvestigateResolved(r *investigation.Resources) error {
 		}
 		logging.Info("Alert has been sent")
 		return nil
+	}
+	if removedReasons {
+		metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary).Inc()
 	}
 	return nil
 }

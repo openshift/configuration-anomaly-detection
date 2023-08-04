@@ -100,5 +100,6 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `CAD_SILENT_POLICY`: refers to the silent policy CAD should use if the incident shall be silent
 * `PD_SIGNATURE`: refers to the PagerDuty webhook signature (HMAC+SHA256)
 * `X_SECRET_TOKEN`: refers to our custom Secret Token for authenticating against our pipeline
+* `CAD_PROMETHEUS_PUSHGATEWAY`: refers to the URL cad will push metrics to
 
 For Red Hat employees, these environment variables can be found in the SRE-P vault.

@@ -80,9 +80,11 @@ func Evaluate(awsError error, r *investigation.Resources) error {
 // if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
 func RemoveLimitedSupport(r *investigation.Resources) error {
-	metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
+	removedReason := false
 	err := utils.WithRetries(func() error {
-		return r.OcmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, r.Cluster.ID())
+		var err error
+		removedReason, err = r.OcmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, r.Cluster.ID())
+		return err
 	})
 	if err != nil {
 		logging.Errorf("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
@@ -96,6 +98,9 @@ func RemoveLimitedSupport(r *investigation.Resources) error {
 		}
 		logging.Info("Primary has been alerted")
 		return nil
+	}
+	if removedReason {
+		metrics.LimitedSupportLifted.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType(), ccamLimitedSupport.Summary).Inc()
 	}
 	return nil
 }

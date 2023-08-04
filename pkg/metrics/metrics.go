@@ -14,7 +14,7 @@ const (
 	namespace      = "cad"
 	investigate    = "investigate"
 	alertTypeLabel = "alert_type"
-	eventType      = "event_type"
+	eventTypeLabel = "event_type"
 )
 
 // Push collects and pushes metrics to the configured pushgateway
@@ -38,26 +38,26 @@ func Push() {
 // Alerts is a metric counting all alerts CAD received
 // Labeled with alert and event type
 var (
-	Alerts     = prometheus.NewCounterVec(alertsOpts, []string{alertTypeLabel, eventType})
+	Alerts     = prometheus.NewCounterVec(alertsOpts, []string{alertTypeLabel, eventTypeLabel})
 	alertsOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "alerts"}
 )
 
 // LimitedSupportSet is a metric counting investigations that ended with posting a limited support reason
 // Labeled with alert and event type
 var (
-	LimitedSupportSet     = prometheus.NewCounterVec(limitedSupportSetOpts, []string{alertTypeLabel, eventType})
+	LimitedSupportSet     = prometheus.NewCounterVec(limitedSupportSetOpts, []string{alertTypeLabel, eventTypeLabel})
 	limitedSupportSetOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "limitedsupport_set"}
 )
 
 // LimitedSupportLifted is a metric counting investigations ending with lifting a limited support reason
 // Labeled with alert and event type
 var (
-	LimitedSupportLifted     = prometheus.NewCounterVec(limitedSupportLiftedOpts, []string{alertTypeLabel, eventType})
+	LimitedSupportLifted     = prometheus.NewCounterVec(limitedSupportLiftedOpts, []string{alertTypeLabel, eventTypeLabel})
 	limitedSupportLiftedOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "limitedsupport_lifted"}
 )
 
 // ServicelogPrepared is a metric counting investigations ending with a prepared servicelog attached to incident notes
 var (
-	ServicelogPrepared     = prometheus.NewCounterVec(servicelogPreparedOpts, []string{alertTypeLabel, eventType})
+	ServicelogPrepared     = prometheus.NewCounterVec(servicelogPreparedOpts, []string{alertTypeLabel, eventTypeLabel})
 	servicelogPreparedOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "servicelog_prepared"}
 )
