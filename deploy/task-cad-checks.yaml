@@ -27,6 +27,9 @@ spec:
           EOF
           # run the cadctl command
           PIPELINE_NAME=$(params.pipeline-name) cadctl investigate --payload-path $file
+      env:
+        - name: CAD_PROMETHEUS_GATEWAY
+          value: aggregation-pushgateway:9091
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
