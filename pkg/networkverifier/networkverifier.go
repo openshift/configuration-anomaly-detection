@@ -38,6 +38,9 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 	}
 
 	subnets, err := getSubnets(infraID, cluster, awsClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Subnets: %w", err)
+	}
 
 	if len(subnets) == 0 {
 		return nil, errors.New("failed to find a subnet for this cluster")
@@ -45,9 +48,6 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 
 	// If multiple private subnets are found the networkverifier will run on the first subnet
 	subnet := subnets[0]
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Subnets: %w", err)
-	}
 
 	awsDefaultTags := map[string]string{
 		"osd-network-verifier": "owned",
@@ -135,7 +135,11 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 func getSubnets(infraID string, cluster *v1.Cluster, awsClient aws.Client) ([]string, error) {
 	// For non-BYOVPC clusters, retrieve private subnets by tag
 	if len(cluster.AWS().SubnetIDs()) == 0 {
-		subnets, _ := awsClient.GetSubnetID(infraID)
+		subnets, err := awsClient.GetSubnetID(infraID)
+		if err != nil {
+			return nil, fmt.Errorf("could not retrieve subnet for non-BYOVPC cluster: %w", err)
+		}
+
 		return subnets, nil
 	}
 	// For PrivateLink clusters, any provided subnet is considered a private subnet
