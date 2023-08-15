@@ -10,13 +10,6 @@ import (
 	"github.com/prometheus/common/expfmt"
 )
 
-const (
-	namespace      = "cad"
-	investigate    = "investigate"
-	alertTypeLabel = "alert_type"
-	eventTypeLabel = "event_type"
-)
-
 // Push collects and pushes metrics to the configured pushgateway
 func Push() {
 	var promPusher *push.Pusher
@@ -35,29 +28,41 @@ func Push() {
 	}
 }
 
-// Alerts is a metric counting all alerts CAD received
-// Labeled with alert and event type
-var (
-	Alerts     = prometheus.NewCounterVec(alertsOpts, []string{alertTypeLabel, eventTypeLabel})
-	alertsOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "alerts"}
+const (
+	namespace            = "cad"
+	subsystemInvestigate = "investigate"
+	alertTypeLabel       = "alert_type"
+	eventTypeLabel       = "event_type"
+	lsSummaryLabel       = "ls_summary"
 )
 
-// LimitedSupportSet is a metric counting investigations that ended with posting a limited support reason
-// Labeled with alert and event type
 var (
-	LimitedSupportSet     = prometheus.NewCounterVec(limitedSupportSetOpts, []string{alertTypeLabel, eventTypeLabel})
-	limitedSupportSetOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "limitedsupport_set"}
-)
-
-// LimitedSupportLifted is a metric counting investigations ending with lifting a limited support reason
-// Labeled with alert and event type
-var (
-	LimitedSupportLifted     = prometheus.NewCounterVec(limitedSupportLiftedOpts, []string{alertTypeLabel, eventTypeLabel})
-	limitedSupportLiftedOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "limitedsupport_lifted"}
-)
-
-// ServicelogPrepared is a metric counting investigations ending with a prepared servicelog attached to incident notes
-var (
-	ServicelogPrepared     = prometheus.NewCounterVec(servicelogPreparedOpts, []string{alertTypeLabel, eventTypeLabel})
-	servicelogPreparedOpts = prometheus.CounterOpts{Namespace: namespace, Subsystem: investigate, Name: "servicelog_prepared"}
+	// Alerts is a metric counting all alerts CAD received
+	Alerts = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "alerts_total",
+			Help: "counts investigated alerts by alert and event type",
+		}, []string{alertTypeLabel, eventTypeLabel})
+	// LimitedSupportSet is a counter for limited support reasons set by cad
+	LimitedSupportSet = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "limitedsupport_set_total",
+			Help: "counts investigations resulting in setting a limited support reason",
+		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
+	// LimitedSupportLifted is a counter for limited support reasons lifted by cad
+	LimitedSupportLifted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "limitedsupport_lifted_total",
+			Help: "counts investigations resulting in lifting a limited support reason",
+		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
+	// ServicelogPrepared is a counter for investigation ending in a prepared servicelog
+	ServicelogPrepared = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "servicelog_prepared_total",
+			Help: "counts investigations resulting in a prepared servicelog attached to the incident notes",
+		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
 )

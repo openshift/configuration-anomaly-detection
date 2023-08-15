@@ -156,8 +156,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// Try to jump into support role
 	// This triggers a cloud-credentials-are-missing investigation in case the jumpRole fails.
-	investigationResources := &investigation.Resources{AlertType: alertType, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: baseAwsClient, OcmClient: ocmClient, PdClient: pdClient}
-	customerAwsClient, err := jumpRoles(investigationResources)
+	customerAwsClient, err := jumpRoles(cluster, baseAwsClient, ocmClient, pdClient, alertTypeString)
 	if err != nil {
 		return err
 	}
@@ -167,7 +166,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	investigationResources.AwsClient = customerAwsClient
+	investigationResources := &investigation.Resources{AlertType: alertType, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
 	run := investigation.NewInvestigation()
 
@@ -200,7 +199,7 @@ func run(_ *cobra.Command, _ []string) error {
 }
 
 // jumpRoles will return an aws client or an error after trying to jump into support role
-func jumpRoles(r *investigation.Resources) (*aws.SdkClient, error) {
+func jumpRoles(cluster *v1.Cluster, baseAwsClient aws.Client, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) (*aws.SdkClient, error) {
 	cssJumprole, ok := os.LookupEnv("CAD_AWS_CSS_JUMPROLE")
 	if !ok {
 		return nil, fmt.Errorf("CAD_AWS_CSS_JUMPROLE is missing")
@@ -211,16 +210,16 @@ func jumpRoles(r *investigation.Resources) (*aws.SdkClient, error) {
 		return nil, fmt.Errorf("CAD_AWS_SUPPORT_JUMPROLE is missing")
 	}
 
-	customerAwsClient, err := assumerole.AssumeSupportRoleChain(r.AwsClient, r.OcmClient, r.Cluster, cssJumprole, supportRole)
+	customerAwsClient, err := assumerole.AssumeSupportRoleChain(baseAwsClient, ocmClient, cluster, cssJumprole, supportRole)
 	if err != nil {
 		logging.Info("Failed assumeRole chain: ", err.Error())
 
 		// If assumeSupportRoleChain fails, we evaluate if the credentials are missing based on the error message,
 		// it is also possible the assumeSupportRoleChain failed for another reason (e.g. API errors)
-		return nil, ccam.Evaluate(err, r)
+		return nil, ccam.Evaluate(cluster, err, ocmClient, pdClient, alertType)
 	}
 	logging.Info("Successfully jumpRoled into the customer account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
-	return customerAwsClient, ccam.RemoveLimitedSupport(r)
+	return customerAwsClient, ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient, alertType)
 }
 
 // isAlertSupported will return the alertname as enum type of the alert if it is supported, otherwise an error

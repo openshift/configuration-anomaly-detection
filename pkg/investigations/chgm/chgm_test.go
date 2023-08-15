@@ -605,7 +605,6 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().UnrelatedLimitedSupportExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(false, nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&masterInstance, &infraInstance}, nil)
-				r.PdClient.(*pdmock.MockClient).EXPECT().GetEventType().Return("triggered")
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().DeleteLimitedSupportReasons(chgmLimitedSupport, "")
 				// Act
 				gotErr := chgm.InvestigateResolved(r)

@@ -90,7 +90,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	// The node shutdown was the customer
 	// Put into limited support, silence and update incident notes
 	return utils.WithRetries(func() error {
-		metrics.LimitedSupportSet.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType()).Inc()
+		metrics.LimitedSupportSet.WithLabelValues(r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary).Inc()
 		return postLimitedSupport(r.Cluster.ID(), res.string(), r.OcmClient, r.PdClient)
 	})
 }
