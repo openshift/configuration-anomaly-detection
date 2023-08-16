@@ -51,7 +51,6 @@ type Client interface {
 	GetServiceID() string
 	EscalateAlertWithNote(notes string) error
 	EscalateAlert() error
-	ResolveAlertsForCluster(clusterID string) error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
@@ -599,36 +598,6 @@ func (c *SdkClient) addNoteAndEscalate(notes, escalationPolicy string) error {
 	return c.MoveToEscalationPolicy(escalationPolicy)
 }
 
-func (c *SdkClient) listActiveServiceIncidents() ([]pagerduty.Incident, error) {
-	logging.Debug("Fetching active incidents for service...")
-	var incidents []pagerduty.Incident
-
-	opts := sdk.ListIncidentsOptions{
-		ServiceIDs: []string{c.GetServiceID()},
-		Statuses:   []string{"triggered", "acknowledged"},
-	}
-
-	items, err := c.sdkClient.ListIncidentsWithContext(context.Background(), opts)
-	if err != nil {
-		return nil, err
-	}
-	incidents = append(incidents, items.Incidents...)
-
-	for items.APIListObject.More {
-		logging.Debugf("Fetching more incidents (pagination) - currently %d fetched...", len(incidents))
-		opts.Offset = uint(len(incidents))
-		items, err = c.sdkClient.ListIncidentsWithContext(context.Background(), opts)
-		if err != nil {
-			return nil, err
-		}
-		incidents = append(incidents, items.Incidents...)
-	}
-
-	logging.Debugf("listActiveServiceIncidents found %d active incidents for service '%s'", len(incidents), c.GetServiceName())
-
-	return incidents, nil
-}
-
 // ResolveIncident resolves an incident
 func (c *SdkClient) ResolveIncident(incident *pagerduty.Incident) error {
 	opts := pagerduty.ManageIncidentsOptions{
@@ -640,61 +609,4 @@ func (c *SdkClient) ResolveIncident(incident *pagerduty.Incident) error {
 	_, err := c.sdkClient.ManageIncidentsWithContext(context.TODO(), CADEmailAddress, []pagerduty.ManageIncidentsOptions{opts})
 
 	return err
-}
-
-// ResolveAlertsForCluster resolve all alerts for client's service
-// with a matching custom details cluster_id field
-func (c *SdkClient) ResolveAlertsForCluster(clusterID string) error {
-	logging.Infof("Resolving incidents related to cluster '%s' on pagerduty service '%s.", clusterID, c.GetServiceName())
-	incidents, err := c.listActiveServiceIncidents()
-	if err != nil {
-		return err
-	}
-
-	for i, incident := range incidents {
-		// We should not resolve the SilenceAlert
-		if incident.ID == c.incidentData.IncidentID {
-			logging.Infof("Skipping incident '%s', as it is the SilenceAlert incident.", incident.ID)
-			continue
-		}
-
-		// Get all alerts contained in the incident
-
-		alerts, err := c.GetAlertsForIncident(incident.ID)
-		if err != nil {
-			return err
-		}
-
-		alertDetails, err := c.GetAlertListDetails(alerts)
-		if err != nil {
-			if strings.Contains(err.Error(), "failed to extractClusterIDFromAlertBody") {
-				logging.Debugf("Alert '%s' could not be parsed, alert is possibly in an old format not implemented in CAD. Skipping.", incident.ID)
-				continue
-			}
-
-			return fmt.Errorf("Could not resolve alerts for cluster, failed to get details of incident alerts: %w", err)
-		}
-
-		logging.Debugf("Incident '%s' has %d alerts attached to it.", incident.ID, len(alertDetails))
-
-		// Resolve all incidents for the same clusterID as the SilenceAlert
-		for _, alertDetails := range alertDetails {
-			logging.Debugf("Alert '%s' has custom details clusterID '%s'", alertDetails.ID, alertDetails.ClusterID)
-			if alertDetails.ClusterID != clusterID {
-				logging.Debugf("Skipping resolve of incident '%s', clusterID for alert '%s' contained in the incident did not match: %s and %s.", incident.ID, alertDetails.ID, alertDetails.ClusterID, clusterID)
-				continue
-			}
-			logging.Infof("Resolving incident %s.", incident.ID)
-			err := c.ResolveIncident(&incidents[i])
-			if err != nil {
-				logging.Warnf("Failed to resolve incident '%s': %s. Skipping...", incident.ID, err.Error())
-			}
-
-			err = c.AddNoteToIncident(incident.ID, "🤖 Alert resolved: inhibited by SilenceAlert 🤖\n")
-			if err != nil {
-				logging.Warnf("Failed to attach note to incident '%s': %s. Skipping...", incident.ID, err.Error())
-			}
-		}
-	}
-	return nil
 }

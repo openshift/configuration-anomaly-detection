@@ -104,20 +104,6 @@ func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
 }
 
-// ResolveAlertsForCluster mocks base method.
-func (m *MockClient) ResolveAlertsForCluster(clusterID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResolveAlertsForCluster", clusterID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ResolveAlertsForCluster indicates an expected call of ResolveAlertsForCluster.
-func (mr *MockClientMockRecorder) ResolveAlertsForCluster(clusterID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveAlertsForCluster", reflect.TypeOf((*MockClient)(nil).ResolveAlertsForCluster), clusterID)
-}
-
 // SilenceAlertWithNote mocks base method.
 func (m *MockClient) SilenceAlertWithNote(notes string) error {
 	m.ctrl.T.Helper()
