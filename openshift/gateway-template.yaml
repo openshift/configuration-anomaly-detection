@@ -8,10 +8,7 @@ parameters:
   value: v0.7.0
 
 - name: REGISTRY_IMG
-  value: zapier/prom-aggregation-gateway
-
-- name: IMAGE_REPOSITORY
-  value: ghcr.io
+  value: quay.io/app-sre/prom-aggregation-gateway
 
 - name: MEMORY_REQUEST
   description: Memory request for the API pods.
@@ -73,7 +70,7 @@ objects:
       spec:
         containers:
           - name: aggregation-pushgateway
-            image: ${IMAGE_REGISTRY}/${IMAGE_REPOSITORY}:${IMAGE_TAG}
+            image: ${REGISTRY_IMG}:${IMAGE_TAG}
             securityContext: 
               allowPrivilegeEscalation: false
               runAsNonRoot: true
@@ -85,7 +82,6 @@ objects:
             env:
               - name: PAG_APILISTEN
                 value: :9091
-                # Do we need 9092 for the health checks?
               - name: PAG_LIFECYCLELISTEN
                 value: :9092
             resources:
