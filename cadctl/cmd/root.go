@@ -19,6 +19,7 @@ package cmd
 import (
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/spf13/cobra"
 )
 
@@ -32,6 +33,7 @@ var rootCmd = &cobra.Command{
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
+	metrics.Push()
 	if err != nil {
 		logging.Fatal(err)
 	}

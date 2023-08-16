@@ -7,6 +7,7 @@ import (
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
@@ -29,7 +30,7 @@ const accessDeniedError string = "failed to assume into support-role: AccessDeni
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support, otherwise an error is returned. If the cluster already has a CCAM
 // LS reason, no additional reasons are added and incident is sent to SilentTest.
-func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client) error {
+func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) error {
 	logging.Info("Investigating possible missing cloud credentials...")
 
 	// We aren't able to jumpRole because of an error that is different than
@@ -57,6 +58,7 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 	switch cluster.State() {
 	case v1.ClusterStateReady:
 		// Cluster is in functional sate but we can't jumprole to it: post limited support
+		metrics.LimitedSupportSet.WithLabelValues(alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary).Inc()
 		err = ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
 		if err != nil {
 			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
@@ -76,9 +78,12 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 // RemoveLimitedSupport will remove any CCAM limited support reason from the cluster,
 // if it fails to do so, it will try to alert primary
 // Run this after cloud credentials are confirmed
-func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pagerduty.Client) error {
+func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) error {
+	removedReason := false
 	err := utils.WithRetries(func() error {
-		return ocmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, cluster.ID())
+		var err error
+		removedReason, err = ocmClient.DeleteLimitedSupportReasons(ccamLimitedSupport, cluster.ID())
+		return err
 	})
 	if err != nil {
 		logging.Errorf("Failed to remove CCAM Limited support reason from cluster. Attempting to alert Primary.")
@@ -92,6 +97,9 @@ func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pa
 		}
 		logging.Info("Primary has been alerted")
 		return nil
+	}
+	if removedReason {
+		metrics.LimitedSupportLifted.WithLabelValues(alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary).Inc()
 	}
 	return nil
 }

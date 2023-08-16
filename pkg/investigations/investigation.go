@@ -39,6 +39,7 @@ func NewInvestigation() *Investigation {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
+	AlertType         AlertType
 	Cluster           *v1.Cluster
 	ClusterDeployment *hivev1.ClusterDeployment
 	AwsClient         aws.Client
@@ -65,20 +66,21 @@ func BuildAlertForLimitedSupportRemovalFailure(lsErr error, internalClusterID st
 type AlertType int64
 
 const (
-	// Undefined represents an alert not defined in CAD
-	Undefined AlertType = iota
+	// Unsupported represents an alert not defined in CAD
+	Unsupported AlertType = iota
 	// ClusterHasGoneMissing represents the alert type ClusterHasGoneMissing
 	ClusterHasGoneMissing
 	// ClusterProvisioningDelay represents the alert type ClusterProvisioningDelay
 	ClusterProvisioningDelay
 )
 
-func (a AlertType) String() (string, error) {
+func (a AlertType) String() string {
 	switch a {
 	case ClusterHasGoneMissing:
-		return "ClusterHasGoneMissing", nil
+		return "ClusterHasGoneMissing"
 	case ClusterProvisioningDelay:
-		return "ClusterProvisioningDelay", nil
+		return "ClusterProvisioningDelay"
+	default:
+		return "Unsupported"
 	}
-	return "", fmt.Errorf("missing implementation: .String() needs to be implemented for alert type '%d'", a)
 }

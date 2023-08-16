@@ -33,7 +33,7 @@ type Client interface {
 	IsInLimitedSupport(internalClusterID string) (bool, error)
 	UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
-	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) error
+	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	GetSupportRoleARN(internalClusterID string) (string, error)
 }
 
@@ -238,10 +238,11 @@ func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, internalCluste
 }
 
 // DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
-func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) error {
+// Returns true if a limited support reason got removed
+func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error) {
 	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
-		return fmt.Errorf("could not list current limited support reasons: %w", err)
+		return false, fmt.Errorf("could not list current limited support reasons: %w", err)
 	}
 
 	// Remove each limited support reason matching the given template
@@ -250,21 +251,21 @@ func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, interna
 		if reasonsMatch(ls, reason) {
 			reasonID, ok := reason.GetID()
 			if !ok {
-				return fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
+				return false, fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
 			}
 			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
 			if err != nil {
-				return fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
+				return false, fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
 			}
 			removedReasons = true
 		}
 	}
 	if removedReasons {
 		logging.Infof("Removed limited support reason `%s`", ls.Summary)
-	} else {
-		logging.Infof("Found no limited support reason to remove for `%s`", ls.Summary)
+		return true, nil
 	}
-	return nil
+	logging.Infof("Found no limited support reason to remove for `%s`", ls.Summary)
+	return false, nil
 }
 
 // IsInLimitedSupport indicates whether any LS reasons exist on a given cluster
