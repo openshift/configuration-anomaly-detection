@@ -281,6 +281,6 @@ func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []strin
 		}
 	}
 
-	logging.Infof("Unsupported cloud provider: %s", cloudProvider)
+	logging.Infof("Unsupported cloud provider: %s", cloudProvider.ID())
 	return false, nil
 }
