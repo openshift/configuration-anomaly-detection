@@ -58,11 +58,7 @@ func Evaluate(cluster *v1.Cluster, awsError error, ocmClient ocm.Client, pdClien
 	switch cluster.State() {
 	case v1.ClusterStateReady:
 		// Cluster is in functional sate but we can't jumprole to it: post limited support
-		metric, err := metrics.LimitedSupportSet.GetMetricWithLabelValues(alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary)
-		if err != nil {
-			logging.Error(err)
-		}
-		metric.Inc()
+		metrics.Inc(metrics.LimitedSupportSet, alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary)
 		err = ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
 		if err != nil {
 			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
@@ -103,11 +99,7 @@ func RemoveLimitedSupport(cluster *v1.Cluster, ocmClient ocm.Client, pdClient pa
 		return nil
 	}
 	if removedReason {
-		metric, err := metrics.LimitedSupportLifted.GetMetricWithLabelValues(alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary)
-		if err != nil {
-			logging.Error(err)
-		}
-		metric.Inc()
+		metrics.Inc(metrics.LimitedSupportLifted, alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary)
 	}
 	return nil
 }

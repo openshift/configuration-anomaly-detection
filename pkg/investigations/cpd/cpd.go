@@ -53,11 +53,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				logging.Error(err)
 			}
 			if !isValid {
-				metric, err := metrics.ServicelogPrepared.GetMetricWithLabelValues(r.AlertType.String(), r.PdClient.GetEventType())
-				if err != nil {
-					logging.Error(err)
-				}
-				metric.Inc()
+				metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
 				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\nRun the following to send the according ServiceLog:\nosdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json\n", subnet, r.Cluster.ID()))
 				err = r.PdClient.AddNote(notesSb.String())
 				if err != nil {
@@ -84,11 +80,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
-		metric, err := metrics.ServicelogPrepared.GetMetricWithLabelValues(r.AlertType.String(), r.PdClient.GetEventType())
-		if err != nil {
-			logging.Error(err)
-		}
-		metric.Inc()
+		metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
 		notesSb.WriteString(fmt.Sprintf("⚠️ Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", failureReason, r.Cluster.ID(), failureReason))
 
 		// In the future, we want to send a service log in this case

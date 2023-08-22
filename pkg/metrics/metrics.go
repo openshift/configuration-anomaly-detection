@@ -28,6 +28,15 @@ func Push() {
 	}
 }
 
+// Inc takes a counterVec and a set of label values and increases by one
+func Inc(counterVec *prometheus.CounterVec, lsv ...string) {
+	metric, err := counterVec.GetMetricWithLabelValues(lsv...)
+	if err != nil {
+		logging.Error(err)
+	}
+	metric.Inc()
+}
+
 const (
 	namespace            = "cad"
 	subsystemInvestigate = "investigate"

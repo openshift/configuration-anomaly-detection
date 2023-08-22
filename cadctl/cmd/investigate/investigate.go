@@ -85,11 +85,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	alertType := isAlertSupported(pdClient.GetTitle())
 	alertTypeString := alertType.String()
-	metric, err := metrics.Alerts.GetMetricWithLabelValues(alertTypeString, pdClient.GetEventType())
-	if err != nil {
-		logging.Error(err)
-	}
-	metric.Inc()
+	metrics.Inc(metrics.Alerts, alertTypeString, pdClient.GetEventType())
 
 	// handle unsupported alerts
 	if alertType == investigation.Unsupported {
