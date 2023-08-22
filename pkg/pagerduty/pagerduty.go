@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"reflect"
 	"strings"
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"gopkg.in/yaml.v2"
 
 	"github.com/PagerDuty/go-pagerduty"
 	sdk "github.com/PagerDuty/go-pagerduty"
@@ -498,38 +498,45 @@ func (c *SdkClient) GetAlertListDetails(alertList *[]sdk.IncidentAlert) ([]Alert
 	return res, nil
 }
 
+type notesData struct {
+	ClusterID string `yaml:"cluster_id"`
+}
+
 func extractClusterIDFromAlertBody(data map[string]interface{}) (string, error) {
-	var ok bool
-	_, ok = data["details"]
-	if !ok {
-		return "", AlertBodyExternalParseError{FailedProperty: ".details"}
+	details, found := data["details"].(map[string]interface{})
+	if !found {
+		return "", errors.New("could not find alert details field")
 	}
 
-	details, ok := data["details"].(map[string]interface{})
-	if !ok {
-		err := AlertBodyExternalCastError{
-			FailedProperty:     ".details",
-			ExpectedType:       "map[string]interface{}",
-			ActualType:         reflect.TypeOf(data["details"]).String(),
-			ActualBodyResource: fmt.Sprintf("%v", data["details"]),
-		}
-		return "", err
+	// PARSE OPTION 1 (new format): cluster_id directly contained in custom details
+	clusterID, found := details["cluster_id"].(string)
+	if !found {
+		logging.Warn("Unable to parse cluster_id as direct field directly from the alert details.")
+	} else {
+		return clusterID, nil
 	}
 
-	clusterIDInterface, ok := details["cluster_id"]
-	if !ok {
-		return "", AlertBodyExternalParseError{FailedProperty: ".details.cluster_id"}
+	// PARSE OPTION 2 (old format: OSD-18006): cluster_id contained in custom_details[notes]
+	// We have quite a few alerts fired from a few months ago that still are in this format.
+	// We will have to wait a bit until we remove the backwards compatibility.
+	// In theory, it's not a big issue that the alerts fail to get handled by CAD, as this
+	// only affects alerts that already exist, and re-pass CAD for the 'resolve' state.
+	// We still don't want to many failing pipelines though.
+	logging.Warn("Trying to parse cluster_id from the notes field...")
+
+	notes, found := details["notes"].(string)
+	if !found {
+		return "", errors.New("could not find notes field")
 	}
 
-	clusterID, ok := clusterIDInterface.(string)
-	if !ok {
-		err := AlertBodyExternalCastError{
-			FailedProperty:     ".details.cluster_id",
-			ExpectedType:       "string",
-			ActualType:         reflect.TypeOf(details["cluster_id"]).String(),
-			ActualBodyResource: fmt.Sprintf("%v", details["cluster_id"]),
-		}
-		return "", err
+	var notesUnmarshalled notesData
+	if err := yaml.Unmarshal([]byte(notes), &notesUnmarshalled); err != nil {
+		return "", fmt.Errorf("error decoding notes YAML: %w", err)
+	}
+
+	clusterID = notesUnmarshalled.ClusterID
+	if clusterID == "" {
+		return "", errors.New("could not find cluster_id field in notes")
 	}
 
 	return clusterID, nil
