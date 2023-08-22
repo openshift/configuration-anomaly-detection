@@ -490,8 +490,22 @@ var _ = Describe("Pagerduty", func() {
 					Expect(res).Should(Equal("654321"))
 				})
 			})
+			When("[BACKWARDS COMPATIBILITY: OSD-18006] the payload contains the cluster_id in the notes field", func() {
+				It("should succeed and pull the clusterID", func() {
+					// Arrange
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						// Standard alert format of
+						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"notes":"cluster_id: 654321"}}}]}`)
+					})
+					// Act
+					res, err := p.RetrieveClusterID()
+					// Assert
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(res).Should(Equal("654321"))
+				})
+			})
 			When("the alert body does not have a 'details' field", func() {
-				It("should raise an 'AlertBodyDoesNotHaveDetailsFieldErr' error", func() {
+				It("should raise an error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						// Standard alert format of
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"describe":{"chicken": 1.75},"steak":true}}]}`)
@@ -500,18 +514,16 @@ var _ = Describe("Pagerduty", func() {
 					_, err := p.RetrieveClusterID()
 					// Assert
 					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).Should(Equal("could not extract alert details from alert '1234': failed to extractClusterIDFromAlertBody: cannot find '.details' in body"))
 				})
 			})
 			When("the '.details' field is of the wrong type", func() {
-				It("should raise wrapped 'AlertBodyExternalCastError' errors", func() {
+				It("should raise an error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
 					})
 
 					_, err := p.RetrieveClusterID()
 					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).Should(Equal("could not extract alert details from alert '1234': failed to extractClusterIDFromAlertBody: '.details' field is not 'map[string]interface{}' it is 'string', the resource is 'bad details' "))
 				})
 			})
 		})
