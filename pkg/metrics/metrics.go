@@ -64,5 +64,5 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_prepared_total",
 			Help: "counts investigations resulting in a prepared servicelog attached to the incident notes",
-		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
+		}, []string{alertTypeLabel, eventTypeLabel})
 )
