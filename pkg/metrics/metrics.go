@@ -28,6 +28,15 @@ func Push() {
 	}
 }
 
+// Inc takes a counterVec and a set of label values and increases by one
+func Inc(counterVec *prometheus.CounterVec, lsv ...string) {
+	metric, err := counterVec.GetMetricWithLabelValues(lsv...)
+	if err != nil {
+		logging.Error(err)
+	}
+	metric.Inc()
+}
+
 const (
 	namespace            = "cad"
 	subsystemInvestigate = "investigate"
@@ -64,5 +73,5 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_prepared_total",
 			Help: "counts investigations resulting in a prepared servicelog attached to the incident notes",
-		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
+		}, []string{alertTypeLabel, eventTypeLabel})
 )
