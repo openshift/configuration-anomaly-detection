@@ -8,11 +8,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsv1alpha1 "github.com/openshift/aws-account-operator/pkg/apis/aws/v1alpha1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -237,9 +239,57 @@ func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, internalCluste
 	return false, nil
 }
 
+// isLimitedSupportReasonFlapping checks if a cluster has been put in limited support too many times
+// Returns true if the cluster has been put in limited support at least 2 times in the last 4 hours
+func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, internalClusterID string) (bool, error) {
+	// Retrieve external ID
+	info, err := c.GetClusterInfo(internalClusterID)
+	if err != nil {
+		return false, fmt.Errorf("could not retrieve cluster info: %w", err)
+	}
+
+	externalID := info.ExternalID()
+
+	// Rerieve service logs
+	resp, err := c.conn.ServiceLogs().V1().Clusters().Cluster(externalID).ClusterLogs().List().Send()
+	if err != nil {
+		return false, fmt.Errorf("could not list service logs history: %w", err)
+	}
+
+	serviceLogs, ok := resp.GetItems()
+	if !ok {
+		return false, nil
+	}
+
+	// Check if the cluster has been put in limited support at least 2 times in the last 4 hours
+	fourHoursAgo := time.Now().Add(-4 * time.Hour)
+
+	var filteredLogs []*servicelogsv1.LogEntry
+	for _, log := range serviceLogs.Slice() {
+		if log.ServiceName() == "LimitedSupport" &&
+			log.Username() == "service-account-ocm-cad-production" &&
+			log.Timestamp().After(fourHoursAgo) &&
+			log.Summary() == ls.Summary {
+			filteredLogs = append(filteredLogs, log)
+		}
+	}
+
+	return len(filteredLogs) >= 2, nil
+}
+
 // DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
 // Returns true if a limited support reason got removed
 func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error) {
+	isFlapping, err := c.isLimitedSupportReasonFlapping(ls, internalClusterID)
+	if err != nil {
+		return false, err
+	}
+
+	if isFlapping {
+		logging.Infof("Limited support reason is flapping `%s`", ls.Summary)
+		return false, nil
+	}
+
 	reasons, err := c.listLimitedSupportReasons(internalClusterID)
 	if err != nil {
 		return false, fmt.Errorf("could not list current limited support reasons: %w", err)
