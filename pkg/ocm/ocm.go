@@ -240,7 +240,7 @@ func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, internalCluste
 }
 
 // isLimitedSupportReasonFlapping checks if a cluster has been put in limited support too many times
-// Returns true if the cluster has been put in limited support at least 2 times in the last 4 hours
+// Returns true if the cluster has been put in limited support at least 2 times in the last 24 hours
 func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, internalClusterID string) (bool, error) {
 	// Retrieve external ID
 	info, err := c.GetClusterInfo(internalClusterID)
@@ -261,8 +261,8 @@ func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, inte
 		return false, nil
 	}
 
-	// Check if the cluster has been put in limited support at least 2 times in the last 4 hours
-	fourHoursAgo := time.Now().Add(-4 * time.Hour)
+	// Check if the cluster has been put in limited support at least 2 times in the last 24 hours
+	fourHoursAgo := time.Now().Add(-24 * time.Hour)
 
 	var filteredLogs []*servicelogsv1.LogEntry
 	for _, log := range serviceLogs.Slice() {
