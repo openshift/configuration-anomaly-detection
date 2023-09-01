@@ -266,8 +266,8 @@ func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, inte
 
 	var filteredLogs []*servicelogsv1.LogEntry
 	for _, log := range serviceLogs.Slice() {
-		if log.ServiceName() == "LimitedSupport" &&
-			log.Username() == "service-account-ocm-cad-production" &&
+		if (log.Username() == "service-account-ocm-cad-production" || log.Username() == "service-account-ocm-cad-staging") &&
+			log.ServiceName() == "LimitedSupport" &&
 			log.Timestamp().After(fourHoursAgo) &&
 			log.Summary() == ls.Summary {
 			filteredLogs = append(filteredLogs, log)
@@ -277,7 +277,8 @@ func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, inte
 	return len(filteredLogs) >= 2, nil
 }
 
-// DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary
+// DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary,
+// skips if it has been removed at least 2 times in the last 24 hours
 // Returns true if a limited support reason got removed
 func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error) {
 	isFlapping, err := c.isLimitedSupportReasonFlapping(ls, internalClusterID)
