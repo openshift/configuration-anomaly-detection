@@ -11,7 +11,7 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.356
 	github.com/openshift/aws-account-operator/pkg/apis v0.0.0-20220908090753-666f6cd72cfc
 	github.com/openshift/hive/apis v0.0.0-20230714230139-212207882cc9
-	github.com/openshift/osd-network-verifier v0.4.0
+	github.com/openshift/osd-network-verifier v0.4.2
 	github.com/spf13/cobra v1.7.0
 	go.uber.org/zap v1.24.0
 	gopkg.in/yaml.v2 v2.4.0
