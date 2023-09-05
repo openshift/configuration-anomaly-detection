@@ -73,14 +73,6 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
 
-	// clusterID can end up being either be the internal or external ID.
-	// We don't really care, as we only use this to initialize the cluster object,
-	// which will contain both IDs.
-	clusterID, err := pdClient.RetrieveClusterID()
-	if err != nil {
-		return err
-	}
-
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
 	alertType := isAlertSupported(pdClient.GetTitle())
@@ -94,6 +86,14 @@ func run(_ *cobra.Command, _ []string) error {
 			return fmt.Errorf("Could not escalate unsupported alert: %w", err)
 		}
 		return nil
+	}
+
+	// clusterID can end up being either be the internal or external ID.
+	// We don't really care, as we only use this to initialize the cluster object,
+	// which will contain both IDs.
+	clusterID, err := pdClient.RetrieveClusterID()
+	if err != nil {
+		return err
 	}
 
 	ocmClient, err := GetOCMClient()
