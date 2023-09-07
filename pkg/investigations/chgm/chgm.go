@@ -519,34 +519,6 @@ func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNod
 		return nil, fmt.Errorf("failed to retrieve infra node data")
 	}
 
-	minWorkerCount, maxWorkerCount := 0, 0
-	computeCount, computeCountOk := nodes.GetCompute()
-	if computeCountOk {
-		minWorkerCount += computeCount
-		maxWorkerCount += computeCount
-	}
-	autoscaleCompute, autoscaleComputeOk := nodes.GetAutoscaleCompute()
-	if autoscaleComputeOk {
-		minReplicasCount, ok := autoscaleCompute.GetMinReplicas()
-		if !ok {
-			logging.Errorf("autoscale min replicas data is missing, dumping cluster object: %v#", cluster)
-			return nil, fmt.Errorf("failed to retrieve min replicas from autoscale compute data")
-		}
-
-		maxReplicasCount, ok := autoscaleCompute.GetMaxReplicas()
-		if !ok {
-			logging.Errorf("autoscale max replicas data is missing, dumping cluster object: %v#", cluster)
-			return nil, fmt.Errorf("failed to retrieve max replicas from autoscale compute data")
-		}
-
-		minWorkerCount += minReplicasCount
-		maxWorkerCount += maxReplicasCount
-	}
-	if !computeCountOk && !autoscaleComputeOk {
-		logging.Errorf("compute and autoscale compute data are missing, dumping cluster object: %v#", cluster)
-		return nil, fmt.Errorf("failed to retrieve cluster compute and autoscale compute data")
-	}
-
 	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
 	machinePools, err := ocmCli.GetClusterMachinePools(cluster.ID())
 	if err != nil {
@@ -587,8 +559,8 @@ func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNod
 	nodeCount := &expectedNodesCount{
 		Master:    masterCount,
 		Infra:     infraCount,
-		MinWorker: minWorkerCount + poolMinWorkersCount,
-		MaxWorker: maxWorkerCount + poolMaxWorkersCount,
+		MinWorker: poolMinWorkersCount,
+		MaxWorker: poolMaxWorkersCount,
 	}
 	return nodeCount, nil
 }
