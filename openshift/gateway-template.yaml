@@ -54,7 +54,7 @@ objects:
     selector:
       matchLabels:
         app: aggregation-pushgateway
-    replicas: 1
+    replicas: 2
     strategy:
     rollingParams:
       intervalSeconds: 1
