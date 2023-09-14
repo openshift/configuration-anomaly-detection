@@ -28,6 +28,15 @@ type LimitedSupportReason struct {
 	Summary string
 }
 
+// ServiceLog is the internal representation of a service log
+type ServiceLog struct {
+	Severity     string
+	ServiceName  string
+	Summary      string
+	Description  string
+	InternalOnly bool
+}
+
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error)
@@ -37,6 +46,7 @@ type Client interface {
 	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	GetSupportRoleARN(internalClusterID string) (string, error)
+	PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -201,7 +211,7 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupport
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
 	if err != nil {
-		return fmt.Errorf("could not create post request: %w", err)
+		return fmt.Errorf("could not create post request (LS): %w", err)
 	}
 
 	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().Add()
@@ -210,6 +220,33 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupport
 	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'uninstalling' state") {
 		return fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, resp)
 	}
+
+	return nil
+}
+
+// PostServiceLog allows to send a generic servicelog to a cluster.
+func (c *SdkClient) PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error {
+	builder := &servicelogsv1.LogEntryBuilder{}
+	builder.Severity(servicelogsv1.Severity(sl.Severity))
+	builder.ServiceName(sl.ServiceName)
+	builder.Summary(sl.Summary)
+	builder.Description(sl.Description)
+	builder.InternalOnly(sl.InternalOnly)
+	builder.SubscriptionID(cluster.Subscription().ID())
+	builder.ClusterID(cluster.ID())
+	le, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("could not create post request (SL): %w", err)
+	}
+
+	request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
+	request = request.Body(le)
+
+	if _, err = request.Send(); err != nil {
+		return fmt.Errorf("could not post service log %s: %w", sl.Summary, err)
+	}
+
+	logging.Infof("Successfully sent servicelog: %s", sl.Summary)
 
 	return nil
 }

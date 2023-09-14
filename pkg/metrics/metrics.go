@@ -19,6 +19,7 @@ func Push() {
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(LimitedSupportLifted)
 		promPusher.Collector(ServicelogPrepared)
+		promPusher.Collector(ServicelogSent)
 		err := promPusher.Add()
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
@@ -73,5 +74,12 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_prepared_total",
 			Help: "counts investigations resulting in a prepared servicelog attached to the incident notes",
+		}, []string{alertTypeLabel, eventTypeLabel})
+	// ServicelogSent is a counter for investigation ending in a sent servicelog
+	ServicelogSent = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "servicelog_sent_total",
+			Help: "counts investigations resulting in a sent servicelog",
 		}, []string{alertTypeLabel, eventTypeLabel})
 )

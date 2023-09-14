@@ -10,7 +10,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
+
+// https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
+var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Error", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
 
 // InvestigateTriggered runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
@@ -35,6 +39,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		if err != nil {
 			logging.Error("could not add clusters ready state to incident notes")
 		}
+		return r.PdClient.EscalateAlert()
 	}
 	notesSb.WriteString("✅ Cluster installation did not yet finish\n")
 
@@ -53,13 +58,17 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				logging.Error(err)
 			}
 			if !isValid {
-				metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
-				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\nRun the following to send the according ServiceLog:\nosdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json\n", subnet, r.Cluster.ID()))
-				err = r.PdClient.AddNote(notesSb.String())
-				if err != nil {
+				if err := r.OcmClient.PostServiceLog(r.Cluster, byovpcRoutingSL); err != nil {
+					return err
+				}
+				metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
+
+				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\n🤖 Sent SL: '%s' 🤖", subnet, byovpcRoutingSL.Summary))
+				if err := r.PdClient.AddNote(notesSb.String()); err != nil {
 					logging.Error(err)
 				}
-				return r.PdClient.EscalateAlert()
+
+				return r.PdClient.SilenceAlert()
 			}
 		}
 	}

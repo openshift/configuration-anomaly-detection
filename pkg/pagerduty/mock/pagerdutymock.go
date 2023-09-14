@@ -118,6 +118,20 @@ func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
 }
 
+// SilenceAlert mocks base method.
+func (m *MockClient) SilenceAlert() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SilenceAlert")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SilenceAlert indicates an expected call of SilenceAlert.
+func (mr *MockClientMockRecorder) SilenceAlert() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceAlert", reflect.TypeOf((*MockClient)(nil).SilenceAlert))
+}
+
 // SilenceAlertWithNote mocks base method.
 func (m *MockClient) SilenceAlertWithNote(notes string) error {
 	m.ctrl.T.Helper()
