@@ -45,6 +45,7 @@ const (
 
 // Client is the interface exposing pagerduty functions
 type Client interface {
+	SilenceAlert() error
 	SilenceAlertWithNote(notes string) error
 	AddNote(notes string) error
 	CreateNewAlert(newAlert NewAlert, serviceID string) error
