@@ -9,6 +9,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
@@ -63,6 +64,21 @@ func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.Mac
 func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockClient)(nil).GetClusterMachinePools), internalClusterID)
+}
+
+// GetServiceLog mocks base method.
+func (m *MockClient) GetServiceLog(cluster *v1.Cluster, filter string) (*v10.ClusterLogsUUIDListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServiceLog", cluster, filter)
+	ret0, _ := ret[0].(*v10.ClusterLogsUUIDListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetServiceLog indicates an expected call of GetServiceLog.
+func (mr *MockClientMockRecorder) GetServiceLog(cluster, filter interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceLog", reflect.TypeOf((*MockClient)(nil).GetServiceLog), cluster, filter)
 }
 
 // GetSupportRoleARN mocks base method.

@@ -46,6 +46,7 @@ type Client interface {
 	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	GetSupportRoleARN(internalClusterID string) (string, error)
+	GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
 	PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error
 }
 
@@ -222,6 +223,15 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupport
 	}
 
 	return nil
+}
+
+// GetServiceLog returns all ServiceLogs for a cluster.
+// When supplying a filter it will use the Search call and pass it to this one directly.
+func (c *SdkClient) GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error) {
+	if filter != "" {
+		return c.conn.ServiceLogs().V1().Clusters().Cluster(cluster.ExternalID()).ClusterLogs().List().Search(filter).Send()
+	}
+	return c.conn.ServiceLogs().V1().Clusters().Cluster(cluster.ExternalID()).ClusterLogs().List().Send()
 }
 
 // PostServiceLog allows to send a generic servicelog to a cluster.
