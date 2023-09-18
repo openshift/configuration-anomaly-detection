@@ -55,6 +55,17 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		return r.PdClient.SilenceAlertWithNote(res.string() + "Unrelated limited support reason present on cluster, silenced.")
 	}
 
+	longHibernation, hibernationErr := investigateHibernation(r.Cluster, r.OcmClient)
+	if hibernationErr != nil {
+		logging.Warn(fmt.Errorf("Could not check hibernation status of cluster: %w", err))
+	}
+	if longHibernation {
+		err = r.PdClient.AddNote(fmt.Sprintf("⚠️ Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", hibernationTooLong.Hours()/24))
+		if err != nil {
+			logging.Error("could not add hibernation comment to incident notes")
+		}
+	}
+
 	if res.UserAuthorized {
 		logging.Info("The customer has not stopped/terminated any nodes.")
 		// Run network verifier
@@ -66,6 +77,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 			if err != nil {
 				logging.Error("could not add failure reason incident notes")
 			}
+
 			return r.PdClient.EscalateAlertWithNote(res.string())
 		}
 
@@ -208,6 +220,22 @@ func investigateRestoredCluster(r *investigation.Resources) (res investigateInst
 	}
 
 	return res, nil
+}
+
+// investigateHibernation checks if the cluster was recently woken up from
+// hibernation. If clusters are hibernated for more than 30 days, the internal
+// certificates of the kubelets can expire and CSRs need to be approved
+// manually:
+// - https://github.com/openshift/hive/blob/master/docs/hibernating-clusters.md
+func investigateHibernation(cluster *v1.Cluster, client ocm.Client) (bool, error) {
+	hibernations, err := getHibernationStatusForCluster(client, cluster)
+	if err != nil {
+		return false, err
+	}
+	if len(hibernations) == 0 {
+		return false, nil
+	}
+	return hibernatedTooLong(hibernations, time.Now()), nil
 }
 
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
