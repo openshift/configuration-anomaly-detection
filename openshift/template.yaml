@@ -187,6 +187,9 @@ objects:
       command:
       - /bin/bash
       - -c
+      env:
+      - name: CAD_PROMETHEUS_GATEWAY
+        value: aggregation-pushgateway:9091
       envFrom:
       - secretRef:
           name: cad-aws-credentials

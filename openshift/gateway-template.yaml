@@ -1,0 +1,114 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: configuration-anomaly-detection-gateway-template
+parameters:
+
+- name: IMAGE_TAG
+  value: v0.7.0
+
+- name: REGISTRY_IMG
+  value: quay.io/app-sre/prom-aggregation-gateway
+
+- name: MEMORY_REQUEST
+  description: Memory request for the API pods.
+  value: "512Mi"
+
+- name: MEMORY_LIMIT
+  description: Memory limit for the API pods.
+  value: "1Gi"
+
+- name: CPU_REQUEST
+  description: CPU request for the API pods.
+  value: "200m"
+
+- name: CPU_LIMIT
+  description: CPU limit for the API pods.
+  value: "1"
+
+objects:
+- kind: Service
+  apiVersion: v1
+  metadata:
+    name: aggregation-pushgateway
+    labels:
+      app: aggregation-pushgateway
+      port: metrics
+    annotations:
+      description: Exposes and load balances the aggregation-pushgateway pods
+  spec:
+    selector:
+      app: aggregation-pushgateway
+    ports:
+    - name: metrics
+      port: 9091
+      targetPort: 9091
+      protocol: TCP
+- kind: Deployment
+  apiVersion: apps/v1
+  metadata:
+    name: aggregation-pushgateway
+    labels:
+      app: aggregation-pushgateway
+  spec:
+    selector:
+      matchLabels:
+        app: aggregation-pushgateway
+    replicas: 2
+    strategy:
+    rollingParams:
+      intervalSeconds: 1
+      maxSurge: 25%
+      maxUnavailable: 25%
+      timeoutSeconds: 600
+      updatePeriodSeconds: 1
+    type: Rolling
+    template:
+      metadata:
+        labels:
+          app: aggregation-pushgateway
+      spec:
+        containers:
+          - name: aggregation-pushgateway
+            image: ${REGISTRY_IMG}:${IMAGE_TAG}
+            securityContext: 
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              capabilities:
+                drop: ["ALL"]
+              seccompProfile:
+                type: RuntimeDefault
+            imagePullPolicy: IfNotPresent
+            env:
+              - name: PAG_APILISTEN
+                value: :9091
+              - name: PAG_LIFECYCLELISTEN
+                value: :9092
+            resources:
+              requests:
+                cpu: ${CPU_REQUEST}
+                memory: ${MEMORY_REQUEST}
+              limits:
+                cpu: ${CPU_LIMIT}
+                memory: ${MEMORY_LIMIT}
+            ports:
+            - name: metrics
+              protocol: TCP
+              containerPort: 9091
+            - name: lifecycle
+              protocol: TCP
+              containerPort: 9092
+            livenessProbe:
+              httpGet:
+                path: /healthy
+                port: 9092
+                scheme: HTTP
+              initialDelaySeconds: 15
+              periodSeconds: 5
+            readinessProbe:
+              httpGet:
+                path: /ready
+                port: 9092
+                scheme: HTTP
+              initialDelaySeconds: 20
+              periodSeconds: 10
