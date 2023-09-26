@@ -8,7 +8,7 @@ parameters:
   value: v0.7.0
 
 - name: REGISTRY_IMG
-  value: quay.io/app-sre/prom-aggregation-gateway
+  value: quay.io/app-sre/aggregation-gateway
 
 - name: MEMORY_REQUEST
   description: Memory request for the API pods.
@@ -68,6 +68,7 @@ objects:
         labels:
           app: aggregation-pushgateway
       spec:
+        serviceAccountName: pushgateway
         containers:
           - name: aggregation-pushgateway
             image: ${REGISTRY_IMG}:${IMAGE_TAG}
