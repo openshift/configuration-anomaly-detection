@@ -387,7 +387,7 @@ func (c *SdkClient) AddNote(noteContent string) error {
 
 // AddNoteToIncident will add a note to an incident
 func (c *SdkClient) AddNoteToIncident(incidentID string, noteContent string) error {
-	logging.Info("Attaching Note...")
+	logging.Infof("Attaching Note: %s", noteContent)
 	sdkNote := sdk.IncidentNote{
 		Content: noteContent,
 	}
