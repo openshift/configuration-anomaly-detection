@@ -32,7 +32,7 @@ objects:
   metadata:
     name: aggregation-pushgateway
     labels:
-      app: aggregation-pushgateway
+      app: configuration-anomaly-detection
       port: metrics
     annotations:
       description: Exposes and load balances the aggregation-pushgateway pods
