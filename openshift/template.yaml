@@ -188,7 +188,7 @@ objects:
       - /bin/bash
       - -c
       env:
-      - name: CAD_PROMETHEUS_GATEWAY
+      - name: CAD_PROMETHEUS_PUSHGATEWAY
         value: aggregation-pushgateway:9091
       envFrom:
       - secretRef:
