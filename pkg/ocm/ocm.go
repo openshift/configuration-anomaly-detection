@@ -3,6 +3,7 @@ package ocm
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -48,6 +49,7 @@ type Client interface {
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
 	PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error
+	AwsClassicJumpRoleCompatible(clusterID string) (bool, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -431,4 +433,22 @@ func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*v1.L
 		return []*v1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
 	}
 	return reasons.Items().Slice(), nil
+}
+
+// AwsClassicJumpRoleCompatible check whether or not the CAD jumprole path is supported by the cluster
+func (c *SdkClient) AwsClassicJumpRoleCompatible(clusterID string) (bool, error) {
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).StsSupportJumpRole().Get().Send()
+	if err != nil {
+		return false, fmt.Errorf("could not query sts support role from ocm: %w", err)
+	}
+
+	roleARN, ok := resp.Body().GetRoleArn()
+	if !ok {
+		return false, errors.New("unable to get sts support role ARN for cluster")
+	}
+
+	// This ARN has a different formatting depending on whether it's accessible using the new backplane flow or not
+	// - Clusters using the new access (SDE-3036, unsupported by CAD): arn:aws:iam::<aws_id>:role/RH-Technical-Support-123456
+	//-  Clusters using the old access (supported by CAD): arn:aws:iam::<aws_id>:role/RH-Technical-Support-Access
+	return strings.Contains(roleARN, "RH-Technical-Support-Access"), nil
 }

@@ -36,6 +36,21 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// AwsClassicJumpRoleCompatible mocks base method.
+func (m *MockClient) AwsClassicJumpRoleCompatible(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AwsClassicJumpRoleCompatible", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AwsClassicJumpRoleCompatible indicates an expected call of AwsClassicJumpRoleCompatible.
+func (mr *MockClientMockRecorder) AwsClassicJumpRoleCompatible(clusterID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AwsClassicJumpRoleCompatible", reflect.TypeOf((*MockClient)(nil).AwsClassicJumpRoleCompatible), clusterID)
+}
+
 // DeleteLimitedSupportReasons mocks base method.
 func (m *MockClient) DeleteLimitedSupportReasons(ls ocm.LimitedSupportReason, internalClusterID string) (bool, error) {
 	m.ctrl.T.Helper()

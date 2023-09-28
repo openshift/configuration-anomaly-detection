@@ -144,6 +144,24 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(internalClusterID)
+	if err != nil {
+		return err
+	}
+
+	if !cadAWSAccessCompatible {
+		logging.Info("Cluster is not compatible with the implemented AWS flow, forwarding/silencing depending on LS status.")
+		ls, err := ocmClient.IsInLimitedSupport(internalClusterID)
+		if err != nil {
+			return err
+		}
+
+		if ls {
+			return pdClient.SilenceAlertWithNote("CAD: Cluster is already in limited support. Silencing alert.")
+		}
+		return pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: missing cloud infrastructure access to clusters using the new backplane flow.")
+	}
+
 	baseAwsClient, err := GetAWSClient()
 	if err != nil {
 		return fmt.Errorf("could not initialize aws client: %w", err)
