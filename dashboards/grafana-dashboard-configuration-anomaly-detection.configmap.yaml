@@ -9,43 +9,6 @@ metadata:
 data:
   Configuration-Anomaly-Detection-SLOs-1654690826229.json: |-
     {
-      "__inputs": [
-        {
-          "name": "DS_APP-SRE-STAGE-01-CLUSTER-PROMETHEUS",
-          "label": "app-sre-stage-01-cluster-prometheus",
-          "description": "",
-          "type": "datasource",
-          "pluginId": "prometheus",
-          "pluginName": "Prometheus"
-        }
-      ],
-      "__elements": [],
-      "__requires": [
-        {
-          "type": "panel",
-          "id": "gauge",
-          "name": "Gauge",
-          "version": ""
-        },
-        {
-          "type": "grafana",
-          "id": "grafana",
-          "name": "Grafana",
-          "version": "8.5.2"
-        },
-        {
-          "type": "datasource",
-          "id": "prometheus",
-          "name": "Prometheus",
-          "version": "1.0.0"
-        },
-        {
-          "type": "panel",
-          "id": "stat",
-          "name": "Stat",
-          "version": ""
-        }
-      ],
       "annotations": {
         "list": [
           {
@@ -71,15 +34,14 @@ data:
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": null,
-      "iteration": 1654685784278,
+      "id": 622044,
       "links": [],
       "liveNow": false,
       "panels": [
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${tekton_ds}"
           },
           "description": "",
           "fieldConfig": {
@@ -142,15 +104,17 @@ data:
             "showThresholdMarkers": true,
             "text": {}
           },
-          "pluginVersion": "8.5.2",
+          "pluginVersion": "9.3.8",
           "targets": [
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${datasource}"
+                "uid": "${tekton_ds}"
               },
-              "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\", status=\"success\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\"}[$__range])) * 100)",
+              "editorMode": "code",
+              "expr": "sum(rate(kube_pod_status_phase{namespace=\"$namespace\", phase=\"Succeeded\"}[$__range]))/sum(rate(kube_pod_status_phase{namespace=\"$namespace\"}[$__range]))*100",
               "hide": false,
+              "range": true,
               "refId": "A"
             }
           ],
@@ -160,42 +124,25 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${cad_ds}"
           },
-          "description": "",
+          "description": "Alerts cad actioned with either limited support, prepared servicelog or sent servicelog",
           "fieldConfig": {
             "defaults": {
               "color": {
                 "mode": "thresholds"
               },
-              "decimals": 2,
-              "mappings": [
-                {
-                  "options": {
-                    "[0-94]": {
-                      "color": "red",
-                      "index": 0
-                    },
-                    "[95-100]": {
-                      "color": "green",
-                      "index": 1
-                    }
-                  },
-                  "type": "value"
-                }
-              ],
-              "max": 100,
-              "min": 0,
+              "mappings": [],
               "thresholds": {
-                "mode": "percentage",
+                "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "green",
                     "value": null
                   },
                   {
-                    "color": "green",
-                    "value": 95
+                    "color": "red",
+                    "value": 80
                   }
                 ]
               },
@@ -209,7 +156,7 @@ data:
             "x": 12,
             "y": 0
           },
-          "id": 4,
+          "id": 8,
           "options": {
             "orientation": "auto",
             "reduceOptions": {
@@ -222,25 +169,28 @@ data:
             "showThresholdLabels": false,
             "showThresholdMarkers": true
           },
-          "pluginVersion": "8.5.2",
+          "pluginVersion": "9.3.8",
           "targets": [
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${datasource}"
+                "uid": "${cad_ds}"
               },
-              "expr": "(sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_bucket{namespace=\"$namespace\",status=\"success\",le=\"60\"}[$__range]))\n    /\n    sum(rate(tekton_pipelines_controller_pipelinerun_duration_seconds_count{namespace=\"$namespace\",status=\"success\"}[$__range])) * 100)",
+              "editorMode": "code",
+              "expr": "((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / sum(increase(cad_investigate_alerts_total[$__range])) * 100",
               "hide": false,
-              "refId": "A"
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "B"
             }
           ],
-          "title": "SLO Latency (Target: 90%)",
+          "title": "Prevented Alerts",
           "type": "gauge"
         },
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${datasource}"
+            "uid": "${cad_ds}"
           },
           "fieldConfig": {
             "defaults": {
@@ -270,6 +220,71 @@ data:
             "x": 0,
             "y": 9
           },
+          "id": 12,
+          "options": {
+            "displayMode": "gradient",
+            "minVizHeight": 10,
+            "minVizWidth": 0,
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without (instance, pod)(increase(cad_investigate_alerts_total[$__range])) ",
+              "legendFormat": "{{alert_type}} - {{event_type}}",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Total Alerts ",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${tekton_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
           "id": 6,
           "options": {
             "colorMode": "value",
@@ -285,16 +300,16 @@ data:
             },
             "textMode": "auto"
           },
-          "pluginVersion": "8.5.2",
+          "pluginVersion": "9.3.8",
           "targets": [
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "${datasource}"
+                "uid": "${tekton_ds}"
               },
               "editorMode": "code",
               "exemplar": true,
-              "expr": "histogram_quantile(0.95, sum by(le) (rate(tekton_pipelines_controller_pipelinerun_duration_seconds_bucket{namespace=\"$namespace\",status=\"success\"}[$__range])))",
+              "expr": "sum(sum_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod) / sum(count_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod)",
               "format": "time_series",
               "instant": false,
               "legendFormat": "Average Pipeline Runtime (in seconds)",
@@ -304,9 +319,113 @@ data:
           ],
           "title": "Average Pipeline Runtime (in seconds)",
           "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "displayName": "${__series.name}",
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 24,
+            "x": 0,
+            "y": 17
+          },
+          "id": 13,
+          "options": {
+            "displayMode": "gradient",
+            "minVizHeight": 10,
+            "minVizWidth": 0,
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_limitedsupport_set_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} - {{event_type}} : {{ls_summary}}",
+              "range": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_limitedsupport_lifted_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} - {{event_type}} : {{ls_summary}}",
+              "range": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_sent_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} - {{event_type}}",
+              "range": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_prepared_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} - {{event_type}}",
+              "range": true,
+              "refId": "C"
+            }
+          ],
+          "title": "Total actions taken",
+          "type": "bargauge"
         }
       ],
-      "schemaVersion": 36,
+      "refresh": false,
+      "schemaVersion": 37,
       "style": "dark",
       "tags": [],
       "templating": {
@@ -314,30 +433,48 @@ data:
           {
             "current": {
               "selected": false,
+              "text": "app-sre-stage-01-prometheus",
+              "value": "app-sre-stage-01-prometheus"
+            },
+            "description": "Datasource ( cad metrics )",
+            "hide": 0,
+            "includeAll": false,
+            "multi": false,
+            "name": "cad_ds",
+            "options": [],
+            "query": "prometheus",
+            "queryValue": "",
+            "refresh": 1,
+            "regex": "(app-sre-prod-01-prometheus)|(app-sre-stage-01-prometheus)",
+            "skipUrlSync": false,
+            "type": "datasource"
+          },
+          {
+            "current": {
+              "selected": true,
               "text": "app-sre-stage-01-cluster-prometheus",
               "value": "app-sre-stage-01-cluster-prometheus"
             },
             "hide": 0,
             "includeAll": false,
             "multi": false,
-            "name": "datasource",
+            "name": "tekton_ds",
             "options": [],
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "/app-sre-(prod-01|stage-01)-cluster-prometheus/",
+            "regex": "(app-sre-prod-01-cluster-prometheus)|(app-sre-stage-01-cluster-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
           {
             "current": {
-              "selected": false,
+              "selected": true,
               "text": "configuration-anomaly-detection-stage",
               "value": "configuration-anomaly-detection-stage"
             },
             "hide": 0,
             "includeAll": false,
-            "label": "Namespace",
             "multi": false,
             "name": "namespace",
             "options": [
@@ -348,24 +485,25 @@ data:
               },
               {
                 "selected": false,
-                "text": "configuration-anomaly-detection-prod",
-                "value": "configuration-anomaly-detection-prod"
+                "text": "configuration-anomaly-detection-production",
+                "value": "configuration-anomaly-detection-production"
               }
             ],
-            "query": "configuration-anomaly-detection-stage,configuration-anomaly-detection-prod",
+            "query": "configuration-anomaly-detection-stage,\nconfiguration-anomaly-detection-production",
+            "queryValue": "",
             "skipUrlSync": false,
             "type": "custom"
           }
         ]
       },
       "time": {
-        "from": "now-12h",
+        "from": "now-30d",
         "to": "now"
       },
       "timepicker": {},
       "timezone": "",
-      "title": "Configuration-Anomaly-Detection-SLOs",
-      "uid": "2k6bSMj7k",
-      "version": 1,
+      "title": "Configuration-Anomaly-Detection-SLOsv2",
+      "uid": "2k6bSMj7t",
+      "version": 11,
       "weekStart": ""
     }
