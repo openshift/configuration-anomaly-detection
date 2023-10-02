@@ -82,6 +82,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		}
 
 		if verifierResult == networkverifier.Failure {
+			metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
 			err = r.PdClient.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, r.Cluster.ID(), failureReason))
 			if err != nil {
 				logging.Error("could not add issues to incident notes")
