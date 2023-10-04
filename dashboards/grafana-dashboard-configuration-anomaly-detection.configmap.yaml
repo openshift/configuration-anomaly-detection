@@ -34,7 +34,6 @@ data:
       "editable": true,
       "fiscalYearStartMonth": 0,
       "graphTooltip": 0,
-      "id": null,
       "links": [],
       "liveNow": false,
       "panels": [
@@ -152,7 +151,7 @@ data:
           },
           "gridPos": {
             "h": 9,
-            "w": 12,
+            "w": 6,
             "x": 12,
             "y": 0
           },
@@ -215,17 +214,17 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 0,
-            "y": 9
+            "h": 9,
+            "w": 6,
+            "x": 18,
+            "y": 0
           },
-          "id": 12,
+          "id": 20,
           "options": {
-            "displayMode": "gradient",
-            "minVizHeight": 10,
-            "minVizWidth": 0,
-            "orientation": "horizontal",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
@@ -233,7 +232,77 @@ data:
               "fields": "",
               "values": false
             },
-            "showUnfilled": true
+            "textMode": "auto"
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(cad_investigate_alerts_total[$__range]))",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Total number of investigated alerts",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              "mappings": []
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 12,
+          "options": {
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true,
+              "values": []
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
           },
           "pluginVersion": "9.3.8",
           "targets": [
@@ -250,7 +319,8 @@ data:
             }
           ],
           "title": "Total Alerts ",
-          "type": "bargauge"
+          "transformations": [],
+          "type": "piechart"
         },
         {
           "datasource": {
@@ -328,38 +398,39 @@ data:
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "thresholds"
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
               },
               "displayName": "${__series.name}",
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
+              "mappings": []
             },
             "overrides": []
           },
           "gridPos": {
-            "h": 13,
-            "w": 24,
+            "h": 11,
+            "w": 12,
             "x": 0,
             "y": 17
           },
           "id": 13,
           "options": {
-            "displayMode": "gradient",
-            "minVizHeight": 10,
-            "minVizWidth": 0,
-            "orientation": "horizontal",
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "pieType": "pie",
             "reduceOptions": {
               "calcs": [
                 "lastNotNull"
@@ -367,7 +438,10 @@ data:
               "fields": "",
               "values": false
             },
-            "showUnfilled": true
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
           },
           "pluginVersion": "9.3.8",
           "targets": [
@@ -379,10 +453,69 @@ data:
               "editorMode": "code",
               "expr": "sum without(instance, pod)(increase(cad_investigate_limitedsupport_set_total[$__range]))",
               "hide": false,
-              "legendFormat": "{{alert_type}} - {{event_type}} : {{ls_summary}}",
+              "legendFormat": "{{alert_type}} : {{ls_summary}}",
               "range": true,
               "refId": "B"
+            }
+          ],
+          "title": "Limited Support - Posted",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              "displayName": "${__series.name}",
+              "mappings": []
             },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 12,
+            "x": 12,
+            "y": 17
+          },
+          "id": 16,
+          "options": {
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -391,22 +524,69 @@ data:
               "editorMode": "code",
               "expr": "sum without(instance, pod)(increase(cad_investigate_limitedsupport_lifted_total[$__range]))",
               "hide": false,
-              "legendFormat": "{{alert_type}} - {{event_type}} : {{ls_summary}}",
+              "legendFormat": "{{alert_type}} : {{ls_summary}}",
               "range": true,
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${cad_ds}"
+              "refId": "B"
+            }
+          ],
+          "title": "Limited Support - Removed",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
               },
-              "editorMode": "code",
-              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_sent_total[$__range]))",
-              "hide": false,
-              "legendFormat": "{{alert_type}} - {{event_type}}",
-              "range": true,
-              "refId": "A"
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              "displayName": "${__series.name}",
+              "mappings": []
             },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 12,
+            "x": 0,
+            "y": 28
+          },
+          "id": 17,
+          "options": {
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
             {
               "datasource": {
                 "type": "prometheus",
@@ -415,13 +595,84 @@ data:
               "editorMode": "code",
               "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_prepared_total[$__range]))",
               "hide": false,
-              "legendFormat": "{{alert_type}} - {{event_type}}",
+              "legendFormat": "{{alert_type}} : {{ls_summary}}",
               "range": true,
-              "refId": "C"
+              "refId": "B"
             }
           ],
-          "title": "Total actions taken",
-          "type": "bargauge"
+          "title": "Prepared servicelogs",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              "displayName": "${__series.name}",
+              "mappings": []
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 10,
+            "w": 12,
+            "x": 12,
+            "y": 28
+          },
+          "id": 18,
+          "options": {
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_sent_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} : {{ls_summary}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Sent servicelogs",
+          "type": "piechart"
         }
       ],
       "refresh": false,
@@ -432,7 +683,7 @@ data:
         "list": [
           {
             "current": {
-              "selected": false,
+              "selected": true,
               "text": "app-sre-stage-01-prometheus",
               "value": "app-sre-stage-01-prometheus"
             },
@@ -497,13 +748,13 @@ data:
         ]
       },
       "time": {
-        "from": "now-30d",
+        "from": "now-7d",
         "to": "now"
       },
       "timepicker": {},
       "timezone": "",
       "title": "Configuration-Anomaly-Detection-SLOs",
       "uid": "2k6bSMj7k",
-      "version": 11,
+      "version": 2,
       "weekStart": ""
     }
