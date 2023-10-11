@@ -111,7 +111,7 @@ data:
                 "uid": "${tekton_ds}"
               },
               "editorMode": "code",
-              "expr": "sum(rate(kube_pod_status_phase{namespace=\"$namespace\", phase=\"Succeeded\"}[$__range]))/sum(rate(kube_pod_status_phase{namespace=\"$namespace\"}[$__range]))*100",
+              "expr": "(sum(rate(kube_pod_status_phase{namespace=\"$namespace\", phase=\"Succeeded\", pod =~\"cad-check-.*\"}[$__range]))\n/\nsum(rate(kube_pod_status_phase{namespace=\"$namespace\", pod =~\"cad-check-.*\"}[$__range])) ) *100",
               "hide": false,
               "range": true,
               "refId": "A"
@@ -176,7 +176,7 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / sum(increase(cad_investigate_alerts_total[$__range])) * 100",
+              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) - sum(increase(cad_investigate_alerts_total{alert_type=\"ClusterHasGoneMissing\", event_type=\"incident.resolved\"}[$__range]))) * 100)",
               "hide": false,
               "legendFormat": "__auto",
               "range": true,
@@ -684,8 +684,8 @@ data:
           {
             "current": {
               "selected": true,
-              "text": "app-sre-stage-01-prometheus",
-              "value": "app-sre-stage-01-prometheus"
+              "text": "app-sre-prod-01-prometheus",
+              "value": "app-sre-prod-01-prometheus"
             },
             "description": "Datasource ( cad metrics )",
             "hide": 0,
@@ -703,8 +703,8 @@ data:
           {
             "current": {
               "selected": true,
-              "text": "app-sre-stage-01-cluster-prometheus",
-              "value": "app-sre-stage-01-cluster-prometheus"
+              "text": "app-sre-prod-01-cluster-prometheus",
+              "value": "app-sre-prod-01-cluster-prometheus"
             },
             "hide": 0,
             "includeAll": false,
@@ -721,8 +721,8 @@ data:
           {
             "current": {
               "selected": true,
-              "text": "configuration-anomaly-detection-stage",
-              "value": "configuration-anomaly-detection-stage"
+              "text": "configuration-anomaly-detection-production",
+              "value": "configuration-anomaly-detection-production"
             },
             "hide": 0,
             "includeAll": false,
@@ -730,12 +730,12 @@ data:
             "name": "namespace",
             "options": [
               {
-                "selected": true,
+                "selected": false,
                 "text": "configuration-anomaly-detection-stage",
                 "value": "configuration-anomaly-detection-stage"
               },
               {
-                "selected": false,
+                "selected": true,
                 "text": "configuration-anomaly-detection-production",
                 "value": "configuration-anomaly-detection-production"
               }
@@ -748,13 +748,13 @@ data:
         ]
       },
       "time": {
-        "from": "now-7d",
+        "from": "now-30d",
         "to": "now"
       },
       "timepicker": {},
       "timezone": "",
       "title": "Configuration-Anomaly-Detection-SLOs",
       "uid": "2k6bSMj7k",
-      "version": 2,
+      "version": 3,
       "weekStart": ""
     }
