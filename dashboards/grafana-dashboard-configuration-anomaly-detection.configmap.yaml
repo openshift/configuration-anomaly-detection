@@ -176,7 +176,7 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / sum(increase(cad_investigate_alerts_total[$__range])) * 100",
+              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) - sum(increase(cad_investigate_alerts_total{alert_type=\"ClusterHasGoneMissing\", event_type=\"incident.resolved\"}[$__range]))) * 100)",
               "hide": false,
               "legendFormat": "__auto",
               "range": true,
