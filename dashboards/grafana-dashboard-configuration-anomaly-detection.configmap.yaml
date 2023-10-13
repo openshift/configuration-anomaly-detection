@@ -254,6 +254,139 @@ data:
         {
           "datasource": {
             "type": "prometheus",
+            "uid": "${tekton_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${tekton_ds}"
+              },
+              "editorMode": "code",
+              "exemplar": true,
+              "expr": "sum(sum_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod) / sum(count_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod)",
+              "format": "time_series",
+              "instant": false,
+              "legendFormat": "Average Pipeline Runtime (in seconds)",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Average Pipeline Runtime (in seconds)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "id": 22,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) - sum(increase(cad_investigate_alerts_total{alert_type=\"ClusterHasGoneMissing\", event_type=\"incident.resolved\"}[$__range])))) * sum(increase(cad_investigate_alerts_total[$__range])) * 15 / 60",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Estimated SRE hours saved ",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
             "uid": "${cad_ds}"
           },
           "fieldConfig": {
@@ -274,9 +407,9 @@ data:
           },
           "gridPos": {
             "h": 8,
-            "w": 12,
+            "w": 24,
             "x": 0,
-            "y": 9
+            "y": 17
           },
           "id": 12,
           "options": {
@@ -325,74 +458,6 @@ data:
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "${tekton_ds}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 9
-          },
-          "id": 6,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "textMode": "auto"
-          },
-          "pluginVersion": "9.3.8",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${tekton_ds}"
-              },
-              "editorMode": "code",
-              "exemplar": true,
-              "expr": "sum(sum_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod) / sum(count_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod)",
-              "format": "time_series",
-              "instant": false,
-              "legendFormat": "Average Pipeline Runtime (in seconds)",
-              "range": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Average Pipeline Runtime (in seconds)",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
             "uid": "${cad_ds}"
           },
           "fieldConfig": {
@@ -416,7 +481,7 @@ data:
             "h": 11,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 25
           },
           "id": 13,
           "options": {
@@ -487,7 +552,7 @@ data:
             "h": 11,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 25
           },
           "id": 16,
           "options": {
@@ -558,7 +623,7 @@ data:
             "h": 10,
             "w": 12,
             "x": 0,
-            "y": 28
+            "y": 36
           },
           "id": 17,
           "options": {
@@ -629,7 +694,7 @@ data:
             "h": 10,
             "w": 12,
             "x": 12,
-            "y": 28
+            "y": 36
           },
           "id": 18,
           "options": {
