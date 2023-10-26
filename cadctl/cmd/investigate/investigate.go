@@ -79,7 +79,7 @@ func run(_ *cobra.Command, _ []string) error {
 	alertTypeString := alertType.String()
 	metrics.Inc(metrics.Alerts, alertTypeString, pdClient.GetEventType())
 
-	// handle unsupported alerts
+	// Escalate all unsupported alerts
 	if alertType == investigation.Unsupported {
 		err = pdClient.EscalateAlert()
 		if err != nil {
@@ -112,54 +112,9 @@ func run(_ *cobra.Command, _ []string) error {
 	// initialize logger for the internal-cluster-id context
 	logging.RawLogger = logging.InitLogger(logLevelString, internalClusterID)
 
-	cloudProviderSupported, err := checkCloudProviderSupported(cluster, []string{"aws"})
-	if err != nil {
+	requiresInvestigation, err := clusterRequiresInvestigation(cluster, ocmClient, pdClient)
+	if err != nil || !requiresInvestigation {
 		return err
-	}
-
-	// We currently have no investigations supporting GCP. In the future, this check should be moved on
-	// the investigation level, and we should be GCP or AWSClient based on this.
-	// For now, we can silence alerts for clusters that are already in limited support and not handled by CAD
-	if !cloudProviderSupported {
-		// We forward everything CAD doesn't support investigations for to primary, as long as the clusters
-		// aren't in limited support.
-		logging.Info("Cloud provider is not supported, checking for limited support...")
-		ls, err := ocmClient.IsInLimitedSupport(internalClusterID)
-		if err != nil {
-			err = pdClient.EscalateAlertWithNote(fmt.Sprintf("could not determine if cluster is in limited support: %s", err.Error()))
-			if err != nil {
-				return err
-			}
-		}
-		if ls {
-			logging.Info("cluster is in limited support, silencing")
-			return pdClient.SilenceAlertWithNote("cluster is in limited support, silencing alert.")
-		}
-
-		err = pdClient.EscalateAlertWithNote("CAD Investigation skipped: cloud provider is not supported.")
-		if err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(internalClusterID)
-	if err != nil {
-		return err
-	}
-
-	if !cadAWSAccessCompatible {
-		logging.Info("Cluster is not compatible with the implemented AWS flow, forwarding/silencing depending on LS status.")
-		ls, err := ocmClient.IsInLimitedSupport(internalClusterID)
-		if err != nil {
-			return err
-		}
-
-		if ls {
-			return pdClient.SilenceAlertWithNote("CAD: Cluster is already in limited support. Silencing alert.")
-		}
-		return pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: missing cloud infrastructure access to clusters using the new backplane flow.")
 	}
 
 	baseAwsClient, err := GetAWSClient()
@@ -301,4 +256,54 @@ func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []strin
 
 	logging.Infof("Unsupported cloud provider: %s", cloudProvider.ID())
 	return false, nil
+}
+
+// Checks pre-requisites for a cluster investigation:
+// - the cluster's state is supported by CAD for an investigation ( = not uninstalling)
+// - the cloud provider is supported by CAD
+// - the AWS account access flow is supported by CAD
+// Performs according pagerduty actions and returns whether CAD needs to investigate the cluster.
+func clusterRequiresInvestigation(cluster *v1.Cluster, ocmClient *ocm.SdkClient, pdClient *pagerduty.SdkClient) (bool, error) {
+	if cluster.State() == v1.ClusterStateUninstalling {
+		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
+		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
+	}
+
+	// We currently have no investigations supporting GCP. In the future, this check should be moved on
+	// the investigation level, and we should build GCP or AWSClient based on this.
+	cloudProviderSupported, err := checkCloudProviderSupported(cluster, []string{"aws"})
+	if err != nil {
+		return false, err
+	}
+
+	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(cluster.ID())
+	if err != nil {
+		return false, err
+	}
+
+	if !cloudProviderSupported || !cadAWSAccessCompatible {
+		logging.Infof("Cloud provider supported by CAD: %t. AWS account access supported by CAD: %t", cloudProviderSupported, cadAWSAccessCompatible)
+
+		ls, err := ocmClient.IsInLimitedSupport(cluster.ID())
+		if err != nil {
+			return false, err
+		}
+		// Do not escalate, as humans don't handle alerts with clusters being in limited support.
+		// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
+		if ls {
+			logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
+			return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
+		}
+
+		// Escalate with the according reason
+		if !cloudProviderSupported {
+			return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
+		}
+		if !cadAWSAccessCompatible {
+			return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: missing cloud infrastructure access to clusters using the new backplane flow.")
+		}
+	}
+
+	// If none of the special cases apply, the cluster requires investigation.
+	return true, nil
 }
