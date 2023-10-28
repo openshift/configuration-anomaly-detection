@@ -119,6 +119,28 @@ var _ = Describe("chgm", func() {
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
+		When("Triggered finds instances stopped by the customer with CloudTrail eventVersion 1.99", func() {
+			It("should still put the cluster into limited support", func() {
+				event := cloudtrail.Event{
+					Username:        aws.String("12345"),
+					CloudTrailEvent: aws.String(`{"eventVersion":"1.99", "userIdentity":{"type":"AssumedRole", "sessionContext":{"sessionIssuer":{"type":"Role", "userName": "654321"}}}}`),
+				}
+				// We need to cast it to the mock client, as the investigationResources are unaware the underlying functions are mocks
+				r.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&infraInstance}, nil)
+				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&masterInstance, &infraInstance}, nil)
+				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
+				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]*cloudtrail.Event{&event}, nil)
+				r.OcmClient.(*ocmmock.MockClient).EXPECT().IsInLimitedSupport(gomock.Eq(cluster.ID())).Return(false, nil)
+				r.PdClient.(*pdmock.MockClient).EXPECT().GetEventType().Return("triggered")
+				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostLimitedSupportReason(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(nil)
+				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceAlertWithNote(gomock.Any())
+				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
+
+				gotErr := chgm.InvestigateTriggered(r)
+
+				Expect(gotErr).NotTo(HaveOccurred())
+			})
+		})
 		When("Triggered errors", func() {
 			It("should update the incident notes and escalate to primary", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fakeErr)

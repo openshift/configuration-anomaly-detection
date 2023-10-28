@@ -18,7 +18,6 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
-
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
@@ -646,10 +645,23 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	if err != nil {
 		return CloudTrailEventRaw{}, fmt.Errorf("could not marshal event.CloudTrailEvent: %w", err)
 	}
-	const supportedEventVersion = "1.08"
-	if res.EventVersion != supportedEventVersion {
-		return CloudTrailEventRaw{}, fmt.Errorf("event version differs from saved one (got %s, want %s) , not sure it's the same schema", res.EventVersion, supportedEventVersion)
+
+	// To be sure that your applications can parse the event structure, we recommend that you perform an equal-to
+	// comparison on the major version number. To be sure that fields that are expected by your application exist, we
+	// also recommend performing a greater-than-or-equal-to comparison on the minor version.
+	// https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-record-contents.html
+	const supportedEventVersionMajor = 1
+	const minSupportedEventVersionMinor = 8
+
+	var responseMajor, responseMinor int
+	if _, err := fmt.Sscanf(res.EventVersion, "%d.%d", &responseMajor, &responseMinor); err != nil {
+		return CloudTrailEventRaw{}, fmt.Errorf("failed to parse CloudTrail event version: %w", err)
 	}
+
+	if responseMajor != supportedEventVersionMajor || responseMinor < minSupportedEventVersionMinor {
+		return CloudTrailEventRaw{}, fmt.Errorf("unexpected event version (got %s, expected compatibility with %d.%d)", res.EventVersion, supportedEventVersionMajor, minSupportedEventVersionMinor)
+	}
+
 	return res, nil
 }
 
