@@ -636,6 +636,16 @@ type CloudTrailEventRaw struct {
 	} `json:"userIdentity"`
 }
 
+// TODO(Claudio): Go 1.21 - use builtin slice.Contains()
+func contains(sliceObjects []string, elem string) bool {
+	for _, object := range sliceObjects {
+		if object == elem {
+			return true
+		}
+	}
+	return false
+}
+
 // extractUserDetails will take an event and
 func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	if cloudTrailEvent == nil || *cloudTrailEvent == "" {
@@ -646,9 +656,9 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	if err != nil {
 		return CloudTrailEventRaw{}, fmt.Errorf("could not marshal event.CloudTrailEvent: %w", err)
 	}
-	const supportedEventVersion = "1.08"
-	if res.EventVersion != supportedEventVersion {
-		return CloudTrailEventRaw{}, fmt.Errorf("event version differs from saved one (got %s, want %s) , not sure it's the same schema", res.EventVersion, supportedEventVersion)
+	supportedEventVersions := []string{"1.08", "1.09"}
+	if !contains(supportedEventVersions, res.EventVersion) {
+		return CloudTrailEventRaw{}, fmt.Errorf("cloudtrail event version not yet supported by CAD (version %s, not contained in supported versions: %#v)", res.EventVersion, supportedEventVersions)
 	}
 	return res, nil
 }
