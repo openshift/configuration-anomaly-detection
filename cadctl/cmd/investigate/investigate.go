@@ -240,72 +240,64 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	return client, nil
 }
 
-// checkCloudProviderSupported takes a list of supported providers and checks if the
-// cluster to investigate's provider is supported
-func checkCloudProviderSupported(cluster *v1.Cluster, supportedProviders []string) (bool, error) {
+func isAWS(cluster *v1.Cluster) (bool, error) {
 	cloudProvider, ok := cluster.GetCloudProvider()
 	if !ok {
 		return false, fmt.Errorf("Failed to get clusters cloud provider")
 	}
 
-	for _, provider := range supportedProviders {
-		if cloudProvider.ID() == provider {
-			return true, nil
-		}
-	}
-
-	logging.Infof("Unsupported cloud provider: %s", cloudProvider.ID())
-	return false, nil
+	return cloudProvider.ID() == "aws", nil
 }
 
 // Checks pre-requisites for a cluster investigation:
-// - the cluster's state is supported by CAD for an investigation ( = not uninstalling)
-// - the cloud provider is supported by CAD
+// - the cluster's state is supported by CAD for an investigation (= not uninstalling)
+// - the cloud provider is supported by CAD (cluster is AWS)
 // - the AWS account access flow is supported by CAD
-// Performs according pagerduty actions and returns whether CAD needs to investigate the cluster.
+// Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
 func clusterRequiresInvestigation(cluster *v1.Cluster, ocmClient *ocm.SdkClient, pdClient *pagerduty.SdkClient) (bool, error) {
 	if cluster.State() == v1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
 	}
 
-	// We currently have no investigations supporting GCP. In the future, this check should be moved on
-	// the investigation level, and we should build GCP or AWSClient based on this.
-	cloudProviderSupported, err := checkCloudProviderSupported(cluster, []string{"aws"})
-	if err != nil {
-		return false, err
-	}
-
-	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(cluster.ID())
-	if err != nil {
-		return false, err
-	}
-
-	if cloudProviderSupported && cadAWSAccessCompatible {
-		return true, nil
-	}
-
-	logging.Infof("Cloud provider supported by CAD: %t. AWS account access supported by CAD: %t", cloudProviderSupported, cadAWSAccessCompatible)
-
 	ls, err := ocmClient.IsInLimitedSupport(cluster.ID())
 	if err != nil {
 		return false, err
 	}
-	// Do not escalate, as humans don't handle alerts with clusters being in limited support.
-	// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
-	if ls {
-		logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
-		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
+
+	isAWSCluster, err := isAWS(cluster)
+	if err != nil {
+		return false, err
 	}
 
-	// Escalate with the according reason
-	if !cloudProviderSupported {
+	if !isAWSCluster {
+		if ls {
+			// Do not escalate, as humans don't handle alerts with clusters being in limited support.
+			// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
+			logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
+			return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
+		}
+		logging.Info("Cloud provider unsupported, forwarding to primary.")
 		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
 	}
+
+	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(cluster)
+	if err != nil {
+		return false, err
+	}
+
 	if !cadAWSAccessCompatible {
+		if ls {
+			// Do not escalate, as humans don't handle alerts with clusters being in limited support.
+			// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
+			logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
+			return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
+		}
+
+		// The alert needs handling but the aws access path is not implemented in CAD
+		logging.Info("AWS access flow not supported by CAD, forwarding to primary.")
 		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: missing cloud infrastructure access to clusters using the new backplane flow.")
 	}
 
-	// Should never happen, escalation cases handled above.
-	return false, nil
+	return true, nil
 }

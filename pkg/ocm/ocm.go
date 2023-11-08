@@ -49,7 +49,7 @@ type Client interface {
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
 	PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error
-	AwsClassicJumpRoleCompatible(clusterID string) (bool, error)
+	AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -436,8 +436,14 @@ func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*v1.L
 }
 
 // AwsClassicJumpRoleCompatible check whether or not the CAD jumprole path is supported by the cluster
-func (c *SdkClient) AwsClassicJumpRoleCompatible(clusterID string) (bool, error) {
-	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).StsSupportJumpRole().Get().Send()
+func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, error) {
+	// If the cluster is STS, check if it compatible.
+	if cluster.AWS().STS().Empty() {
+		// All non STS clusters are compatible.
+		return true, nil
+	}
+
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).StsSupportJumpRole().Get().Send()
 	if err != nil {
 		return false, fmt.Errorf("could not query sts support role from ocm: %w", err)
 	}
