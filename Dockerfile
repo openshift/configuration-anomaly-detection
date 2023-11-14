@@ -1,4 +1,4 @@
-ARG BUILDER_IMG=registry.ci.openshift.org/openshift/release:golang-1.19
+ARG BUILDER_IMG=registry.ci.openshift.org/openshift/release:golang-1.20
 FROM $BUILDER_IMG as builder
 
 ADD . /opt
