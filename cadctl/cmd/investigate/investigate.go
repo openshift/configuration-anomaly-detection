@@ -151,7 +151,7 @@ func run(_ *cobra.Command, _ []string) error {
 	switch alertType {
 	case investigation.ClusterHasGoneMissing:
 		run.Triggered = chgm.InvestigateTriggered
-		run.Resolved = chgm.InvestigateResolved
+		run.Resolved = chgm.HandleResolved
 	case investigation.ClusterProvisioningDelay:
 		run.Triggered = cpd.InvestigateTriggered
 	default:

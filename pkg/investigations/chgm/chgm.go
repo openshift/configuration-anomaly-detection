@@ -21,8 +21,6 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
-const restoredClusterRetryDelaySeconds = 1200
-
 // NOTE: USE CAUTION WHEN CHANGING THESE TEMPLATES!!
 // Changing the templates' summaries will likely prevent CAD from removing clusters with these Limited Support reasons in the future, since it identifies which reasons to delete via their summaries.
 // If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
@@ -105,121 +103,6 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		metrics.Inc(metrics.LimitedSupportSet, r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary)
 		return postLimitedSupport(r.Cluster.ID(), res.string(), r.OcmClient, r.PdClient)
 	})
-}
-
-// InvestigateResolved runs the investigation for a resolved chgm pagerduty event
-func InvestigateResolved(r *investigation.Resources) error {
-	// Check if CAD put the cluster in CHGM LS. If it didn't, we don't need a resolve investigation, as
-	// either way it would be a NOOP for CAD (no LS to remove).
-	// This is the case most of the time, so it saves us a lot of long pipeline runs.
-	chgmLsExists, err := r.OcmClient.LimitedSupportReasonExists(chgmLimitedSupport, r.Cluster.ID())
-	if err != nil {
-		// The check is just to allow returning early, as we don't need an investigation if CAD didn't put the cluster in LS.
-		// If this fails, it's not a big issue. We can skip the check and proceed with the resolve investigation.
-		logging.Warn("Unable to determine whether or not the cluster was put in limited support by CAD. Proceeding with investigation anyway...")
-	}
-	if !chgmLsExists {
-		logging.Info("Skipping resolve investigation, as no actions were taking on this cluster by CAD.")
-		return nil
-	}
-
-	res, err := investigateRestoredCluster(r)
-	// The investigation encountered an error & never completed - alert Primary and report the error
-	if err != nil {
-		return err
-	}
-
-	// Investigation completed, but the state in OCM indicated the cluster didn't need investigation
-	if res.ClusterNotEvaluated {
-		investigationNotNeededNote := fmt.Sprintf("Cluster has state '%s' in OCM, and so investigation is not needed:\n", res.ClusterState)
-		logging.Infof("Adding note: %s", investigationNotNeededNote)
-
-		err = utils.WithRetries(func() error {
-			return r.PdClient.AddNote(investigationNotNeededNote)
-		})
-		if err != nil {
-			logging.Errorf("Failed to add note '%s' to incident: %s", investigationNotNeededNote, err)
-			return err
-		}
-		return nil
-	}
-
-	// Investigation completed, but an error was encountered.
-	// Retry the investigation, escalating to Primary if the cluster still isn't healthy on recheck
-	if res.Error != "" {
-		logging.Warnf("Cluster failed alert resolution check. Result: %#v", res)
-		logging.Infof("Waiting %d seconds before rechecking cluster", restoredClusterRetryDelaySeconds)
-
-		time.Sleep(time.Duration(restoredClusterRetryDelaySeconds) * time.Second)
-
-		res, err = investigateRestoredCluster(r)
-		if err != nil {
-			return fmt.Errorf("failure while re-investigating cluster: %w", err)
-		}
-		if res.ClusterNotEvaluated {
-			logging.Infof("Investigation not required, cluster has the following condition: %s", res.ClusterState)
-			return nil
-		}
-		if res.Error != "" {
-			logging.Warnf("investigation completed, but cluster has not been restored properly")
-			err = utils.WithRetries(func() error {
-				return r.PdClient.AddNote(res.string())
-			})
-			if err != nil {
-				logging.Errorf("failed to add notes to incident: %s", res.string())
-			}
-
-			return utils.WithRetries(func() error {
-				return r.PdClient.CreateNewAlert(buildAlertForFailedPostCHGM(r.Cluster.ID(), res.Error), r.PdClient.GetServiceID())
-			})
-		}
-	}
-	logging.Info("Investigation complete, remove 'Cluster has gone missing' limited support reason if any...")
-	removedReasons := false
-	err = utils.WithRetries(func() error {
-		var err error
-		removedReasons, err = r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
-		return err
-	})
-	if err != nil {
-		logging.Error("failed to remove limited support")
-		err = utils.WithRetries(func() error {
-			return r.PdClient.CreateNewAlert(investigation.BuildAlertForLimitedSupportRemovalFailure(err, r.Cluster.ID()), r.PdClient.GetServiceID())
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create alert: %w", err)
-		}
-		logging.Info("Alert has been sent")
-		return nil
-	}
-	if removedReasons {
-		metrics.Inc(metrics.LimitedSupportLifted, r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary)
-	}
-	return nil
-}
-
-// investigateRestoredCluster investigates the status of all instances belonging to the cluster. If the investigation encounters an error,
-// Primary is notified via PagerDuty incident
-func investigateRestoredCluster(r *investigation.Resources) (res investigateInstancesOutput, err error) {
-	res, err = investigateStartedInstances(r)
-	// The investigation encountered an error & never completed - alert Primary and report the error, retrying as many times as necessary to escalate the issue
-	if err != nil {
-		logging.Warnf("Failure detected while investigating cluster '%s', attempting to notify Primary. Error: %v", r.Cluster.ExternalID(), err)
-		originalErr := err
-		err = r.PdClient.AddNote(fmt.Sprintf("Resolved investigation did not complete: %v\n", err.Error()))
-		if err != nil {
-			logging.Error("could not update incident notes")
-		}
-		err = utils.WithRetries(func() error {
-			return r.PdClient.CreateNewAlert(buildAlertForInvestigationFailure(r.Cluster.ID(), originalErr), r.PdClient.GetServiceID())
-		})
-		if err != nil {
-			logging.Errorf("failed to alert primary: %w", err)
-		}
-		return investigateInstancesOutput{}, fmt.Errorf("InvestigateStartedInstances failed for %s: %w", r.Cluster.ExternalID(), originalErr)
-	}
-
-	return res, nil
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
@@ -433,67 +316,6 @@ func investigateStoppedInstances(cluster *v1.Cluster, clusterDeployment *hivev1.
 	return output, nil
 }
 
-// investigateStartedInstances is the internal version of InvestigateStartedInstances operating on the read-only
-// version of Client.
-func investigateStartedInstances(r *investigation.Resources) (investigateInstancesOutput, error) {
-	if r.ClusterDeployment == nil {
-		return investigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating started instances, did not populate the instance before")
-	}
-
-	infraID := r.ClusterDeployment.Spec.ClusterMetadata.InfraID
-
-	// Verify cluster is in a valid state to be investigated (ie - not hibernating, powering down, or being deleted)
-	state, ok := r.Cluster.GetState()
-	if !ok {
-		return investigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: cluster '%s' has no state associated with it", r.Cluster.ID())
-	}
-	if state == v1.ClusterStateUninstalling || state == v1.ClusterStatePoweringDown || state == v1.ClusterStateHibernating {
-		output := investigateInstancesOutput{
-			ClusterState:        string(state),
-			ClusterNotEvaluated: true,
-		}
-		return output, nil
-	}
-
-	lsExists, err := r.OcmClient.UnrelatedLimitedSupportExists(chgmLimitedSupport, r.Cluster.ID())
-	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("failed to determine if investigation required: could not determine if non-CAD limited support reasons exist: %w", err)
-	}
-	if lsExists {
-		output := investigateInstancesOutput{
-			ClusterState:        "unrelated limited support reasons present on cluster",
-			ClusterNotEvaluated: true,
-		}
-		return output, nil
-	}
-
-	// Verify cluster has expected number of nodes running
-	runningNodesCount, err := getRunningNodesCount(infraID, r.AwsClient)
-	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating started instances for %s: %w", infraID, err)
-	}
-
-	expectedNodesCount, err := getExpectedNodesCount(r.Cluster, r.OcmClient)
-	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes count while investigating started instances for %s: %w", infraID, err)
-	}
-
-	// Check for mistmach in running nodes and expected nodes
-	if runningNodesCount.Master != expectedNodesCount.Master {
-		return investigateInstancesOutput{UserAuthorized: true, Error: "number of running master node instances does not match the expected master node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
-	}
-	if runningNodesCount.Infra != expectedNodesCount.Infra {
-		return investigateInstancesOutput{UserAuthorized: true, Error: "number of running infra node instances does not match the expected infra node count: quota may be insufficient or irreplaceable machines have been terminated"}, nil
-	}
-
-	output := investigateInstancesOutput{
-		UserAuthorized:    true,
-		ExpectedInstances: *expectedNodesCount,
-		RunningInstances:  *runningNodesCount,
-	}
-	return output, nil
-}
-
 // GetRunningNodesCount return the number of running nodes that are currently running in the cluster
 func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount, error) {
 	instances, err := awsCli.ListRunningInstances(infraID)
@@ -593,33 +415,6 @@ func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNod
 	return nodeCount, nil
 }
 
-// buildAlertForFailedPostCHGM returns an alert for a cluster that resolved its chgm alert but somehow is still failing CAD checks
-// This is potentially very noisy and led to some confusion for primary already
-func buildAlertForFailedPostCHGM(clusterID string, investigationErr string) pagerduty.NewAlert {
-	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("cluster %s has failed CAD's post-CHGM investigation", clusterID),
-		Details: pagerduty.NewAlertCustomDetails{
-			ClusterID:  clusterID,
-			Error:      investigationErr,
-			Resolution: "Review the investigation reason and take action as appropriate. Once the cluster has been reviewed, this alert needs to be manually resolved.",
-			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ClusterFailedPostCHGMInvestigation.md",
-		},
-	}
-}
-
-// buildAlertForInvestigationFailure returns an alert for a cluster that could not be properly investigated
-func buildAlertForInvestigationFailure(clusterID string, investigationErr error) pagerduty.NewAlert {
-	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("CAD's post-CHGM investigation for cluster %s has encountered an error", clusterID),
-		Details: pagerduty.NewAlertCustomDetails{
-			ClusterID:  clusterID,
-			Error:      investigationErr.Error(),
-			Resolution: "Manually review the cluster to determine if it should have it's 'Cluster Has Gone Missing' and/or 'Cloud Credentials Are Missing' Limited Support reasons removed. Once the cluster has been reviewed and appropriate actions have been taken, manually resolve this alert.",
-			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorInPostCHGMInvestigation.md",
-		},
-	}
-}
-
 // CloudTrailEventRaw will help marshal the cloudtrail.Event.CloudTrailEvent string
 // TODO: tidy uo the struct when we know exactly what we need
 type CloudTrailEventRaw struct {
@@ -676,4 +471,25 @@ func postLimitedSupport(clusterID string, notes string, ocmCli ocm.Client, pdCli
 	// we need to aditionally silence here, as dms service keeps firing
 	// even when we put in limited support
 	return pdCli.SilenceAlertWithNote(notes)
+}
+
+// HandleResolved removes limited support when a CHGM resolves
+func HandleResolved(r *investigation.Resources) error {
+	logging.Info("Remove 'Cluster has gone missing' limited support reason if any...")
+
+	removedReasons := false
+	err := utils.WithRetries(func() error {
+		var err error
+		removedReasons, err = r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to remove limited support")
+	}
+
+	if removedReasons {
+		metrics.Inc(metrics.LimitedSupportLifted, r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary)
+	}
+
+	return nil
 }
