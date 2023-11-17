@@ -579,78 +579,10 @@ var _ = Describe("chgm", func() {
 		})
 	})
 	Describe("Resolved", func() {
-		var err error
-		When("the cluster is uninstalling", func() {
-			It("should not investigate the cluster", func() {
-				r.Cluster, _ = v1.NewCluster().ID("uninstallingCluster").State(v1.ClusterStateUninstalling).Build()
-				Expect(err).ToNot(HaveOccurred())
-				r.ClusterDeployment = &hivev1.ClusterDeployment{
-					Spec: hivev1.ClusterDeploymentSpec{
-						ClusterMetadata: &hivev1.ClusterMetadata{
-							InfraID:   "uninstallingCluster",
-							ClusterID: "uninstallingCluster",
-						},
-					},
-				}
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq("uninstallingCluster")).Return(true, nil)
-				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
-				gotErr := chgm.InvestigateResolved(r)
-				Expect(gotErr).ToNot(HaveOccurred())
-			})
-		})
-		When("the cluster is in limited support for an unrelated reason", func() {
-			It("should not investigate the cluster", func() {
-				// Arrange
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().UnrelatedLimitedSupportExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
-				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
-				// Act
-				gotErr := chgm.InvestigateResolved(r)
-				// Assert
-				Expect(gotErr).ToNot(HaveOccurred())
-			})
-		})
-		When("UnrelatedLimitedSupportReasonExists fails", func() {
-			It("should alert primary for an investigation failure", func() {
-				// Arrange
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().UnrelatedLimitedSupportExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(false, fakeErr)
-				// Should we mock the alerts here?
-				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
-				r.PdClient.(*pdmock.MockClient).EXPECT().GetServiceID().Return("")
-				r.PdClient.(*pdmock.MockClient).EXPECT().CreateNewAlert(gomock.Any(), gomock.Any()).Return(nil)
-				// Act
-				gotErr := chgm.InvestigateResolved(r)
-				// Assert
-				Expect(gotErr).To(HaveOccurred())
-			})
-		})
-		When("ListRunningInstances fails", func() {
-			It("should alert primary for an investigation failure", func() {
-				// Arrange
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().UnrelatedLimitedSupportExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return(nil, fakeErr)
-				r.PdClient.(*pdmock.MockClient).EXPECT().AddNote(gomock.Any()).Return(nil)
-				r.PdClient.(*pdmock.MockClient).EXPECT().GetServiceID().Return("")
-				r.PdClient.(*pdmock.MockClient).EXPECT().CreateNewAlert(gomock.Any(), gomock.Any()).Return(nil)
-				// Act
-				gotErr := chgm.InvestigateResolved(r)
-				// Assert
-				Expect(gotErr).To(HaveOccurred())
-			})
-		})
-		When("the cluster appears to be healthy again", func() {
-			It("should complete and remove the chgm limited support reason", func() {
-				// Arrange
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().LimitedSupportReasonExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(true, nil)
-				r.OcmClient.(*ocmmock.MockClient).EXPECT().UnrelatedLimitedSupportExists(gomock.Eq(chgmLimitedSupport), gomock.Eq(cluster.ID())).Return(false, nil)
-				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&masterInstance, &infraInstance}, nil)
+		When("the alert resolves", func() {
+			It("should remove limited support", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().DeleteLimitedSupportReasons(chgmLimitedSupport, "")
-				// Act
-				gotErr := chgm.InvestigateResolved(r)
-				// Assert
+				gotErr := chgm.HandleResolved(r)
 				Expect(gotErr).ToNot(HaveOccurred())
 			})
 		})
