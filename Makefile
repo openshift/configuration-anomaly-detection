@@ -85,8 +85,8 @@ generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
 ## CI actions
 
 .PHONY: coverage
-coverage: hack/codecov.sh
-
+coverage: 
+	hack/codecov.sh
 
 .PHONY: generate-template-file
 generate-template-file:
@@ -113,3 +113,7 @@ boilerplate-update:
 pre-commit:
 	@cp $(PRE_COMMIT_SCRIPT) $(PRE_COMMIT_HOOK)
 	@chmod +x $(PRE_COMMIT_HOOK)
+
+.PHONY: go-test
+go-test:
+	go test $(TESTOPTS) -mod=readonly ./...
