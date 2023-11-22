@@ -88,7 +88,6 @@ generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
 coverage: 
 	hack/codecov.sh
 
-
 .PHONY: generate-template-file
 generate-template-file:
 	cd ./hack/update-template/ && go build -mod=readonly . && ./update-template
