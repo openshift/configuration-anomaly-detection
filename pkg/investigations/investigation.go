@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -40,7 +40,7 @@ func NewInvestigation() *Investigation {
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
 	AlertType         AlertType
-	Cluster           *v1.Cluster
+	Cluster           *cmv1.Cluster
 	ClusterDeployment *hivev1.ClusterDeployment
 	AwsClient         aws.Client
 	OcmClient         ocm.Client

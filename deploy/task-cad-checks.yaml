@@ -38,3 +38,5 @@ spec:
             name: cad-ocm-client-secret
         - secretRef:
             name: cad-pd-token
+        - secretRef:
+            name: cad-backplane-secret

@@ -9,7 +9,7 @@ import (
 	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
@@ -27,9 +27,9 @@ var _ = Describe("chgm", func() {
 	var (
 		r                  *investigation.Resources
 		mockCtrl           *gomock.Controller
-		cluster            *v1.Cluster
+		cluster            *cmv1.Cluster
 		clusterDeployment  *hivev1.ClusterDeployment
-		machinePools       []*v1.MachinePool
+		machinePools       []*cmv1.MachinePool
 		infraID            string
 		instance           ec2.Instance
 		chgmLimitedSupport ocm.LimitedSupportReason
@@ -51,7 +51,7 @@ var _ = Describe("chgm", func() {
 
 		var err error
 		// Must explicitly set all node types for GetNodeCount() to work in these tests
-		cluster, err = v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(v1.ClusterStateReady).Build()
+		cluster, err = cmv1.NewCluster().Nodes(cmv1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(cmv1.ClusterStateReady).Build()
 		Expect(err).ToNot(HaveOccurred())
 		clusterDeployment = &hivev1.ClusterDeployment{
 			Spec: hivev1.ClusterDeploymentSpec{
@@ -253,9 +253,6 @@ var _ = Describe("chgm", func() {
 
 		When("username role is OrganizationAccountAccessRole on a CCS cluster", func() {
 			It("should be put into limited support", func() {
-				cluster, err := v1.NewCluster().Nodes(v1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(v1.ClusterStateReady).CCS(v1.NewCCS().Enabled(true)).Build()
-				Expect(err).ToNot(HaveOccurred())
-
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListRunningInstances(gomock.Eq(infraID)).Return([]*ec2.Instance{&instance}, nil)

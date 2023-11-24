@@ -4,7 +4,7 @@ import (
 	"sort"
 	"time"
 
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
@@ -45,7 +45,7 @@ func hibernatedTooLong(hibernations []*hibernationPeriod, now time.Time) bool {
 	return false
 }
 
-func getHibernationStatusForCluster(ocmClient ocm.Client, cluster *v1.Cluster) ([]*hibernationPeriod, error) {
+func getHibernationStatusForCluster(ocmClient ocm.Client, cluster *cmv1.Cluster) ([]*hibernationPeriod, error) {
 	filter := "log_type='cluster-state-updates'"
 	clusterStateUpdates, err := ocmClient.GetServiceLog(cluster, filter)
 	if err != nil {

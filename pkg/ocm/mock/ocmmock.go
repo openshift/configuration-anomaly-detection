@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	sdk "github.com/openshift-online/ocm-sdk-go"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -79,6 +80,20 @@ func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.Mac
 func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMachinePools", reflect.TypeOf((*MockClient)(nil).GetClusterMachinePools), internalClusterID)
+}
+
+// GetConnection mocks base method.
+func (m *MockClient) GetConnection() *sdk.Connection {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetConnection")
+	ret0, _ := ret[0].(*sdk.Connection)
+	return ret0
+}
+
+// GetConnection indicates an expected call of GetConnection.
+func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
 }
 
 // GetServiceLog mocks base method.

@@ -18,7 +18,7 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/aws/aws-sdk-go/service/ec2"
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
 // NOTE: USE CAUTION WHEN CHANGING THESE TEMPLATES!!
@@ -110,7 +110,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 // certificates of the kubelets can expire and CSRs need to be approved
 // manually:
 // - https://github.com/openshift/hive/blob/master/docs/hibernating-clusters.md
-func investigateHibernation(cluster *v1.Cluster, client ocm.Client) (bool, error) {
+func investigateHibernation(cluster *cmv1.Cluster, client ocm.Client) (bool, error) {
 	hibernations, err := getHibernationStatusForCluster(client, cluster)
 	if err != nil {
 		return false, err
@@ -239,7 +239,7 @@ func (i investigateInstancesOutput) string() string {
 	return msg
 }
 
-func investigateStoppedInstances(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {
+func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {
 	if clusterDeployment == nil {
 		return investigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
 	}
@@ -351,7 +351,7 @@ func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount
 
 // GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
 // We do not use nodes.GetTotal() here, because total seems to be always 0.
-func getExpectedNodesCount(cluster *v1.Cluster, ocmCli ocm.Client) (*expectedNodesCount, error) {
+func getExpectedNodesCount(cluster *cmv1.Cluster, ocmCli ocm.Client) (*expectedNodesCount, error) {
 	nodes, ok := cluster.GetNodes()
 	if !ok {
 		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
