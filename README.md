@@ -18,6 +18,7 @@
   - [Boilerplate](#boilerplate)
   - [PipelinePruner](#pipelinepruner)
   - [Required ENV variables](#required-env-variables)
+  - [Optional ENV variables](#optional-env-variables)
 
 # Configuration Anomaly Detection
 
@@ -101,5 +102,13 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `PD_SIGNATURE`: refers to the PagerDuty webhook signature (HMAC+SHA256)
 * `X_SECRET_TOKEN`: refers to our custom Secret Token for authenticating against our pipeline
 * `CAD_PROMETHEUS_PUSHGATEWAY`: refers to the URL cad will push metrics to
+* `BACKPLANE_URL`: refers to the backplane url to use
+* `BACKPLANE_INITIAL_ARN`: refers to the initial ARN used for the isolated backplane jumprole flow
+
+## Optional ENV variables
+
+* `BACKPLANE_PROXY`: refers to the proxy CAD uses for the isolated backplane access flow. 
+
+**Note:** `BACKPLANE_PROXY` is required for local development, as a backplane api is only accessible through the proxy.
 
 For Red Hat employees, these environment variables can be found in the SRE-P vault.

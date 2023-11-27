@@ -141,6 +141,14 @@ objects:
 - apiVersion: v1
   kind: Secret
   metadata:
+    name: cad-backplane-secret
+  stringData:
+    BACKPLANE_INITIAL_ARN: CHANGEME
+    BACKPLANE_URL: CHANGEME
+  type: Opaque
+- apiVersion: v1
+  kind: Secret
+  metadata:
     name: cad-ocm-client-secret
   stringData:
     CAD_OCM_CLIENT_ID: CHANGEME
@@ -197,6 +205,8 @@ objects:
           name: cad-ocm-client-secret
       - secretRef:
           name: cad-pd-token
+      - secretRef:
+          name: cad-backplane-secret
       image: ${REGISTRY_IMG}:${IMAGE_TAG}
       name: check-infrastructure
 - apiVersion: batch/v1

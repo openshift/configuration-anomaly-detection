@@ -23,13 +23,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -117,28 +117,17 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	baseAwsClient, err := GetAWSClient()
-	if err != nil {
-		return fmt.Errorf("could not initialize aws client: %w", err)
-	}
-
 	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
 	if err != nil {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
 	}
 
-	// Try to jump into support role
-	// This triggers a cloud-credentials-are-missing investigation in case the jumpRole fails.
-	customerAwsClient, err := utils.JumpRoles(cluster, baseAwsClient, ocmClient)
+	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		logging.Info("Failed assumeRole chain: ", err.Error())
-
-		// If assumeSupportRoleChain fails, we evaluate if the credentials are missing based on the error message,
-		// it is also possible the assumeSupportRoleChain failed for another reason (e.g. API errors)
 		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertTypeString)
 	}
 
-	logging.Info("Successfully jumpRoled into the customer account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
+	logging.Info("Successfully accessed customer cloud account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
 	err = ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient, alertTypeString)
 	if err != nil {
 		return err
@@ -206,22 +195,6 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 	return ocm.New(cadOcmFilePath)
 }
 
-// GetAWSClient will retrieve the AwsClient from the 'aws' package
-func GetAWSClient() (*aws.SdkClient, error) {
-	awsAccessKeyID, hasAwsAccessKeyID := os.LookupEnv("AWS_ACCESS_KEY_ID")
-	awsSecretAccessKey, hasAwsSecretAccessKey := os.LookupEnv("AWS_SECRET_ACCESS_KEY")
-	awsSessionToken, _ := os.LookupEnv("AWS_SESSION_TOKEN") // AWS_SESSION_TOKEN is optional
-	awsDefaultRegion, hasAwsDefaultRegion := os.LookupEnv("AWS_DEFAULT_REGION")
-	if !hasAwsAccessKeyID || !hasAwsSecretAccessKey {
-		return nil, fmt.Errorf("one of the required envvars in the list '(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY)' is missing")
-	}
-	if !hasAwsDefaultRegion {
-		awsDefaultRegion = "us-east-1"
-	}
-
-	return aws.NewClient(awsAccessKeyID, awsSecretAccessKey, awsSessionToken, awsDefaultRegion)
-}
-
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
@@ -240,7 +213,7 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	return client, nil
 }
 
-func isAWS(cluster *v1.Cluster) (bool, error) {
+func isAWS(cluster *cmv1.Cluster) (bool, error) {
 	cloudProvider, ok := cluster.GetCloudProvider()
 	if !ok {
 		return false, fmt.Errorf("Failed to get clusters cloud provider")
@@ -254,15 +227,10 @@ func isAWS(cluster *v1.Cluster) (bool, error) {
 // - the cloud provider is supported by CAD (cluster is AWS)
 // - the AWS account access flow is supported by CAD
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func clusterRequiresInvestigation(cluster *v1.Cluster, ocmClient *ocm.SdkClient, pdClient *pagerduty.SdkClient) (bool, error) {
-	if cluster.State() == v1.ClusterStateUninstalling {
+func clusterRequiresInvestigation(cluster *cmv1.Cluster, ocmClient *ocm.SdkClient, pdClient *pagerduty.SdkClient) (bool, error) {
+	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
-	}
-
-	ls, err := ocmClient.IsInLimitedSupport(cluster.ID())
-	if err != nil {
-		return false, err
 	}
 
 	isAWSCluster, err := isAWS(cluster)
@@ -271,32 +239,7 @@ func clusterRequiresInvestigation(cluster *v1.Cluster, ocmClient *ocm.SdkClient,
 	}
 
 	if !isAWSCluster {
-		if ls {
-			// Do not escalate, as humans don't handle alerts with clusters being in limited support.
-			// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
-			logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
-			return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
-		}
-		logging.Info("Cloud provider unsupported, forwarding to primary.")
-		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
-	}
-
-	cadAWSAccessCompatible, err := ocmClient.AwsClassicJumpRoleCompatible(cluster)
-	if err != nil {
-		return false, err
-	}
-
-	if !cadAWSAccessCompatible {
-		if ls {
-			// Do not escalate, as humans don't handle alerts with clusters being in limited support.
-			// This case happens because limited support has been changed to not affect alerts on the deadmanssnitch services.
-			logging.Info("Cluster is in limited support and should not be escalated back to primary, silencing.")
-			return false, pdClient.SilenceAlertWithNote("CAD: Cluster is in limited support. Silencing alert.")
-		}
-
-		// The alert needs handling but the aws access path is not implemented in CAD
-		logging.Info("AWS access flow not supported by CAD, forwarding to primary.")
-		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: missing cloud infrastructure access to clusters using the new backplane flow.")
+		return false, utils.EscalateAlertIfNotLS("CAD could not run an automated investigation on this cluster: unsupported cloud provider.", cluster, pdClient, ocmClient)
 	}
 
 	return true, nil

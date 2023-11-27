@@ -14,9 +14,9 @@ import (
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
-	awsv1alpha1 "github.com/openshift/aws-account-operator/pkg/apis/aws/v1alpha1"
+	awsv1alpha1 "github.com/openshift/aws-account-operator/api/v1alpha1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
@@ -40,16 +40,17 @@ type ServiceLog struct {
 
 // Client is the interface exposing OCM related functions
 type Client interface {
-	GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error)
+	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
 	PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error
 	IsInLimitedSupport(internalClusterID string) (bool, error)
 	UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	GetSupportRoleARN(internalClusterID string) (string, error)
-	GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
-	PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error
-	AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, error)
+	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
+	PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error
+	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
+	GetConnection() *sdk.Connection
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -160,7 +161,7 @@ func (c *SdkClient) GetAWSAccountClaim(internalClusterID string) (*awsv1alpha1.A
 
 // GetClusterInfo returns cluster information from ocm by using either internal, external id or the cluster name
 // Returns a v1.Cluster object or an error
-func (c *SdkClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+func (c *SdkClient) GetClusterInfo(identifier string) (*cmv1.Cluster, error) {
 	q := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", identifier)
 	resp, err := c.conn.ClustersMgmt().V1().Clusters().List().Search(q).Send()
 	if err != nil || resp.Error() != nil || resp.Status() != http.StatusOK {
@@ -191,7 +192,7 @@ func (c *SdkClient) GetClusterDeployment(internalClusterID string) (*hivev1.Clus
 }
 
 // GetClusterMachinePools get the machine pools for a given cluster
-func (c *SdkClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
+func (c *SdkClient) GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error) {
 	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).MachinePools().List().Page(1).Size(-1).Send()
 	if err != nil {
 		return nil, err
@@ -229,7 +230,7 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupport
 
 // GetServiceLog returns all ServiceLogs for a cluster.
 // When supplying a filter it will use the Search call and pass it to this one directly.
-func (c *SdkClient) GetServiceLog(cluster *v1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error) {
+func (c *SdkClient) GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error) {
 	if filter != "" {
 		return c.conn.ServiceLogs().V1().Clusters().Cluster(cluster.ExternalID()).ClusterLogs().List().Search(filter).Send()
 	}
@@ -237,7 +238,7 @@ func (c *SdkClient) GetServiceLog(cluster *v1.Cluster, filter string) (*servicel
 }
 
 // PostServiceLog allows to send a generic servicelog to a cluster.
-func (c *SdkClient) PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error {
+func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error {
 	builder := &servicelogsv1.LogEntryBuilder{}
 	builder.Severity(servicelogsv1.Severity(sl.Severity))
 	builder.ServiceName(sl.ServiceName)
@@ -264,11 +265,11 @@ func (c *SdkClient) PostServiceLog(cluster *v1.Cluster, sl *ServiceLog) error {
 }
 
 // newLimitedSupportReasonBuilder creates a Limited Support reason
-func newLimitedSupportReasonBuilder(ls LimitedSupportReason) *v1.LimitedSupportReasonBuilder {
-	builder := v1.NewLimitedSupportReason()
+func newLimitedSupportReasonBuilder(ls LimitedSupportReason) *cmv1.LimitedSupportReasonBuilder {
+	builder := cmv1.NewLimitedSupportReason()
 	builder.Summary(ls.Summary)
 	builder.Details(ls.Details)
-	builder.DetectionType(v1.DetectionTypeManual)
+	builder.DetectionType(cmv1.DetectionTypeManual)
 	return builder
 }
 
@@ -420,23 +421,23 @@ func (c *SdkClient) LimitedSupportReasonExists(ls LimitedSupportReason, internal
 	return false, nil
 }
 
-func reasonsMatch(template LimitedSupportReason, reason *v1.LimitedSupportReason) bool {
+func reasonsMatch(template LimitedSupportReason, reason *cmv1.LimitedSupportReason) bool {
 	return reason.Summary() == template.Summary && reason.Details() == template.Details
 }
 
 // listLimitedSupportReasons returns all limited support reasons attached to the given cluster
-func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*v1.LimitedSupportReason, error) {
+func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*cmv1.LimitedSupportReason, error) {
 	// List reasons
 	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons()
 	reasons, err := clusterLimitedSupport.List().Send()
 	if err != nil {
-		return []*v1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
+		return []*cmv1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
 	}
 	return reasons.Items().Slice(), nil
 }
 
 // AwsClassicJumpRoleCompatible check whether or not the CAD jumprole path is supported by the cluster
-func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, error) {
+func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error) {
 	// If the cluster is STS, check if it compatible.
 	if cluster.AWS().STS().Empty() {
 		// All non STS clusters are compatible.
@@ -457,4 +458,9 @@ func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, err
 	// - Clusters using the new access (SDE-3036, unsupported by CAD): arn:aws:iam::<aws_id>:role/RH-Technical-Support-123456
 	//-  Clusters using the old access (supported by CAD): arn:aws:iam::<aws_id>:role/RH-Technical-Support-Access
 	return strings.Contains(roleARN, "RH-Technical-Support-Access"), nil
+}
+
+// GetConnection returns the active connection of the SdkClient
+func (c *SdkClient) GetConnection() *sdk.Connection {
+	return c.conn
 }
