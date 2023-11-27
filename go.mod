@@ -9,7 +9,6 @@ require (
 	github.com/onsi/gomega v1.30.0
 	github.com/openshift-online/ocm-sdk-go v0.1.386
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
-	github.com/openshift/backplane-cli v0.0.0-00010101000000-000000000000
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
 	github.com/openshift/osd-network-verifier v0.4.3
 	github.com/prometheus/client_golang v1.13.0
@@ -91,6 +90,7 @@ require (
 	github.com/openshift-online/ocm-cli v0.1.66 // indirect
 	github.com/openshift/api v0.0.0-20230720094506-afcbe27aec7c // indirect
 	github.com/openshift/backplane-api v0.0.0-20230919035427-a52e4ae498fb // indirect
+	github.com/openshift/backplane-cli v0.1.20-0.20231127133146-fc75330a99d6 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/perimeterx/marshmallow v1.1.4 // indirect
@@ -148,5 +148,3 @@ require (
 	github.com/onsi/ginkgo/v2 v2.13.1
 	golang.org/x/sys v0.14.0 // indirect
 )
-
-replace github.com/openshift/backplane-cli => ../backplane-cli

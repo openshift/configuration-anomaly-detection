@@ -25,12 +25,12 @@ func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.
 
 	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
 
-	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneUrl, AssumeInitialArn: backplaneInitialARN}}
+	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneUrl, AssumeInitialArn: backplaneInitialARN}, Cluster: cluster}
 	if backplaneProxy != "" {
 		queryConfig.ProxyURL = &backplaneProxy
 	}
 
-	config, err := bpcloud.GetAWSV2Config(queryConfig, cluster)
+	config, err := queryConfig.GetAWSV2Config()
 	if err != nil {
 		return nil, fmt.Errorf("unable to query aws credentials from backplane: %w", err)
 	}
