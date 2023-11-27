@@ -460,6 +460,7 @@ func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, e
 	return strings.Contains(roleARN, "RH-Technical-Support-Access"), nil
 }
 
+// GetConnection returns the active connection of the SdkClient
 func (c *SdkClient) GetConnection() *sdk.Connection {
 	return c.conn
 }

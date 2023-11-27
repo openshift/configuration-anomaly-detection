@@ -1,3 +1,4 @@
+// Package managedcloud contains functionality to access cloud environments of managed clusters
 package managedcloud
 
 import (
@@ -12,9 +13,10 @@ import (
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
+// CreateCustomerAWSClient creates an aws.SdkClient to a cluster's AWS account
 func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.SdkClient, error) {
-	backplaneUrl := os.Getenv("BACKPLANE_URL")
-	if backplaneUrl == "" {
+	backplaneURL := os.Getenv("BACKPLANE_URL")
+	if backplaneURL == "" {
 		return nil, fmt.Errorf("missing environment variable BACKPLANE_URL")
 	}
 
@@ -25,7 +27,7 @@ func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.
 
 	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
 
-	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneUrl, AssumeInitialArn: backplaneInitialARN}, Cluster: cluster}
+	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneURL, AssumeInitialArn: backplaneInitialARN}, Cluster: cluster}
 	if backplaneProxy != "" {
 		queryConfig.ProxyURL = &backplaneProxy
 	}
