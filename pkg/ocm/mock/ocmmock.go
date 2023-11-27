@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	sdk "github.com/openshift-online/ocm-sdk-go"
+	ocm_sdk_go "github.com/openshift-online/ocm-sdk-go"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -83,10 +83,10 @@ func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID inter
 }
 
 // GetConnection mocks base method.
-func (m *MockClient) GetConnection() *sdk.Connection {
+func (m *MockClient) GetConnection() *ocm_sdk_go.Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConnection")
-	ret0, _ := ret[0].(*sdk.Connection)
+	ret0, _ := ret[0].(*ocm_sdk_go.Connection)
 	return ret0
 }
 
