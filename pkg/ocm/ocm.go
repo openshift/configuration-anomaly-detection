@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -42,13 +41,9 @@ type ServiceLog struct {
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
 	PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error
-	IsInLimitedSupport(internalClusterID string) (bool, error)
-	UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
-	LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error)
-	DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error)
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
-	PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error
+	PostServiceLog(clusterID string, sl *ServiceLog) error
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
 }
@@ -238,15 +233,14 @@ func (c *SdkClient) GetServiceLog(cluster *cmv1.Cluster, filter string) (*servic
 }
 
 // PostServiceLog allows to send a generic servicelog to a cluster.
-func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error {
+func (c *SdkClient) PostServiceLog(clusterID string, sl *ServiceLog) error {
 	builder := &servicelogsv1.LogEntryBuilder{}
 	builder.Severity(servicelogsv1.Severity(sl.Severity))
 	builder.ServiceName(sl.ServiceName)
 	builder.Summary(sl.Summary)
 	builder.Description(sl.Description)
 	builder.InternalOnly(sl.InternalOnly)
-	builder.SubscriptionID(cluster.Subscription().ID())
-	builder.ClusterID(cluster.ID())
+	builder.ClusterID(clusterID)
 	le, err := builder.Build()
 	if err != nil {
 		return fmt.Errorf("could not create post request (SL): %w", err)
@@ -271,169 +265,6 @@ func newLimitedSupportReasonBuilder(ls LimitedSupportReason) *cmv1.LimitedSuppor
 	builder.Details(ls.Details)
 	builder.DetectionType(cmv1.DetectionTypeManual)
 	return builder
-}
-
-// LimitedSupportExists takes a LimitedSupportReason and matches the Summary against
-// a clusters limited support reasons
-// Returns true if any match is found
-func (c *SdkClient) LimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("could not list existing limited support reasons: %w", err)
-	}
-	for _, reason := range reasons {
-		if reasonsMatch(ls, reason) {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// isLimitedSupportReasonFlapping checks if a cluster has been put in limited support too many times
-// Returns true if the cluster has been put in limited support at least 2 times in the last 24 hours
-func (c *SdkClient) isLimitedSupportReasonFlapping(ls LimitedSupportReason, internalClusterID string) (bool, error) {
-	// Retrieve external ID
-	info, err := c.GetClusterInfo(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("could not retrieve cluster info: %w", err)
-	}
-
-	externalID := info.ExternalID()
-
-	// Rerieve service logs
-	resp, err := c.conn.ServiceLogs().V1().Clusters().Cluster(externalID).ClusterLogs().List().Send()
-	if err != nil {
-		return false, fmt.Errorf("could not list service logs history: %w", err)
-	}
-
-	serviceLogs, ok := resp.GetItems()
-	if !ok {
-		return false, nil
-	}
-
-	// Check if the cluster has been put in limited support at least 2 times in the last 24 hours
-	fourHoursAgo := time.Now().Add(-24 * time.Hour)
-
-	var filteredLogs []*servicelogsv1.LogEntry
-	for _, log := range serviceLogs.Slice() {
-		if (log.Username() == "service-account-ocm-cad-production" || log.Username() == "service-account-ocm-cad-staging") &&
-			log.ServiceName() == "LimitedSupport" &&
-			log.Timestamp().After(fourHoursAgo) &&
-			log.Summary() == ls.Summary {
-			filteredLogs = append(filteredLogs, log)
-		}
-	}
-
-	return len(filteredLogs) >= 2, nil
-}
-
-// DeleteLimitedSupportReasons removes *all* limited support reasons for a cluster which match the given summary,
-// skips if it has been removed at least 2 times in the last 24 hours
-// Returns true if a limited support reason got removed
-func (c *SdkClient) DeleteLimitedSupportReasons(ls LimitedSupportReason, internalClusterID string) (bool, error) {
-	isFlapping, err := c.isLimitedSupportReasonFlapping(ls, internalClusterID)
-	if err != nil {
-		return false, err
-	}
-
-	if isFlapping {
-		logging.Infof("Limited support reason is flapping `%s`", ls.Summary)
-		return false, nil
-	}
-
-	reasons, err := c.listLimitedSupportReasons(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("could not list current limited support reasons: %w", err)
-	}
-
-	// Remove each limited support reason matching the given template
-	removedReasons := false
-	for _, reason := range reasons {
-		if reasonsMatch(ls, reason) {
-			reasonID, ok := reason.GetID()
-			if !ok {
-				return false, fmt.Errorf("one of the cluster's limited support reasons does not contain an ID. Limited Support Reason: %#v", reason)
-			}
-			response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().LimitedSupportReason(reasonID).Delete().Send()
-			if err != nil {
-				return false, fmt.Errorf("received error while deleting limited support reason '%s': %w. Full response: %#v", reasonID, err, response)
-			}
-			removedReasons = true
-		}
-	}
-	if removedReasons {
-		logging.Infof("Removed limited support reason `%s`", ls.Summary)
-		return true, nil
-	}
-	logging.Infof("Found no limited support reason to remove for `%s`", ls.Summary)
-	return false, nil
-}
-
-// IsInLimitedSupport indicates whether any LS reasons exist on a given cluster
-func (c *SdkClient) IsInLimitedSupport(internalClusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("failed to list existing limited support reasons: %w", err)
-	}
-	if len(reasons) == 0 {
-		return false, nil
-	}
-	return true, nil
-}
-
-// UnrelatedLimitedSupportExists takes a cluster id and limited support reason
-// Returns true if any other limited support reason than the given one exists on the cluster
-func (c *SdkClient) UnrelatedLimitedSupportExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("UnrelatedLimitedSupportExists: failed to list current limited support reasons: %w", err)
-	}
-	if len(reasons) == 0 {
-		return false, nil
-	}
-
-	for _, reason := range reasons {
-		if !reasonsMatch(ls, reason) {
-			logging.Infof("UnrelatedLimitedSupportExists: cluster is in limited support for unrelated reason: %s", reason.Summary())
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// LimitedSupportReasonExists takes a cluster id and limited support reason
-// Returns true if the limited support reason exists on the cluster
-func (c *SdkClient) LimitedSupportReasonExists(ls LimitedSupportReason, internalClusterID string) (bool, error) {
-	reasons, err := c.listLimitedSupportReasons(internalClusterID)
-	if err != nil {
-		return false, fmt.Errorf("LimitedSupportReasonExists: failed to list current limited support reasons: %w", err)
-	}
-	if len(reasons) == 0 {
-		return false, nil
-	}
-
-	for _, reason := range reasons {
-		if reasonsMatch(ls, reason) {
-			logging.Infof("LimitedSupportReasonExists: cluster is in limited support for reason: %s", reason.Summary())
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func reasonsMatch(template LimitedSupportReason, reason *cmv1.LimitedSupportReason) bool {
-	return reason.Summary() == template.Summary && reason.Details() == template.Details
-}
-
-// listLimitedSupportReasons returns all limited support reasons attached to the given cluster
-func (c *SdkClient) listLimitedSupportReasons(internalClusterID string) ([]*cmv1.LimitedSupportReason, error) {
-	// List reasons
-	clusterLimitedSupport := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons()
-	reasons, err := clusterLimitedSupport.List().Send()
-	if err != nil {
-		return []*cmv1.LimitedSupportReason{}, fmt.Errorf("received error from ocm: %w. Full Response: %#v", err, reasons)
-	}
-	return reasons.Items().Slice(), nil
 }
 
 // AwsClassicJumpRoleCompatible check whether or not the CAD jumprole path is supported by the cluster

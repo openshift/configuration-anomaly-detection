@@ -17,7 +17,6 @@ func Push() {
 		promPusher = push.New(pushgateway, "cad").Format(expfmt.FmtText)
 		promPusher.Collector(Alerts)
 		promPusher.Collector(LimitedSupportSet)
-		promPusher.Collector(LimitedSupportLifted)
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
 		err := promPusher.Add()
@@ -60,13 +59,6 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "limitedsupport_set_total",
 			Help: "counts investigations resulting in setting a limited support reason",
-		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
-	// LimitedSupportLifted is a counter for limited support reasons lifted by cad
-	LimitedSupportLifted = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: namespace, Subsystem: subsystemInvestigate,
-			Name: "limitedsupport_lifted_total",
-			Help: "counts investigations resulting in lifting a limited support reason",
 		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
 	// ServicelogPrepared is a counter for investigation ending in a prepared servicelog
 	ServicelogPrepared = prometheus.NewCounterVec(

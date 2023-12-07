@@ -21,88 +21,77 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
-// NOTE: USE CAUTION WHEN CHANGING THESE TEMPLATES!!
-// Changing the templates' summaries will likely prevent CAD from removing clusters with these Limited Support reasons in the future, since it identifies which reasons to delete via their summaries.
-// If the summaries *must* be modified, it's imperative that existing clusters w/ these LS reasons have the new summary applied to them (currently, the only way to do this is to delete the current
-// reason & apply the new one). Failure to do so will result in orphan clusters that are not managed by CAD.
-var chgmLimitedSupport = ocm.LimitedSupportReason{
-	Summary: "Cluster not checking in",
-	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
+var chgmSL = ocm.ServiceLog{
+	Severity:     "Error",
+	Summary:      "Action required: cluster not checking in",
+	ServiceName:  "SREManualAction",
+	Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
+	InternalOnly: false,
 }
-
-// CAUTION
 
 // InvestigateTriggered runs the investigation for a triggered chgm pagerduty event
 func InvestigateTriggered(r *investigation.Resources) error {
+	var notesSb strings.Builder
+	notesSb.WriteString("🤖 Automated CHGM pre-investigation 🤖\n")
+	notesSb.WriteString("===========================\n")
+
+	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
+	logging.Debugf("the investigation returned: [infras running: %d] - [masters running: %d]", res.RunningInstances.Infra, res.RunningInstances.Master)
 
-	logging.Debugf("the investigation returned %#v", res.string())
+	if !res.UserAuthorized {
+		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
+		return utils.WithRetries(func() error {
+			err := postChgmSLAndSilence(r.Cluster.ID(), r.OcmClient, r.PdClient)
+			metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
 
-	lsExists, err := r.OcmClient.IsInLimitedSupport(r.Cluster.ID())
+			return err
+		})
+	}
+	notesSb.WriteString("✅ Customer did not stop nodes.\n")
+	logging.Info("The customer has not stopped/terminated any nodes.")
+
+	// 2. Check if the cluster is fresh out of a long hibernation
+	// TODO(Claudio): OSD-18775 - add the note regardless of how long the cluster was hibernated, as long as it came just out of hibernation.
+	longHibernation, err := investigateHibernation(r.Cluster, r.OcmClient)
 	if err != nil {
-		return r.PdClient.EscalateAlertWithNote(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
-	}
-
-	// if lsExists, silence alert and add investigation to notes
-	if lsExists {
-		logging.Info("Unrelated limited support reason present on cluster, silencing")
-		return r.PdClient.SilenceAlertWithNote(res.string() + "Unrelated limited support reason present on cluster, silenced.")
-	}
-
-	longHibernation, hibernationErr := investigateHibernation(r.Cluster, r.OcmClient)
-	if hibernationErr != nil {
-		logging.Warn(fmt.Errorf("Could not check hibernation status of cluster: %w", err))
+		logging.Warnf("could not check hibernation status of cluster: %w", err)
 	}
 	if longHibernation {
-		err = r.PdClient.AddNote(fmt.Sprintf("⚠️ Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", hibernationTooLong.Hours()/24))
+		logging.Info("The cluster was hibernated for too long.")
+		notesSb.WriteString(fmt.Sprintf("⚠️ Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation\n", hibernationTooLong.Hours()/24))
+	} else {
+		logging.Info("The cluster was not hibernated for too long.")
+	}
+
+	// 3. Check if the customer blocked egresses
+	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	if err != nil {
+		logging.Error("Network verifier ran into an error: %s", err.Error())
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n\t %s", err))
+
+		err = r.PdClient.AddNote(notesSb.String())
 		if err != nil {
-			logging.Error("could not add hibernation comment to incident notes")
+			// We do not return as we want the alert to be escalated either no matter what.
+			logging.Error("could not add failure reason incident notes")
 		}
 	}
 
-	if res.UserAuthorized {
-		logging.Info("The customer has not stopped/terminated any nodes.")
-		// Run network verifier
-		verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
-		if err != nil {
-			// Forward to on call, set err as note to pagerduty incident
-			logging.Error("Error running network verifier, escalating to SRE.")
-			err = r.PdClient.AddNote(fmt.Sprintf("NetworkVerifier failed to run:\n\t %s", err))
-			if err != nil {
-				logging.Error("could not add failure reason incident notes")
-			}
-
-			return r.PdClient.EscalateAlertWithNote(res.string())
-		}
-
-		if verifierResult == networkverifier.Failure {
-			metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
-			err = r.PdClient.AddNote(fmt.Sprintf("Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", failureReason, r.Cluster.ID(), failureReason))
-			if err != nil {
-				logging.Error("could not add issues to incident notes")
-			}
-			// Change this to put the cluster into limited support after some time
-			return r.PdClient.EscalateAlertWithNote(res.string())
-		}
-
-		logging.Info("Network verifier passed. Escalating to SRE")
-		err = r.PdClient.AddNote(fmt.Sprintln("Network verifier passed."))
-		if err != nil {
-			logging.Error("could not add passed message to incident notes")
-		}
-		return r.PdClient.EscalateAlertWithNote(res.string())
+	switch verifierResult {
+	case networkverifier.Failure:
+		logging.Infof("Network verifier reported failure: %s", failureReason)
+		metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
+	case networkverifier.Success:
+		notesSb.WriteString("✅ Network verifier passed\n")
 	}
-	res.LimitedSupportReason = chgmLimitedSupport
+	logging.Info("Network verifier passed.")
 
-	// The node shutdown was the customer
-	// Put into limited support, silence and update incident notes
-	return utils.WithRetries(func() error {
-		metrics.Inc(metrics.LimitedSupportSet, r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary)
-		return postLimitedSupport(r.Cluster.ID(), res.string(), r.OcmClient, r.PdClient)
-	})
+	// Found no issues - forward notes to SRE.
+	return r.PdClient.EscalateAlertWithNote(notesSb.String())
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
@@ -199,44 +188,6 @@ type investigateInstancesOutput struct {
 	ClusterNotEvaluated  bool
 	LimitedSupportReason ocm.LimitedSupportReason
 	Error                string
-}
-
-// string implements the stringer interface for InvestigateInstancesOutput
-func (i investigateInstancesOutput) string() string {
-	msg := ""
-	msg += fmt.Sprintf("Is user authorized: '%v' \n", i.UserAuthorized)
-	// TODO: check if %v is the best formatting for UserInfo
-	if i.User.UserName != "" {
-		msg += fmt.Sprintf("\nUserName : '%v' \n", i.User.UserName)
-	}
-	if i.User.IssuerUserName != "" {
-		msg += fmt.Sprintf("\nIssuerUserName: '%v' \n", i.User.IssuerUserName)
-	}
-	msg += fmt.Sprintf("\nNumber of non running instances: '%v' \n", len(i.NonRunningInstances))
-	msg += fmt.Sprintf("\nNumber of running instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tWorker: '%v'\n",
-		i.RunningInstances.Master, i.RunningInstances.Infra, i.RunningInstances.Worker)
-	msg += fmt.Sprintf("\nNumber of expected instances:\n\tMaster: '%v'\n\tInfra: '%v'\n\tMin Worker: '%v'\n\tMax Worker: '%v'\n",
-		i.ExpectedInstances.Master, i.ExpectedInstances.Infra, i.ExpectedInstances.MinWorker, i.ExpectedInstances.MaxWorker)
-	// var ids []string
-	ids := make([]string, len(i.NonRunningInstances))
-	for i, nonRunningInstance := range i.NonRunningInstances {
-		// TODO: add also the StateTransitionReason to the output if needed
-		ids[i] = *nonRunningInstance.InstanceId
-	}
-	if len(i.NonRunningInstances) > 0 {
-		msg += fmt.Sprintf("\nInstance IDs: '%v' \n", ids)
-	}
-
-	if i.LimitedSupportReason != (ocm.LimitedSupportReason{}) {
-		msg += fmt.Sprintln("\nLimited Support reason sent:")
-		msg += fmt.Sprintf("- Summary: '%s'\n", i.LimitedSupportReason.Summary)
-		msg += fmt.Sprintf("- Details: '%s'\n", i.LimitedSupportReason.Details)
-	}
-
-	if i.Error != "" {
-		msg += fmt.Sprintf("\nErrors: '%v' \n", i.Error)
-	}
-	return msg
 }
 
 func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {
@@ -460,36 +411,12 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	return res, nil
 }
 
-// PostLimitedSupport will put the cluster into limited support
-// As the deadmanssnitch operator is not silenced on limited support
-// the alert is updated with notes and silenced
-func postLimitedSupport(clusterID string, notes string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
-	err := ocmCli.PostLimitedSupportReason(chgmLimitedSupport, clusterID)
+// postChgmSLAndSilence will send the CHGM SL and silence the alert
+func postChgmSLAndSilence(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
+	err := ocmCli.PostServiceLog(clusterID, &chgmSL)
 	if err != nil {
-		return fmt.Errorf("failed posting limited support reason: %w", err)
-	}
-	// we need to aditionally silence here, as dms service keeps firing
-	// even when we put in limited support
-	return pdCli.SilenceAlertWithNote(notes)
-}
-
-// HandleResolved removes limited support when a CHGM resolves
-func HandleResolved(r *investigation.Resources) error {
-	logging.Info("Remove 'Cluster has gone missing' limited support reason if any...")
-
-	removedReasons := false
-	err := utils.WithRetries(func() error {
-		var err error
-		removedReasons, err = r.OcmClient.DeleteLimitedSupportReasons(chgmLimitedSupport, r.Cluster.ID())
-		return err
-	})
-	if err != nil {
-		return fmt.Errorf("failed to remove limited support")
+		return fmt.Errorf("failed sending service log: %w", err)
 	}
 
-	if removedReasons {
-		metrics.Inc(metrics.LimitedSupportLifted, r.AlertType.String(), r.PdClient.GetEventType(), chgmLimitedSupport.Summary)
-	}
-
-	return nil
+	return pdCli.SilenceAlertWithNote("Customer stopped instances. Sending SL and silencing alert.")
 }
