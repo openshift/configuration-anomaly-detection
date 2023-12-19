@@ -34,7 +34,7 @@ var chgmLimitedSupport = ocm.LimitedSupportReason{
 // ClusterDeploymentSupportExceptionLabel is the label indicating the cluster is under limited support
 // and the PagerDuty service should be enabled even if the cluster is in limited support
 // TODO:() Centrailize or Remove this varaiable once https://issues.redhat.com/browse/XCMSTRAT-427 is completed
-var ClusterDeploymentSupportExceptionLabel = "hive.openshift.com/support-exception"
+var ClusterDeploymentSupportExceptionLabel = "ext-managed.openshift.io/support-exception"
 
 // CAUTION
 
