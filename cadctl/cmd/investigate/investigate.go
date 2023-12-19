@@ -226,7 +226,7 @@ func isAWS(cluster *cmv1.Cluster) (bool, error) {
 // ClusterDeploymentSupportExceptionLabel is the label indicating the cluster is under limited support
 // and the PagerDuty service should be enabled even if the cluster is in limited support
 // TODO:() Centrailize or Remove this varaiable once https://issues.redhat.com/browse/XCMSTRAT-427 is completed
-var ClusterDeploymentSupportExceptionLabel = "hive.openshift.com/support-exception"
+var ClusterDeploymentSupportExceptionLabel = "ext-managed.openshift.io/support-exception"
 
 // Checks pre-requisites for a cluster investigation:
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
