@@ -4,6 +4,7 @@ package chgm
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,11 @@ var chgmLimitedSupport = ocm.LimitedSupportReason{
 	Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 }
 
+// ClusterDeploymentSupportExceptionLabel is the label indicating the cluster is under limited support
+// and the PagerDuty service should be enabled even if the cluster is in limited support
+// TODO:() Centrailize or Remove this varaiable once https://issues.redhat.com/browse/XCMSTRAT-427 is completed
+var ClusterDeploymentSupportExceptionLabel = "hive.openshift.com/support-exception"
+
 // CAUTION
 
 // InvestigateTriggered runs the investigation for a triggered chgm pagerduty event
@@ -41,13 +47,18 @@ func InvestigateTriggered(r *investigation.Resources) error {
 
 	logging.Debugf("the investigation returned %#v", res.string())
 
+	hasSupportException := false
+	if supportExValue, err := strconv.ParseBool(r.ClusterDeployment.Labels[ClusterDeploymentSupportExceptionLabel]); err == nil {
+		hasSupportException = supportExValue
+	}
+
 	lsExists, err := r.OcmClient.IsInLimitedSupport(r.Cluster.ID())
 	if err != nil {
 		return r.PdClient.EscalateAlertWithNote(fmt.Errorf("failed to determine if limited support reason already exists: %w", err).Error())
 	}
 
-	// if lsExists, silence alert and add investigation to notes
-	if lsExists {
+	// if lsExists, silence alert and add investigation to notes and its not in support exceuption
+	if lsExists && !hasSupportException {
 		logging.Info("Unrelated limited support reason present on cluster, silencing")
 		return r.PdClient.SilenceAlertWithNote(res.string() + "Unrelated limited support reason present on cluster, silenced.")
 	}
