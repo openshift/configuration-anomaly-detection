@@ -9,8 +9,9 @@ require (
 	github.com/onsi/gomega v1.30.0
 	github.com/openshift-online/ocm-sdk-go v0.1.386
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
+	github.com/openshift/backplane-cli v0.1.20-0.20231127133146-fc75330a99d6
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
-	github.com/openshift/osd-network-verifier v0.4.3
+	github.com/openshift/osd-network-verifier v0.4.4
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/common v0.37.0
 	github.com/spf13/cobra v1.8.0
@@ -39,7 +40,7 @@ require (
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
-	github.com/cespare/xxhash/v2 v2.1.2 // indirect
+	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/deepmap/oapi-codegen v1.12.4 // indirect
 	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
@@ -62,7 +63,7 @@ require (
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/google/uuid v1.3.0 // indirect
+	github.com/google/uuid v1.3.1 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
@@ -90,7 +91,6 @@ require (
 	github.com/openshift-online/ocm-cli v0.1.66 // indirect
 	github.com/openshift/api v0.0.0-20230720094506-afcbe27aec7c // indirect
 	github.com/openshift/backplane-api v0.0.0-20230919035427-a52e4ae498fb // indirect
-	github.com/openshift/backplane-cli v0.1.20-0.20231127133146-fc75330a99d6 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
 	github.com/perimeterx/marshmallow v1.1.4 // indirect
@@ -141,7 +141,7 @@ require (
 )
 
 require (
-	github.com/golang/glog v1.0.0 // indirect
+	github.com/golang/glog v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
