@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -34,6 +35,7 @@ import (
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/spf13/cobra"
 )
@@ -120,6 +122,14 @@ func run(_ *cobra.Command, _ []string) error {
 	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
 	if err != nil {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
+	}
+
+	supportExceptionExists, err := hasSupportEx(clusterDeployment)
+	if err != nil {
+		return fmt.Errorf("could not verify if cluster has a support exception: %w", err)
+	}
+	if supportExceptionExists {
+		return pdClient.EscalateAlertWithNote("Cluster has a support exception, while it might be in limited support, it still needs investigation. Please investigate manually.")
 	}
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
@@ -243,4 +253,20 @@ func clusterRequiresInvestigation(cluster *cmv1.Cluster, ocmClient *ocm.SdkClien
 	}
 
 	return true, nil
+}
+
+func hasSupportEx(cd *hivev1.ClusterDeployment) (bool, error) {
+	const ClusterDeploymentSupportExceptionLabel = "ext-managed.openshift.io/support-exception"
+
+	labelValue, exists := cd.Labels[ClusterDeploymentSupportExceptionLabel]
+	if !exists {
+		return false, nil
+	}
+
+	supportExValue, err := strconv.ParseBool(labelValue)
+	if err != nil {
+		return false, fmt.Errorf("unable to parse support exception label to bool: %w", err)
+	}
+
+	return supportExValue, nil
 }
