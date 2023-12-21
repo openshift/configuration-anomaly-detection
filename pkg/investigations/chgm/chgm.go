@@ -418,5 +418,5 @@ func postChgmSLAndSilence(clusterID string, ocmCli ocm.Client, pdCli pagerduty.C
 		return fmt.Errorf("failed sending service log: %w", err)
 	}
 
-	return pdCli.SilenceAlertWithNote("Customer stopped instances. Sending SL and silencing alert.")
+	return pdCli.SilenceAlertWithNote("Customer stopped instances. Sent SL and silencing alert.")
 }
