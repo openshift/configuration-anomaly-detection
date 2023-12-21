@@ -76,7 +76,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		err = r.PdClient.AddNote(notesSb.String())
 		if err != nil {
 			// We do not return as we want the alert to be escalated either no matter what.
-			logging.Error("could not add failure reason incident notes")
+			logging.Error("could not add failure reason to incident notes")
 		}
 	}
 
