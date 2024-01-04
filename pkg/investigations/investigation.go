@@ -3,7 +3,6 @@ package investigation
 
 import (
 	"errors"
-	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -45,21 +44,6 @@ type Resources struct {
 	AwsClient         aws.Client
 	OcmClient         ocm.Client
 	PdClient          pagerduty.Client
-}
-
-// BuildAlertForLimitedSupportRemovalFailure populates the alert template that is used in case of failure to remove a limited support reason that was
-// previously added by CAD
-func BuildAlertForLimitedSupportRemovalFailure(lsErr error, internalClusterID string) pagerduty.NewAlert {
-	// The alert description acts as a title for the resulting incident
-	return pagerduty.NewAlert{
-		Description: fmt.Sprintf("CAD is unable to remove a Limited Support reason from cluster %s", internalClusterID),
-		Details: pagerduty.NewAlertCustomDetails{
-			ClusterID:  internalClusterID,
-			Error:      lsErr.Error(),
-			Resolution: "CAD has been unable to remove a Limited Support reason from this cluster. The cluster needs to be manually reviewed and have any appropriate Limited Support reasons removed. After corrective actions have been taken, this alert must be manually resolved.",
-			SOP:        "https://github.com/openshift/ops-sop/blob/master/v4/alerts/CAD_ErrorRemovingLSReason.md",
-		},
-	}
 }
 
 // AlertType is the struct representing all alerts handled by CAD

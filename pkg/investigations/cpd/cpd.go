@@ -27,7 +27,6 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Error", Summary: "Installation 
 // In the future, we want to automate service logs based on the network verifier output.
 func InvestigateTriggered(r *investigation.Resources) error {
 	var notesSb strings.Builder
-
 	notesSb.WriteString("🤖 Automated CPD pre-investigation 🤖\n")
 	notesSb.WriteString("===========================\n")
 
@@ -58,7 +57,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				logging.Error(err)
 			}
 			if !isValid {
-				if err := r.OcmClient.PostServiceLog(r.Cluster, byovpcRoutingSL); err != nil {
+				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL); err != nil {
 					return err
 				}
 				metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
@@ -90,7 +89,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 		metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
-		notesSb.WriteString(fmt.Sprintf("⚠️ Network verifier found issues:\n %s \n\n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", failureReason, r.Cluster.ID(), failureReason))
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
 
 		// In the future, we want to send a service log in this case
 		err = r.PdClient.AddNote(notesSb.String())

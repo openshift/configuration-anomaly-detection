@@ -4,3 +4,5 @@ dist
 .docker
 .envrc
 .idea
+.vscode
+cad_testing

@@ -332,7 +332,7 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTi
 		if executionError == nil {
 			return nil, fmt.Errorf("command failed after a pollTimeout of %v: %w", backoffUpperLimit, err)
 		}
-		return nil, fmt.Errorf("command failed after a pollTimeout of %v: %v: %w", backoffUpperLimit, err.Error(), executionError)
+		return nil, fmt.Errorf("command failed after a pollTimeout of %v: %w: %w", backoffUpperLimit, err, executionError)
 	}
 
 	return events, nil

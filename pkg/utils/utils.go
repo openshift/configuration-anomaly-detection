@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
 // WithRetries runs a function with up to 10 retries on error
@@ -34,18 +31,4 @@ func WithRetriesConfigurable(count int, initialBackoff time.Duration, fn func() 
 		}
 	}
 	return fmt.Errorf("failed after %d retries: %w", count, err)
-}
-
-// EscalateAlertIfNotLS escalates an alert with the given reason if the cluster is not in limited support, else assigns the alert to silent test
-func EscalateAlertIfNotLS(escalationReason string, cluster *cmv1.Cluster, pdClient pagerduty.Client, ocmClient ocm.Client) error {
-	ls, err := ocmClient.IsInLimitedSupport(cluster.ID())
-	if err != nil {
-		return err
-	}
-
-	if ls {
-		return pdClient.SilenceAlertWithNote("Cluster is in limited support. Silencing instead of escalating.")
-	}
-
-	return pdClient.EscalateAlertWithNote(escalationReason)
 }

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -34,8 +33,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/spf13/cobra"
 )
@@ -85,7 +82,7 @@ func run(_ *cobra.Command, _ []string) error {
 	if alertType == investigation.Unsupported {
 		err = pdClient.EscalateAlert()
 		if err != nil {
-			return fmt.Errorf("Could not escalate unsupported alert: %w", err)
+			return fmt.Errorf("could not escalate unsupported alert: %w", err)
 		}
 		return nil
 	}
@@ -114,7 +111,7 @@ func run(_ *cobra.Command, _ []string) error {
 	// initialize logger for the internal-cluster-id context
 	logging.RawLogger = logging.InitLogger(logLevelString, internalClusterID)
 
-	requiresInvestigation, err := clusterRequiresInvestigation(cluster, ocmClient, pdClient)
+	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient)
 	if err != nil || !requiresInvestigation {
 		return err
 	}
@@ -124,23 +121,9 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
 	}
 
-	supportExceptionExists, err := hasSupportEx(clusterDeployment)
-	if err != nil {
-		return fmt.Errorf("could not verify if cluster has a support exception: %w", err)
-	}
-	if supportExceptionExists {
-		return pdClient.EscalateAlertWithNote("Cluster has a support exception, while it might be in limited support, it still needs investigation. Please investigate manually.")
-	}
-
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
 		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertTypeString)
-	}
-
-	logging.Info("Successfully accessed customer cloud account. Removing existing 'Cloud Credentials Are Missing' limited support reasons.")
-	err = ccam.RemoveLimitedSupport(cluster, ocmClient, pdClient, alertTypeString)
-	if err != nil {
-		return err
 	}
 
 	investigationResources := &investigation.Resources{AlertType: alertType, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
@@ -150,7 +133,6 @@ func run(_ *cobra.Command, _ []string) error {
 	switch alertType {
 	case investigation.ClusterHasGoneMissing:
 		run.Triggered = chgm.InvestigateTriggered
-		run.Resolved = chgm.HandleResolved
 	case investigation.ClusterProvisioningDelay:
 		run.Triggered = cpd.InvestigateTriggered
 	default:
@@ -223,50 +205,20 @@ func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
 	return client, nil
 }
 
-func isAWS(cluster *cmv1.Cluster) (bool, error) {
-	cloudProvider, ok := cluster.GetCloudProvider()
-	if !ok {
-		return false, fmt.Errorf("Failed to get clusters cloud provider")
-	}
-
-	return cloudProvider.ID() == "aws", nil
-}
-
 // Checks pre-requisites for a cluster investigation:
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
 // - the cloud provider is supported by CAD (cluster is AWS)
-// - the AWS account access flow is supported by CAD
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func clusterRequiresInvestigation(cluster *cmv1.Cluster, ocmClient *ocm.SdkClient, pdClient *pagerduty.SdkClient) (bool, error) {
+func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient) (bool, error) {
 	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
 	}
 
-	isAWSCluster, err := isAWS(cluster)
-	if err != nil {
-		return false, err
-	}
-
-	if !isAWSCluster {
-		return false, utils.EscalateAlertIfNotLS("CAD could not run an automated investigation on this cluster: unsupported cloud provider.", cluster, pdClient, ocmClient)
+	if cluster.AWS() == nil {
+		logging.Info("Cloud provider unsupported, forwarding to primary.")
+		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
 	}
 
 	return true, nil
-}
-
-func hasSupportEx(cd *hivev1.ClusterDeployment) (bool, error) {
-	const ClusterDeploymentSupportExceptionLabel = "ext-managed.openshift.io/support-exception"
-
-	labelValue, exists := cd.Labels[ClusterDeploymentSupportExceptionLabel]
-	if !exists {
-		return false, nil
-	}
-
-	supportExValue, err := strconv.ParseBool(labelValue)
-	if err != nil {
-		return false, fmt.Errorf("unable to parse support exception label to bool: %w", err)
-	}
-
-	return supportExValue, nil
 }
