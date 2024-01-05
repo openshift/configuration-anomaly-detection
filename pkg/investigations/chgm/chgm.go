@@ -87,8 +87,8 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
 	case networkverifier.Success:
 		notesSb.WriteString("✅ Network verifier passed\n")
+		logging.Info("Network verifier passed.")
 	}
-	logging.Info("Network verifier passed.")
 
 	// Found no issues - forward notes to SRE.
 	return r.PdClient.EscalateAlertWithNote(notesSb.String())
