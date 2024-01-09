@@ -71,13 +71,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n\t %s", err))
-
-		err = r.PdClient.AddNote(notesSb.String())
-		if err != nil {
-			// We do not return as we want the alert to be escalated either no matter what.
-			logging.Error("could not add failure reason to incident notes")
-		}
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n %s", err.Error()))
 	}
 
 	switch verifierResult {
@@ -89,8 +83,11 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		notesSb.WriteString("✅ Network verifier passed\n")
 		logging.Info("Network verifier passed.")
 	}
+	// TODO(Claudio): Keep track of network failures automatically warranting the SL and alert silence,
+	// and automate the send for those instead of escalating to SRE.
+	// https://issues.redhat.com/browse/OSD-20190
 
-	// Found no issues - forward notes to SRE.
+	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return r.PdClient.EscalateAlertWithNote(notesSb.String())
 }
 
