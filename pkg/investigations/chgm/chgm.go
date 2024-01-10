@@ -29,6 +29,14 @@ var chgmSL = ocm.ServiceLog{
 	InternalOnly: false,
 }
 
+var egressSL = ocm.ServiceLog{
+	Severity:     "Error",
+	Summary:      "Action required: Network misconfiguration",
+	ServiceName:  "SREManualAction",
+	Description:  "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please refer to the following firewall pre-requisites which are required for PrivateLink clusters: https://docs.openshift.com/rosa/rosa_install_access_delete_clusters/rosa_getting_started_iam/rosa-aws-prereqs.html#osd-aws-privatelink-firewall-prerequisites_prerequisites. Please revert changes.",
+	InternalOnly: false,
+}
+
 // InvestigateTriggered runs the investigation for a triggered chgm pagerduty event
 func InvestigateTriggered(r *investigation.Resources) error {
 	var notesSb strings.Builder
@@ -77,8 +85,23 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
-		metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
+
+		egressSL.Description = fmt.Sprintf(egressSL.Description, failureReason)
+		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &egressSL)
+		if err != nil {
+			logging.Error("Failed to send network verifier servicelog: %w", err)
+			notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
+			break
+		}
+		metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.\n", failureReason))
+
+		if strings.Contains(failureReason, "nosnch.in") {
+			logging.Info("Alert is expected as the cluster is not able to reach deadmanssnitch. Silencing.")
+			notesSb.WriteString("Silencing the alert, as the cluster is not able to reach deadmanssnitch.")
+			return r.PdClient.SilenceAlertWithNote(notesSb.String())
+		}
+		notesSb.WriteString("Deadmanssnitch is not blocked. Please investigate the cluster.")
 	case networkverifier.Success:
 		notesSb.WriteString("✅ Network verifier passed\n")
 		logging.Info("Network verifier passed.")
