@@ -94,21 +94,18 @@ func InvestigateTriggered(r *investigation.Resources) error {
 			break
 		}
 		metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.\n", failureReason))
 
 		if strings.Contains(failureReason, "nosnch.in") {
 			logging.Info("Alert is expected as the cluster is not able to reach deadmanssnitch. Silencing.")
-			notesSb.WriteString("Silencing the alert, as the cluster is not able to reach deadmanssnitch.")
+			notesSb.WriteString("Silencing the alert, as the cluster is not able to reach deadmanssnitch.\n")
+			notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.\n", failureReason))
 			return r.PdClient.SilenceAlertWithNote(notesSb.String())
 		}
-		notesSb.WriteString("Deadmanssnitch is not blocked. Please investigate the cluster.")
+		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason))
 	case networkverifier.Success:
 		notesSb.WriteString("✅ Network verifier passed\n")
 		logging.Info("Network verifier passed.")
 	}
-	// TODO(Claudio): Keep track of network failures automatically warranting the SL and alert silence,
-	// and automate the send for those instead of escalating to SRE.
-	// https://issues.redhat.com/browse/OSD-20190
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return r.PdClient.EscalateAlertWithNote(notesSb.String())
