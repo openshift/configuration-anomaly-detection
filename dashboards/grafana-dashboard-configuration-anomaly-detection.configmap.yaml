@@ -125,7 +125,7 @@ data:
             "type": "prometheus",
             "uid": "${cad_ds}"
           },
-          "description": "Alerts cad actioned with either limited support, prepared servicelog or sent servicelog",
+          "description": "Alerts that cad prevented from paging SRE by actioning with either limited support, a prepared servicelog or a sent servicelog",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -176,7 +176,7 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) - sum(increase(cad_investigate_alerts_total{alert_type=\"ClusterHasGoneMissing\", event_type=\"incident.resolved\"}[$__range]))) * 100)",
+              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) ) * 100)",
               "hide": false,
               "legendFormat": "__auto",
               "range": true,
@@ -324,6 +324,7 @@ data:
             "type": "prometheus",
             "uid": "${cad_ds}"
           },
+          "description": "Calculated from the number of prevented alerts with a heuristic constant factor of 15 minutes per prevented page.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -375,7 +376,7 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) - sum(increase(cad_investigate_alerts_total{alert_type=\"ClusterHasGoneMissing\", event_type=\"incident.resolved\"}[$__range])))) * sum(increase(cad_investigate_alerts_total[$__range])) * 15 / 60",
+              "expr": "(((sum(increase(cad_investigate_limitedsupport_set_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_sent_total[$__range])) OR on() vector(0)) + (sum(increase(cad_investigate_servicelog_prepared_total[$__range])) OR on() vector(0))) / (sum(increase(cad_investigate_alerts_total[$__range])) )) * sum(increase(cad_investigate_alerts_total[$__range])) * 15 / 60",
               "legendFormat": "__auto",
               "range": true,
               "refId": "A"
@@ -407,7 +408,7 @@ data:
           },
           "gridPos": {
             "h": 8,
-            "w": 24,
+            "w": 12,
             "x": 0,
             "y": 17
           },
@@ -478,7 +479,78 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 11,
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 17
+          },
+          "id": 18,
+          "options": {
+            "displayLabels": [
+              "name",
+              "value",
+              "percent"
+            ],
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_sent_total[$__range]))",
+              "hide": false,
+              "legendFormat": "{{alert_type}} : {{ls_summary}}",
+              "range": true,
+              "refId": "B"
+            }
+          ],
+          "title": "Sent servicelogs",
+          "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                }
+              },
+              "displayName": "${__series.name}",
+              "mappings": []
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
             "w": 12,
             "x": 0,
             "y": 25
@@ -549,81 +621,10 @@ data:
             "overrides": []
           },
           "gridPos": {
-            "h": 11,
+            "h": 8,
             "w": 12,
             "x": 12,
             "y": 25
-          },
-          "id": 16,
-          "options": {
-            "displayLabels": [
-              "name",
-              "value",
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "pieType": "pie",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.3.8",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${cad_ds}"
-              },
-              "editorMode": "code",
-              "expr": "sum without(instance, pod)(increase(cad_investigate_limitedsupport_lifted_total[$__range]))",
-              "hide": false,
-              "legendFormat": "{{alert_type}} : {{ls_summary}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Limited Support - Removed",
-          "type": "piechart"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${cad_ds}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                }
-              },
-              "displayName": "${__series.name}",
-              "mappings": []
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 0,
-            "y": 36
           },
           "id": 17,
           "options": {
@@ -667,77 +668,6 @@ data:
           ],
           "title": "Prepared servicelogs",
           "type": "piechart"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${cad_ds}"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                }
-              },
-              "displayName": "${__series.name}",
-              "mappings": []
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 12,
-            "y": 36
-          },
-          "id": 18,
-          "options": {
-            "displayLabels": [
-              "name",
-              "value",
-              "percent"
-            ],
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "pieType": "pie",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "tooltip": {
-              "mode": "single",
-              "sort": "none"
-            }
-          },
-          "pluginVersion": "9.3.8",
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${cad_ds}"
-              },
-              "editorMode": "code",
-              "expr": "sum without(instance, pod)(increase(cad_investigate_servicelog_sent_total[$__range]))",
-              "hide": false,
-              "legendFormat": "{{alert_type}} : {{ls_summary}}",
-              "range": true,
-              "refId": "B"
-            }
-          ],
-          "title": "Sent servicelogs",
-          "type": "piechart"
         }
       ],
       "refresh": false,
@@ -761,7 +691,7 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(app-sre-prod-01-prometheus)|(app-sre-stage-01-prometheus)",
+            "regex": "(app-sre-prod-01-prometheus)|(appsres07ue1-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
@@ -779,7 +709,7 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(app-sre-prod-01-cluster-prometheus)|(app-sre-stage-01-cluster-prometheus)",
+            "regex": "(app-sre-prod-01-cluster-prometheus)|(appsres07ue1-cluster-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
@@ -820,6 +750,6 @@ data:
       "timezone": "",
       "title": "Configuration-Anomaly-Detection-SLOs",
       "uid": "2k6bSMj7k",
-      "version": 3,
+      "version": 2,
       "weekStart": ""
     }
