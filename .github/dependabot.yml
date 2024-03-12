@@ -6,3 +6,10 @@ updates:
       - dependency-name: "github.com/openshift/osd-network-verifier"
     schedule:
       interval: 'daily'
+  - package-ecosystem: "docker"
+    directory: "/"
+    ignore:
+      # Only update runners base image not builder
+      - dependency-name: "registry.ci.openshift.org/openshift/release"
+    schedule:
+      interval: "weekly"
