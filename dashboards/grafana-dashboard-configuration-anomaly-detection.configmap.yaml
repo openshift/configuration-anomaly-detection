@@ -679,8 +679,8 @@ data:
           {
             "current": {
               "selected": true,
-              "text": "app-sre-prod-01-prometheus",
-              "value": "app-sre-prod-01-prometheus"
+              "text": "appsrep07ue1-prometheus",
+              "value": "appsrep07ue1-prometheus"
             },
             "description": "Datasource ( cad metrics )",
             "hide": 0,
@@ -691,15 +691,15 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(app-sre-prod-01-prometheus)|(appsres07ue1-prometheus)",
+            "regex": "(appsrep07ue1-prometheus)|(appsres07ue1-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
           {
             "current": {
               "selected": true,
-              "text": "app-sre-prod-01-cluster-prometheus",
-              "value": "app-sre-prod-01-cluster-prometheus"
+              "text": "appsrep07ue1-cluster-prometheus",
+              "value": "appsrep07ue1-cluster-prometheus"
             },
             "hide": 0,
             "includeAll": false,
@@ -709,7 +709,7 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(app-sre-prod-01-cluster-prometheus)|(appsres07ue1-cluster-prometheus)",
+            "regex": "(appsrep07ue1-cluster-prometheus)|(appsres07ue1-cluster-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
