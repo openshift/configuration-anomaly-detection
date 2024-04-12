@@ -22,7 +22,7 @@ import (
 )
 
 var chgmSL = &ocm.ServiceLog{
-	Severity:     "Error",
+	Severity:     "Critical",
 	Summary:      "Action required: cluster not checking in",
 	ServiceName:  "SREManualAction",
 	Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
@@ -51,8 +51,11 @@ var _ = Describe("chgm", func() {
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		var err error
+
+		region := cmv1.NewCloudRegion().Name("us-east-1")
+
 		// Must explicitly set all node types for GetNodeCount() to work in these tests
-		cluster, err = cmv1.NewCluster().Nodes(cmv1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(cmv1.ClusterStateReady).Build()
+		cluster, err = cmv1.NewCluster().Nodes(cmv1.NewClusterNodes().Compute(0).Master(1).Infra(1)).State(cmv1.ClusterStateReady).Region(region).Build()
 		Expect(err).ToNot(HaveOccurred())
 		clusterDeployment = &hivev1.ClusterDeployment{
 			Spec: hivev1.ClusterDeploymentSpec{

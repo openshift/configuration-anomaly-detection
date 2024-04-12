@@ -22,7 +22,7 @@ import (
 )
 
 var chgmSL = ocm.ServiceLog{
-	Severity:     "Error",
+	Severity:     "Critical",
 	Summary:      "Action required: cluster not checking in",
 	ServiceName:  "SREManualAction",
 	Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
@@ -30,7 +30,7 @@ var chgmSL = ocm.ServiceLog{
 }
 
 var egressSL = ocm.ServiceLog{
-	Severity:     "Error",
+	Severity:     "Critical",
 	Summary:      "Action required: Network misconfiguration",
 	ServiceName:  "SREManualAction",
 	Description:  "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please refer to the following firewall pre-requisites which are required for PrivateLink clusters: https://docs.openshift.com/rosa/rosa_install_access_delete_clusters/rosa_getting_started_iam/rosa-aws-prereqs.html#osd-aws-privatelink-firewall-prerequisites_prerequisites. Please revert changes.",
