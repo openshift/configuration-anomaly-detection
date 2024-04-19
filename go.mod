@@ -1,9 +1,7 @@
 module github.com/openshift/configuration-anomaly-detection
 
 go 1.21
-
-toolchain go1.22.2
-
+ 
 require (
 	github.com/PagerDuty/go-pagerduty v1.7.0
 	github.com/aws/aws-sdk-go v1.48.3
