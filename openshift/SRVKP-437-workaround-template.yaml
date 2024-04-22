@@ -25,7 +25,6 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: srvkp-4372
-    namespace: configuration-anomaly-detection-stage
   roleRef:
     kind: ClusterRole
     name: srvkp-4372
@@ -34,7 +33,6 @@ objects:
   apiVersion: v1
   metadata:
     name: srvkp-4372
-    namespace: configuration-anomaly-detection-stage
     annotations:
       kubernetes.io/description: Mitigate https://issues.redhat.com/browse/SRVKP-4372 by manually adding missing permissions to scc
 - apiVersion: batch/v1
