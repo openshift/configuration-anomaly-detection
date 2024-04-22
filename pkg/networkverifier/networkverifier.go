@@ -30,7 +30,8 @@ const (
 	Success   VerifierResult = 2
 )
 
-func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*onv.ValidateEgressInput, error) {
+// InitializeValidateEgressInput computes the input to pass to the network verifier tool
+func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*onv.ValidateEgressInput, error) {
 	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
 	securityGroupID, err := awsClient.GetSecurityGroupID(infraID)
 	if err != nil {
@@ -60,6 +61,14 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		return nil, fmt.Errorf("unsupported region: %s", region)
 	}
 
+	// If a KMS key is defined for the cluster, use it as the default aws/ebs key may not exist
+	kmsKeyArn := ""
+	aws := cluster.AWS()
+
+	if aws != nil {
+		kmsKeyArn = aws.KMSKeyArn()
+	}
+
 	proxy := proxy.ProxyConfig{}
 	// If the cluster has a cluster-wide proxy, configure it
 	if cluster.Proxy() != nil && !cluster.Proxy().Empty() {
@@ -82,6 +91,7 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		PlatformType: helpers.PlatformAWS,
 		Tags:         awsDefaultTags,
 		AWS: onv.AwsEgressConfig{
+			KmsKeyID:        kmsKeyArn,
 			SecurityGroupId: securityGroupID,
 		},
 	}, nil
@@ -89,7 +99,7 @@ func initializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 
 // Run runs the network verifier tool to check for network misconfigurations
 func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) {
-	validateEgressInput, err := initializeValidateEgressInput(cluster, clusterDeployment, awsClient)
+	validateEgressInput, err := InitializeValidateEgressInput(cluster, clusterDeployment, awsClient)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to initialize validateEgressInput: %w", err)
 	}

@@ -17,7 +17,7 @@ var _ = Describe("RunVerifier", func() {
 	Describe("AreAllInstancesRunning", func() {
 		var (
 			mockCtrl          *gomock.Controller
-			cluster           *v1.Cluster
+			clusterBuilder    *v1.ClusterBuilder
 			clusterDeployment *hivev1.ClusterDeployment
 			awsCli            *awsmock.MockClient
 		)
@@ -26,13 +26,17 @@ var _ = Describe("RunVerifier", func() {
 
 			awsCli = awsmock.NewMockClient(mockCtrl)
 
-			var err error
-			cluster, err = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Build()
+			region := v1.NewCloudRegion().ID("us-east-1")
 
-			clusterDeployment := &hivev1.ClusterDeployment{}
-			clusterDeployment.Spec.ClusterMetadata.InfraID = "infra_id"
+			clusterBuilder = v1.NewCluster().ID("12345").Nodes(v1.NewClusterNodes().Total(1)).Region(region)
 
-			Expect(err).ToNot(HaveOccurred())
+			clusterDeployment = &hivev1.ClusterDeployment{
+				Spec: hivev1.ClusterDeploymentSpec{
+					ClusterMetadata: &hivev1.ClusterMetadata{
+						InfraID: "infra_id",
+					},
+				},
+			}
 		})
 		AfterEach(func() {
 			mockCtrl.Finish()
@@ -40,16 +44,47 @@ var _ = Describe("RunVerifier", func() {
 		// This test is pretty useless but illustrates what tests for networkverifier should look like
 		When("Getting security group ids", func() {
 			It("Should return the error failed to get SecurityGroupId", func() {
-				expectedError := errors.New("failed to get SecurityGroupId: errormessage")
+				// Finish setup
+				cluster, err := clusterBuilder.Build()
+
+				Expect(err).ToNot(HaveOccurred())
+
 				// Arrange
-				awsCli.EXPECT().GetSecurityGroupID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return(nil, expectedError)
+				expectedError := errors.New("failed to get SecurityGroupId: errormessage")
+
+				awsCli.EXPECT().GetSecurityGroupID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return("", expectedError)
+
 				// Act
 				result, failures, gotErr := networkverifier.Run(cluster, clusterDeployment, awsCli)
-
 				fmt.Printf("result %v, failures %v", result, failures)
+
 				// Assert
 				Expect(gotErr).To(HaveOccurred())
-				Expect(gotErr.Error()).To(BeIdenticalTo(expectedError))
+				Expect(gotErr.Error()).To(ContainSubstring(expectedError.Error()))
+			})
+		})
+
+		When("Checking input passed to ONV", func() {
+			It("Should forward the cluster KMS key", func() {
+				// Finish setup
+				kmsKey := "some-KMS-key-ARN"
+				clusterBuilder.AWS(v1.NewAWS().KMSKeyArn(kmsKey))
+
+				cluster, err := clusterBuilder.Build()
+
+				Expect(err).ToNot(HaveOccurred())
+
+				// Arrange
+				awsCli.EXPECT().GetSecurityGroupID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return(gomock.Any().String(), nil)
+				awsCli.EXPECT().GetSubnetID(gomock.Eq(clusterDeployment.Spec.ClusterMetadata.InfraID)).Return([]string{"string1", "string2"}, nil)
+
+				// Act
+				input, gotErr := networkverifier.InitializeValidateEgressInput(cluster, clusterDeployment, awsCli)
+				fmt.Printf("input %v", input)
+
+				// Assert
+				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(input.AWS.KmsKeyID).To(BeIdenticalTo(kmsKey))
 			})
 		})
 	})
