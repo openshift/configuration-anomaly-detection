@@ -1,5 +1,8 @@
 apiVersion: template.openshift.io/v1
 kind: Template
+parameters:
+- name: DEPLOYMENT_NAMESPACE
+  value: configuration-anomaly-detection-production
 metadata:
   name: configuration-anomaly-detection-SRVKP-437-template
 objects:
@@ -25,6 +28,7 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: srvkp-4372
+    namespace: ${DEPLOYMENT_NAMESPACE}
   roleRef:
     kind: ClusterRole
     name: srvkp-4372
@@ -95,5 +99,11 @@ objects:
                 # Current namespace as script can be deployed to different namespaces (prod/stage namespaces differ)
                 namespace=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace)
 
-                echo "Reapplying runtime/default: $seccomp_profile to $scc_name in namespace $namespace"
-                oc patch scc $scc_name -n $namespace --type=json -p '[{"op": "replace", "path": "/seccompProfiles", "value": ["runtime/default"]}]'
+                echo "Checking seccompProfiles to of $scc_name in namespace $namespace"
+                current_seccomp_profiles=$(oc get scc $scc_name -n $namespace -o=jsonpath='{.seccompProfiles}')
+                if [ -z "$current_seccomp_profiles" ]; then
+                  echo "seccompProfiles is empty in SCC $scc_name, applying patch"
+                  oc patch scc $scc_name -n $namespace --type=json -p '[{"op": "add", "path": "/seccompProfiles", "value": ["runtime/default"]}]'
+                else
+                  echo "seccompProfiles is not empty in SCC $scc_name, skipping patch"
+                fi
