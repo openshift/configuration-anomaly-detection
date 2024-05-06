@@ -61,3 +61,16 @@ metadata:
 spec:
   triggers:
   - triggerRef: cad-pipe-listener
+  resources:
+    kubernetesResource:
+      spec:
+        template:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: 100m
+                    memory: 64Mi
+                  limits:
+                    cpu: 1
+                    memory: 256Mi
