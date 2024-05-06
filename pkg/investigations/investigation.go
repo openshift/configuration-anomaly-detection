@@ -29,7 +29,7 @@ type Investigation struct {
 
 // NewInvestigation creates a new investigation with default functions that return errors in case they are not overwritten
 func NewInvestigation() *Investigation {
-	unimplementedFunc := func(resources *Resources) error {
+	unimplementedFunc := func(_ *Resources) error {
 		return errors.New("Investigation not implemented for this alert state")
 	}
 
