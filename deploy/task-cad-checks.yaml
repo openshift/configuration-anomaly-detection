@@ -40,3 +40,10 @@ spec:
             name: cad-pd-token
         - secretRef:
             name: cad-backplane-secret
+      computeResources:
+        requests:
+          cpu: 10m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 256Mi

@@ -64,6 +64,19 @@ objects:
       triggers.tekton.dev/old-escape-quotes: "true"
     name: cad-event-listener
   spec:
+    resources:
+      kubernetesResource:
+        spec:
+          template:
+            spec:
+              containers:
+              - resources:
+                  limits:
+                    cpu: 500m
+                    memory: 256Mi
+                  requests:
+                    cpu: 100m
+                    memory: 64Mi
     triggers:
     - triggerRef: cad-pipe-listener
 - apiVersion: tekton.dev/v1beta1
@@ -195,6 +208,13 @@ objects:
       command:
       - /bin/bash
       - -c
+      computeResources:
+        limits:
+          cpu: 100m
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
       env:
       - name: CAD_PROMETHEUS_PUSHGATEWAY
         value: aggregation-pushgateway:9091
@@ -232,6 +252,13 @@ objects:
               image: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8@sha256:e1fa47811f156e48a61741aabe73ef85078960567822a4b23c174c0d9b4d0ee6
               imagePullPolicy: IfNotPresent
               name: tekton-resource-pruner
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+                requests:
+                  cpu: 100m
+                  memory: 64Mi
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
