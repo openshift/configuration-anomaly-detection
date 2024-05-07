@@ -41,9 +41,7 @@ spec:
         - secretRef:
             name: cad-backplane-secret
       computeResources:
-        requests:
-          cpu: 100m
-          memory: 256Mi
+        # We need QoS class guaranteed as we do not retry these tasksruns
         limits:
-          cpu: 1
-          memory: 1Gi
+          cpu: 500m
+          memory: 256Mi

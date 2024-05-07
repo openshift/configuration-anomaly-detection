@@ -72,7 +72,7 @@ objects:
               containers:
               - resources:
                   limits:
-                    cpu: 1
+                    cpu: 500m
                     memory: 256Mi
                   requests:
                     cpu: 100m
@@ -210,10 +210,7 @@ objects:
       - -c
       computeResources:
         limits:
-          cpu: 1
-          memory: 1Gi
-        requests:
-          cpu: 100m
+          cpu: 500m
           memory: 256Mi
       env:
       - name: CAD_PROMETHEUS_PUSHGATEWAY
@@ -254,7 +251,7 @@ objects:
               name: tekton-resource-pruner
               resources:
                 limits:
-                  cpu: 1
+                  cpu: 500m
                   memory: 256Mi
                 requests:
                   cpu: 100m
