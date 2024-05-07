@@ -210,8 +210,11 @@ objects:
       - -c
       computeResources:
         limits:
-          cpu: 500m
+          cpu: 100m
           memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
       env:
       - name: CAD_PROMETHEUS_PUSHGATEWAY
         value: aggregation-pushgateway:9091
