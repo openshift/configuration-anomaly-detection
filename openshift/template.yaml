@@ -208,13 +208,6 @@ objects:
       command:
       - /bin/bash
       - -c
-      computeResources:
-        limits:
-          cpu: 100m
-          memory: 256Mi
-        requests:
-          cpu: 10m
-          memory: 64Mi
       env:
       - name: CAD_PROMETHEUS_PUSHGATEWAY
         value: aggregation-pushgateway:9091
@@ -229,6 +222,13 @@ objects:
           name: cad-backplane-secret
       image: ${REGISTRY_IMG}:${IMAGE_TAG}
       name: check-infrastructure
+      resources:
+        limits:
+          cpu: 100m
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 64Mi
 - apiVersion: batch/v1
   kind: CronJob
   metadata:
