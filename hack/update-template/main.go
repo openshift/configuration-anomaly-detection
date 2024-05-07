@@ -190,8 +190,8 @@ func fixTaskImage(fileAsMap map[interface{}]interface{}) error {
 	return nil
 }
 
-func findAllYamlFilesInDepth(maxDepth int, filesNames *[]string) func(path string, info os.FileInfo, err error) error {
-	return func(path string, info os.FileInfo, err error) error {
+func findAllYamlFilesInDepth(maxDepth int, filesNames *[]string) func(path string, _ os.FileInfo, _ error) error {
+	return func(path string, _ os.FileInfo, _ error) error {
 		if !strings.HasSuffix(path, "yaml") {
 			return nil
 		}

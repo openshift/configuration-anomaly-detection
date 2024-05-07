@@ -1,7 +1,7 @@
 include project.mk
 include boilerplate/generated-includes.mk
 
-GOLANGCI_LINT_VERSION=v1.53.3
+GOLANGCI_LINT_VERSION=v1.58.0
 PRE_COMMIT_HOOK = .git/hooks/pre-commit
 PRE_COMMIT_SCRIPT = hack/pre-commit.sh
 
@@ -85,7 +85,7 @@ generate-markdown: $(MARKDOWN_SOURCES) bin/embedmd
 ## CI actions
 
 .PHONY: coverage
-coverage: 
+coverage:
 	hack/codecov.sh
 
 .PHONY: generate-template-file
