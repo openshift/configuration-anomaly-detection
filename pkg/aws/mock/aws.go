@@ -112,11 +112,12 @@ func (mr *MockClientMockRecorder) GetSubnetID(infraID interface{}) *gomock.Call 
 }
 
 // IsSubnetPrivate mocks base method.
-func (m *MockClient) IsSubnetPrivate(subnet string) bool {
+func (m *MockClient) IsSubnetPrivate(subnet string) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsSubnetPrivate", subnet)
 	ret0, _ := ret[0].(bool)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // IsSubnetPrivate indicates an expected call of IsSubnetPrivate.

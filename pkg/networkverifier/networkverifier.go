@@ -164,7 +164,11 @@ func getSubnets(infraID string, cluster *v1.Cluster, awsClient aws.Client) ([]st
 	if !cluster.AWS().PrivateLink() && len(cluster.AWS().SubnetIDs()) != 0 {
 		subnets := cluster.AWS().SubnetIDs()
 		for _, subnet := range subnets {
-			if awsClient.IsSubnetPrivate(subnet) {
+			isPrivate, err := awsClient.IsSubnetPrivate(subnet)
+			if err != nil {
+				return []string{}, err
+			}
+			if isPrivate {
 				return []string{subnet}, nil
 			}
 		}
