@@ -44,7 +44,7 @@ type Client interface {
 	GetAWSCredentials() credentials.Value
 	GetSecurityGroupID(infraID string) (string, error)
 	GetSubnetID(infraID string) ([]string, error)
-	IsSubnetPrivate(subnet string) bool
+	IsSubnetPrivate(subnet string) (bool, error)
 	AssumeRole(roleARN, region string) (*SdkClient, error)
 	GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, error)
 }
@@ -480,15 +480,68 @@ func (c *SdkClient) GetSubnetID(infraID string) ([]string, error) {
 	return []string{*out.Subnets[0].SubnetId}, nil
 }
 
+func (c *SdkClient) defaultRouteTableForVpc(vpcId *string) (*ec2.RouteTable, error) {
+	describeRouteTablesOutput, err := c.Ec2Client.DescribeRouteTables(&ec2.DescribeRouteTablesInput{
+		Filters: []*ec2.Filter{{Name: aws.String("vpc-id"), Values: []*string{vpcId}}},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, rt := range describeRouteTablesOutput.RouteTables {
+		for _, assoc := range rt.Associations {
+			if *assoc.Main {
+				return rt, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no default route table found for vpc: %s", *vpcId)
+}
+
 // IsSubnetPrivate checks if the provided subnet is private
-func (c *SdkClient) IsSubnetPrivate(subnet string) bool {
+func (c *SdkClient) IsSubnetPrivate(subnet string) (bool, error) {
 	in := &ec2.DescribeSubnetsInput{
 		SubnetIds: []*string{aws.String(subnet)},
 	}
 
-	out, _ := c.Ec2Client.DescribeSubnets(in)
+	out, err := c.Ec2Client.DescribeSubnets(in)
+	if err != nil {
+		return false, err
+	}
 
-	return !*out.Subnets[0].MapPublicIpOnLaunch
+	// Check the associated routetable for having an internet gateway.
+	rtbIn := &ec2.DescribeRouteTablesInput{
+		Filters: []*ec2.Filter{
+			{
+				Name:   aws.String("association.subnet-id"),
+				Values: []*string{aws.String(subnet)},
+			},
+		},
+	}
+	var rtb *ec2.RouteTable
+	rtbs, err := c.Ec2Client.DescribeRouteTables(rtbIn)
+	if err != nil {
+		return false, err
+	}
+	if len(rtbs.RouteTables) == 0 {
+		rtb, err = c.defaultRouteTableForVpc(out.Subnets[0].VpcId)
+		if err != nil {
+			return false, err
+		}
+	} else {
+		rtb = rtbs.RouteTables[0]
+	}
+	for _, route := range rtb.Routes {
+		// GatewayId can contain an internet gateway *or* a virtual private gateway:
+		// "The ID of an internet gateway or virtual private gateway attached to your VPC."
+		if route.DestinationCidrBlock == aws.String("0.0.0.0/0") &&
+			(route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw")) {
+			// This is a public subnet
+			return false, nil
+		}
+	}
+
+	return !*out.Subnets[0].MapPublicIpOnLaunch, nil
 }
 
 // GetRouteTableForSubnet returns the subnets routeTable
