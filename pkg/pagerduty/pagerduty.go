@@ -50,7 +50,6 @@ type Client interface {
 	AddNote(notes string) error
 	CreateNewAlert(newAlert NewAlert, serviceID string) error
 	GetServiceID() string
-	GetEventType() string
 	EscalateAlertWithNote(notes string) error
 	EscalateAlert() error
 }
@@ -71,12 +70,11 @@ type SdkClient struct {
 
 // IncidentData represents the data contained in an incident
 type IncidentData struct {
-	IncidentEventType string // e.g. incident.Triggered
-	IncidentTitle     string // e.g. InfraNodesNeedResizingSRE CRITICAL (1)
-	IncidentID        string // e.g. Q2I4AV3ZURABC
-	IncidentRef       string // e.g. https://<>.pagerduty.com/incidents/Q2I4AV3ZURABC
-	ServiceID         string // e.g. PCH1XGB
-	ServiceSummary    string // e.g. prod-deadmanssnitch
+	IncidentTitle  string // e.g. InfraNodesNeedResizingSRE CRITICAL (1)
+	IncidentID     string // e.g. Q2I4AV3ZURABC
+	IncidentRef    string // e.g. https://<>.pagerduty.com/incidents/Q2I4AV3ZURABC
+	ServiceID      string // e.g. PCH1XGB
+	ServiceSummary string // e.g. prod-deadmanssnitch
 }
 
 func (c *SdkClient) initializeIncidentData(payload []byte) (*IncidentData, error) {
@@ -85,7 +83,6 @@ func (c *SdkClient) initializeIncidentData(payload []byte) (*IncidentData, error
 	logging.Debug("Attempting to unmarshal webhookV3...")
 	unmarshalled, err := unmarshalWebhookV3(payload)
 	if err == nil {
-		incidentData.IncidentEventType = unmarshalled.Event.EventType
 		incidentData.IncidentTitle = unmarshalled.Event.Data.Title
 		incidentData.IncidentID = unmarshalled.Event.Data.IncidentID
 		incidentData.IncidentRef = unmarshalled.Event.Data.IncidentRef
@@ -107,7 +104,6 @@ func (c *SdkClient) initializeIncidentData(payload []byte) (*IncidentData, error
 		return nil, err
 	}
 
-	incidentData.IncidentEventType = fetchedIncident.Type
 	incidentData.IncidentTitle = fetchedIncident.Title
 	incidentData.IncidentID = fetchedIncident.ID
 	incidentData.IncidentRef = fetchedIncident.HTMLURL
@@ -217,11 +213,6 @@ func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload [
 // SetIncidentData sets the Client's incidentData
 func (c *SdkClient) SetIncidentData(incidentData *IncidentData) {
 	c.incidentData = incidentData
-}
-
-// GetEventType returns the event type of the webhook
-func (c *SdkClient) GetEventType() string {
-	return c.incidentData.IncidentEventType
 }
 
 // GetServiceID returns the event type of the webhook

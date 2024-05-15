@@ -37,8 +37,8 @@ var egressSL = ocm.ServiceLog{
 	InternalOnly: false,
 }
 
-// InvestigateTriggered runs the investigation for a triggered chgm pagerduty event
-func InvestigateTriggered(r *investigation.Resources) error {
+// Investigate runs the investigation for a triggered chgm pagerduty event
+func Investigate(r *investigation.Resources) error {
 	var notesSb strings.Builder
 	notesSb.WriteString("🤖 Automated CHGM pre-investigation 🤖\n")
 	notesSb.WriteString("===========================\n")
@@ -54,7 +54,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		return utils.WithRetries(func() error {
 			err := postChgmSLAndSilence(r.Cluster.ID(), r.OcmClient, r.PdClient)
-			metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
+			metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
 			return err
 		})
@@ -93,7 +93,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 			notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
 			break
 		}
-		metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
+		metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
 		if strings.Contains(failureReason, "nosnch.in") {
 			logging.Info("Alert is expected as the cluster is not able to reach deadmanssnitch. Silencing.")

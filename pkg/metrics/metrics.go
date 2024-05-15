@@ -41,7 +41,6 @@ const (
 	namespace            = "cad"
 	subsystemInvestigate = "investigate"
 	alertTypeLabel       = "alert_type"
-	eventTypeLabel       = "event_type"
 	lsSummaryLabel       = "ls_summary"
 )
 
@@ -52,26 +51,26 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "alerts_total",
 			Help: "counts investigated alerts by alert and event type",
-		}, []string{alertTypeLabel, eventTypeLabel})
+		}, []string{alertTypeLabel})
 	// LimitedSupportSet is a counter for limited support reasons set by cad
 	LimitedSupportSet = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "limitedsupport_set_total",
 			Help: "counts investigations resulting in setting a limited support reason",
-		}, []string{alertTypeLabel, eventTypeLabel, lsSummaryLabel})
+		}, []string{alertTypeLabel, lsSummaryLabel})
 	// ServicelogPrepared is a counter for investigation ending in a prepared servicelog
 	ServicelogPrepared = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_prepared_total",
 			Help: "counts investigations resulting in a prepared servicelog attached to the incident notes",
-		}, []string{alertTypeLabel, eventTypeLabel})
+		}, []string{alertTypeLabel})
 	// ServicelogSent is a counter for investigation ending in a sent servicelog
 	ServicelogSent = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_sent_total",
 			Help: "counts investigations resulting in a sent servicelog",
-		}, []string{alertTypeLabel, eventTypeLabel})
+		}, []string{alertTypeLabel})
 )
