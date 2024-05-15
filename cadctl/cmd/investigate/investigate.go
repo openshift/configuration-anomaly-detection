@@ -75,8 +75,6 @@ func run(_ *cobra.Command, _ []string) error {
 
 	alertInvestigation := getInvestigation(pdClient.GetTitle())
 
-	metrics.Inc(metrics.Alerts)
-
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
 		err = pdClient.EscalateAlert()
@@ -85,6 +83,8 @@ func run(_ *cobra.Command, _ []string) error {
 		}
 		return nil
 	}
+
+	metrics.Inc(metrics.Alerts, alertInvestigation.Name)
 
 	// clusterID can end up being either be the internal or external ID.
 	// We don't really care, as we only use this to initialize the cluster object,

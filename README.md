@@ -7,18 +7,22 @@
 - [Configuration Anomaly Detection](#configuration-anomaly-detection)
   - [About](#about)
   - [Contributing](#contributing)
-- [Documentation](#documentation)
-  - [CAD CLI](#cad-cli)
-  - [Investigations](#investigations)
-  - [Integrations](#integrations)
-  - [Overview](#overview)
-  - [Templates](#templates)
-  - [Dashboards](#dashboards)
-  - [Deployment](#deployment)
-  - [Boilerplate](#boilerplate)
-  - [PipelinePruner](#pipelinepruner)
-  - [Required ENV variables](#required-env-variables)
-  - [Optional ENV variables](#optional-env-variables)
+    - [Adding a new investigation](#adding-a-new-investigation)
+  - [Testing locally](#testing-locally)
+    - [Pre-requirements](#pre-requirements)
+    - [Running cadctl for an incident ID](#running-cadctl-for-an-incident-id)
+  - [Documentation](#documentation)
+    - [CAD CLI](#cad-cli)
+    - [Investigations](#investigations)
+    - [Integrations](#integrations)
+    - [Overview](#overview)
+    - [Templates](#templates)
+    - [Dashboards](#dashboards)
+    - [Deployment](#deployment)
+    - [Boilerplate](#boilerplate)
+    - [PipelinePruner](#pipelinepruner)
+    - [Required ENV variables](#required-env-variables)
+    - [Optional ENV variables](#optional-env-variables)
 
 # Configuration Anomaly Detection
 
@@ -28,30 +32,59 @@
 
 Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE effort by pre-investigating alerts, detecting cluster anomalies and sending relevant communications to the cluster owner.
 
-## Contributing
+## Contributing 
 
-To contribute to CAD, please see our [CONTRIBUTING Document](CONTRIBUTING.md).
+### Adding a new investigation
 
-# Documentation
+CAD investigations are triggered by PagerDuty webhooks. Currently, CAD supports the following two formats of webhooks:
+-  WebhookV3 
+-  EventOrchestrationWebhook
 
-## CAD CLI
+The required investigation is identified by CAD based on the incident and its payload. 
+As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
+
+To add a new alert investigation:
+- create a mapping for the alert to the `getInvestigation` function in `investigate.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
+- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on.
+
+## Testing locally
+
+### Pre-requirements
+- an existing cluster
+- an existing PagerDuty incident for the cluster and alert type that is being tested
+
+### Running cadctl for an incident ID
+1) Export the required ENV variables, see [required ENV variables](#required-env-variables).
+2) Create a payload file containing the incident ID
+  ```bash
+  export INCIDENT_ID=
+  echo '{"event": {"data":{"id": "${INCIDENT_ID}"}}}' > ./payload
+  ```
+1) Run `cadctl` using the payload file
+  ```bash
+  ./cadctl/cadctl investigate --payload-path payload
+  ```
+
+## Documentation
+
+### CAD CLI
 
 * [cadctl](./cadctl/README.md) -- Performs investigation workflow.
 
-## Investigations
+### Investigations
 
 Every alert managed by CAD corresponds to an investigation, representing the executed code associated with the alert.
 
 Investigation specific documentation can be found in the according investigation folder,  e.g. for [ClusterHasGoneMissing](./pkg/investigations/chgm/README.md).
 
-## Integrations
+### Integrations
 
 * [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
 * [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
 * [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
 * [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 
-## Overview
+### Overview
 
 - CAD is a command line tool that is run in tekton pipelines. 
 - The tekton service is running on an app-sre cluster. 
@@ -61,30 +94,30 @@ Investigation specific documentation can be found in the according investigation
 ![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
 ![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
 
-## Templates
+### Templates
 
 * [Update-Template](./hack/update-template/README.md) -- Updating configuration-anomaly-detection-template.Template.yaml.
 * [OpenShift](./openshift/README.md) -- Used by app-interface to deploy the CAD resources on a target cluster.
 
-## Dashboards
+### Dashboards
 
 Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) directory. See app-interface for further documentation on dashboards.
 
-## Deployment
+### Deployment
 
 * [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
 * [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
 * [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
 
-## Boilerplate
+### Boilerplate
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
 
-## PipelinePruner
+### PipelinePruner
 
 * [PipelinePruner](./openshift/PipelinePruning.md) -- Documentation about PipelineRun pruning.
 
-## Required ENV variables
+### Required ENV variables
 
 * `CAD_OCM_CLIENT_ID`: refers to the OCM client ID used by CAD to initialize the OCM client
 * `CAD_OCM_CLIENT_SECRET`: refers to the OCM client secret used by CAD to initialize the OCM client
@@ -105,7 +138,7 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `BACKPLANE_URL`: refers to the backplane url to use
 * `BACKPLANE_INITIAL_ARN`: refers to the initial ARN used for the isolated backplane jumprole flow
 
-## Optional ENV variables
+### Optional ENV variables
 
 * `BACKPLANE_PROXY`: refers to the proxy CAD uses for the isolated backplane access flow. 
 
