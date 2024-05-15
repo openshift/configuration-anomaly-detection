@@ -45,7 +45,7 @@ As PagerDuty itself does not provide finer granularity for webhooks than service
 
 To add a new alert investigation:
 - create a mapping for the alert to the `getInvestigation` function in `investigate.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
-- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on.
+- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
 
@@ -60,7 +60,7 @@ To add a new alert investigation:
   export INCIDENT_ID=
   echo '{"event": {"data":{"id": "${INCIDENT_ID}"}}}' > ./payload
   ```
-1) Run `cadctl` using the payload file
+3) Run `cadctl` using the payload file
   ```bash
   ./cadctl/cadctl investigate --payload-path payload
   ```
