@@ -42,7 +42,7 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 	switch cluster.State() {
 	case cmv1.ClusterStateReady:
 		// Cluster is in functional sate but we can't jumprole to it: post limited support
-		metrics.Inc(metrics.LimitedSupportSet, alertType, pdClient.GetEventType(), ccamLimitedSupport.Summary)
+		metrics.Inc(metrics.LimitedSupportSet, alertType, ccamLimitedSupport.Summary)
 		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
 		if err != nil {
 			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)

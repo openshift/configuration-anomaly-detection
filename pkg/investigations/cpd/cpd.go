@@ -16,7 +16,7 @@ import (
 // https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
 var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
 
-// InvestigateTriggered runs the investigation for a triggered CPD pagerduty event
+// Investigate runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
 // - check cluster state
 // - check DNS
@@ -25,7 +25,7 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation 
 // - always escalate the alert to primary
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
-func InvestigateTriggered(r *investigation.Resources) error {
+func Investigate(r *investigation.Resources) error {
 	var notesSb strings.Builder
 	notesSb.WriteString("🤖 Automated CPD pre-investigation 🤖\n")
 	notesSb.WriteString("===========================\n")
@@ -60,7 +60,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL); err != nil {
 					return err
 				}
-				metrics.Inc(metrics.ServicelogSent, r.AlertType.String(), r.PdClient.GetEventType())
+				metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
 				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\n🤖 Sent SL: '%s' 🤖", subnet, byovpcRoutingSL.Summary))
 				if err := r.PdClient.AddNote(notesSb.String()); err != nil {
@@ -88,7 +88,7 @@ func InvestigateTriggered(r *investigation.Resources) error {
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
-		metrics.Inc(metrics.ServicelogPrepared, r.AlertType.String(), r.PdClient.GetEventType())
+		metrics.Inc(metrics.ServicelogPrepared, r.InvestigationName)
 		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
 
 		// In the future, we want to send a service log in this case

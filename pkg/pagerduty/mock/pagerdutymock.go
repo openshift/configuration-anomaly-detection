@@ -90,20 +90,6 @@ func (mr *MockClientMockRecorder) EscalateAlertWithNote(notes interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateAlertWithNote", reflect.TypeOf((*MockClient)(nil).EscalateAlertWithNote), notes)
 }
 
-// GetEventType mocks base method.
-func (m *MockClient) GetEventType() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEventType")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// GetEventType indicates an expected call of GetEventType.
-func (mr *MockClientMockRecorder) GetEventType() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventType", reflect.TypeOf((*MockClient)(nil).GetEventType))
-}
-
 // GetServiceID mocks base method.
 func (m *MockClient) GetServiceID() string {
 	m.ctrl.T.Helper()

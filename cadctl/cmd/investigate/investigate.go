@@ -17,7 +17,6 @@ limitations under the License.
 package investigate
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -74,18 +73,18 @@ func run(_ *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	alertType := isAlertSupported(pdClient.GetTitle())
-	alertTypeString := alertType.String()
-	metrics.Inc(metrics.Alerts, alertTypeString, pdClient.GetEventType())
+	alertInvestigation := getInvestigation(pdClient.GetTitle())
 
 	// Escalate all unsupported alerts
-	if alertType == investigation.Unsupported {
+	if alertInvestigation == nil {
 		err = pdClient.EscalateAlert()
 		if err != nil {
 			return fmt.Errorf("could not escalate unsupported alert: %w", err)
 		}
 		return nil
 	}
+
+	metrics.Inc(metrics.Alerts, alertInvestigation.Name)
 
 	// clusterID can end up being either be the internal or external ID.
 	// We don't really care, as we only use this to initialize the cluster object,
@@ -123,52 +122,27 @@ func run(_ *cobra.Command, _ []string) error {
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertTypeString)
+		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertInvestigation.Name)
 	}
 
-	investigationResources := &investigation.Resources{AlertType: alertType, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
+	investigationResources := &investigation.Resources{InvestigationName: alertInvestigation.Name, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
-	run := investigation.NewInvestigation()
-
-	switch alertType {
-	case investigation.ClusterHasGoneMissing:
-		run.Triggered = chgm.InvestigateTriggered
-	case investigation.ClusterProvisioningDelay:
-		run.Triggered = cpd.InvestigateTriggered
-	default:
-		// Should never happen as GetAlertType should fail on unsupported alerts
-		return errors.New("alert is not supported by CAD")
-	}
-
-	eventType := pdClient.GetEventType()
-	logging.Infof("Starting investigation for %s with event type %s", alertTypeString, eventType)
-
-	switch eventType {
-	case pagerduty.IncidentTriggered:
-		return run.Triggered(investigationResources)
-	case pagerduty.IncidentResolved:
-		return run.Resolved(investigationResources)
-	case pagerduty.IncidentReopened:
-		return run.Reopened(investigationResources)
-	case pagerduty.IncidentEscalated:
-		return run.Escalated(investigationResources)
-	default:
-		return fmt.Errorf("event type '%s' is not supported", eventType)
-	}
+	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
+	return alertInvestigation.Run(investigationResources)
 }
 
-// isAlertSupported will return the alertname as enum type of the alert if it is supported, otherwise an error
-func isAlertSupported(alertTitle string) investigation.AlertType {
+// getInvestigation will return the investigation function for the identified alert
+func getInvestigation(alertTitle string) *investigation.Investigation {
 	// We currently map to the alert by using the title, we should use the name in the alert note in the future.
 	// This currently isn't feasible yet, as CPD's alertmanager doesn't allow for the field to exist.
 
 	// We can't switch case here as it's strings.Contains.
 	if strings.Contains(alertTitle, "has gone missing") {
-		return investigation.ClusterHasGoneMissing
+		return investigation.NewInvestigation(chgm.Investigate, "ClusterHasGoneMissing")
 	} else if strings.Contains(alertTitle, "ClusterProvisioningDelay -") {
-		return investigation.ClusterProvisioningDelay
+		return investigation.NewInvestigation(cpd.Investigate, "ClusterProvisioningDelay")
 	}
-	return investigation.Unsupported
+	return nil
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
