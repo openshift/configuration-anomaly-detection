@@ -53,6 +53,9 @@ To add a new alert investigation:
 - an existing cluster
 - an existing PagerDuty incident for the cluster and alert type that is being tested
 
+To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`. 
+Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrrrrrrrrrrhkaj`.
+
 ### Running cadctl for an incident ID
 1) Export the required ENV variables, see [required ENV variables](#required-env-variables).
 2) Create a payload file containing the incident ID
