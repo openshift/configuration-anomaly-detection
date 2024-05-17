@@ -13,11 +13,10 @@ require (
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
 	github.com/openshift/backplane-cli v0.1.28
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
-	github.com/openshift/osd-network-verifier v0.4.9
+	github.com/openshift/osd-network-verifier v0.4.10
 	github.com/prometheus/client_golang v1.13.0
 	github.com/prometheus/common v0.37.0
 	github.com/spf13/cobra v1.8.0
-	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.26.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/apimachinery v0.28.4
