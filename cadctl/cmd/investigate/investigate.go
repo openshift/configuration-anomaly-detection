@@ -26,6 +26,7 @@ import (
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
@@ -151,6 +152,9 @@ func getInvestigation(alertTitle string) *investigation.Investigation {
 	logging.Warn("Flag CAD_EXPERIMENTAL_ENABLED is set, experimental CAD investigations are enabled!")
 
 	// Experimental investigations go here
+	if strings.Contains(alertTitle, "ClusterMonitoringErrorBudgetBurnSRE") {
+		return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "ClusterMonitoringErrorBudgetBurnSRE")
+	}
 
 	return nil
 }
