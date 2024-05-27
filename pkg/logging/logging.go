@@ -29,8 +29,8 @@ func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
 	config.EncoderConfig.TimeKey = "timestamp"
 	config.Level = logLevel
 	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
-	config.EncoderConfig.StacktraceKey = "" // to hide stacktrace info
-	config.EncoderConfig.CallerKey = ""     // to hide caller info
+	config.EncoderConfig.StacktraceKey = ""   // to hide stacktrace info
+	config.EncoderConfig.CallerKey = "caller" // to hide caller info
 
 	logger, err := config.Build()
 	if err != nil {

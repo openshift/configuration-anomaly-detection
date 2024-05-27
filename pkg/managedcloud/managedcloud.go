@@ -17,7 +17,7 @@ import (
 func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.SdkClient, error) {
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
-		return nil, fmt.Errorf("missing environment variable BACKPLANE_URL")
+		return nil, fmt.Errorf("could not create new aws client: missing environment variable BACKPLANE_URL")
 	}
 
 	backplaneInitialARN := os.Getenv("BACKPLANE_INITIAL_ARN")
