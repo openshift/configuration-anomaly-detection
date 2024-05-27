@@ -7,7 +7,7 @@ WORKDIR /opt
 RUN git update-index --refresh; make CGO_ENABLED=0 cadctl-install-local-force
 
 
-FROM quay.io/app-sre/ubi8-ubi-minimal:8.9 as runner
+FROM quay.io/app-sre/ubi8-ubi-minimal:8.10 as runner
 
 COPY --from=builder /opt/cadctl/cadctl /bin/cadctl
 
