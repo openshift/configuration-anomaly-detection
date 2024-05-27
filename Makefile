@@ -62,13 +62,13 @@ lint-template-updater: ## Lint template-updater subproject
 	cd hack/update-template && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: test-cadctl
-test-cadctl: ## Run unit tests for cadctl
+test-cadctl: ## Run automated tests for cadctl
 	@echo
 	@echo "Running unit tests for cadctl..."
 	go test $(TESTOPTS) -race -mod=readonly ./cadctl/... ./pkg/...
 
 .PHONY: test-interceptor
-test-interceptor: build-interceptor ## Run unit tests for interceptor
+test-interceptor: build-interceptor ## Run automated tests for interceptor
 	@echo
 	@echo "Running unit tests for interceptor..."
 	cd interceptor && go test -race -mod=readonly ./...
