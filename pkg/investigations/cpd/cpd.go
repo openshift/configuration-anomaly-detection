@@ -2,14 +2,12 @@
 package cpd
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
@@ -26,28 +24,26 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation 
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
 func Investigate(r *investigation.Resources) error {
-	var notesSb strings.Builder
-	notesSb.WriteString("🤖 Automated CPD pre-investigation 🤖\n")
-	notesSb.WriteString("===========================\n")
+	notes := notewriter.New("CPD", logging.RawLogger)
 
 	if r.Cluster.Status().State() == "ready" {
 		// We are unsure when this happens, in theory, if the cluster is ready, the alert shouldn't fire or should autoresolve.
 		// We currently believe this never happens, but want to be made aware if it does.
-		notesSb.WriteString("⚠️ This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future\n")
-		err := r.PdClient.AddNote(notesSb.String())
+		notes.AppendWarning("This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future")
+		err := r.PdClient.AddNote(notes.String())
 		if err != nil {
 			logging.Error("could not add clusters ready state to incident notes")
 		}
 		return r.PdClient.EscalateAlert()
 	}
-	notesSb.WriteString("✅ Cluster installation did not yet finish\n")
+	notes.AppendSuccess("✅ Cluster installation did not yet finish")
 
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
-		notesSb.WriteString(fmt.Sprintf("⚠️ DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin\n", r.Cluster.ID()))
-		return r.PdClient.EscalateAlertWithNote(notesSb.String())
+		notes.AppendWarning("DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin", r.Cluster.ID())
+		return r.PdClient.EscalateAlertWithNote(notes.String())
 	}
-	notesSb.WriteString("✅ Cluster DNS is ready\n")
+	notes.AppendSuccess("Cluster DNS is ready")
 
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
 		logging.Info("Checking BYOVPC to ensure subnets have valid routing...")
@@ -62,8 +58,9 @@ func Investigate(r *investigation.Resources) error {
 				}
 				metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
-				notesSb.WriteString(fmt.Sprintf("⚠️ subnet %s does not have a default route to 0.0.0.0/0\n🤖 Sent SL: '%s' 🤖", subnet, byovpcRoutingSL.Summary))
-				if err := r.PdClient.AddNote(notesSb.String()); err != nil {
+				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
+				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
+				if err := r.PdClient.AddNote(notes.String()); err != nil {
 					logging.Error(err)
 				}
 
@@ -71,14 +68,14 @@ func Investigate(r *investigation.Resources) error {
 			}
 		}
 	}
-	notesSb.WriteString("✅ BYOVPC has valid routing\n")
+	notes.AppendSuccess("BYOVPC has valid routing")
 
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n\t %s", err))
+		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err)
 
-		err = r.PdClient.AddNote(notesSb.String())
+		err = r.PdClient.AddNote(notes.String())
 		if err != nil {
 			// We do not return as we want the alert to be escalated either no matter what.
 			logging.Error("could not add failure reason incident notes")
@@ -89,16 +86,16 @@ func Investigate(r *investigation.Resources) error {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 		metrics.Inc(metrics.ServicelogPrepared, r.InvestigationName)
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
+		notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 
 		// In the future, we want to send a service log in this case
-		err = r.PdClient.AddNote(notesSb.String())
+		err = r.PdClient.AddNote(notes.String())
 		if err != nil {
 			logging.Error("could not add issues to incident notes")
 		}
 	case networkverifier.Success:
-		notesSb.WriteString("✅ Network verifier passed\n")
-		err = r.PdClient.AddNote(notesSb.String())
+		notes.AppendSuccess("Network verifier passed")
+		err = r.PdClient.AddNote(notes.String())
 		if err != nil {
 			logging.Error("could not add passed message to incident notes")
 		}
