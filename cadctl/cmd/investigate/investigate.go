@@ -142,6 +142,16 @@ func getInvestigation(alertTitle string) *investigation.Investigation {
 	} else if strings.Contains(alertTitle, "ClusterProvisioningDelay -") {
 		return investigation.NewInvestigation(cpd.Investigate, "ClusterProvisioningDelay")
 	}
+
+	// Return early if experimental features are not enabled
+	if strings.ToUpper(os.Getenv("CAD_EXPERIMENTAL_ENABLED")) != "TRUE" {
+		return nil
+	}
+
+	logging.Warn("Flag CAD_EXPERIMENTAL_ENABLED is set, experimental CAD investigations are enabled!")
+
+	// Experimental investigations go here
+
 	return nil
 }
 
