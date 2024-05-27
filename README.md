@@ -44,7 +44,7 @@ The required investigation is identified by CAD based on the incident and its pa
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
-- create a mapping for the alert to the `getInvestigation` function in `investigate.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
+- create a mapping for the alert to the `GetInvestigation` function in `mapping.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
 - if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
@@ -61,7 +61,7 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
 2) Create a payload file containing the incident ID
   ```bash
   export INCIDENT_ID=
-  echo '{"event": {"data":{"id": "${INCIDENT_ID}"}}}' > ./payload
+  echo '{"__pd_metadata":{"incident":{"id":"'${INCIDENT_ID}'"}}}' > ./payload
   ```
 3) Run `cadctl` using the payload file
   ```bash
