@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
@@ -39,9 +40,7 @@ var egressSL = ocm.ServiceLog{
 
 // Investigate runs the investigation for a triggered chgm pagerduty event
 func Investigate(r *investigation.Resources) error {
-	var notesSb strings.Builder
-	notesSb.WriteString("🤖 Automated CHGM pre-investigation 🤖\n")
-	notesSb.WriteString("===========================\n")
+	notes := notewriter.New("CHGM", logging.RawLogger)
 
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
@@ -59,7 +58,7 @@ func Investigate(r *investigation.Resources) error {
 			return err
 		})
 	}
-	notesSb.WriteString("✅ Customer did not stop nodes.\n")
+	notes.AppendSuccess("Customer did not stop nodes.")
 	logging.Info("The customer has not stopped/terminated any nodes.")
 
 	// 2. Check if the cluster is fresh out of a long hibernation
@@ -70,7 +69,7 @@ func Investigate(r *investigation.Resources) error {
 	}
 	if longHibernation {
 		logging.Info("The cluster was hibernated for too long.")
-		notesSb.WriteString(fmt.Sprintf("⚠️ Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation\n", hibernationTooLong.Hours()/24))
+		notes.AppendWarning("Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", hibernationTooLong.Hours()/24)
 	} else {
 		logging.Info("The cluster was not hibernated for too long.")
 	}
@@ -79,7 +78,7 @@ func Investigate(r *investigation.Resources) error {
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier failed to run:\n %s", err.Error()))
+		notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())
 	}
 
 	switch verifierResult {
@@ -90,25 +89,25 @@ func Investigate(r *investigation.Resources) error {
 		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &egressSL)
 		if err != nil {
 			logging.Error("Failed to send network verifier servicelog: %w", err)
-			notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s\n", r.Cluster.ID(), failureReason))
+			notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 			break
 		}
 		metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
 		if strings.Contains(failureReason, "nosnch.in") {
 			logging.Info("Alert is expected as the cluster is not able to reach deadmanssnitch. Silencing.")
-			notesSb.WriteString("Silencing the alert, as the cluster is not able to reach deadmanssnitch.\n")
-			notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.\n", failureReason))
-			return r.PdClient.SilenceAlertWithNote(notesSb.String())
+			notes.AppendAutomation("Silencing the alert, as the cluster is not able to reach deadmanssnitch.")
+			notes.AppendWarning("NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.", failureReason)
+			return r.PdClient.SilenceAlertWithNote(notes.String())
 		}
-		notesSb.WriteString(fmt.Sprintf("⚠️ NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason))
+		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
-		notesSb.WriteString("✅ Network verifier passed\n")
+		notes.AppendSuccess("✅ Network verifier passed")
 		logging.Info("Network verifier passed.")
 	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
-	return r.PdClient.EscalateAlertWithNote(notesSb.String())
+	return r.PdClient.EscalateAlertWithNote(notes.String())
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
