@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -66,6 +67,24 @@ type SdkClient struct {
 	incidentData *IncidentData
 	// clusterID ( only gets initialized after the first GetclusterID call )
 	clusterID *string
+}
+
+// GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
+func GetPDClient(webhookPayload []byte) (*SdkClient, error) {
+	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
+	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
+	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
+
+	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
+		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+	}
+
+	client, err := NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
+	if err != nil {
+		return nil, fmt.Errorf("could not initialize the client: %w", err)
+	}
+
+	return client, nil
 }
 
 // IncidentData represents the data contained in an incident
