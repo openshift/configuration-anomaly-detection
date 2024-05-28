@@ -6,16 +6,17 @@
 
 - [Configuration Anomaly Detection](#configuration-anomaly-detection)
   - [About](#about)
+  - [Overview](#overview)
+    - [Workflow](#workflow)
   - [Contributing](#contributing)
+    - [Building](#building)
     - [Adding a new investigation](#adding-a-new-investigation)
   - [Testing locally](#testing-locally)
     - [Pre-requirements](#pre-requirements)
     - [Running cadctl for an incident ID](#running-cadctl-for-an-incident-id)
   - [Documentation](#documentation)
-    - [CAD CLI](#cad-cli)
     - [Investigations](#investigations)
     - [Integrations](#integrations)
-    - [Overview](#overview)
     - [Templates](#templates)
     - [Dashboards](#dashboards)
     - [Deployment](#deployment)
@@ -32,7 +33,28 @@
 
 Configuration Anomaly Detection (CAD) is responsible for reducing manual SRE effort by pre-investigating alerts, detecting cluster anomalies and sending relevant communications to the cluster owner.
 
+## Overview
+
+CAD consists of:
+- a tekton deployment including a custom tekton interceptor
+- the `cadctl` command line tool implementing alert remediations and pre-investigations
+
+### Workflow
+
+1) [PagerDuty Webhooks](https://support.pagerduty.com/docs/webhooks) are used to trigger Configuration-Anomaly-Detection when a [PagerDuty incident](https://support.pagerduty.com/docs/incidents) is created
+2) The webhook routes to a [Tekton EventListener](https://tekton.dev/docs/triggers/eventlisteners/)
+3) Received webhooks are filtered by a [Tekton Interceptor](https://tekton.dev/docs/triggers/interceptors/) that uses the payload to evaluate whether the alert has an implemented handler function in `cadctl` or not. If there is no handler implemented, the alert is directly forwarded to a human SRE. 
+4) If `cadctl` implements a handler for the received payload/alert, a [Tekton PipelineRun](https://tekton.dev/docs/pipelines/pipelineruns/) is started.
+5) The pipeline runs `cadctl` which determines the handler function by itself based on the payload. 
+
+![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
+![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
+
 ## Contributing 
+
+### Building
+
+For build targets, see `make help`. 
 
 ### Adding a new investigation
 
@@ -44,7 +66,7 @@ The required investigation is identified by CAD based on the incident and its pa
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
-- create a mapping for the alert to the `getInvestigation` function in `investigate.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
+- create a mapping for the alert to the `GetInvestigation` function in `mapping.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
 - if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
@@ -61,7 +83,7 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
 2) Create a payload file containing the incident ID
   ```bash
   export INCIDENT_ID=
-  echo '{"event": {"data":{"id": "${INCIDENT_ID}"}}}' > ./payload
+  echo '{"__pd_metadata":{"incident":{"id":"'${INCIDENT_ID}'"}}}' > ./payload
   ```
 3) Run `cadctl` using the payload file
   ```bash
@@ -69,10 +91,6 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
   ```
 
 ## Documentation
-
-### CAD CLI
-
-* [cadctl](./cadctl/README.md) -- Performs investigation workflow.
 
 ### Investigations
 
@@ -86,16 +104,6 @@ Investigation specific documentation can be found in the according investigation
 * [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
 * [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
 * [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
-
-### Overview
-
-- CAD is a command line tool that is run in tekton pipelines. 
-- The tekton service is running on an app-sre cluster. 
-- CAD is triggered by PagerDuty webhooks configured on selected services, meaning that all alerts in that service trigger a CAD pipeline. 
-- CAD uses the data received via the webhook to determine which investigation to start.
-
-![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
-![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
 
 ### Templates
 
