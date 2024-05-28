@@ -60,7 +60,7 @@ const accessDeniedErrorSupportRole string = "could not assume support role in cu
 
 // - installer role is deleted (it falls back to old flow, which results in access denied)
 // - installer and support role are deleted
-const accessDeniedErrorInstallerRole string = "could not assume support role in customer's account: AccessDenied:"
+const accessDeniedErrorInstallerRole string = "RH-Managed-OpenShift-Installer/OCM is not authorized to perform: sts:AssumeRole on resource:"
 
 func customerRemovedPermissions(backplaneError string) bool {
 	return strings.Contains(backplaneError, accessDeniedErrorSupportRole) || strings.Contains(backplaneError, accessDeniedErrorInstallerRole)
