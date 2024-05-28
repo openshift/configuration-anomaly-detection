@@ -17,21 +17,15 @@ var ccamLimitedSupport = ocm.LimitedSupportReason{
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
 
-// This error is the response from backplane calls when:
-// - trust policy of ManagedOpenShift-Support-Role is changed
-// - installer role is deleted (it falls back to old flow, which results in access denied)
-// - installer and support role are deleted
-// - support role is deleted
-const accessDeniedError string = "could not assume support role in customer's account: AccessDenied:"
-
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
 func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) error {
 	logging.Info("Investigating possible missing cloud credentials...")
 
-	// We aren't able to jumpRole because of an error that is different than
-	// a removed support role/policy
-	if !strings.Contains(bpError.Error(), accessDeniedError) {
+	if customerRemovedPermissions := customerRemovedPermissions(bpError.Error()); !customerRemovedPermissions {
+		// We aren't able to jumpRole because of an error that is different than
+		// a removed support role/policy or removed installer role/policy
+		// This would normally be a backplane failure.
 		return fmt.Errorf("credentials are there, error is different: %w", bpError)
 	}
 
@@ -57,4 +51,17 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
 		return pdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 	}
+}
+
+// This error is the response from backplane calls when:
+// - trust policy of ManagedOpenShift-Support-Role is changed
+// - support role is deleted
+const accessDeniedErrorSupportRole string = "could not assume support role in customer's account: AccessDenied:"
+
+// - installer role is deleted (it falls back to old flow, which results in access denied)
+// - installer and support role are deleted
+const accessDeniedErrorInstallerRole string = "could not assume support role in customer's account: AccessDenied:"
+
+func customerRemovedPermissions(backplaneError string) bool {
+	return strings.Contains(backplaneError, accessDeniedErrorSupportRole) || strings.Contains(backplaneError, accessDeniedErrorInstallerRole)
 }
