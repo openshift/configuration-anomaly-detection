@@ -102,7 +102,7 @@ func Investigate(r *investigation.Resources) error {
 		}
 		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
-		notes.AppendSuccess("✅ Network verifier passed")
+		notes.AppendSuccess("Network verifier passed")
 		logging.Info("Network verifier passed.")
 	}
 
