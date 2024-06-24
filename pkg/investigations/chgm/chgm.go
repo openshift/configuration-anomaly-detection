@@ -195,15 +195,14 @@ type expectedNodesCount struct {
 
 // investigateInstancesOutput is the result of the InvestigateInstances command
 type investigateInstancesOutput struct {
-	NonRunningInstances  []*ec2.Instance
-	RunningInstances     runningNodesCount
-	ExpectedInstances    expectedNodesCount
-	User                 userInfo
-	UserAuthorized       bool
-	ClusterState         string
-	ClusterNotEvaluated  bool
-	LimitedSupportReason ocm.LimitedSupportReason
-	Error                string
+	NonRunningInstances []*ec2.Instance
+	RunningInstances    runningNodesCount
+	ExpectedInstances   expectedNodesCount
+	User                userInfo
+	UserAuthorized      bool
+	ClusterState        string
+	ClusterNotEvaluated bool
+	Error               string
 }
 
 func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {

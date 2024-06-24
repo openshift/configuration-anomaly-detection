@@ -8,48 +8,50 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
-var ccamLimitedSupport = ocm.LimitedSupportReason{
-	Summary: "Restore missing cloud credentials",
-	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
+var ccamSL = ocm.ServiceLog{
+	Severity:     "Major",
+	Summary:      "Action required: Restore missing cloud credentials",
+	ServiceName:  "SREManualAction",
+	Description:  "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install.",
+	InternalOnly: false,
 }
 
-// Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
-// the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
+// Evaluate checks if the backplane error is due to a customer modification on the support/installer roles.
+// If it determines that the above is the case, a service log is sent, otherwise an error is returned.
 func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) error {
+	investigationName := "CloudCredentialsAreMissing"
+
 	logging.Info("Investigating possible missing cloud credentials...")
+
+	notes := notewriter.New(investigationName, logging.RawLogger)
 
 	if customerRemovedPermissions := customerRemovedPermissions(bpError.Error()); !customerRemovedPermissions {
 		// We aren't able to jumpRole because of an error that is different than
 		// a removed support role/policy or removed installer role/policy
-		// This would normally be a backplane failure.
+		// This would normally be a backplane failure or an incompability with the backplane error messages.
 		return fmt.Errorf("credentials are there, error is different: %w", bpError)
 	}
 
-	// The jumprole failed because of a missing support role/policy:
-	// we need to figure out if we cluster state allows us to set limited support
-	// (the cluster is in a ready state, not uninstalling, installing, etc.)
-
 	switch cluster.State() {
-	case cmv1.ClusterStateReady:
-		// Cluster is in functional sate but we can't jumprole to it: post limited support
-		metrics.Inc(metrics.LimitedSupportSet, alertType, ccamLimitedSupport.Summary)
-		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
-		if err != nil {
-			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
-		}
-
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
 	case cmv1.ClusterStateUninstalling:
 		// A cluster in uninstalling state should not alert primary - we just skip this
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
+		notes.AppendAutomation("Skipped sending service log '%s': cluster is already uninstalling.", ccamSL.Summary)
+		return pdClient.SilenceAlertWithNote(notes.String())
 	default:
-		// Anything else is an unknown state to us and/or requires investigation.
-		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
-		return pdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
+		// Cluster is not yet uninstalling and we can't jumprole to it: send a service log
+		metrics.Inc(metrics.ServicelogSent, investigationName)
+		err := ocmClient.PostServiceLog(cluster.ID(), &ccamSL)
+		if err != nil {
+			return fmt.Errorf("could not post service log for %s: %w", cluster.Name(), err)
+		}
+		notes.AppendAutomation("Sent service log to cluster: '%s'. Silencing alert.\n", ccamSL.Summary)
+
+		return pdClient.SilenceAlertWithNote(notes.String())
 	}
 }
 
