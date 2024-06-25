@@ -108,7 +108,7 @@ func run(_ *cobra.Command, _ []string) error {
 	// initialize logger for the internal-cluster-id context
 	logging.RawLogger = logging.InitLogger(logLevelString, internalClusterID)
 
-	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient)
+	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
 	if err != nil || !requiresInvestigation {
 		return err
 	}
@@ -149,7 +149,7 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
 // - the cloud provider is supported by CAD (cluster is AWS)
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient) (bool, error) {
+func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient, ocmClient *ocm.SdkClient) (bool, error) {
 	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
@@ -160,5 +160,13 @@ func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.Sdk
 		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
 	}
 
+	isAccessProtected, err := ocmClient.IsAccessProtected(cluster)
+	if err != nil {
+		logging.Warnf("failed to get access protection status for cluster. %w. Continuing...")
+	}
+	if isAccessProtected {
+		logging.Info("Cluster is access protected. Escalating alert.")
+		return false, pdClient.EscalateAlertWithNote("CAD is unable to run against access protected clusters. Please investigate.")
+	}
 	return true, nil
 }
