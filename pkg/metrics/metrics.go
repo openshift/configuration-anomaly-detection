@@ -14,7 +14,7 @@ import (
 func Push() {
 	var promPusher *push.Pusher
 	if pushgateway := os.Getenv("CAD_PROMETHEUS_PUSHGATEWAY"); pushgateway != "" {
-		promPusher = push.New(pushgateway, "cad").Format(expfmt.TextVersion)
+		promPusher = push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
 		promPusher.Collector(Alerts)
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(ServicelogPrepared)
