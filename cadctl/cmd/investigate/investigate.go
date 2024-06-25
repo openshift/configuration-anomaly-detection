@@ -20,14 +20,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
+	investigation_mapping "github.com/openshift/configuration-anomaly-detection/pkg/investigations/mapping"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -67,14 +64,14 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 	logging.Info("Running CAD with webhook payload:", string(payload))
 
-	pdClient, err := GetPDClient(payload)
+	pdClient, err := pagerduty.GetPDClient(payload)
 	if err != nil {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	alertInvestigation := getInvestigation(pdClient.GetTitle())
+	alertInvestigation := investigation_mapping.GetInvestigation(pdClient.GetTitle())
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
@@ -132,33 +129,6 @@ func run(_ *cobra.Command, _ []string) error {
 	return alertInvestigation.Run(investigationResources)
 }
 
-// getInvestigation will return the investigation function for the identified alert
-func getInvestigation(alertTitle string) *investigation.Investigation {
-	// We currently map to the alert by using the title, we should use the name in the alert note in the future.
-	// This currently isn't feasible yet, as CPD's alertmanager doesn't allow for the field to exist.
-
-	// We can't switch case here as it's strings.Contains.
-	if strings.Contains(alertTitle, "has gone missing") {
-		return investigation.NewInvestigation(chgm.Investigate, "ClusterHasGoneMissing")
-	} else if strings.Contains(alertTitle, "ClusterProvisioningDelay -") {
-		return investigation.NewInvestigation(cpd.Investigate, "ClusterProvisioningDelay")
-	}
-
-	// Return early if experimental features are not enabled
-	if strings.ToUpper(os.Getenv("CAD_EXPERIMENTAL_ENABLED")) != "TRUE" {
-		return nil
-	}
-
-	logging.Warn("Flag CAD_EXPERIMENTAL_ENABLED is set, experimental CAD investigations are enabled!")
-
-	// Experimental investigations go here
-	if strings.Contains(alertTitle, "ClusterMonitoringErrorBudgetBurnSRE") {
-		return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "ClusterMonitoringErrorBudgetBurnSRE")
-	}
-
-	return nil
-}
-
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
 func GetOCMClient() (*ocm.SdkClient, error) {
 	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
@@ -173,24 +143,6 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 	}
 
 	return ocm.New(cadOcmFilePath)
-}
-
-// GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient(webhookPayload []byte) (*pagerduty.SdkClient, error) {
-	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
-	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
-	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
-
-	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
-	}
-
-	client, err := pagerduty.NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
-	if err != nil {
-		return nil, fmt.Errorf("could not initialize the client: %w", err)
-	}
-
-	return client, nil
 }
 
 // Checks pre-requisites for a cluster investigation:

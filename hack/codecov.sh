@@ -14,7 +14,7 @@ JOB_TYPE=${JOB_TYPE:-"local"}
 # regularly getting OOM-killed; so do this rather than boost the pod resources
 # unreasonably.
 COV_THREAD_COUNT=${COV_THREAD_COUNT:-4}
-make -C "${REPO_ROOT}" go-test TESTOPTS="-coverprofile=${COVER_PROFILE}.tmp -covermode=atomic -coverpkg=./... -p ${COV_THREAD_COUNT}"
+make -C "${REPO_ROOT}" test-cadctl TESTOPTS="-coverprofile=${COVER_PROFILE}.tmp -covermode=atomic -coverpkg=./... -p ${COV_THREAD_COUNT}"
 
 # Remove generated files from coverage profile
 grep -v "zz_generated" "${COVER_PROFILE}.tmp" > "${COVER_PROFILE}"
