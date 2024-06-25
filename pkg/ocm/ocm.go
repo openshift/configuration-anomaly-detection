@@ -46,6 +46,7 @@ type Client interface {
 	PostServiceLog(clusterID string, sl *ServiceLog) error
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
+	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -294,4 +295,17 @@ func (c *SdkClient) AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, e
 // GetConnection returns the active connection of the SdkClient
 func (c *SdkClient) GetConnection() *sdk.Connection {
 	return c.conn
+}
+
+// IsAccessProtected returns whether access protection is enabled for a cluster
+func (c *SdkClient) IsAccessProtected(cluster *cmv1.Cluster) (bool, error) {
+	resp, err := c.conn.AccessTransparency().V1().AccessProtection().Get().ClusterId(cluster.ID()).Send()
+	if err != nil {
+		return false, fmt.Errorf("could not query access protection status from ocm: %w", err)
+	}
+	enabled, ok := resp.Body().GetEnabled()
+	if !ok {
+		return false, fmt.Errorf("unable to get AccessProtection status for cluster")
+	}
+	return enabled, nil
 }

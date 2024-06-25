@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	ocm_sdk_go "github.com/openshift-online/ocm-sdk-go"
+	sdk "github.com/openshift-online/ocm-sdk-go"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -68,10 +68,10 @@ func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID inter
 }
 
 // GetConnection mocks base method.
-func (m *MockClient) GetConnection() *ocm_sdk_go.Connection {
+func (m *MockClient) GetConnection() *sdk.Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConnection")
-	ret0, _ := ret[0].(*ocm_sdk_go.Connection)
+	ret0, _ := ret[0].(*sdk.Connection)
 	return ret0
 }
 
@@ -109,6 +109,21 @@ func (m *MockClient) GetSupportRoleARN(internalClusterID string) (string, error)
 func (mr *MockClientMockRecorder) GetSupportRoleARN(internalClusterID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSupportRoleARN", reflect.TypeOf((*MockClient)(nil).GetSupportRoleARN), internalClusterID)
+}
+
+// IsAccessProtected mocks base method.
+func (m *MockClient) IsAccessProtected(cluster *v1.Cluster) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAccessProtected", cluster)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsAccessProtected indicates an expected call of IsAccessProtected.
+func (mr *MockClientMockRecorder) IsAccessProtected(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAccessProtected", reflect.TypeOf((*MockClient)(nil).IsAccessProtected), cluster)
 }
 
 // PostLimitedSupportReason mocks base method.
