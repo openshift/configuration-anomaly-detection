@@ -17,6 +17,7 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation 
 // Investigate runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
 // - check cluster state
+// - check clusterDeployment state
 // - check DNS
 // - check subnet routes
 // - run network verifier and add the output as pagerduty note
@@ -30,13 +31,19 @@ func Investigate(r *investigation.Resources) error {
 		// We are unsure when this happens, in theory, if the cluster is ready, the alert shouldn't fire or should autoresolve.
 		// We currently believe this never happens, but want to be made aware if it does.
 		notes.AppendWarning("This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future")
-		err := r.PdClient.AddNote(notes.String())
-		if err != nil {
-			logging.Error("could not add clusters ready state to incident notes")
-		}
-		return r.PdClient.EscalateAlert()
+
+		return r.PdClient.EscalateAlertWithNote(notes.String())
 	}
-	notes.AppendSuccess("✅ Cluster installation did not yet finish")
+	notes.AppendSuccess("Cluster installation did not yet finish")
+
+	if r.ClusterDeployment.Spec.ClusterMetadata == nil {
+		// This sometimes happens on staging when QE tests new unstable versions
+		// In case this happens on production, we want to raise this to OCM/CS.
+		notes.AppendWarning("This cluster has an empty ClusterDeployment.Spec.ClusterMetadata, meaning that the provisioning failed before the installation started. This is usually the case when the install configuration is faulty. Please investigate manually.")
+
+		return r.PdClient.EscalateAlertWithNote(notes.String())
+	}
+	notes.AppendSuccess("Installation hive job started")
 
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
