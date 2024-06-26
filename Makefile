@@ -2,8 +2,6 @@ include project.mk
 include boilerplate/generated-includes.mk
 
 GOLANGCI_LINT_VERSION=v1.58.1
-PRE_COMMIT_HOOK = .git/hooks/pre-commit
-PRE_COMMIT_SCRIPT = hack/pre-commit.sh
 
 .DEFAULT_GOAL := all
 
@@ -11,20 +9,20 @@ help:  # Display this help
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[0-9A-Za-z_-]+:.*?##/ { printf "  \033[36m%-50s\033[0m %s\n", $$1, $$2 } /^\$$\([0-9A-Za-z_-]+\):.*?##/ { gsub("_","-", $$1); printf "  \033[36m%-50s\033[0m %s\n", tolower(substr($$1, 3, length($$1)-7)), $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Global:
-.PHONY: all 
+.PHONY: all
 all: interceptor cadctl template-updater generate-template-file  ## Generate, build, lint, test all subprojects
 
-.PHONY: build 
-build: build-interceptor build-cadctl build-template-updater ## Build all subprojects in this repository 
+.PHONY: build
+build: build-interceptor build-cadctl build-template-updater ## Build all subprojects in this repository
 
 .PHONY: lint
 lint: getlint lint-cadctl lint-interceptor lint-template-updater ## Lint all subprojects
 
 ##@ cadctl:
-.PHONY: cadctl 
+.PHONY: cadctl
 cadctl: generate-cadctl build-cadctl test-cadctl lint-cadctl generate-template-file ## Run all targets for cadctl (generate, build, test, lint, generation)
 
-.PHONY: generate-cadctl 
+.PHONY: generate-cadctl
 generate-cadctl: ## Generate mocks for cadctl
 	go generate -mod=readonly ./...
 
@@ -34,7 +32,7 @@ build-cadctl: ## Build the cadctl binary
 	@echo "Building cadctl..."
 	cd cadctl && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/cadctl .
 
-.PHONY: lint-cadctl 
+.PHONY: lint-cadctl
 lint-cadctl: ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
@@ -50,19 +48,19 @@ test-cadctl:  ## Run automated tests for cadctl
 .PHONY: interceptor
 interceptor: build-interceptor test-interceptor lint-interceptor ## Run all targets for interceptor (build, test, lint)
 
-.PHONY: build-interceptor 
+.PHONY: build-interceptor
 build-interceptor: ## Build the interceptor binary
 	@echo
 	@echo "Building interceptor..."
 	cd interceptor && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/interceptor .
 
-.PHONY: lint-interceptor 
+.PHONY: lint-interceptor
 lint-interceptor: ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
 	cd interceptor && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
 
-.PHONY: test-interceptor 
+.PHONY: test-interceptor
 test-interceptor: build-interceptor ## Run automated tests for interceptor
 	@echo
 	@echo "Running unit tests for interceptor..."
@@ -87,15 +85,7 @@ lint-template-updater: ## Lint template-updater subproject
 	@echo "Linting template-updater..."
 	cd hack/update-template && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
 
-##@ Utility:
-.PHONY: pre-commit 
-pre-commit: ## Run pre-commit hook
-	@echo
-	@echo "Running pre-commit hook..."
-	@cp $(PRE_COMMIT_SCRIPT) $(PRE_COMMIT_HOOK)
-	@chmod +x $(PRE_COMMIT_HOOK)
-
-.PHONY: boilerplate-update 
+.PHONY: boilerplate-update
 boilerplate-update: ## Update boilerplate version
 	@boilerplate/update
 
