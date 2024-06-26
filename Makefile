@@ -2,8 +2,6 @@ include project.mk
 include boilerplate/generated-includes.mk
 
 GOLANGCI_LINT_VERSION=v1.58.1
-PRE_COMMIT_HOOK = .git/hooks/pre-commit
-PRE_COMMIT_SCRIPT = hack/pre-commit.sh
 
 .DEFAULT_GOAL := all
 
@@ -86,14 +84,6 @@ lint-template-updater: ## Lint template-updater subproject
 	@echo
 	@echo "Linting template-updater..."
 	cd hack/update-template && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
-
-##@ Utility:
-.PHONY: pre-commit
-pre-commit: ## Run pre-commit hook
-	@echo
-	@echo "Running pre-commit hook..."
-	@cp $(PRE_COMMIT_SCRIPT) $(PRE_COMMIT_HOOK)
-	@chmod +x $(PRE_COMMIT_HOOK)
 
 .PHONY: boilerplate-update
 boilerplate-update: ## Update boilerplate version
