@@ -40,7 +40,7 @@ type ServiceLog struct {
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error
+	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
 	PostServiceLog(clusterID string, sl *ServiceLog) error
@@ -206,7 +206,7 @@ func (c *SdkClient) getClusterResource(internalClusterID string, resourceKey str
 }
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
-func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason LimitedSupportReason, internalClusterID string) error {
+func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error {
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
@@ -260,7 +260,7 @@ func (c *SdkClient) PostServiceLog(clusterID string, sl *ServiceLog) error {
 }
 
 // newLimitedSupportReasonBuilder creates a Limited Support reason
-func newLimitedSupportReasonBuilder(ls LimitedSupportReason) *cmv1.LimitedSupportReasonBuilder {
+func newLimitedSupportReasonBuilder(ls *LimitedSupportReason) *cmv1.LimitedSupportReasonBuilder {
 	builder := cmv1.NewLimitedSupportReason()
 	builder.Summary(ls.Summary)
 	builder.Details(ls.Details)

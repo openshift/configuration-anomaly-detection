@@ -22,21 +22,17 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
-var chgmSL = ocm.ServiceLog{
-	Severity:     "Critical",
-	Summary:      "Action required: cluster not checking in",
-	ServiceName:  "SREManualAction",
-	Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
-	InternalOnly: false,
-}
+var (
+	investigationName = "ClusterHasGoneMissing"
 
-var egressSL = ocm.ServiceLog{
-	Severity:     "Critical",
-	Summary:      "Action required: Network misconfiguration",
-	ServiceName:  "SREManualAction",
-	Description:  "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please refer to the following firewall pre-requisites which are required for PrivateLink clusters: https://docs.openshift.com/rosa/rosa_install_access_delete_clusters/rosa_getting_started_iam/rosa-aws-prereqs.html#osd-aws-privatelink-firewall-prerequisites_prerequisites. Please revert changes.",
-	InternalOnly: false,
-}
+	chgmSL = ocm.ServiceLog{
+		Severity:     "Critical",
+		Summary:      "Action required: cluster not checking in",
+		ServiceName:  "SREManualAction",
+		Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
+		InternalOnly: false,
+	}
+)
 
 // Investigate runs the investigation for a triggered chgm pagerduty event
 func Investigate(r *investigation.Resources) error {
@@ -53,7 +49,7 @@ func Investigate(r *investigation.Resources) error {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		return utils.WithRetries(func() error {
 			err := postChgmSLAndSilence(r.Cluster.ID(), r.OcmClient, r.PdClient)
-			metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
+			metrics.Inc(metrics.ServicelogSent, investigationName)
 
 			return err
 		})
@@ -85,21 +81,13 @@ func Investigate(r *investigation.Resources) error {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
-		egressSL.Description = fmt.Sprintf(egressSL.Description, failureReason)
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &egressSL)
+		// Send SL or LS according to the blocked egresses
+		err := handleBlockedEgress(r.Cluster, r.OcmClient, failureReason)
 		if err != nil {
-			logging.Error("Failed to send network verifier servicelog: %w", err)
-			notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
+			notes.AppendWarning("CAD found blocked egresses: %s, but was not able to send limited support/service log. Error when posting to OCM: %s. Please take the appropriate steps manually.", failureReason, err.Error())
 			break
 		}
-		metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
 
-		if strings.Contains(failureReason, "nosnch.in") {
-			logging.Info("Alert is expected as the cluster is not able to reach deadmanssnitch. Silencing.")
-			notes.AppendAutomation("Silencing the alert, as the cluster is not able to reach deadmanssnitch.")
-			notes.AppendWarning("NetworkVerifier found unreachable targets. \n %s\n The servicelog has been sent.", failureReason)
-			return r.PdClient.SilenceAlertWithNote(notes.String())
-		}
 		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
 		notes.AppendSuccess("Network verifier passed")
@@ -108,6 +96,37 @@ func Investigate(r *investigation.Resources) error {
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return r.PdClient.EscalateAlertWithNote(notes.String())
+}
+
+// handleBlockedEgress sends limited support or service logs appropriate to the blocked egresses
+func handleBlockedEgress(cluster *cmv1.Cluster, ocmCli ocm.Client, egressFailures string) error {
+	// These two URLs are absolutely critical for customers to keep open.
+	// Without them, we can't guarantee SLA, therefore these two should result in limited support.
+	urlsToLimitedSupport := []string{"pagerduty.com", "nosnch.in"}
+
+	setLS := false
+	for _, urlsToLimitedSupport := range urlsToLimitedSupport {
+		if strings.Contains(egressFailures, urlsToLimitedSupport) {
+			setLS = true
+			break
+		}
+	}
+
+	if setLS {
+		err := ocmCli.PostLimitedSupportReason(createEgressLS(egressFailures), cluster.ID())
+		if err != nil {
+			return err
+		}
+		metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
+	} else {
+		err := ocmCli.PostServiceLog(cluster.ID(), createEgressSL(egressFailures))
+		if err != nil {
+			return err
+		}
+		metrics.Inc(metrics.ServicelogSent, investigationName)
+	}
+
+	return nil
 }
 
 // investigateHibernation checks if the cluster was recently woken up from

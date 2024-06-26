@@ -123,7 +123,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertInvestigation.Name)
 	}
 
-	investigationResources := &investigation.Resources{InvestigationName: alertInvestigation.Name, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
+	investigationResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
 	return alertInvestigation.Run(investigationResources)

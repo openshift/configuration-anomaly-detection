@@ -12,7 +12,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
-var ccamLimitedSupport = ocm.LimitedSupportReason{
+var ccamLimitedSupport = &ocm.LimitedSupportReason{
 	Summary: "Restore missing cloud credentials",
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }

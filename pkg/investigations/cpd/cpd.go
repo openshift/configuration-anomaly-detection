@@ -11,8 +11,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
-// https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
-var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
+var (
+	investigationName = "ClusterProvisioningDelay"
+	// https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
+	byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
+)
 
 // Investigate runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
@@ -63,7 +66,7 @@ func Investigate(r *investigation.Resources) error {
 				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL); err != nil {
 					return err
 				}
-				metrics.Inc(metrics.ServicelogSent, r.InvestigationName)
+				metrics.Inc(metrics.ServicelogSent, investigationName)
 
 				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
 				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
@@ -92,7 +95,7 @@ func Investigate(r *investigation.Resources) error {
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
-		metrics.Inc(metrics.ServicelogPrepared, r.InvestigationName)
+		metrics.Inc(metrics.ServicelogPrepared, investigationName)
 		notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 
 		// In the future, we want to send a service log in this case
