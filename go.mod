@@ -151,4 +151,5 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/onsi/ginkgo/v2 v2.17.2
 	golang.org/x/sys v0.21.0 // indirect
+	gotest.tools/v3 v3.5.1
 )

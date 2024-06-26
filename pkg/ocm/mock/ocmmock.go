@@ -127,7 +127,7 @@ func (mr *MockClientMockRecorder) IsAccessProtected(cluster interface{}) *gomock
 }
 
 // PostLimitedSupportReason mocks base method.
-func (m *MockClient) PostLimitedSupportReason(limitedSupportReason ocm.LimitedSupportReason, internalClusterID string) error {
+func (m *MockClient) PostLimitedSupportReason(limitedSupportReason *ocm.LimitedSupportReason, internalClusterID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, internalClusterID)
 	ret0, _ := ret[0].(error)

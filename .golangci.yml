@@ -3,7 +3,7 @@ run:
   modules-download-mode: readonly
   # Timeout for analysis, e.g. 30s, 5m.
   # Default: 1m
-  timeout: 5m
+  timeout: 15m
 
 issues:
   # on default, golangci-lint excludes gosec. Hence, we have to
