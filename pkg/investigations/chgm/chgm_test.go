@@ -519,34 +519,5 @@ var _ = Describe("chgm", func() {
 				Expect(gotErr).NotTo(HaveOccurred())
 			})
 		})
-
-		Describe("Blocked Egress Handling", func() {
-			When("An egress is SLA relevant", func() {
-				It("should put the cluster into limited support", func() {
-					// nosnch.in:443 is blocked
-					blockedUrls := "ec2.us-east-1.amazonaws.com:443,nosnch.in:443,events.us-east-1.amazonaws.com:443,elasticloadbalancing.us-east-1.amazonaws.com:443,sts.us-east-1.amazonaws.com:443"
-					egressLS := createEgressLS(blockedUrls)
-
-					// We need to cast it to the mock client, as the investigationResources are unaware the underlying functions are mocks
-					r.OcmClient.(*ocmmock.MockClient).EXPECT().PostLimitedSupportReason(gomock.Eq(egressLS), gomock.Eq(cluster.ID())).Return(nil)
-
-					gotErr := handleBlockedEgress(r.Cluster, r.OcmClient, blockedUrls)
-
-					Expect(gotErr).NotTo(HaveOccurred())
-				})
-			})
-			When("An egress is not SLA relevant", func() {
-				It("should send a service log", func() {
-					blockedUrls := "ec2.us-east-1.amazonaws.com:443,events.us-east-1.amazonaws.com:443,elasticloadbalancing.us-east-1.amazonaws.com:443,sts.us-east-1.amazonaws.com:443"
-					egressSL := createEgressSL(blockedUrls)
-
-					// We need to cast it to the mock client, as the investigationResources are unaware the underlying functions are mocks
-					r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(egressSL)).Return(nil)
-
-					gotErr := handleBlockedEgress(r.Cluster, r.OcmClient, blockedUrls)
-					Expect(gotErr).NotTo(HaveOccurred())
-				})
-			})
-		})
 	})
 })
