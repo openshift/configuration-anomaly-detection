@@ -3,7 +3,8 @@ package ccam
 
 import (
 	"fmt"
-	"strings"
+	"log"
+	"regexp"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -53,15 +54,37 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 	}
 }
 
-// This error is the response from backplane calls when:
-// - trust policy of ManagedOpenShift-Support-Role is changed
-// - support role is deleted
-const accessDeniedErrorSupportRole string = "could not assume support role in customer's account: AccessDenied:"
+// userCausedErrors contains the list of backplane returned error strings that we map to
+// customer modifications/role deletions.
+var userCausedErrors = []string{
+	// OCM can't access the installer role to determine the trust relationship on the support role,
+	// therefore we don't know if it's the isolated access flow or the old flow, e.g.:
+	// status is 404, identifier is '404', code is 'CLUSTERS-MGMT-404' and operation identifier is '<id>': Failed to find trusted relationship to support role 'RH-Technical-Support-Access'
+	// See https://issues.redhat.com/browse/OSD-24270
+	".*Failed to find trusted relationship to support role 'RH-Technical-Support-Access'.*",
 
-// - installer role is deleted (it falls back to old flow, which results in access denied)
-// - installer and support role are deleted
-const accessDeniedErrorInstallerRole string = "RH-Managed-OpenShift-Installer/OCM is not authorized to perform: sts:AssumeRole on resource:"
+	// Customer deleted the support role, e.g.:
+	// status is 404, identifier is '404', code is 'CLUSTERS-MGMT-404' and operation identifier is '<id>': Support role, used with cluster '<cluster_id>', does not exist in the customer's AWS account
+	".*Support role, used with cluster '[a-z0-9]{32}', does not exist in the customer's AWS account.*",
+
+	// This error is the response from backplane calls when:
+	// trust policy of ManagedOpenShift-Support-Role is changed
+	// TODO(Claudio, 06.27.2024): after updating to backplane-cli 0.1.32 I no longer see this error. This might already be covered by one of the above.
+	".*could not assume support role in customer's account: AccessDenied:.*",
+}
 
 func customerRemovedPermissions(backplaneError string) bool {
-	return strings.Contains(backplaneError, accessDeniedErrorSupportRole) || strings.Contains(backplaneError, accessDeniedErrorInstallerRole)
+	for _, str := range userCausedErrors {
+		re, err := regexp.Compile(str)
+		if err != nil {
+			// This should never happen on production as we would run into it during unit tests
+			log.Fatal("failed to regexp.Compile string in `userCausedErrors`")
+		}
+
+		if re.MatchString(backplaneError) {
+			return true
+		}
+	}
+
+	return false
 }
