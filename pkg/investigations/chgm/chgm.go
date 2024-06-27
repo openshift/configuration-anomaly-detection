@@ -81,12 +81,24 @@ func Investigate(r *investigation.Resources) error {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
-		// Send SL or LS according to the blocked egresses
-		err := handleBlockedEgress(r.Cluster, r.OcmClient, failureReason)
-		if err != nil {
-			notes.AppendWarning("CAD found blocked egresses: %s, but was not able to send limited support/service log. Error when posting to OCM: %s. Please take the appropriate steps manually.", failureReason, err.Error())
-			break
+		if strings.Contains(failureReason, "nosnch.in") {
+			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster.ID())
+			if err != nil {
+				return err
+			}
+
+			metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
+
+			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
+			return r.PdClient.SilenceAlertWithNote(notes.String())
 		}
+
+		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason))
+		if err != nil {
+			return err
+		}
+
+		metrics.Inc(metrics.ServicelogSent, investigationName)
 
 		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
@@ -96,37 +108,6 @@ func Investigate(r *investigation.Resources) error {
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return r.PdClient.EscalateAlertWithNote(notes.String())
-}
-
-// handleBlockedEgress sends limited support or service logs appropriate to the blocked egresses
-func handleBlockedEgress(cluster *cmv1.Cluster, ocmCli ocm.Client, egressFailures string) error {
-	// These two URLs are absolutely critical for customers to keep open.
-	// Without them, we can't guarantee SLA, therefore these two should result in limited support.
-	urlsToLimitedSupport := []string{"pagerduty.com", "nosnch.in"}
-
-	setLS := false
-	for _, urlsToLimitedSupport := range urlsToLimitedSupport {
-		if strings.Contains(egressFailures, urlsToLimitedSupport) {
-			setLS = true
-			break
-		}
-	}
-
-	if setLS {
-		err := ocmCli.PostLimitedSupportReason(createEgressLS(egressFailures), cluster.ID())
-		if err != nil {
-			return err
-		}
-		metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
-	} else {
-		err := ocmCli.PostServiceLog(cluster.ID(), createEgressSL(egressFailures))
-		if err != nil {
-			return err
-		}
-		metrics.Inc(metrics.ServicelogSent, investigationName)
-	}
-
-	return nil
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
