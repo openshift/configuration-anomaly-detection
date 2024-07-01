@@ -63,13 +63,16 @@ var userCausedErrors = []string{
 	// See https://issues.redhat.com/browse/OSD-24270
 	".*Failed to find trusted relationship to support role 'RH-Technical-Support-Access'.*",
 
+	// OCM role can't access the installer role, this happens when customer deletes/modifies the trust policy of the installer role, e.g.:
+	// status is 400, identifier is '400', code is 'CLUSTERS-MGMT-400' and operation identifier is '<id>': Please make sure IAM role 'arn:aws:iam::<ocm_role_aws_id>:role/ManagedOpenShift-Installer-Role' exists, and add 'arn:aws:iam::<id>:role/RH-Managed-OpenShift-Installer' to the trust policy on IAM role 'arn:aws:iam::<id>:role/ManagedOpenShift-Installer-Role': Failed to assume role: User: arn:aws:sts::<id>:assumed-role/RH-Managed-OpenShift-Installer/OCM is not authorized to perform: sts:AssumeRole on resource: arn:aws:iam::<customer_aws_id>:role/ManagedOpenShift-Installer-Role
+	".*RH-Managed-OpenShift-Installer/OCM is not authorized to perform: sts:AssumeRole on resource.*",
+
 	// Customer deleted the support role, e.g.:
 	// status is 404, identifier is '404', code is 'CLUSTERS-MGMT-404' and operation identifier is '<id>': Support role, used with cluster '<cluster_id>', does not exist in the customer's AWS account
 	".*Support role, used with cluster '[a-z0-9]{32}', does not exist in the customer's AWS account.*",
 
 	// This error is the response from backplane calls when:
 	// trust policy of ManagedOpenShift-Support-Role is changed
-	// TODO(Claudio, 06.27.2024): after updating to backplane-cli 0.1.32 I no longer see this error. This might already be covered by one of the above.
 	".*could not assume support role in customer's account: AccessDenied:.*",
 }
 
