@@ -91,8 +91,8 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		PlatformType: helpers.PlatformAWS,
 		Tags:         awsDefaultTags,
 		AWS: onv.AwsEgressConfig{
-			KmsKeyID:        kmsKeyArn,
-			SecurityGroupId: securityGroupID,
+			KmsKeyID:         kmsKeyArn,
+			SecurityGroupIDs: []string{securityGroupID},
 		},
 	}, nil
 }
@@ -110,7 +110,7 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %w", err)
 	}
 
-	logging.Infof("Running Network Verifier with security group '%s' - subnet '%s' - region '%s'... ", validateEgressInput.AWS.SecurityGroupId, validateEgressInput.SubnetID, cluster.Region().ID())
+	logging.Infof("Running Network Verifier with security group '%s' - subnet '%s' - region '%s'... ", validateEgressInput.AWS.SecurityGroupIDs, validateEgressInput.SubnetID, cluster.Region().ID())
 
 	out := verifier.ValidateEgress(awsVerifier, *validateEgressInput)
 
