@@ -85,7 +85,7 @@ func Investigate(r *investigation.Resources) error {
 			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster)
 			if err != nil {
 				notes.AppendWarning("NetworkVerifier found unreachable targets, deadmanssnitch is blocked! \nUnreachable: \n%s", failureReason)
-				notes.AppendWarning("Failed to post limited support: %v", err)
+				notes.AppendWarning("Failed to post limited support: %s", err.Error())
 				return r.PdClient.EscalateAlertWithNote(notes.String())
 			}
 
