@@ -40,7 +40,7 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 		metrics.Inc(metrics.LimitedSupportSet, alertType, ccamLimitedSupport.Summary)
 		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster)
 		if err != nil {
-			return pdClient.EscalateAlertWithNote(fmt.Sprintf("could not post limited support reason for %s: %v", cluster.Name(), err))
+			return pdClient.EscalateAlertWithNote(fmt.Sprintf("could not post limited support reason for %s: %s", cluster.Name(), err.Error()))
 		}
 
 		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
