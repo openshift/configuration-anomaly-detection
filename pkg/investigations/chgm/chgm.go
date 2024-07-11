@@ -82,9 +82,11 @@ func Investigate(r *investigation.Resources) error {
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster.ID())
+			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster)
 			if err != nil {
-				return err
+				notes.AppendWarning("NetworkVerifier found unreachable targets, deadmanssnitch is blocked! \nUnreachable: \n%s", failureReason)
+				notes.AppendWarning("Failed to post limited support: %v", err)
+				return r.PdClient.EscalateAlertWithNote(notes.String())
 			}
 
 			metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
