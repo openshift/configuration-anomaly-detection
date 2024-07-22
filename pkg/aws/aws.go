@@ -438,8 +438,10 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 	in := &ec2.DescribeSecurityGroupsInput{
 		Filters: []*ec2.Filter{
 			{
+				// Prior to 4.16: <infra_id>-master-sg
+				// 4.16+: <infra_id>-controlplane
 				Name:   aws.String("tag:Name"),
-				Values: []*string{aws.String(fmt.Sprintf("%s-worker-sg", infraID))},
+				Values: []*string{aws.String(fmt.Sprintf("%s-master-sg", infraID)), aws.String(fmt.Sprintf("%s-controlplane", infraID))},
 			},
 		},
 	}
@@ -451,7 +453,7 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 		return "", fmt.Errorf("security groups are empty")
 	}
 	if len(*out.SecurityGroups[0].GroupId) == 0 {
-		return "", fmt.Errorf("failed to list security group %s-worker-sg", infraID)
+		return "", fmt.Errorf("failed to list security groups: %s-master-sg, %s-controlplane", infraID, infraID)
 	}
 	return *out.SecurityGroups[0].GroupId, nil
 }
@@ -461,8 +463,8 @@ func (c *SdkClient) GetSubnetID(infraID string) ([]string, error) {
 	in := &ec2.DescribeSubnetsInput{
 		Filters: []*ec2.Filter{
 			{
-				Name:   aws.String(fmt.Sprintf("tag:kubernetes.io/cluster/%s", infraID)),
-				Values: []*string{aws.String("owned")},
+				Name:   aws.String("tag-key"),
+				Values: []*string{aws.String(fmt.Sprintf("kubernetes.io/cluster/%s", infraID))},
 			},
 			{
 				Name:   aws.String("tag-key"),
@@ -475,7 +477,7 @@ func (c *SdkClient) GetSubnetID(infraID string) ([]string, error) {
 		return nil, fmt.Errorf("failed to find private subnet for %s: %w", infraID, err)
 	}
 	if len(out.Subnets) == 0 {
-		return nil, fmt.Errorf("found 0 subnets with kubernetes.io/cluster/%s=owned and kubernetes.io/role/internal-elb", infraID)
+		return nil, fmt.Errorf("found 0 subnets with kubernetes.io/cluster/%s and kubernetes.io/role/internal-elb", infraID)
 	}
 	return []string{*out.Subnets[0].SubnetId}, nil
 }

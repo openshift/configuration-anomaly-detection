@@ -65,7 +65,7 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
   ```
 3) Run `cadctl` using the payload file
   ```bash
-  ./cadctl/cadctl investigate --payload-path payload
+  ./bin/cadctl investigate --payload-path payload
   ```
 
 ## Documentation
