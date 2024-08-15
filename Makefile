@@ -36,7 +36,7 @@ build-cadctl: ## Build the cadctl binary
 lint-cadctl: ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
-	cd cadctl && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
+	GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl:  ## Run automated tests for cadctl
