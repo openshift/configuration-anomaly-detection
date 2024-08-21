@@ -121,7 +121,7 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 		}
 	}
 
-	pdi.Logger.Infof("Incident %s is not mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name)
+	pdi.Logger.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name)
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
 	}
