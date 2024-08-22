@@ -4,12 +4,14 @@ FROM $BUILDER_IMG as builder
 ADD . /opt
 WORKDIR /opt
 
-RUN git update-index --refresh; make CGO_ENABLED=0 cadctl-install-local-force
+RUN make CGO_ENABLED=0 build-cadctl
+RUN make CGO_ENABLED=0 build-interceptor
 
 
 FROM quay.io/app-sre/ubi8-ubi-minimal:8.10 as runner
 
-COPY --from=builder /opt/cadctl/cadctl /bin/cadctl
+COPY --from=builder /opt/bin/cadctl /bin/cadctl
+COPY --from=builder /opt/bin/interceptor /bin/interceptor
 
 ARG BUILD_DATE
 ARG VERSION
