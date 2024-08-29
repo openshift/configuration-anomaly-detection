@@ -127,17 +127,17 @@ func (mr *MockClientMockRecorder) IsAccessProtected(cluster interface{}) *gomock
 }
 
 // PostLimitedSupportReason mocks base method.
-func (m *MockClient) PostLimitedSupportReason(limitedSupportReason *ocm.LimitedSupportReason, internalClusterID string) error {
+func (m *MockClient) PostLimitedSupportReason(limitedSupportReason *ocm.LimitedSupportReason, cluster *v1.Cluster) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, internalClusterID)
+	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, cluster)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostLimitedSupportReason indicates an expected call of PostLimitedSupportReason.
-func (mr *MockClientMockRecorder) PostLimitedSupportReason(limitedSupportReason, internalClusterID interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) PostLimitedSupportReason(limitedSupportReason, cluster interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), limitedSupportReason, internalClusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), limitedSupportReason, cluster)
 }
 
 // PostServiceLog mocks base method.

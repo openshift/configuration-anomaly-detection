@@ -40,7 +40,7 @@ type ServiceLog struct {
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error
+	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, cluster *cmv1.Cluster) error
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
 	PostServiceLog(clusterID string, sl *ServiceLog) error
@@ -206,15 +206,24 @@ func (c *SdkClient) getClusterResource(internalClusterID string, resourceKey str
 }
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
-func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error {
+func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, cluster *cmv1.Cluster) error {
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
+
+	// Do not post limited support on critical customers
+	isCriticalCu, err := c.isCriticalCustomer(cluster.Subscription())
+	if err != nil {
+		return err
+	}
+	if isCriticalCu {
+		return errors.New("cannot post limited support on critical customers cluster. Please open a proactive case and silence the alert.")
+	}
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
 	if err != nil {
 		return fmt.Errorf("could not create post request (LS): %w", err)
 	}
 
-	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().Add()
+	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
 	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'uninstalling' state") {
@@ -222,6 +231,33 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSuppor
 	}
 
 	return nil
+}
+
+func (c *SdkClient) isCriticalCustomer(subscription *cmv1.Subscription) (bool, error) {
+	subscriptionResponse, err := c.conn.AccountsMgmt().V1().
+		Subscriptions().
+		Subscription(subscription.ID()).
+		Get().Send()
+	if err != nil {
+		return false, err
+	}
+
+	labelResponse, err := c.conn.AccountsMgmt().V1().
+		Organizations().
+		Organization(subscriptionResponse.Body().OrganizationID()).
+		Labels().
+		Label("capability.organization.managed_critical_customer").
+		Get().Send()
+	if err != nil {
+		if labelResponse.Error().Status() != http.StatusNotFound {
+			return false, fmt.Errorf("failed to retrieve cluster labels: %w", err)
+		}
+	} else if labelResponse.Body().Value() == "true" {
+		logging.Infof("This cluster is owned by a critical customer.")
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // GetServiceLog returns all ServiceLogs for a cluster.
