@@ -7,11 +7,11 @@ package awsmock
 import (
 	reflect "reflect"
 
-	credentials "github.com/aws/aws-sdk-go/aws/credentials"
-	cloudtrail "github.com/aws/aws-sdk-go/service/cloudtrail"
-	ec2 "github.com/aws/aws-sdk-go/service/ec2"
+	aws "github.com/aws/aws-sdk-go-v2/aws"
+	types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
+	types0 "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	gomock "github.com/golang/mock/gomock"
-	aws "github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	aws0 "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 )
 
 // MockClient is a mock of Client interface.
@@ -38,10 +38,10 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // AssumeRole mocks base method.
-func (m *MockClient) AssumeRole(roleARN, region string) (*aws.SdkClient, error) {
+func (m *MockClient) AssumeRole(roleARN, region string) (*aws0.SdkClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AssumeRole", roleARN, region)
-	ret0, _ := ret[0].(*aws.SdkClient)
+	ret0, _ := ret[0].(*aws0.SdkClient)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -53,10 +53,10 @@ func (mr *MockClientMockRecorder) AssumeRole(roleARN, region interface{}) *gomoc
 }
 
 // GetAWSCredentials mocks base method.
-func (m *MockClient) GetAWSCredentials() credentials.Value {
+func (m *MockClient) GetAWSCredentials() aws.Credentials {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAWSCredentials")
-	ret0, _ := ret[0].(credentials.Value)
+	ret0, _ := ret[0].(aws.Credentials)
 	return ret0
 }
 
@@ -67,10 +67,10 @@ func (mr *MockClientMockRecorder) GetAWSCredentials() *gomock.Call {
 }
 
 // GetRouteTableForSubnet mocks base method.
-func (m *MockClient) GetRouteTableForSubnet(subnetID string) (*ec2.RouteTable, error) {
+func (m *MockClient) GetRouteTableForSubnet(subnetID string) (types0.RouteTable, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRouteTableForSubnet", subnetID)
-	ret0, _ := ret[0].(*ec2.RouteTable)
+	ret0, _ := ret[0].(types0.RouteTable)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -127,10 +127,10 @@ func (mr *MockClientMockRecorder) IsSubnetPrivate(subnet interface{}) *gomock.Ca
 }
 
 // ListNonRunningInstances mocks base method.
-func (m *MockClient) ListNonRunningInstances(infraID string) ([]*ec2.Instance, error) {
+func (m *MockClient) ListNonRunningInstances(infraID string) ([]types0.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNonRunningInstances", infraID)
-	ret0, _ := ret[0].([]*ec2.Instance)
+	ret0, _ := ret[0].([]types0.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -142,10 +142,10 @@ func (mr *MockClientMockRecorder) ListNonRunningInstances(infraID interface{}) *
 }
 
 // ListRunningInstances mocks base method.
-func (m *MockClient) ListRunningInstances(infraID string) ([]*ec2.Instance, error) {
+func (m *MockClient) ListRunningInstances(infraID string) ([]types0.Instance, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListRunningInstances", infraID)
-	ret0, _ := ret[0].([]*ec2.Instance)
+	ret0, _ := ret[0].([]types0.Instance)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -157,10 +157,10 @@ func (mr *MockClientMockRecorder) ListRunningInstances(infraID interface{}) *gom
 }
 
 // PollInstanceStopEventsFor mocks base method.
-func (m *MockClient) PollInstanceStopEventsFor(instances []*ec2.Instance, retryTimes int) ([]*cloudtrail.Event, error) {
+func (m *MockClient) PollInstanceStopEventsFor(instances []types0.Instance, retryTimes int) ([]types.Event, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PollInstanceStopEventsFor", instances, retryTimes)
-	ret0, _ := ret[0].([]*cloudtrail.Event)
+	ret0, _ := ret[0].([]types.Event)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
