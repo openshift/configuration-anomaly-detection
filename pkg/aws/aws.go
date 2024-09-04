@@ -24,9 +24,6 @@ import (
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	stsv2 "github.com/aws/aws-sdk-go-v2/service/sts"
 
-	// stsv2types "github.com/aws/aws-sdk-go-v2/service/sts/types"
-
-	"github.com/aws/aws-sdk-go/aws"
 	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -59,7 +56,6 @@ type StsAPI interface {
 }
 
 type Client interface {
-	AssumeRole(roleARN, region string) (*SdkClient, error)
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	PollInstanceStopEventsFor(instances []ec2v2types.Instance, retryTimes int) ([]cloudtrailv2types.Event, error)
@@ -133,7 +129,7 @@ func (c *SdkClient) GetAWSCredentials() awsv2.Credentials {
 func (c *SdkClient) AssumeRole(roleARN, region string) (*SdkClient, error) {
 	input := &stsv2.AssumeRoleInput{
 		RoleArn:         &roleARN,
-		RoleSessionName: aws.String("CAD"),
+		RoleSessionName: awsv2.String("CAD"),
 	}
 	out, err := c.StsClient.AssumeRole(context.TODO(), input)
 	if err != nil {
@@ -332,7 +328,7 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []ec2v2types.Instance, r
 func (c *SdkClient) ListAllInstanceStopEventsV2() ([]cloudtrailv2types.Event, error) {
 	att := cloudtrailv2types.LookupAttribute{
 		AttributeKey:   "EventName",
-		AttributeValue: aws.String("StopInstances"),
+		AttributeValue: awsv2.String("StopInstances"),
 	}
 	return c.listAllInstancesAttribute(att)
 }
@@ -341,7 +337,7 @@ func (c *SdkClient) ListAllInstanceStopEventsV2() ([]cloudtrailv2types.Event, er
 func (c *SdkClient) ListAllTerminatedInstancesV2() ([]cloudtrailv2types.Event, error) {
 	att := cloudtrailv2types.LookupAttribute{
 		AttributeKey:   "EventName",
-		AttributeValue: aws.String("TerminateInstances"),
+		AttributeValue: awsv2.String("TerminateInstances"),
 	}
 	return c.listAllInstancesAttribute(att)
 }
@@ -353,7 +349,7 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 			{
 				// Prior to 4.16: <infra_id>-master-sg
 				// 4.16+: <infra_id>-controlplane
-				Name:   aws.String("tag:Name"),
+				Name:   awsv2.String("tag:Name"),
 				Values: []string{fmt.Sprintf("%s-master-sg", infraID), fmt.Sprintf("%s-controlplane", infraID)},
 			},
 		},
@@ -376,11 +372,11 @@ func (c *SdkClient) GetSubnetID(infraID string) ([]string, error) {
 	in := &ec2v2.DescribeSubnetsInput{
 		Filters: []ec2v2types.Filter{
 			{
-				Name:   aws.String("tag-key"),
+				Name:   awsv2.String("tag-key"),
 				Values: []string{fmt.Sprintf("kubernetes.io/cluster/%s", infraID)},
 			},
 			{
-				Name:   aws.String("tag-key"),
+				Name:   awsv2.String("tag-key"),
 				Values: []string{"kubernetes.io/role/internal-elb"},
 			},
 		},
@@ -410,7 +406,7 @@ func (c *SdkClient) IsSubnetPrivate(subnet string) (bool, error) {
 	rtbIn := &ec2v2.DescribeRouteTablesInput{
 		Filters: []ec2v2types.Filter{
 			{
-				Name:   aws.String("association.subnet-id"),
+				Name:   awsv2.String("association.subnet-id"),
 				Values: []string{subnet},
 			},
 		},
@@ -431,7 +427,7 @@ func (c *SdkClient) IsSubnetPrivate(subnet string) (bool, error) {
 	for _, route := range rtb.Routes {
 		// GatewayId can contain an internet gateway *or* a virtual private gateway:
 		// "The ID of an internet gateway or virtual private gateway attached to your VPC."
-		if route.DestinationCidrBlock == aws.String("0.0.0.0/0") &&
+		if route.DestinationCidrBlock == awsv2.String("0.0.0.0/0") &&
 			(route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw")) {
 			// This is a public subnet
 			return false, nil
@@ -446,7 +442,7 @@ func (c *SdkClient) GetRouteTableForSubnet(subnetID string) (ec2v2types.RouteTab
 	out, err := c.Ec2Client.DescribeRouteTables(context.TODO(), &ec2v2.DescribeRouteTablesInput{
 		Filters: []ec2v2types.Filter{
 			{
-				Name:   aws.String("association.subnet-id"),
+				Name:   awsv2.String("association.subnet-id"),
 				Values: []string{subnetID},
 			},
 		},
@@ -479,7 +475,7 @@ func (c *SdkClient) GetRouteTableForSubnet(subnetID string) (ec2v2types.RouteTab
 
 func (c *SdkClient) defaultRouteTableForVpc(vpcId string) (*ec2v2types.RouteTable, error) {
 	describeRouteTablesOutput, err := c.Ec2Client.DescribeRouteTables(context.TODO(), &ec2v2.DescribeRouteTablesInput{
-		Filters: []ec2v2types.Filter{{Name: aws.String("vpc-id"), Values: []string{vpcId}}},
+		Filters: []ec2v2types.Filter{{Name: awsv2.String("vpc-id"), Values: []string{vpcId}}},
 	})
 	if err != nil {
 		return nil, err
@@ -532,7 +528,7 @@ func (c *SdkClient) findDefaultRouteTableForVPC(vpcID string) (string, error) {
 	describeRouteTablesOutput, err := c.Ec2Client.DescribeRouteTables(context.TODO(), &ec2v2.DescribeRouteTablesInput{
 		Filters: []ec2v2types.Filter{
 			{
-				Name:   aws.String("vpc-id"),
+				Name:   awsv2.String("vpc-id"),
 				Values: []string{vpcID},
 			},
 		},

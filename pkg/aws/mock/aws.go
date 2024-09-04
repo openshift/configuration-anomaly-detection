@@ -15,7 +15,6 @@ import (
 	types0 "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	sts "github.com/aws/aws-sdk-go-v2/service/sts"
 	gomock "github.com/golang/mock/gomock"
-	aws0 "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 )
 
 // MockEC2API is a mock of EC2API interface.
@@ -228,21 +227,6 @@ func NewMockClient(ctrl *gomock.Controller) *MockClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
-}
-
-// AssumeRole mocks base method.
-func (m *MockClient) AssumeRole(roleARN, region string) (*aws0.SdkClient, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AssumeRole", roleARN, region)
-	ret0, _ := ret[0].(*aws0.SdkClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AssumeRole indicates an expected call of AssumeRole.
-func (mr *MockClientMockRecorder) AssumeRole(roleARN, region interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssumeRole", reflect.TypeOf((*MockClient)(nil).AssumeRole), roleARN, region)
 }
 
 // GetAWSCredentials mocks base method.
