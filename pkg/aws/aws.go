@@ -43,6 +43,21 @@ var stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}
 
 //go:generate mockgen -source=aws.go -package=awsmock -destination=mock/aws.go
 
+type EC2API interface {
+	DescribeInstances(ctx context.Context, in *ec2v2.DescribeInstancesInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeInstancesOutput, error)
+	DescribeSecurityGroups(ctx context.Context, in *ec2v2.DescribeSecurityGroupsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSecurityGroupsOutput, error)
+	DescribeSubnets(ctx context.Context, in *ec2v2.DescribeSubnetsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSubnetsOutput, error)
+	DescribeRouteTables(ctx context.Context, in *ec2v2.DescribeRouteTablesInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeRouteTablesOutput, error)
+}
+
+type CloudTrailAPI interface {
+	LookupEvents(ctx context.Context, in *cloudtrailv2.LookupEventsInput, optFns ...func(*cloudtrailv2.Options)) (*cloudtrailv2.LookupEventsOutput, error)
+}
+
+type StsAPI interface {
+	AssumeRole(ctx context.Context, in *stsv2.AssumeRoleInput, optFns ...func(*stsv2.Options)) (*stsv2.AssumeRoleOutput, error)
+}
+
 type Client interface {
 	AssumeRole(roleARN, region string) (*SdkClient, error)
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
@@ -58,9 +73,9 @@ type Client interface {
 type SdkClient struct {
 	Credentials      awsv2.Credentials
 	Region           string
-	CloudtrailClient cloudtrailv2.Client
-	Ec2Client        ec2v2.Client
-	StsClient        stsv2.Client
+	CloudtrailClient CloudTrailAPI
+	Ec2Client        EC2API
+	StsClient        StsAPI
 }
 
 func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error) {
@@ -83,9 +98,9 @@ func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error)
 	return &SdkClient{
 		Credentials:      creds,
 		Region:           region,
-		CloudtrailClient: *cloudtrailv2.NewFromConfig(config),
-		Ec2Client:        *ec2v2.NewFromConfig(config),
-		StsClient:        *stsv2.NewFromConfig(config),
+		CloudtrailClient: cloudtrailv2.NewFromConfig(config),
+		Ec2Client:        ec2v2.NewFromConfig(config),
+		StsClient:        stsv2.NewFromConfig(config),
 	}, nil
 }
 

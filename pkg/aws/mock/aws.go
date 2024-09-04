@@ -5,14 +5,207 @@
 package awsmock
 
 import (
+	context "context"
 	reflect "reflect"
 
 	aws "github.com/aws/aws-sdk-go-v2/aws"
+	cloudtrail "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
+	ec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	types0 "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	sts "github.com/aws/aws-sdk-go-v2/service/sts"
 	gomock "github.com/golang/mock/gomock"
 	aws0 "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 )
+
+// MockEC2API is a mock of EC2API interface.
+type MockEC2API struct {
+	ctrl     *gomock.Controller
+	recorder *MockEC2APIMockRecorder
+}
+
+// MockEC2APIMockRecorder is the mock recorder for MockEC2API.
+type MockEC2APIMockRecorder struct {
+	mock *MockEC2API
+}
+
+// NewMockEC2API creates a new mock instance.
+func NewMockEC2API(ctrl *gomock.Controller) *MockEC2API {
+	mock := &MockEC2API{ctrl: ctrl}
+	mock.recorder = &MockEC2APIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEC2API) EXPECT() *MockEC2APIMockRecorder {
+	return m.recorder
+}
+
+// DescribeInstances mocks base method.
+func (m *MockEC2API) DescribeInstances(ctx context.Context, in *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeInstances", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeInstancesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeInstances indicates an expected call of DescribeInstances.
+func (mr *MockEC2APIMockRecorder) DescribeInstances(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstances", reflect.TypeOf((*MockEC2API)(nil).DescribeInstances), varargs...)
+}
+
+// DescribeRouteTables mocks base method.
+func (m *MockEC2API) DescribeRouteTables(ctx context.Context, in *ec2.DescribeRouteTablesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeRouteTablesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeRouteTables", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeRouteTablesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeRouteTables indicates an expected call of DescribeRouteTables.
+func (mr *MockEC2APIMockRecorder) DescribeRouteTables(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeRouteTables", reflect.TypeOf((*MockEC2API)(nil).DescribeRouteTables), varargs...)
+}
+
+// DescribeSecurityGroups mocks base method.
+func (m *MockEC2API) DescribeSecurityGroups(ctx context.Context, in *ec2.DescribeSecurityGroupsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSecurityGroupsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeSecurityGroups", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeSecurityGroupsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeSecurityGroups indicates an expected call of DescribeSecurityGroups.
+func (mr *MockEC2APIMockRecorder) DescribeSecurityGroups(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSecurityGroups", reflect.TypeOf((*MockEC2API)(nil).DescribeSecurityGroups), varargs...)
+}
+
+// DescribeSubnets mocks base method.
+func (m *MockEC2API) DescribeSubnets(ctx context.Context, in *ec2.DescribeSubnetsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeSubnetsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeSubnets", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeSubnetsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeSubnets indicates an expected call of DescribeSubnets.
+func (mr *MockEC2APIMockRecorder) DescribeSubnets(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockEC2API)(nil).DescribeSubnets), varargs...)
+}
+
+// MockCloudTrailAPI is a mock of CloudTrailAPI interface.
+type MockCloudTrailAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockCloudTrailAPIMockRecorder
+}
+
+// MockCloudTrailAPIMockRecorder is the mock recorder for MockCloudTrailAPI.
+type MockCloudTrailAPIMockRecorder struct {
+	mock *MockCloudTrailAPI
+}
+
+// NewMockCloudTrailAPI creates a new mock instance.
+func NewMockCloudTrailAPI(ctrl *gomock.Controller) *MockCloudTrailAPI {
+	mock := &MockCloudTrailAPI{ctrl: ctrl}
+	mock.recorder = &MockCloudTrailAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockCloudTrailAPI) EXPECT() *MockCloudTrailAPIMockRecorder {
+	return m.recorder
+}
+
+// LookupEvents mocks base method.
+func (m *MockCloudTrailAPI) LookupEvents(ctx context.Context, in *cloudtrail.LookupEventsInput, optFns ...func(*cloudtrail.Options)) (*cloudtrail.LookupEventsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "LookupEvents", varargs...)
+	ret0, _ := ret[0].(*cloudtrail.LookupEventsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LookupEvents indicates an expected call of LookupEvents.
+func (mr *MockCloudTrailAPIMockRecorder) LookupEvents(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookupEvents", reflect.TypeOf((*MockCloudTrailAPI)(nil).LookupEvents), varargs...)
+}
+
+// MockStsAPI is a mock of StsAPI interface.
+type MockStsAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockStsAPIMockRecorder
+}
+
+// MockStsAPIMockRecorder is the mock recorder for MockStsAPI.
+type MockStsAPIMockRecorder struct {
+	mock *MockStsAPI
+}
+
+// NewMockStsAPI creates a new mock instance.
+func NewMockStsAPI(ctrl *gomock.Controller) *MockStsAPI {
+	mock := &MockStsAPI{ctrl: ctrl}
+	mock.recorder = &MockStsAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStsAPI) EXPECT() *MockStsAPIMockRecorder {
+	return m.recorder
+}
+
+// AssumeRole mocks base method.
+func (m *MockStsAPI) AssumeRole(ctx context.Context, in *sts.AssumeRoleInput, optFns ...func(*sts.Options)) (*sts.AssumeRoleOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AssumeRole", varargs...)
+	ret0, _ := ret[0].(*sts.AssumeRoleOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AssumeRole indicates an expected call of AssumeRole.
+func (mr *MockStsAPIMockRecorder) AssumeRole(ctx, in interface{}, optFns ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssumeRole", reflect.TypeOf((*MockStsAPI)(nil).AssumeRole), varargs...)
+}
 
 // MockClient is a mock of Client interface.
 type MockClient struct {
