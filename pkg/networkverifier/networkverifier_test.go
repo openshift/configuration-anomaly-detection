@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("RunVerifier", func() {

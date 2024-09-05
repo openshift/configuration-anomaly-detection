@@ -6,7 +6,6 @@ import (
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -17,6 +16,7 @@ import (
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"go.uber.org/mock/gomock"
 )
 
 var _ = Describe("chgm", func() {

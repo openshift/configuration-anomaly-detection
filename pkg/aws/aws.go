@@ -24,7 +24,6 @@ import (
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	stsv2 "github.com/aws/aws-sdk-go-v2/service/sts"
 
-	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"k8s.io/apimachinery/pkg/util/wait"
 )

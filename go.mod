@@ -10,7 +10,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.137.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.9
-	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.33.1
 	github.com/openshift-online/ocm-sdk-go v0.1.427
 	github.com/openshift/api v0.0.0-20230720094506-afcbe27aec7c
@@ -21,6 +20,7 @@ require (
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/common v0.54.0
 	github.com/spf13/cobra v1.8.0
+	go.uber.org/mock v0.4.0
 	go.uber.org/zap v1.26.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.28.3

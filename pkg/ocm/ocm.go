@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	_ "github.com/golang/mock/mockgen/model" //revive:disable:blank-imports used for the mockgen generation
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"

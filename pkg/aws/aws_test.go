@@ -7,8 +7,7 @@ import (
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/golang/mock/gomock"
-	_ "github.com/golang/mock/mockgen/model"
+	"go.uber.org/mock/gomock"
 
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 )
