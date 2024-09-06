@@ -18,7 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
+	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
@@ -195,7 +195,7 @@ type expectedNodesCount struct {
 
 // investigateInstancesOutput is the result of the InvestigateInstances command
 type investigateInstancesOutput struct {
-	NonRunningInstances  []*ec2.Instance
+	NonRunningInstances  []ec2v2types.Instance
 	RunningInstances     runningNodesCount
 	ExpectedInstances    expectedNodesCount
 	User                 userInfo
