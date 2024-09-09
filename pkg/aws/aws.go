@@ -357,7 +357,7 @@ func (c *SdkClient) GetSecurityGroupID(infraID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to list security group: %w", err)
 	}
-	if out.SecurityGroups == nil {
+	if len(out.SecurityGroups) == 0 {
 		return "", fmt.Errorf("security groups are empty")
 	}
 	if len(*out.SecurityGroups[0].GroupId) == 0 {
