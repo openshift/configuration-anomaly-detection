@@ -40,6 +40,11 @@ func TestCustomerRemovedPermissions(t *testing.T) {
 			expectedMatch: true,
 		},
 		{
+			name:          "Matching error 5",
+			errorMessage:  "unable to query aws credentials from backplane: failed to determine if cluster is using isolated backlpane access: failed to get sts support jump role ARN for cluster <cluster_id>: failed to get STS Support Jump Role for cluster <cluster_id>, status is 400, identifier is '400', code is 'CLUSTERS-MGMT-400' and operation identifier is '<op_id>': Failed to get role: User: arn:aws:sts::<cluster_aws_account_id>:assumed-role/ManagedOpenShift-Installer-Role/OCM is not authorized to perform: iam:GetRole on resource: role ManagedOpenShift-Support-Role because no identity-based policy allows the iam:GetRole action",
+			expectedMatch: true,
+		},
+		{
 			name:          "Non-matching error",
 			errorMessage:  "Some timeout error",
 			expectedMatch: false,
