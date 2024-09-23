@@ -74,6 +74,10 @@ var userCausedErrors = []string{
 	// This error is the response from backplane calls when:
 	// trust policy of ManagedOpenShift-Support-Role is changed
 	".*could not assume support role in customer's account: AccessDenied:.*",
+
+	// Customer removed the `GetRole` permission from the Installer role.
+	// Failed to get role: User: arn:aws:sts::<id>:assumed-role/ManagedOpenShift-Installer-Role/OCM is not authorized to perform: iam:GetRole on resource: role ManagedOpenShift-Support-Role because no identity-based policy allows the iam:GetRole action
+	".*is not authorized to perform: iam:GetRole on resource: role.*",
 }
 
 func customerRemovedPermissions(backplaneError string) bool {
