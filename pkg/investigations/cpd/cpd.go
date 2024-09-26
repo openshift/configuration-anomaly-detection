@@ -83,7 +83,7 @@ func Investigate(r *investigation.Resources) error {
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err)
+		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err.Error())
 
 		err = r.PdClient.AddNote(notes.String())
 		if err != nil {
