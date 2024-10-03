@@ -107,15 +107,3 @@ coverage:
 
 .PHONY: validate
 validate: generate-template-file isclean
-
-# Build targets
-cadctl/cadctl: cadctl/**/*.go pkg/**/*.go go.mod go.sum
-	GOBIN=$(PWD)/cadctl go install -ldflags="-s -w" -mod=readonly -trimpath $(PWD)/cadctl
-
-.PHONY: cadctl-install-local
-cadctl-install-local: cadctl/cadctl
-
-.PHONY: cadctl-install-local-force
-cadctl-install-local-force:
-	rm cadctl/cadctl >/dev/null 2>&1 || true
-	make cadctl-install-local
