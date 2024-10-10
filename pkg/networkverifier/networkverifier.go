@@ -13,11 +13,10 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	"github.com/openshift/osd-network-verifier/pkg/helpers"
+	"github.com/openshift/osd-network-verifier/pkg/data/cloud"
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
 	"github.com/openshift/osd-network-verifier/pkg/verifier"
-	onv "github.com/openshift/osd-network-verifier/pkg/verifier"
-	onvAwsClient "github.com/openshift/osd-network-verifier/pkg/verifier/aws"
+	verifierAws "github.com/openshift/osd-network-verifier/pkg/verifier/aws"
 )
 
 // VerifierResult type contains the verifier outcomes
@@ -31,7 +30,7 @@ const (
 )
 
 // InitializeValidateEgressInput computes the input to pass to the network verifier tool
-func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*onv.ValidateEgressInput, error) {
+func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*verifier.ValidateEgressInput, error) {
 	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
 	securityGroupID, err := awsClient.GetSecurityGroupID(infraID)
 	if err != nil {
@@ -56,13 +55,8 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		"Name":                 "osd-network-verifier",
 	}
 
-	region := cluster.Region().ID()
-	if onvAwsClient.GetAMIForRegion(region) == "" {
-		return nil, fmt.Errorf("unsupported region: %s", region)
-	}
-
 	// If a KMS key is defined for the cluster, use it as the default aws/ebs key may not exist
-	kmsKeyArn := ""
+	var kmsKeyArn string
 	aws := cluster.AWS()
 
 	if aws != nil {
@@ -81,16 +75,15 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		return nil, errors.New("cluster has an additional trust bundle configured - this is currently not supported by CAD's network verifier")
 	}
 
-	return &onv.ValidateEgressInput{
+	return &verifier.ValidateEgressInput{
 		Timeout:      2 * time.Second,
 		Ctx:          context.TODO(),
 		SubnetID:     subnet,
-		CloudImageID: onvAwsClient.GetAMIForRegion(region),
 		InstanceType: "t3.micro",
 		Proxy:        proxy,
-		PlatformType: helpers.PlatformAWS,
+		PlatformType: cloud.AWSClassic,
 		Tags:         awsDefaultTags,
-		AWS: onv.AwsEgressConfig{
+		AWS: verifier.AwsEgressConfig{
 			KmsKeyID:         kmsKeyArn,
 			SecurityGroupIDs: []string{securityGroupID},
 		},
@@ -105,7 +98,7 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 	}
 
 	credentials := awsClient.GetAWSCredentials()
-	awsVerifier, err := onvAwsClient.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
+	awsVerifier, err := verifierAws.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %w", err)
 	}
