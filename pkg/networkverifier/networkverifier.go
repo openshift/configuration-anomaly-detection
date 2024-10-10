@@ -13,9 +13,10 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	"github.com/openshift/osd-network-verifier/pkg/helpers"
+	"github.com/openshift/osd-network-verifier/pkg/data/cloud"
+	"github.com/openshift/osd-network-verifier/pkg/data/cpu"
+	"github.com/openshift/osd-network-verifier/pkg/probes/curl"
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
-	"github.com/openshift/osd-network-verifier/pkg/verifier"
 	onv "github.com/openshift/osd-network-verifier/pkg/verifier"
 	onvAwsClient "github.com/openshift/osd-network-verifier/pkg/verifier/aws"
 )
@@ -56,13 +57,14 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		"Name":                 "osd-network-verifier",
 	}
 
-	region := cluster.Region().ID()
-	if onvAwsClient.GetAMIForRegion(region) == "" {
-		return nil, fmt.Errorf("unsupported region: %s", region)
+	// We default to using the `curl` based probe for validating egress at this time
+	cloudImageID, err := curl.Probe{}.GetMachineImageID(cloud.AWSClassic, cpu.ArchX86, cluster.Region().ID())
+	if err != nil {
+		return nil, fmt.Errorf("failed getting machine image ID: %w", err)
 	}
 
 	// If a KMS key is defined for the cluster, use it as the default aws/ebs key may not exist
-	kmsKeyArn := ""
+	var kmsKeyArn string
 	aws := cluster.AWS()
 
 	if aws != nil {
@@ -85,10 +87,10 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		Timeout:      2 * time.Second,
 		Ctx:          context.TODO(),
 		SubnetID:     subnet,
-		CloudImageID: onvAwsClient.GetAMIForRegion(region),
+		CloudImageID: cloudImageID,
 		InstanceType: "t3.micro",
 		Proxy:        proxy,
-		PlatformType: helpers.PlatformAWS,
+		PlatformType: cloud.AWSClassic,
 		Tags:         awsDefaultTags,
 		AWS: onv.AwsEgressConfig{
 			KmsKeyID:         kmsKeyArn,
@@ -112,7 +114,7 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 
 	logging.Infof("Running Network Verifier with security group '%s' - subnet '%s' - region '%s'... ", validateEgressInput.AWS.SecurityGroupIDs, validateEgressInput.SubnetID, cluster.Region().ID())
 
-	out := verifier.ValidateEgress(awsVerifier, *validateEgressInput)
+	out := onv.ValidateEgress(awsVerifier, *validateEgressInput)
 
 	verifierFailures, verifierExceptions, verifierErrors := out.Parse()
 
