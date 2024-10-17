@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.137.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.9
+	github.com/golang/mock v1.6.0
 	github.com/onsi/gomega v1.33.1
 	github.com/openshift-online/ocm-sdk-go v0.1.427
 	github.com/openshift/api v0.0.0-20230720094506-afcbe27aec7c
