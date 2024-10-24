@@ -29,6 +29,15 @@ spec:
           requests:
             cpu: "10m"
             memory: "100Mi"
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /ready
@@ -48,7 +57,7 @@ spec:
           runAsUser: 65532
           seccompProfile:
             type: RuntimeDefault
-      restartPolicy: Always 
+      restartPolicy: Always
       serviceAccountName: pipeline
       terminationGracePeriodSeconds: 30
 ---
