@@ -142,6 +142,9 @@ objects:
           'cad-pd-token')
       ref:
         name: cel
+    - ref:
+        kind: NamespacedInterceptor
+        name: cad-interceptor
     template:
       ref: cad-check-trigger-template
 - apiVersion: triggers.tekton.dev/v1alpha1
