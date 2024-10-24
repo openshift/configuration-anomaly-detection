@@ -46,9 +46,9 @@ spec:
       - name: "filter"
         value: "header.canonical('X-Secret-Token').compareSecret('X_SECRET_TOKEN', 'cad-pd-token')"
     # Enable after interceptor deployment is tested
-    # - ref:
-    #     name: "cad-interceptor"
-    #     kind: NamespacedInterceptor
+    - ref:
+        name: "cad-interceptor"
+        kind: NamespacedInterceptor
   bindings:
   - ref: cad-check-trigger
   template:
