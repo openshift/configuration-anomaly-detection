@@ -87,7 +87,7 @@ objects:
     selector:
       app: cad-interceptor
     type: ClusterIP
-- apiVersion: triggers.tekton.dev/v1beta1
+- apiVersion: triggers.tekton.dev/v1alpha1
   kind: Interceptor
   metadata:
     name: cad-interceptor
