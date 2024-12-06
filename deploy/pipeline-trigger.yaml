@@ -66,6 +66,11 @@ spec:
   triggers:
   - triggerRef: cad-pipe-listener
   resources:
+    resources:
+    - name: cad-event-listener-tls
+      type: secret
+      secret:
+        name: cad-event-listener-tls-secret
     kubernetesResource:
       spec:
         template:
@@ -78,3 +83,14 @@ spec:
                   limits:
                     cpu: 500m
                     memory: 256Mi
+  env:
+  - name: TLS_CERT
+    valueFrom:
+      secretKeyRef:
+        name: cad-event-listener-tls-secret
+        key: tls.crt
+  - name: TLS_KEY
+    valueFrom:
+      secretKeyRef:
+        name: cad-event-listener-tls-secret
+        key: tls.key

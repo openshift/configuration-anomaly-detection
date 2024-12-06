@@ -154,6 +154,17 @@ objects:
       triggers.tekton.dev/old-escape-quotes: "true"
     name: cad-event-listener
   spec:
+    env:
+    - name: TLS_CERT
+      valueFrom:
+        secretKeyRef:
+          key: tls.crt
+          name: cad-event-listener-tls-secret
+    - name: TLS_KEY
+      valueFrom:
+        secretKeyRef:
+          key: tls.key
+          name: cad-event-listener-tls-secret
     resources:
       kubernetesResource:
         spec:
@@ -167,6 +178,11 @@ objects:
                   requests:
                     cpu: 100m
                     memory: 64Mi
+      resources:
+      - name: cad-event-listener-tls
+        secret:
+          name: cad-event-listener-tls-secret
+        type: secret
     triggers:
     - triggerRef: cad-pipe-listener
 - apiVersion: tekton.dev/v1beta1
