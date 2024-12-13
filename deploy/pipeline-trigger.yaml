@@ -78,3 +78,14 @@ spec:
                   limits:
                     cpu: 500m
                     memory: 256Mi
+                env:
+                - name: TLS_CERT
+                  valueFrom:
+                    secretKeyRef:
+                      key: tls.crt
+                      name: cad-event-listener-tls-secret
+                - name: TLS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      key: tls.key
+                      name: cad-event-listener-tls-secret
