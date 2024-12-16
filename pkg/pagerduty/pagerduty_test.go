@@ -31,7 +31,7 @@ var _ = Describe("Pagerduty", func() {
 		// each startup of PagerDuty we need to verify the user's email for future requests
 		mux.HandleFunc("/users/me", func(w http.ResponseWriter, r *http.Request) {
 			Expect(r.Method).Should(Equal("GET"))
-			fmt.Fprint(w, `{"user":{"email":"example@example.example"}}`)
+			_, _ = fmt.Fprint(w, `{"user":{"email":"example@example.example"}}`)
 		})
 		var err error // err is declared to make clear the p is not created here, but is global
 		p, err = pagerduty.NewWithToken(
@@ -71,7 +71,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
 				err := p.MoveToEscalationPolicy(escalationPolicyID)
@@ -87,7 +87,7 @@ var _ = Describe("Pagerduty", func() {
 				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				err := p.MoveToEscalationPolicy(escalationPolicyID)
@@ -124,7 +124,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
 				err := p.AssignToUser(userID)
@@ -140,7 +140,7 @@ var _ = Describe("Pagerduty", func() {
 				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				err := p.AssignToUser(userID)
@@ -175,7 +175,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
 				err := p.AcknowledgeIncident()
@@ -191,7 +191,7 @@ var _ = Describe("Pagerduty", func() {
 				// Arrange
 				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("PUT"))
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				err := p.AcknowledgeIncident()
@@ -216,7 +216,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("POST"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				err := p.AddNote(noteContent)
@@ -233,7 +233,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("POST"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
 				err := p.AddNote(noteContent)
@@ -264,7 +264,7 @@ var _ = Describe("Pagerduty", func() {
 				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/notes", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					Expect(r.Method).Should(Equal("POST"))
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				err := p.AddNote(noteContent)
@@ -286,7 +286,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				_, err := p.GetAlertsForIncident(incidentID)
@@ -303,7 +303,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
 				})
 				// Act
 				_, err := p.GetAlertsForIncident(incidentID)
@@ -321,7 +321,7 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusNotFound)
-					fmt.Fprint(w, `{}`)
+					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
 				_, err := p.GetAlertsForIncident(incidentID)
@@ -337,7 +337,7 @@ var _ = Describe("Pagerduty", func() {
 				// Arrange
 				mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 					// CHGM format of
-					fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"cluster_id": "123456"}}}]}`)
+					_, _ = fmt.Fprint(w, `{"alerts":[{"id":"123456","body":{"details":{"cluster_id": "123456"}}}]}`)
 				})
 				// Act
 				res, err1 := p.GetAlertsForIncident(incidentID)
@@ -382,7 +382,7 @@ var _ = Describe("Pagerduty", func() {
 		When("The service has no Dead Man's Snitch integrations", func() {
 			It("should return an IntegrationNotFoundError", func() {
 				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[]}}`, serviceID)
+					_, _ = fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[]}}`, serviceID)
 				})
 				err := p.CreateNewAlert(newAlert, serviceID)
 				Expect(err).To(HaveOccurred())
@@ -392,10 +392,10 @@ var _ = Describe("Pagerduty", func() {
 		When("The event creation fails", func() {
 			It("should return a CreateEventError", func() {
 				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[{"id":"%s"}]}}`, serviceID, dmsIntegrationID)
+					_, _ = fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[{"id":"%s"}]}}`, serviceID, dmsIntegrationID)
 				})
 				mux.HandleFunc(fmt.Sprintf("/services/%s/integrations/%s", serviceID, dmsIntegrationID), func(w http.ResponseWriter, r *http.Request) {
-					fmt.Fprintf(w, `{"integration":{"id":"%s","name":"%s"}}`, dmsIntegrationID, pagerduty.CADIntegrationName)
+					_, _ = fmt.Fprintf(w, `{"integration":{"id":"%s","name":"%s"}}`, dmsIntegrationID, pagerduty.CADIntegrationName)
 				})
 				err := p.CreateNewAlert(newAlert, serviceID)
 				Expect(err).To(HaveOccurred())
@@ -481,7 +481,7 @@ var _ = Describe("Pagerduty", func() {
 					// Arrange
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						// Standard alert format of
-						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"cluster_id": "654321"}}}]}`)
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"cluster_id": "654321"}}}]}`)
 					})
 					// Act
 					res, err := p.RetrieveClusterID()
@@ -495,7 +495,7 @@ var _ = Describe("Pagerduty", func() {
 					// Arrange
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						// Standard alert format of
-						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"notes":"cluster_id: 654321"}}}]}`)
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"notes":"cluster_id: 654321"}}}]}`)
 					})
 					// Act
 					res, err := p.RetrieveClusterID()
@@ -508,7 +508,7 @@ var _ = Describe("Pagerduty", func() {
 				It("should raise an error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						// Standard alert format of
-						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"describe":{"chicken": 1.75},"steak":true}}]}`)
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"describe":{"chicken": 1.75},"steak":true}}]}`)
 					})
 					// Act
 					_, err := p.RetrieveClusterID()
@@ -519,7 +519,7 @@ var _ = Describe("Pagerduty", func() {
 			When("the '.details' field is of the wrong type", func() {
 				It("should raise an error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
-						fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":"bad details"}}]}`)
 					})
 
 					_, err := p.RetrieveClusterID()

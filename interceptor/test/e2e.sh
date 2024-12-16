@@ -24,31 +24,38 @@ function test_interceptor {
     INTERCEPTOR_PID=$!
 
     # Wait for 1 second to allow the interceptor to start up
-    sleep 1
+    sleep 5
 
     local incident_id=$1
     local expected_response=$2
 
     # Send an interceptor request to localhost:8080
     # See https://pkg.go.dev/github.com/tektoncd/triggers/pkg/apis/triggers/v1alpha1#InterceptorRequest
+    CURL_EXITCODE=0
     CURL_OUTPUT=$(curl -s -X POST -H "Content-Type: application/json" \
         -d "{\"body\":\"{\\\"__pd_metadata\\\":{\\\"incident\\\":{\\\"id\\\":\\\"$incident_id\\\"}}}\",\"header\":{\"Content-Type\":[\"application/json\"]},\"extensions\":{},\"interceptor_params\":{},\"context\":null}" \
-        http://localhost:8080)
+        http://localhost:8080) || CURL_EXITCODE=$?
 
     # Check if the curl output matches the expected response
-    if [[ "$CURL_OUTPUT" == "$expected_response" ]]; then
+    if [[ "$CURL_OUTPUT" == "$expected_response" ]] && [[ "$CURL_EXITCODE" == "0" ]]; then
         echo -e "${GREEN}Test passed for incident ID $incident_id: Response is as expected.${NC}"
+
+        # Shut down the interceptor
+        kill $INTERCEPTOR_PID
     else
         echo -e "${RED}Test failed for incident ID $incident_id: Unexpected response.${NC}"
         echo -e "${RED}Expected: $expected_response${NC}"
         echo -e "${RED}Got: $CURL_OUTPUT${NC}"
+        echo -e "${RED}Exit code: $CURL_EXITCODE${NC}"
         echo -e ""
         echo -e "Interceptor logs"
         cat $temp_log_file
-    fi
 
-    # Shut down the interceptor
-    kill $INTERCEPTOR_PID
+        # Shut down the interceptor
+        kill $INTERCEPTOR_PID
+
+        return 1
+    fi
 }
 
 # Expected outputs
