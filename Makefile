@@ -1,7 +1,8 @@
 include project.mk
 include boilerplate/generated-includes.mk
 
-GOLANGCI_LINT_VERSION=v1.58.1
+GOLANGCI_LINT_VERSION=v1.59.1
+MOCKGEN_VERSION=v0.5.0
 
 .DEFAULT_GOAL := all
 
@@ -16,30 +17,30 @@ all: interceptor cadctl template-updater generate-template-file  ## Generate, bu
 build: build-interceptor build-cadctl build-template-updater ## Build all subprojects in this repository
 
 .PHONY: lint
-lint: getlint lint-cadctl lint-interceptor lint-template-updater ## Lint all subprojects
+lint: lint-cadctl lint-interceptor lint-template-updater ## Lint all subprojects
 
 ##@ cadctl:
 .PHONY: cadctl
 cadctl: generate-cadctl build-cadctl test-cadctl lint-cadctl generate-template-file ## Run all targets for cadctl (generate, build, test, lint, generation)
 
 .PHONY: generate-cadctl
-generate-cadctl: ## Generate mocks for cadctl
+generate-cadctl: check-go121-install install-mockgen ## Generate mocks for cadctl
 	go generate -mod=readonly ./...
 
 .PHONY: build-cadctl
-build-cadctl: ## Build the cadctl binary
+build-cadctl: check-go121-install ## Build the cadctl binary
 	@echo
 	@echo "Building cadctl..."
 	cd cadctl && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/cadctl .
 
 .PHONY: lint-cadctl
-lint-cadctl: ## Lint cadctl subproject
+lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
 	GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
 
 .PHONY: test-cadctl
-test-cadctl:  ## Run automated tests for cadctl
+test-cadctl: check-go121-install ## Run automated tests for cadctl
 	@echo
 	@echo "Running unit tests for cadctl..."
 	go test $(TESTOPTS) -race -mod=readonly ./cadctl/... ./pkg/...
@@ -49,19 +50,19 @@ test-cadctl:  ## Run automated tests for cadctl
 interceptor: build-interceptor test-interceptor lint-interceptor ## Run all targets for interceptor (build, test, lint)
 
 .PHONY: build-interceptor
-build-interceptor: ## Build the interceptor binary
+build-interceptor: check-go121-install ## Build the interceptor binary
 	@echo
 	@echo "Building interceptor..."
 	cd interceptor && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/interceptor .
 
 .PHONY: lint-interceptor
-lint-interceptor: ## Lint interceptor subproject
+lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
 	cd interceptor && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
 
 .PHONY: test-interceptor
-test-interceptor: build-interceptor ## Run automated tests for interceptor
+test-interceptor: check-go121-install check-jq-install check-vault-install build-interceptor ## Run automated tests for interceptor
 	@echo
 	@echo "Running unit tests for interceptor..."
 	cd interceptor && go test -race -mod=readonly ./...
@@ -80,7 +81,7 @@ build-template-updater: ## Build the template-updater binary
 	cd hack/update-template && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../../bin/template-updater .
 
 .PHONY: lint-template-updater
-lint-template-updater: ## Lint template-updater subproject
+lint-template-updater: install-linter ## Lint template-updater subproject
 	@echo
 	@echo "Linting template-updater..."
 	cd hack/update-template && GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
@@ -95,11 +96,6 @@ generate-template-file: build-template-updater ## Generate deploy template file
 	@echo "Generating template file..."
 	cp ./bin/template-updater ./hack/update-template/ && cd ./hack/update-template/ && ./template-updater
 
-# Installed using instructions from: https://golangci-lint.run/usage/install/#linux-and-windows
-getlint:
-	@mkdir -p $(GOPATH)/bin
-	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo "Installing golangci-lint..." && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION))
-
 ### CI Only
 .PHONY: coverage
 coverage:
@@ -107,3 +103,22 @@ coverage:
 
 .PHONY: validate
 validate: generate-template-file isclean
+
+### Prerequisites
+### It is assumed that 'make' is already installed
+### Version of go is checked but the version the tools are not checked as this should not matter much.
+.PHONY: check-%-install
+check-%-install:
+	@type $* 1> /dev/null || (>&2 echo && echo "'$*' IS NOT INSTALLED - install it manually" && echo && false)
+
+.PHONY: check-go121-install
+check-go121-install:
+	@(type go 1> /dev/null && go version | grep -q 'go[1-9].[2-9][1-9]') || (>&2 echo && echo "'go' WITH VERSION >= 1.21 IS NOT INSTALLED - install it manually" && echo && false)
+
+.PHONY: install-linter
+install-linter: check-curl-install check-go121-install
+	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo && echo "Installing 'golangci-lint'..." && mkdir -p $(GOPATH)/bin && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION))
+
+.PHONY: install-mockgen
+install-mockgen: check-go121-install
+	@type mockgen 1> /dev/null || (echo && echo "Installing 'mockgen'..." && go install go.uber.org/mock/mockgen@$(MOCKGEN_VERSION))
