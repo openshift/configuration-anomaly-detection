@@ -1,10 +1,11 @@
 version: 2
 updates:
   - package-ecosystem: 'gomod'
-    directory: '/'
+    directories:
+      - '/'
+      - 'interceptor/'
     allow:
       - dependency-type: all
-      - dependency-name: "github.com/openshift/osd-network-verifier"
     schedule:
       interval: 'daily'
   - package-ecosystem: "docker"
