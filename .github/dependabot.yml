@@ -3,6 +3,7 @@ updates:
   - package-ecosystem: 'gomod'
     directory: '/'
     allow:
+      - dependency-type: all
       - dependency-name: "github.com/openshift/osd-network-verifier"
     schedule:
       interval: 'daily'
