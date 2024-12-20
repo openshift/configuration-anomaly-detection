@@ -2,6 +2,7 @@ package chgm
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -44,4 +45,8 @@ func TestCreateEgressLS(t *testing.T) {
 
 	result := createEgressLS(blockedUrls)
 	assert.Equal(t, *expected, *result)
+
+	// OCM does not like the parenthesis, stop gap until we figure
+	assert.Equal(t, strings.Contains(result.Details, "("), false)
+	assert.Equal(t, strings.Contains(result.Details, ")"), false)
 }
