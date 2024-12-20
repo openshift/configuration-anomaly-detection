@@ -1,7 +1,6 @@
 package chgm
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -10,14 +9,11 @@ import (
 )
 
 // Mock data
-var blockedUrls = "example.com, test.com"
+var blockedUrls = "example.com (timeout), test.com (timeout)"
 
 // TestCreateEgressSL tests the createEgressSL function
 func TestCreateEgressSL(t *testing.T) {
-	expectedDescription := fmt.Sprintf(
-		"Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#.",
-		blockedUrls,
-	)
+	expectedDescription := "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: example.com (timeout), test.com (timeout). Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#."
 
 	expected := &ocm.ServiceLog{
 		Severity:     "Critical",
@@ -33,10 +29,7 @@ func TestCreateEgressSL(t *testing.T) {
 
 // TestCreateEgressLS tests the createEgressLS function
 func TestCreateEgressLS(t *testing.T) {
-	expectedDetails := fmt.Sprintf(
-		"Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#",
-		blockedUrls,
-	)
+	expectedDetails := "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: example.com 'timeout', test.com 'timeout'. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#"
 
 	expected := &ocm.LimitedSupportReason{
 		Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
