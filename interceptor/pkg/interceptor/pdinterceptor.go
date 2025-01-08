@@ -89,10 +89,10 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 	if err := json.Unmarshal(body.Bytes(), &ireq); err != nil {
 		return nil, badRequest(fmt.Errorf("failed to parse body as InterceptorRequest: %w", err))
 	}
-	pdi.Logger.Infof("Interceptor Request is: %+v", ireq)
+	pdi.Logger.Debugf("Interceptor request body is: %s", ireq.Body)
 
 	iresp := pdi.Process(ctx, &ireq)
-	pdi.Logger.Infof("Interceptor response is: %+v", iresp)
+	pdi.Logger.Debugf("Interceptor response is: %+v", iresp)
 	respBytes, err := json.Marshal(iresp)
 	if err != nil {
 		return nil, internal(err)
