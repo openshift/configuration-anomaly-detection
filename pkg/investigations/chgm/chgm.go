@@ -82,7 +82,12 @@ func Investigate(r *investigation.Resources) error {
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(), r.Cluster.ID())
+			egressLS := ocm.LimitedSupportReason{
+				Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
+				Details: "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to internet-based resources which are required for the cluster operation and support. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#",
+			}
+
+			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID())
 			if err != nil {
 				return err
 			}
