@@ -82,7 +82,7 @@ func Investigate(r *investigation.Resources) error {
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster.ID())
+			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(), r.Cluster.ID())
 			if err != nil {
 				return err
 			}
