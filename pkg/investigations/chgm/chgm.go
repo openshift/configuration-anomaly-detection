@@ -32,6 +32,11 @@ var (
 		Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
 		InternalOnly: false,
 	}
+
+	egressLS = ocm.LimitedSupportReason{
+		Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
+		Details: "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to internet-based resources which are required for the cluster operation and support. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#",
+	}
 )
 
 // Investigate runs the investigation for a triggered chgm pagerduty event
@@ -82,7 +87,7 @@ func Investigate(r *investigation.Resources) error {
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(createEgressLS(failureReason), r.Cluster.ID())
+			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID())
 			if err != nil {
 				return err
 			}
