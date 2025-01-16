@@ -79,8 +79,7 @@ func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error)
 		configv2.WithRegion(region),
 		configv2.WithCredentialsProvider(staticCredentials),
 		configv2.WithRetryer(func() awsv2.Retryer {
-			return retry.AddWithMaxBackoffDelay(retry.AddWithMaxAttempts(retry.NewStandard(), maxRetries),
-				time.Second*5)
+			return retry.AddWithMaxBackoffDelay(retry.AddWithMaxAttempts(retry.NewStandard(), maxRetries), time.Second*5)
 		}),
 	)
 	if err != nil {
@@ -229,88 +228,100 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []ec2v2types.Instance, r
 	idToCloudtrailEvent := make(map[string]cloudtrailv2types.Event)
 
 	var executionError error
+	var stoppedInstanceEvents []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
+	var terminatedInstanceEvents []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
 	err = wait.ExponentialBackoff(backoffOptions, func() (bool, error) {
 		executionError = nil
 
-		stoppedInstanceEvents, err := c.ListAllInstanceStopEventsV2()
-		if err != nil {
-			executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
-			return false, nil
-		}
-
-		terminatedInstanceEvents, err := c.ListAllTerminatedInstancesV2()
-		if err != nil {
-			executionError = fmt.Errorf("an error occurred in ListAllTerminatedInstances: %w", err)
-			return false, nil
-		}
-
-		// only add events to our investigation, if these events contain
-		// at least one of our cluster instances.
-		var clusterInstanceEvents []cloudtrailv2types.Event
-		for _, event := range stoppedInstanceEvents {
-			if eventContainsInstances(instances, event) {
-				clusterInstanceEvents = append(clusterInstanceEvents, event)
-				continue
+		// Retry only in case we haven't retrieved these events in the previous iteration.
+		if len(stoppedInstanceEvents) == 0 {
+			stoppedInstanceEvents, err = c.ListAllInstanceStopEventsV2()
+			if err != nil {
+				executionError = fmt.Errorf("an error occurred in ListAllInstanceStopEvents: %w", err)
+				//nolint:nilerr
+				return false, nil
 			}
-			// Event is not for one of our cluster instances.
-			logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
 
-		for _, event := range terminatedInstanceEvents {
-			if eventContainsInstances(instances, event) {
-				clusterInstanceEvents = append(clusterInstanceEvents, event)
-				continue
+		// Retry only in case we haven't retrieved these events in the previous
+		// iteration (this should never be != 0 as the code is sequential and
+		// this is the only part that can trigger the partial-retry)
+		if len(terminatedInstanceEvents) == 0 {
+			terminatedInstanceEvents, err = c.ListAllTerminatedInstancesV2()
+			if err != nil {
+				executionError = fmt.Errorf("an error occurred in ListAllTerminatedInstances: %w", err)
+				//nolint:nilerr
+				return false, nil
 			}
-			// Event is not for one of our cluster instances.
-			logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
 		}
+		return true, nil
+	})
 
-		// Loop over all stopped and terminate events for our cluster instancs
-		for _, event := range clusterInstanceEvents {
-			// we have to loop over each resource in each event
-			for _, resource := range event.Resources {
-				instanceID := *resource.ResourceName
-				_, ok := idToStopTime[instanceID]
-				if ok {
-					storedEvent, ok := idToCloudtrailEvent[instanceID]
-					if !ok {
-						idToCloudtrailEvent[instanceID] = event
-					} else if storedEvent.EventTime.Before(*event.EventTime) {
-						// here the event exists already, and we compared it with the eventTime of the current event.
-						// We only jump into this else if clause, if the storedEvent happened BEFORE the current event.
-						// This means we are overwriting the idToCloudTrailEvent with the "newest" event.
-						idToCloudtrailEvent[instanceID] = event
-					}
+	// only add events to our investigation, if these events contain
+	// at least one of our cluster instances.
+	var clusterInstanceEvents []cloudtrailv2types.Event
+	for _, event := range stoppedInstanceEvents {
+		if eventContainsInstances(instances, event) {
+			clusterInstanceEvents = append(clusterInstanceEvents, event)
+			continue
+		}
+		// Event is not for one of our cluster instances.
+		logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
+	}
+
+	for _, event := range terminatedInstanceEvents {
+		if eventContainsInstances(instances, event) {
+			clusterInstanceEvents = append(clusterInstanceEvents, event)
+			continue
+		}
+		// Event is not for one of our cluster instances.
+		logging.Debugf("Ignoring event with id '%s', as it is unrelated to the cluster.", *event.EventId)
+	}
+
+	// Loop over all stopped and terminate events for our cluster instancs
+	for _, event := range clusterInstanceEvents {
+		// we have to loop over each resource in each event
+		for _, resource := range event.Resources {
+			instanceID := *resource.ResourceName
+			_, ok := idToStopTime[instanceID]
+			if ok {
+				storedEvent, ok := idToCloudtrailEvent[instanceID]
+				if !ok {
+					idToCloudtrailEvent[instanceID] = event
+				} else if storedEvent.EventTime.Before(*event.EventTime) {
+					// here the event exists already, and we compared it with the eventTime of the current event.
+					// We only jump into this else if clause, if the storedEvent happened BEFORE the current event.
+					// This means we are overwriting the idToCloudTrailEvent with the "newest" event.
+					idToCloudtrailEvent[instanceID] = event
 				}
 			}
 		}
-		logging.Debugf("%+v", idToCloudtrailEvent)
-		for _, instance := range instances {
-			instanceID := *instance.InstanceId
-			event, ok := idToCloudtrailEvent[instanceID]
-			if !ok {
-				executionError = fmt.Errorf("the stopped instance %s does not have a StopInstanceEvent", instanceID)
-				return false, nil
-			}
-			logging.Debug("event in idToCloudtrailEvent[instanceID]", instanceID)
-
-			// not checking if the item is in the array as it's a 1-1 mapping
-			extractedTime := idToStopTime[instanceID]
-
-			if event.EventTime.Before(extractedTime) {
-				executionError = fmt.Errorf("most up to date time is before the instance stopped time")
-				return false, nil
-			}
+	}
+	logging.Debugf("%+v", idToCloudtrailEvent)
+	for _, instance := range instances {
+		instanceID := *instance.InstanceId
+		event, ok := idToCloudtrailEvent[instanceID]
+		if !ok {
+			executionError = fmt.Errorf("the stopped instance %s does not have a StopInstanceEvent", instanceID)
+			return nil, executionError
 		}
+		logging.Debug("event in idToCloudtrailEvent[instanceID]", instanceID)
 
-		for _, event := range idToCloudtrailEvent {
-			if !containsEvent(event, events) {
-				events = append(events, event)
-			}
+		// not checking if the item is in the array as it's a 1-1 mapping
+		extractedTime := idToStopTime[instanceID]
+
+		if event.EventTime.Before(extractedTime) {
+			executionError = fmt.Errorf("most up to date time is before the instance stopped time")
+			return nil, executionError
 		}
+	}
 
-		return true, nil
-	})
+	for _, event := range idToCloudtrailEvent {
+		if !containsEvent(event, events) {
+			events = append(events, event)
+		}
+	}
+
 	logging.Debugf("%+v", idToCloudtrailEvent)
 
 	if err != nil || executionError != nil {
@@ -493,18 +504,26 @@ func (c *SdkClient) defaultRouteTableForVpc(vpcId string) (*ec2v2types.RouteTabl
 func (c *SdkClient) listAllInstancesAttribute(att cloudtrailv2types.LookupAttribute) ([]cloudtrailv2types.Event, error) {
 	// We only look up events that are not older than 2 hours
 	since := time.Now().UTC().Add(time.Duration(-2) * time.Hour)
-	// We only look up 1000 events maximum
-	var maxResults int32 = 1000
+	// We will only capture this many events via pagination - looping till we
+	// exhaust 90 days of events might take *very* long in big accounts
+	// otherwise.
+	maxNumberEvents := 1000
+	var events []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
 	in := &cloudtrailv2.LookupEventsInput{
 		LookupAttributes: []cloudtrailv2types.LookupAttribute{att},
-		MaxResults:       &maxResults,
 		StartTime:        &since,
 	}
-	out, err := c.CloudtrailClient.LookupEvents(context.TODO(), in)
-	if err != nil {
-		return nil, err
+	paginator := cloudtrailv2.NewLookupEventsPaginator(c.CloudtrailClient, in)
+	// FIXME: Decide if we should just always retrieve *all* events which could
+	// be wasteful
+	for paginator.HasMorePages() && len(events) < maxNumberEvents {
+		out, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, out.Events...)
 	}
-	return out.Events, nil
+	return events, nil
 }
 
 // findVpcIDForSubnet returns the VPC ID for the subnet
