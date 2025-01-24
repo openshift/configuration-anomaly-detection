@@ -9,6 +9,8 @@ parameters:
   value: quay.io/app-sre/configuration-anomaly-detection
 - name: NAMESPACE_NAME
   value: configuration-anomaly-detection
+- name: CAD_EXPERIMENTAL_ENABLED
+  value: "FALSE"
 objects:
 - apiVersion: apps/v1
   kind: Deployment
@@ -30,6 +32,9 @@ objects:
           command:
           - /bin/bash
           - -c
+          env:
+          - name: CAD_EXPERIMENTAL_ENABLED
+            value: ${CAD_EXPERIMENTAL_ENABLED}
           envFrom:
           - secretRef:
               name: cad-pd-token
@@ -312,6 +317,8 @@ objects:
       env:
       - name: CAD_PROMETHEUS_PUSHGATEWAY
         value: aggregation-pushgateway:9091
+      - name: CAD_EXPERIMENTAL_ENABLED
+        value: ${CAD_EXPERIMENTAL_ENABLED}
       envFrom:
       - secretRef:
           name: cad-aws-credentials

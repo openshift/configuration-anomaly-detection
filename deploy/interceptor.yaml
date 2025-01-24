@@ -22,6 +22,9 @@ spec:
         envFrom:
         - secretRef:
             name: cad-pd-token
+        env:
+        - name: CAD_EXPERIMENTAL_ENABLED
+          value: ${CAD_EXPERIMENTAL_ENABLED}
         resources:
           limits:
             cpu: "100m"

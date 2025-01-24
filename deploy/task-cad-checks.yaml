@@ -30,6 +30,8 @@ spec:
       env:
         - name: CAD_PROMETHEUS_PUSHGATEWAY
           value: aggregation-pushgateway:9091
+        - name: CAD_EXPERIMENTAL_ENABLED
+          value: ${CAD_EXPERIMENTAL_ENABLED}
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
