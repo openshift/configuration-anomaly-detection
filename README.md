@@ -137,7 +137,6 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `AWS_SECRET_ACCESS_KEY`: refers to the secret access key of the base AWS account used by CAD
 * `CAD_AWS_CSS_JUMPROLE`:  refers to the arn of the RH-SRE-CCS-Access jumprole
 * `CAD_AWS_SUPPORT_JUMPROLE`: refers to the arn of the RH-Technical-Support-Access jumprole
-* `CAD_ESCALATION_POLICY`:  refers to the escalation policy CAD should use to escalate the incident to
 * `CAD_PD_EMAIL`: refers  to the email for a login via mail/pw credentials
 * `CAD_PD_PW`: refers to the password for a login via mail/pw credentials
 * `CAD_PD_TOKEN`: refers to the generated private access token for token-based authentication

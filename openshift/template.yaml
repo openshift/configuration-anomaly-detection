@@ -279,7 +279,6 @@ objects:
   metadata:
     name: cad-pd-token
   stringData:
-    CAD_ESCALATION_POLICY: CHANGEME
     CAD_PD_EMAIL: CHANGEME
     CAD_PD_PW: CHANGEME
     CAD_PD_TOKEN: CHANGEME

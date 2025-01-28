@@ -35,7 +35,7 @@ func Investigate(r *investigation.Resources) error {
 		// We currently believe this never happens, but want to be made aware if it does.
 		notes.AppendWarning("This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future")
 
-		return r.PdClient.EscalateAlertWithNote(notes.String())
+		return r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	notes.AppendSuccess("Cluster installation did not yet finish")
 
@@ -44,14 +44,14 @@ func Investigate(r *investigation.Resources) error {
 		// In case this happens on production, we want to raise this to OCM/CS.
 		notes.AppendWarning("This cluster has an empty ClusterDeployment.Spec.ClusterMetadata, meaning that the provisioning failed before the installation started. This is usually the case when the install configuration is faulty. Please investigate manually.")
 
-		return r.PdClient.EscalateAlertWithNote(notes.String())
+		return r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	notes.AppendSuccess("Installation hive job started")
 
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
 		notes.AppendWarning("DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin", r.Cluster.ID())
-		return r.PdClient.EscalateAlertWithNote(notes.String())
+		return r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	notes.AppendSuccess("Cluster DNS is ready")
 
@@ -74,7 +74,7 @@ func Investigate(r *investigation.Resources) error {
 					logging.Error(err)
 				}
 
-				return r.PdClient.SilenceAlert()
+				return r.PdClient.SilenceIncident()
 			}
 		}
 	}
@@ -113,7 +113,7 @@ func Investigate(r *investigation.Resources) error {
 
 	// We currently always escalate, in the future, when network verifier is reliable,
 	// we would silence the alert when we had a service log in the case of network verifier detecting failures.
-	return r.PdClient.EscalateAlert()
+	return r.PdClient.EscalateIncident()
 }
 
 func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {

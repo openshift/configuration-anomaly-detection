@@ -57,13 +57,13 @@ func Investigate(r *investigation.Resources) error {
 			return fmt.Errorf("failed posting servicelog: %w", err)
 		}
 
-		return r.PdClient.SilenceAlertWithNote(notes.String())
+		return r.PdClient.SilenceIncidentWithNote(notes.String())
 	}
 
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to a broken UWM configmap")
-	return r.PdClient.EscalateAlertWithNote(notes.String())
+	return r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
 // Check if the `Available` status condition reports a broken UWM config

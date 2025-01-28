@@ -18,7 +18,7 @@ temp_log_file=$(mktemp)
 # Function to send an interceptor request and check the response
 function test_interceptor {
     # Run the interceptor and print logs to temporary log file
-    CAD_PD_TOKEN=$(echo $pd_test_token) CAD_ESCALATION_POLICY=$(echo $pd_test_escalation_policy) CAD_SILENT_POLICY=$(echo $pd_test_silence_policy) ./../bin/interceptor > $temp_log_file  2>&1 &
+    CAD_PD_TOKEN=$(echo $pd_test_token) CAD_SILENT_POLICY=$(echo $pd_test_silence_policy) ./../bin/interceptor > $temp_log_file  2>&1 &
     
     # Store the PID of the interceptor process
     INTERCEPTOR_PID=$!

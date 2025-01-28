@@ -46,7 +46,7 @@ func Investigate(r *investigation.Resources) error {
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
-		return r.PdClient.EscalateAlertWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
+		return r.PdClient.EscalateIncidentWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 	logging.Debugf("the investigation returned: [infras running: %d] - [masters running: %d]", res.RunningInstances.Infra, res.RunningInstances.Master)
 
@@ -95,7 +95,7 @@ func Investigate(r *investigation.Resources) error {
 			metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
 
 			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
-			return r.PdClient.SilenceAlertWithNote(notes.String())
+			return r.PdClient.SilenceIncidentWithNote(notes.String())
 		}
 
 		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason))
@@ -112,7 +112,7 @@ func Investigate(r *investigation.Resources) error {
 	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
-	return r.PdClient.EscalateAlertWithNote(notes.String())
+	return r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
@@ -439,5 +439,5 @@ func postChgmSLAndSilence(clusterID string, ocmCli ocm.Client, pdCli pagerduty.C
 		return fmt.Errorf("failed sending service log: %w", err)
 	}
 
-	return pdCli.SilenceAlertWithNote("Customer stopped instances. Sent SL and silencing alert.")
+	return pdCli.SilenceIncidentWithNote("Customer stopped instances. Sent SL and silencing alert.")
 }

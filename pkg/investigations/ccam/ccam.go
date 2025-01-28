@@ -43,14 +43,14 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
 
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
+		return pdClient.SilenceIncidentWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
 	case cmv1.ClusterStateUninstalling:
 		// A cluster in uninstalling state should not alert primary - we just skip this
-		return pdClient.SilenceAlertWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
+		return pdClient.SilenceIncidentWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
 	default:
 		// Anything else is an unknown state to us and/or requires investigation.
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
-		return pdClient.EscalateAlertWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
+		return pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 	}
 }
 
