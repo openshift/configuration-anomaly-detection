@@ -111,7 +111,7 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 	// and escalate the alert to SRE
 	if investigation == nil {
 		pdi.Logger.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
-		err = pdClient.EscalateIncident()
+		err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖")
 		if err != nil {
 			pdi.Logger.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
 		}
