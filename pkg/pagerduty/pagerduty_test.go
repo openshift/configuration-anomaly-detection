@@ -1,4 +1,4 @@
-package pagerduty_test
+package pagerduty
 
 import (
 	"fmt"
@@ -8,8 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-
 	sdk "github.com/PagerDuty/go-pagerduty"
 )
 
@@ -17,7 +15,7 @@ var _ = Describe("Pagerduty", func() {
 	var (
 		mux                *http.ServeMux
 		server             *httptest.Server
-		p                  *pagerduty.SdkClient
+		p                  *SdkClient
 		incidentID         string
 		escalationPolicyID string
 		silencePolicyID    string
@@ -26,7 +24,6 @@ var _ = Describe("Pagerduty", func() {
 		// Arrange
 		mux = http.NewServeMux()
 		server = httptest.NewServer(mux)
-		escalationPolicyID = "1234"
 		silencePolicyID = "1234"
 		// each startup of PagerDuty we need to verify the user's email for future requests
 		mux.HandleFunc("/users/me", func(w http.ResponseWriter, r *http.Request) {
@@ -34,10 +31,9 @@ var _ = Describe("Pagerduty", func() {
 			_, _ = fmt.Fprint(w, `{"user":{"email":"example@example.example"}}`)
 		})
 		var err error // err is declared to make clear the p is not created here, but is global
-		p, err = pagerduty.NewWithToken(
-			escalationPolicyID,
+		p, err = NewWithToken(
 			silencePolicyID,
-			[]byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.pagerduty.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.pagerduty.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.pagerduty.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.pagerduty.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.pagerduty.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
+			[]byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
 			"fakeathtokenstring",
 			sdk.WithAPIEndpoint(server.URL),
 			sdk.WithV2EventsAPIEndpoint(server.URL),
@@ -57,10 +53,10 @@ var _ = Describe("Pagerduty", func() {
 					w.WriteHeader(http.StatusUnauthorized)
 				})
 				// Act
-				err := p.MoveToEscalationPolicy(escalationPolicyID)
+				err := p.moveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
+				Expect(err).Should(MatchError(InvalidTokenError{}))
 			})
 		})
 
@@ -71,14 +67,14 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("PUT"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, InvalidInputParamsErrorCode)
 				})
 				// Act
-				err := p.MoveToEscalationPolicy(escalationPolicyID)
+				err := p.moveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
+				Expect(err).Should(MatchError(InvalidInputParamsError{}))
 			})
 		})
 
@@ -90,111 +86,7 @@ var _ = Describe("Pagerduty", func() {
 					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
-				err := p.MoveToEscalationPolicy(escalationPolicyID)
-				// Assert
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-		})
-	})
-	Describe("AssignToUser", func() {
-		var userID string
-		BeforeEach(func() {
-			userID = "1234"
-		})
-
-		When("The authentication token that is sent is invalid", func() {
-			It("Should throw an error (401 unauthorized)", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					w.WriteHeader(http.StatusUnauthorized)
-				})
-				// Act
-				err := p.AssignToUser(userID)
-				// Assert
-				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
-			})
-		})
-
-		When("If sent input parameters are invalid", func() {
-			It("Should throw an error (400 badRequest)", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusBadRequest)
-					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
-				})
-				// Act
-				err := p.AssignToUser(userID)
-				// Assert
-				Expect(err).Should(HaveOccurred())
-
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
-			})
-		})
-
-		When("The Assigned User has successfully changed", func() {
-			It("Doesn't trigger an error", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					_, _ = fmt.Fprint(w, `{}`)
-				})
-				// Act
-				err := p.AssignToUser(userID)
-				// Assert
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-		})
-	})
-	Describe("AcknowledgeIncident", func() {
-		BeforeEach(func() {
-		})
-
-		When("The authentication token that is sent is invalid", func() {
-			It("Should throw an error (401 unauthorized)", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					w.WriteHeader(http.StatusUnauthorized)
-				})
-				// Act
-				err := p.AcknowledgeIncident()
-				// Assert
-				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
-			})
-		})
-
-		When("If sent input parameters are invalid", func() {
-			It("Should throw an error (400 badRequest)", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusBadRequest)
-					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
-				})
-				// Act
-				err := p.AcknowledgeIncident()
-				// Assert
-				Expect(err).Should(HaveOccurred())
-
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
-			})
-		})
-
-		When("The incident has successfully acknowledged", func() {
-			It("Doesn't trigger an error", func() {
-				// Arrange
-				mux.HandleFunc("/incidents", func(w http.ResponseWriter, r *http.Request) {
-					Expect(r.Method).Should(Equal("PUT"))
-					_, _ = fmt.Fprint(w, `{}`)
-				})
-				// Act
-				err := p.AcknowledgeIncident()
+				err := p.moveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 			})
@@ -222,7 +114,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
+				Expect(err).Should(MatchError(InvalidTokenError{}))
 			})
 		})
 
@@ -233,14 +125,14 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("POST"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, InvalidInputParamsErrorCode)
 				})
 				// Act
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
+				Expect(err).Should(MatchError(InvalidInputParamsError{}))
 			})
 		})
 
@@ -255,7 +147,7 @@ var _ = Describe("Pagerduty", func() {
 				err := p.AddNote(noteContent)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
+				Expect(err).Should(MatchError(IncidentNotFoundError{}))
 			})
 		})
 
@@ -292,7 +184,7 @@ var _ = Describe("Pagerduty", func() {
 				_, err := p.GetAlertsForIncident(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
-				Expect(err).Should(MatchError(pagerduty.InvalidTokenError{}))
+				Expect(err).Should(MatchError(InvalidTokenError{}))
 			})
 		})
 
@@ -303,14 +195,14 @@ var _ = Describe("Pagerduty", func() {
 					Expect(r.Method).Should(Equal("GET"))
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusBadRequest)
-					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, pagerduty.InvalidInputParamsErrorCode)
+					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, InvalidInputParamsErrorCode)
 				})
 				// Act
 				_, err := p.GetAlertsForIncident(incidentID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.InvalidInputParamsError{}))
+				Expect(err).Should(MatchError(InvalidInputParamsError{}))
 			})
 		})
 
@@ -328,7 +220,7 @@ var _ = Describe("Pagerduty", func() {
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
-				Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
+				Expect(err).Should(MatchError(IncidentNotFoundError{}))
 			})
 		})
 
@@ -353,61 +245,10 @@ var _ = Describe("Pagerduty", func() {
 		})
 	})
 
-	Describe("CreateNewAlert", func() {
-		var (
-			serviceID        string
-			dmsIntegrationID string
-			newAlert         pagerduty.NewAlert
-		)
-		BeforeEach(func() {
-			serviceID = "service-id-12345"
-			dmsIntegrationID = "integration-id-12345"
-			newAlert = pagerduty.NewAlert{
-				Description: "empty-description",
-				Details: pagerduty.NewAlertCustomDetails{
-					ClusterID:  "testcluster",
-					Error:      "",
-					Resolution: "",
-					SOP:        "",
-				},
-			}
-		})
-		When("The service cannot be retrieved", func() {
-			It("should return a ServiceNotFoundError", func() {
-				err := p.CreateNewAlert(newAlert, serviceID)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.ServiceNotFoundError{}))
-			})
-		})
-		When("The service has no Dead Man's Snitch integrations", func() {
-			It("should return an IntegrationNotFoundError", func() {
-				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
-					_, _ = fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[]}}`, serviceID)
-				})
-				err := p.CreateNewAlert(newAlert, serviceID)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.IntegrationNotFoundError{}))
-			})
-		})
-		When("The event creation fails", func() {
-			It("should return a CreateEventError", func() {
-				mux.HandleFunc(fmt.Sprintf("/services/%s", serviceID), func(w http.ResponseWriter, r *http.Request) {
-					_, _ = fmt.Fprintf(w, `{"service":{"id":"%s","integrations":[{"id":"%s"}]}}`, serviceID, dmsIntegrationID)
-				})
-				mux.HandleFunc(fmt.Sprintf("/services/%s/integrations/%s", serviceID, dmsIntegrationID), func(w http.ResponseWriter, r *http.Request) {
-					_, _ = fmt.Fprintf(w, `{"integration":{"id":"%s","name":"%s"}}`, dmsIntegrationID, pagerduty.CADIntegrationName)
-				})
-				err := p.CreateNewAlert(newAlert, serviceID)
-				Expect(err).To(HaveOccurred())
-				Expect(err).To(MatchError(pagerduty.CreateEventError{}))
-			})
-		})
-	})
 	Describe("NewWithToken", func() {
 		When("the payload is empty", func() {
 			It("should fail on UnmarshalError", func() {
-				_, err := pagerduty.NewWithToken(
-					escalationPolicyID,
+				_, err := NewWithToken(
 					silencePolicyID,
 					[]byte(``),
 					"fakeathtokenstring",
@@ -419,41 +260,38 @@ var _ = Describe("Pagerduty", func() {
 		})
 		When("the payload contains invalid payload data (sent as a sample webhook data)", func() {
 			It("should fail on json marshalling error", func() {
-				_, err := pagerduty.NewWithToken(
-					escalationPolicyID,
+				_, err := NewWithToken(
 					silencePolicyID,
 					[]byte(`{"event":{"id":"$ID","event_type":"pagey.ping","resource_type":"pagey","occurred_at":"DATE","agent":null,"client":null,"data":{"message":"Hello from your friend Pagey!","type":"ping"}}}`),
 					"fakeathtokenstring",
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
+				Expect(err).Should(MatchError(UnmarshalError{}))
 			})
 		})
 		When("the payload is missing the event type", func() {
 			It("should fail on json marshalling error", func() {
-				_, err := pagerduty.NewWithToken(
-					escalationPolicyID,
+				_, err := NewWithToken(
 					silencePolicyID,
 					[]byte(`{"event":{"id":"$ID","resource_type":"pagey","occurred_at":"DATE","agent":null,"client":null,"data":{"message":"Hello from your friend Pagey!","type":"ping"}}}`),
 					"fakeathtokenstring",
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
+				Expect(err).Should(MatchError(UnmarshalError{}))
 			})
 		})
 		When("the payload is missing the data field", func() {
 			It("should fail on json marshalling error", func() {
-				_, err := pagerduty.NewWithToken(
-					escalationPolicyID,
+				_, err := NewWithToken(
 					silencePolicyID,
 					[]byte(`{"event":{"id":"$ID","event_type":"pagey.ping","resource_type":"pagey","occurred_at":"DATE","agent":null,"client":null}}`),
 					"fakeathtokenstring",
 					sdk.WithAPIEndpoint(server.URL),
 					sdk.WithV2EventsAPIEndpoint(server.URL),
 				)
-				Expect(err).Should(MatchError(pagerduty.UnmarshalError{}))
+				Expect(err).Should(MatchError(UnmarshalError{}))
 			})
 		})
 	})
@@ -462,10 +300,9 @@ var _ = Describe("Pagerduty", func() {
 			When("the payload path points to a sanitized payload and the api does not have the alert + incident", func() {
 				It("should succeed and pull the clusterid", func() {
 					// Arrange
-					p, _ := pagerduty.NewWithToken(
-						escalationPolicyID,
+					p, _ := NewWithToken(
 						silencePolicyID,
-						[]byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.pagerduty.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.pagerduty.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.pagerduty.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.pagerduty.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.pagerduty.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
+						[]byte(`{"event":{"id":"$ID","event_type":"incident.triggered","resource_type":"incident","occurred_at":"DATE","agent":{"html_url":"https://$PD_HOST/users/$USER_ID","id":"$USER_ID","self":"https://api.com/users/$USER_ID","summary":"$USERNAME","type":"user_reference"},"client":null,"data":{"id":"1234","type":"incident","self":"https://api.com/incidents/$INCIDENT_ID","html_url":"https://$PD_HOST/incidents/$INCIDENT_ID","number":"${INCIDENT_NUMBER}","status":"triggered","incident_key":"${INCIDENT_KEY}","created_at":"DATE","title":"${INCIDENT_TITLE}","service":{"html_url":"https://$PD_HOST/services/$SERVICE_ID","id":"$SERVICE_ID","self":"https://api.com/services/$SERVICE_ID","summary":"$SERVICE_NAME","type":"service_reference"},"assignees":[{"html_url":"https://$PD_HOST/users/$USER_ID_2","id":"$USER_ID_2","self":"https://api.com/users/$USER_ID_2","summary":"$USER_NAME_2","type":"user_reference"}],"escalation_policy":{"html_url":"https://$PD_HOST/escalation_policies/$EP_ID","id":"$EP_ID","self":"https://api.com/escalation_policies/$EP_ID","summary":"$EP_NAME","type":"escalation_policy_reference"},"teams":[],"priority":null,"urgency":"high","conference_bridge":null,"resolve_reason":null}}}`),
 						"fakeathtokenstring",
 						sdk.WithAPIEndpoint(server.URL),
 						sdk.WithV2EventsAPIEndpoint(server.URL),
@@ -473,7 +310,7 @@ var _ = Describe("Pagerduty", func() {
 					// Act
 					_, err := p.RetrieveClusterID()
 					// Assert
-					Expect(err).Should(MatchError(pagerduty.IncidentNotFoundError{}))
+					Expect(err).Should(MatchError(IncidentNotFoundError{}))
 				})
 			})
 			When("the payload is valid and the api does have the alert + incident", func() {

@@ -75,7 +75,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
-		err = pdClient.EscalateAlert()
+		err = pdClient.EscalateIncident()
 		if err != nil {
 			return fmt.Errorf("could not escalate unsupported alert: %w", err)
 		}
@@ -152,12 +152,12 @@ func GetOCMClient() (*ocm.SdkClient, error) {
 func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient, ocmClient *ocm.SdkClient) (bool, error) {
 	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
-		return false, pdClient.SilenceAlertWithNote("CAD: Cluster is already uninstalling, silencing alert.")
+		return false, pdClient.SilenceIncidentWithNote("CAD: Cluster is already uninstalling, silencing alert.")
 	}
 
 	if cluster.AWS() == nil {
 		logging.Info("Cloud provider unsupported, forwarding to primary.")
-		return false, pdClient.EscalateAlertWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
+		return false, pdClient.EscalateIncidentWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
 	}
 
 	isAccessProtected, err := ocmClient.IsAccessProtected(cluster)
@@ -166,7 +166,7 @@ func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.Sdk
 	}
 	if isAccessProtected {
 		logging.Info("Cluster is access protected. Escalating alert.")
-		return false, pdClient.EscalateAlertWithNote("CAD is unable to run against access protected clusters. Please investigate.")
+		return false, pdClient.EscalateIncidentWithNote("CAD is unable to run against access protected clusters. Please investigate.")
 	}
 	return true, nil
 }

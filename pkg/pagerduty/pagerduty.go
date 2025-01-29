@@ -46,21 +46,18 @@ const (
 
 // Client is the interface exposing pagerduty functions
 type Client interface {
-	SilenceAlert() error
-	SilenceAlertWithNote(notes string) error
+	SilenceIncident() error
+	SilenceIncidentWithNote(notes string) error
 	AddNote(notes string) error
-	CreateNewAlert(newAlert NewAlert, serviceID string) error
 	GetServiceID() string
-	EscalateAlertWithNote(notes string) error
-	EscalateAlert() error
+	EscalateIncidentWithNote(notes string) error
+	EscalateIncident() error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
 type SdkClient struct {
 	// c is the PagerDuty client
 	sdkClient *sdk.Client
-	// onCallEscalationPolicy
-	onCallEscalationPolicy string
 	// silentEscalationPolicy
 	silentEscalationPolicy string
 	// incidentData
@@ -72,14 +69,13 @@ type SdkClient struct {
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
 func GetPDClient(webhookPayload []byte) (*SdkClient, error) {
 	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
-	cadEscalationPolicy, hasCadEscalationPolicy := os.LookupEnv("CAD_ESCALATION_POLICY")
 	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
 
-	if !hasCadEscalationPolicy || !hasCadSilentPolicy || !hasCadPD {
-		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_ESCALATION_POLICY CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
+	if !hasCadSilentPolicy || !hasCadPD {
+		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
 	}
 
-	client, err := NewWithToken(cadEscalationPolicy, cadSilentPolicy, webhookPayload, cadPD)
+	client, err := NewWithToken(cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize the client: %w", err)
 	}
@@ -206,13 +202,12 @@ func unmarshalEventOrchestrationWebhook(data []byte) (*eventOrchestrationWebhook
 
 // NewWithToken initializes a new SdkClient
 // The token can be created using the docs https://support.pagerduty.com/docs/api-access-keys#section-generate-a-user-token-rest-api-key
-func NewWithToken(escalationPolicy string, silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (*SdkClient, error) {
+func NewWithToken(silentPolicy string, webhookPayload []byte, authToken string, options ...sdk.ClientOptions) (*SdkClient, error) {
 	c := SdkClient{
 		sdkClient: sdk.NewClient(authToken, options...),
 
-		// All three of the below should be moved out of the SDK.
+		// All two of the below should be moved out of the SDK.
 		// These are static values that should not be part of an sdk
-		onCallEscalationPolicy: escalationPolicy,
 		silentEscalationPolicy: silentPolicy,
 		incidentData:           &IncidentData{},
 	}
@@ -252,11 +247,6 @@ func (c *SdkClient) GetTitle() string {
 // GetIncidentID returns the event type of the webhook
 func (c *SdkClient) GetIncidentID() string {
 	return c.incidentData.IncidentID
-}
-
-// GetOnCallEscalationPolicy returns the set on call escalation policy
-func (c *SdkClient) GetOnCallEscalationPolicy() string {
-	return c.onCallEscalationPolicy
 }
 
 // GetSilentEscalationPolicy returns the set policy for silencing alerts
@@ -307,8 +297,8 @@ func (c *SdkClient) RetrieveClusterID() (string, error) {
 	return "", fmt.Errorf("could not find a clusterID in the given alerts")
 }
 
-// MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
-func (c *SdkClient) MoveToEscalationPolicy(escalationPolicyID string) error {
+// moveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
+func (c *SdkClient) moveToEscalationPolicy(escalationPolicyID string) error {
 	logging.Infof("Moving to escalation policy: %s", escalationPolicyID)
 
 	o := []sdk.ManageIncidentsOptions{
@@ -328,41 +318,6 @@ func (c *SdkClient) MoveToEscalationPolicy(escalationPolicyID string) error {
 			return nil
 		}
 		return fmt.Errorf("could not update the escalation policy: %w", err)
-	}
-	return nil
-}
-
-// AssignToUser will assign the incident to the provided user
-// This is currently not needed by anything
-func (c *SdkClient) AssignToUser(userID string) error {
-	o := []sdk.ManageIncidentsOptions{{
-		ID: c.GetIncidentID(),
-		Assignments: []sdk.Assignee{{
-			Assignee: sdk.APIObject{
-				Type: "user_reference",
-				ID:   userID,
-			},
-		}},
-	}}
-	err := c.updateIncident(o)
-	if err != nil {
-		return fmt.Errorf("could not assign to user: %w", err)
-	}
-	return nil
-}
-
-// AcknowledgeIncident will acknowledge an incident
-// This is currently not needed by anything
-func (c *SdkClient) AcknowledgeIncident() error {
-	o := []sdk.ManageIncidentsOptions{
-		{
-			ID:     c.GetIncidentID(),
-			Status: "acknowledged",
-		},
-	}
-	err := c.updateIncident(o)
-	if err != nil {
-		return fmt.Errorf("could not acknowledge the incident: %w", err)
 	}
 	return nil
 }
@@ -420,53 +375,6 @@ func (c *SdkClient) AddNoteToIncident(incidentID string, noteContent string) err
 	}
 
 	return nil
-}
-
-// CreateNewAlert triggers an alert using the Deadmanssnitch integration for the given service.
-// If the provided service does not have a DMS integration, an error is returned
-func (c *SdkClient) CreateNewAlert(newAlert NewAlert, serviceID string) error {
-	service, err := c.sdkClient.GetServiceWithContext(context.TODO(), serviceID, &sdk.GetServiceOptions{})
-	if err != nil {
-		return ServiceNotFoundError{Err: err}
-	}
-
-	integration, err := c.getCADIntegrationFromService(service)
-	if err != nil {
-		return IntegrationNotFoundError{Err: err}
-	}
-
-	// Current DMS integration requires us to use v1 events
-	event := sdk.Event{
-		ServiceKey:  integration.IntegrationKey,
-		Type:        "trigger",
-		Description: newAlert.Description,
-		Details:     newAlert.Details,
-		Client:      CADEmailAddress,
-	}
-
-	response, err := sdk.CreateEventWithHTTPClient(event, c.sdkClient.HTTPClient)
-	if err != nil {
-		return CreateEventError{Err: fmt.Errorf("%w. Full response: %#v", err, response)}
-	}
-	logging.Infof("Alert has been created %s", newAlert.Description)
-	return nil
-}
-
-// getCADIntegrationFromService retrieves the PagerDuty integration used by CAD from the given service.
-// If the integration CAD expects is not found, an error is returned
-func (c *SdkClient) getCADIntegrationFromService(service *sdk.Service) (sdk.Integration, error) {
-	// For some reason the .Integrations array in the Service object does not contain any usable data,
-	// aside from the ID, so we have to re-grab each integration separately to examine them
-	for _, brokenIntegration := range service.Integrations {
-		realIntegration, err := c.sdkClient.GetIntegrationWithContext(context.TODO(), service.ID, brokenIntegration.ID, sdk.GetIntegrationOptions{})
-		if err != nil {
-			return sdk.Integration{}, fmt.Errorf("failed to retrieve integration '%s' for service '%s': %w", brokenIntegration.ID, service.ID, err)
-		}
-		if realIntegration.Name == CADIntegrationName {
-			return *realIntegration, nil
-		}
-	}
-	return sdk.Integration{}, fmt.Errorf("no integration '%s' exists for service '%s'", CADIntegrationName, service.Name)
 }
 
 // GetAlertsForIncident gets all alerts that are part of an incident
@@ -584,48 +492,53 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 	return nil
 }
 
-// SilenceAlert silences the alert by assigning the "Silent Test" escalation policy
-func (c *SdkClient) SilenceAlert() error {
-	return c.MoveToEscalationPolicy(c.GetSilentEscalationPolicy())
+// SilenceIncident silences the alert by assigning the "Silent Test" escalation policy
+func (c *SdkClient) SilenceIncident() error {
+	return c.moveToEscalationPolicy(c.GetSilentEscalationPolicy())
 }
 
-// SilenceAlertWithNote annotates the PagerDuty alert with the given notes and silences it by
+// SilenceIncidentWithNote annotates the PagerDuty alert with the given notes and silences it by
 // assigning the "Silent Test" escalation policy
-func (c *SdkClient) SilenceAlertWithNote(notes string) error {
-	return c.addNoteAndEscalate(notes, c.GetSilentEscalationPolicy())
-}
-
-// EscalateAlert escalates the alert to the on call escalation policy
-func (c *SdkClient) EscalateAlert() error {
-	return c.MoveToEscalationPolicy(c.GetOnCallEscalationPolicy())
-}
-
-// EscalateAlertWithNote annotates the PagerDuty alert with the given notes and escalates it by
-// assigning to the on call escalation policy
-func (c *SdkClient) EscalateAlertWithNote(notes string) error {
-	return c.addNoteAndEscalate(notes, c.GetOnCallEscalationPolicy())
-}
-
-// addNoteAndEscalate attaches notes to an incident and moves it to the given escalation policy
-func (c *SdkClient) addNoteAndEscalate(notes, escalationPolicy string) error {
+func (c *SdkClient) SilenceIncidentWithNote(notes string) error {
 	if notes != "" {
 		err := c.AddNote(notes)
 		if err != nil {
 			return fmt.Errorf("failed to attach notes to incident: %w", err)
 		}
 	}
-	return c.MoveToEscalationPolicy(escalationPolicy)
+
+	return c.SilenceIncident()
 }
 
-// ResolveIncident resolves an incident
-func (c *SdkClient) ResolveIncident(incident *pagerduty.Incident) error {
-	opts := pagerduty.ManageIncidentsOptions{
-		ID:     incident.ID,
-		Type:   incident.Type,
-		Status: "resolved",
+// EscalateIncidentWithNote annotates the PagerDuty alert with the given notes and escalates it by
+// assigning to the on call escalation policy
+func (c *SdkClient) EscalateIncidentWithNote(notes string) error {
+	if notes != "" {
+		err := c.AddNote(notes)
+		if err != nil {
+			return fmt.Errorf("failed to attach notes to incident: %w", err)
+		}
+	}
+	return c.EscalateIncident()
+}
+
+// EscalateIncident escalates an incident to incident level 2.
+// This currently assumes that we are always at level 1.
+func (c *SdkClient) EscalateIncident() error {
+	o := []pagerduty.ManageIncidentsOptions{
+		{
+			ID:              c.GetIncidentID(),
+			EscalationLevel: 2, // TODO: This is hardcoded because there's no way to check the "current" level. Ideally this should be `current + 1`
+		},
 	}
 
-	_, err := c.sdkClient.ManageIncidentsWithContext(context.TODO(), CADEmailAddress, []pagerduty.ManageIncidentsOptions{opts})
-
-	return err
+	err := c.updateIncident(o)
+	if err != nil {
+		if strings.Contains(err.Error(), "Incident Already Resolved") {
+			logging.Infof("Skipped escalating incident as it is already resolved.")
+			return nil
+		}
+		return fmt.Errorf("could not escalate the incident: %w", err)
+	}
+	return nil
 }

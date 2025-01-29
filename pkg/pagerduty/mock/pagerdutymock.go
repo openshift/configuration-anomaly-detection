@@ -12,7 +12,6 @@ package pdmock
 import (
 	reflect "reflect"
 
-	pagerduty "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -54,46 +53,32 @@ func (mr *MockClientMockRecorder) AddNote(notes any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddNote", reflect.TypeOf((*MockClient)(nil).AddNote), notes)
 }
 
-// CreateNewAlert mocks base method.
-func (m *MockClient) CreateNewAlert(newAlert pagerduty.NewAlert, serviceID string) error {
+// EscalateIncident mocks base method.
+func (m *MockClient) EscalateIncident() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateNewAlert", newAlert, serviceID)
+	ret := m.ctrl.Call(m, "EscalateIncident")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CreateNewAlert indicates an expected call of CreateNewAlert.
-func (mr *MockClientMockRecorder) CreateNewAlert(newAlert, serviceID any) *gomock.Call {
+// EscalateIncident indicates an expected call of EscalateIncident.
+func (mr *MockClientMockRecorder) EscalateIncident() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewAlert", reflect.TypeOf((*MockClient)(nil).CreateNewAlert), newAlert, serviceID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateIncident", reflect.TypeOf((*MockClient)(nil).EscalateIncident))
 }
 
-// EscalateAlert mocks base method.
-func (m *MockClient) EscalateAlert() error {
+// EscalateIncidentWithNote mocks base method.
+func (m *MockClient) EscalateIncidentWithNote(notes string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EscalateAlert")
+	ret := m.ctrl.Call(m, "EscalateIncidentWithNote", notes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// EscalateAlert indicates an expected call of EscalateAlert.
-func (mr *MockClientMockRecorder) EscalateAlert() *gomock.Call {
+// EscalateIncidentWithNote indicates an expected call of EscalateIncidentWithNote.
+func (mr *MockClientMockRecorder) EscalateIncidentWithNote(notes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateAlert", reflect.TypeOf((*MockClient)(nil).EscalateAlert))
-}
-
-// EscalateAlertWithNote mocks base method.
-func (m *MockClient) EscalateAlertWithNote(notes string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EscalateAlertWithNote", notes)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// EscalateAlertWithNote indicates an expected call of EscalateAlertWithNote.
-func (mr *MockClientMockRecorder) EscalateAlertWithNote(notes any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateAlertWithNote", reflect.TypeOf((*MockClient)(nil).EscalateAlertWithNote), notes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateIncidentWithNote", reflect.TypeOf((*MockClient)(nil).EscalateIncidentWithNote), notes)
 }
 
 // GetServiceID mocks base method.
@@ -110,30 +95,30 @@ func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
 }
 
-// SilenceAlert mocks base method.
-func (m *MockClient) SilenceAlert() error {
+// SilenceIncident mocks base method.
+func (m *MockClient) SilenceIncident() error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SilenceAlert")
+	ret := m.ctrl.Call(m, "SilenceIncident")
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SilenceAlert indicates an expected call of SilenceAlert.
-func (mr *MockClientMockRecorder) SilenceAlert() *gomock.Call {
+// SilenceIncident indicates an expected call of SilenceIncident.
+func (mr *MockClientMockRecorder) SilenceIncident() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceAlert", reflect.TypeOf((*MockClient)(nil).SilenceAlert))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceIncident", reflect.TypeOf((*MockClient)(nil).SilenceIncident))
 }
 
-// SilenceAlertWithNote mocks base method.
-func (m *MockClient) SilenceAlertWithNote(notes string) error {
+// SilenceIncidentWithNote mocks base method.
+func (m *MockClient) SilenceIncidentWithNote(notes string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SilenceAlertWithNote", notes)
+	ret := m.ctrl.Call(m, "SilenceIncidentWithNote", notes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SilenceAlertWithNote indicates an expected call of SilenceAlertWithNote.
-func (mr *MockClientMockRecorder) SilenceAlertWithNote(notes any) *gomock.Call {
+// SilenceIncidentWithNote indicates an expected call of SilenceIncidentWithNote.
+func (mr *MockClientMockRecorder) SilenceIncidentWithNote(notes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceAlertWithNote", reflect.TypeOf((*MockClient)(nil).SilenceAlertWithNote), notes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceIncidentWithNote", reflect.TypeOf((*MockClient)(nil).SilenceIncidentWithNote), notes)
 }
