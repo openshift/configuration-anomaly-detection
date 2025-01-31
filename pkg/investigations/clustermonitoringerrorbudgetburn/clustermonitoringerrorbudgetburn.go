@@ -24,11 +24,12 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 	InternalOnly: false,
 }
 
-func Investigate(r *investigation.Resources) error {
+func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	// Initialize k8s client
+	result := investigation.InvestigationResult{}
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient)
 	if err != nil {
-		return fmt.Errorf("unable to initialize k8s cli: %w", err)
+		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
 
 	// Initialize PagerDuty note writer
@@ -39,12 +40,12 @@ func Investigate(r *investigation.Resources) error {
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
 	err = k8scli.List(context.TODO(), coList, listOptions)
 	if err != nil {
-		return fmt.Errorf("unable to list monitoring clusteroperator: %w", err)
+		return result, fmt.Errorf("unable to list monitoring clusteroperator: %w", err)
 	}
 
 	// Make sure our list output only finds a single cluster operator for `metadata.name = monitoring`
 	if len(coList.Items) != 1 {
-		return fmt.Errorf("found %d clusteroperators, expected 1", len(coList.Items))
+		return result, fmt.Errorf("found %d clusteroperators, expected 1", len(coList.Items))
 	}
 	monitoringCo := coList.Items[0]
 
@@ -54,16 +55,18 @@ func Investigate(r *investigation.Resources) error {
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
 		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmMisconfiguredSL)
 		if err != nil {
-			return fmt.Errorf("failed posting servicelog: %w", err)
+			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}
+		// XXX: No metric before
+		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-		return r.PdClient.SilenceIncidentWithNote(notes.String())
+		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
 	}
 
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to a broken UWM configmap")
-	return r.PdClient.EscalateIncidentWithNote(notes.String())
+	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
 // Check if the `Available` status condition reports a broken UWM config

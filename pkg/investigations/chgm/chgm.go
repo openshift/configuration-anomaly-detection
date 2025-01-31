@@ -10,7 +10,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -40,21 +39,23 @@ var (
 )
 
 // Investigate runs the investigation for a triggered chgm pagerduty event
-func Investigate(r *investigation.Resources) error {
+func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+	result := investigation.InvestigationResult{InvestigationName: investigationName}
 	notes := notewriter.New("CHGM", logging.RawLogger)
 
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
-		return r.PdClient.EscalateIncidentWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
+		return result, r.PdClient.EscalateIncidentWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
 	}
 	logging.Debugf("the investigation returned: [infras running: %d] - [masters running: %d]", res.RunningInstances.Infra, res.RunningInstances.Master)
 
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
-		return utils.WithRetries(func() error {
+		return result, utils.WithRetries(func() error {
 			err := postChgmSLAndSilence(r.Cluster.ID(), r.OcmClient, r.PdClient)
-			metrics.Inc(metrics.ServicelogSent, investigationName)
+			// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
+			result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
 			return err
 		})
@@ -89,21 +90,23 @@ func Investigate(r *investigation.Resources) error {
 		if strings.Contains(failureReason, "nosnch.in") {
 			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID())
 			if err != nil {
-				return err
+				return result, err
 			}
 
-			metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
+			// XXX: metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
+			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"EgressBlocked"}}
 
 			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
-			return r.PdClient.SilenceIncidentWithNote(notes.String())
+			return result, r.PdClient.SilenceIncidentWithNote(notes.String())
 		}
 
 		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason))
 		if err != nil {
-			return err
+			return result, err
 		}
 
-		metrics.Inc(metrics.ServicelogSent, investigationName)
+		// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
+		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
 		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
@@ -112,7 +115,7 @@ func Investigate(r *investigation.Resources) error {
 	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
-	return r.PdClient.EscalateIncidentWithNote(notes.String())
+	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
 // investigateHibernation checks if the cluster was recently woken up from
