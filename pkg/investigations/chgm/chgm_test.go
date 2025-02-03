@@ -107,9 +107,12 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any())
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("Triggered finds instances stopped by the customer with CloudTrail eventVersion 1.99", func() {
@@ -126,9 +129,12 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any())
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("Triggered errors", func() {
@@ -136,9 +142,12 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fakeErr)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("there were no stopped instances", func() {
@@ -151,9 +160,12 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("there was an error getting StopInstancesEvents", func() {
@@ -165,8 +177,11 @@ var _ = Describe("chgm", func() {
 
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("there were no StopInstancesEvents", func() {
@@ -179,8 +194,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
 				// Act
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).ToNot(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEventRaw base data is correct, but the sessionissue's username is not an authorized user", func() {
@@ -193,9 +211,12 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 				// Act
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				// Assert
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("issuer user is authorized (openshift-machine-api-aws)", func() {
@@ -212,8 +233,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("username role is OrganizationAccountAccessRole on a non CCS cluster", func() {
@@ -229,8 +253,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 
@@ -247,8 +274,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Any(), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 
@@ -265,8 +295,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("issuer user is authorized (customprefix-Installer-Role)", func() {
@@ -282,8 +315,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("issuer user is authorized (ManagedOpenShift-Support-.*)", func() {
@@ -299,8 +335,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("issuer user is authorized (.*-Support-Role)", func() {
@@ -316,8 +355,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent has a matching whitelisted user (osdManagedAdmin-.*)", func() {
@@ -333,8 +375,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent has a matching whitelisted user (osdCcsAdmin)", func() {
@@ -350,8 +395,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent has a matching whitelisted user (.*openshift-machine-api-awsv2.*)", func() {
@@ -367,8 +415,11 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEventRaw has an empty userIdentity", func() {
@@ -381,8 +432,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("issuer user is unauthorized (testuser assumed role)", func() {
@@ -395,8 +449,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEventRaw base data is correct, but the sessionissue's role is not role", func() {
@@ -409,8 +466,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEventRaw has no data", func() {
@@ -422,8 +482,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 
@@ -437,8 +500,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 
@@ -452,8 +518,11 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeTrue())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent has more than one resource", func() {
@@ -467,8 +536,11 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent is empty", func() {
@@ -482,8 +554,11 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent is an empty string", func() {
@@ -497,8 +572,11 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent is an empty json", func() {
@@ -512,8 +590,11 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("the returned CloudTrailEvent is an invalid json", func() {
@@ -527,8 +608,11 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				_, gotErr := Investigate(r)
+				result, gotErr := Investigate(r)
 				Expect(gotErr).NotTo(HaveOccurred())
+				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
+				Expect(result.ServiceLogSent.Performed).To(BeFalse())
+				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 	})
