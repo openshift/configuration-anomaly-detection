@@ -35,9 +35,10 @@ func NewInvestigation(investigationFn func(resources *Resources) (InvestigationR
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Cluster           *cmv1.Cluster
-	ClusterDeployment *hivev1.ClusterDeployment
-	AwsClient         aws.Client
-	OcmClient         ocm.Client
-	PdClient          pagerduty.Client
+	Cluster             *cmv1.Cluster
+	ClusterDeployment   *hivev1.ClusterDeployment
+	AwsClient           aws.Client
+	OcmClient           ocm.Client
+	PdClient            pagerduty.Client
+	AdditionalResources map[string]interface{}
 }

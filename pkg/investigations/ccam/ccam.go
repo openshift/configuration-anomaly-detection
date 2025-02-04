@@ -7,10 +7,9 @@ import (
 	"regexp"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
 var ccamLimitedSupport = &ocm.LimitedSupportReason{
@@ -20,14 +19,27 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClient pagerduty.Client, alertType string) error {
+func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+	result := investigation.InvestigationResult{}
+	cluster := r.Cluster
+	ocmClient := r.OcmClient
+	pdClient := r.PdClient
+	alertType, ok := r.AdditionalResources["alertType"].(string)
+	if !ok {
+		return result, fmt.Errorf("Missing required CCAM field 'alertType'")
+	}
+	result.InvestigationName = alertType
+	bpError, ok := r.AdditionalResources["error"].(error)
+	if !ok {
+		return result, fmt.Errorf("Missing required CCAM field 'error'")
+	}
 	logging.Info("Investigating possible missing cloud credentials...")
 
 	if customerRemovedPermissions := customerRemovedPermissions(bpError.Error()); !customerRemovedPermissions {
 		// We aren't able to jumpRole because of an error that is different than
 		// a removed support role/policy or removed installer role/policy
 		// This would normally be a backplane failure.
-		return fmt.Errorf("credentials are there, error is different: %w", bpError)
+		return result, fmt.Errorf("credentials are there, error is different: %w", bpError)
 	}
 
 	// The jumprole failed because of a missing support role/policy:
@@ -37,20 +49,21 @@ func Evaluate(cluster *cmv1.Cluster, bpError error, ocmClient ocm.Client, pdClie
 	switch cluster.State() {
 	case cmv1.ClusterStateReady:
 		// Cluster is in functional sate but we can't jumprole to it: post limited support
-		metrics.Inc(metrics.LimitedSupportSet, alertType, ccamLimitedSupport.Summary)
+		result.LimitedSupportSet.Performed = true
+		result.LimitedSupportSet.Labels = []string{ccamLimitedSupport.Summary}
 		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
 		if err != nil {
-			return fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
+			return result, fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
 
-		return pdClient.SilenceIncidentWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
+		return result, pdClient.SilenceIncidentWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
 	case cmv1.ClusterStateUninstalling:
 		// A cluster in uninstalling state should not alert primary - we just skip this
-		return pdClient.SilenceIncidentWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
+		return result, pdClient.SilenceIncidentWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
 	default:
 		// Anything else is an unknown state to us and/or requires investigation.
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
-		return pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
+		return result, pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 	}
 }
 

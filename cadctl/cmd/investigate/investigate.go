@@ -120,7 +120,10 @@ func run(_ *cobra.Command, _ []string) error {
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertInvestigation.Name)
+		ccamResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"alertType": alertInvestigation.Name, "error": err}}
+		result, err := ccam.Investigate(ccamResources)
+		updateMetrics(&result)
+		return err
 	}
 
 	investigationResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
