@@ -16,8 +16,7 @@ func TestEvaluateRandomError(t *testing.T) {
 		OcmClient:         nil,
 		PdClient:          nil,
 		AdditionalResources: map[string]interface{}{
-			"alertType": "",
-			"error":     errors.New("timeout"),
+			"error": errors.New("timeout"),
 		},
 	}
 	_, err := Investigate(&input)

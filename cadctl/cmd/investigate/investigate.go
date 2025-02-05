@@ -120,9 +120,9 @@ func run(_ *cobra.Command, _ []string) error {
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		ccamResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"alertType": alertInvestigation.Name, "error": err}}
+		ccamResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
 		result, err := ccam.Investigate(ccamResources)
-		updateMetrics(&result)
+		updateMetrics(alertInvestigation.Name, &result)
 		return err
 	}
 
@@ -130,7 +130,7 @@ func run(_ *cobra.Command, _ []string) error {
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
 	result, err := alertInvestigation.Run(investigationResources)
-	updateMetrics(&result)
+	updateMetrics(alertInvestigation.Name, &result)
 	return err
 }
 
@@ -176,14 +176,14 @@ func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.Sdk
 	return true, nil
 }
 
-func updateMetrics(result *investigation.InvestigationResult) {
+func updateMetrics(investigationName string, result *investigation.InvestigationResult) {
 	if result.ServiceLogSent.Performed {
-		metrics.Inc(metrics.ServicelogSent, append([]string{result.InvestigationName}, result.ServiceLogSent.Labels...)...)
+		metrics.Inc(metrics.ServicelogSent, append([]string{investigationName}, result.ServiceLogSent.Labels...)...)
 	}
 	if result.ServiceLogPrepared.Performed {
-		metrics.Inc(metrics.ServicelogPrepared, append([]string{result.InvestigationName}, result.ServiceLogPrepared.Labels...)...)
+		metrics.Inc(metrics.ServicelogPrepared, append([]string{investigationName}, result.ServiceLogPrepared.Labels...)...)
 	}
 	if result.LimitedSupportSet.Performed {
-		metrics.Inc(metrics.LimitedSupportSet, append([]string{result.InvestigationName}, result.LimitedSupportSet.Labels...)...)
+		metrics.Inc(metrics.LimitedSupportSet, append([]string{investigationName}, result.LimitedSupportSet.Labels...)...)
 	}
 }

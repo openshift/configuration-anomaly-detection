@@ -15,7 +15,6 @@ type InvestigationStep struct {
 }
 
 type InvestigationResult struct {
-	InvestigationName  string
 	LimitedSupportSet  InvestigationStep
 	ServiceLogPrepared InvestigationStep
 	ServiceLogSent     InvestigationStep

@@ -10,11 +10,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
-var (
-	investigationName = "ClusterProvisioningDelay"
-	// https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
-	byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
-)
+// https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
+var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
 
 // Investigate runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
@@ -27,7 +24,7 @@ var (
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
 func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
-	result := investigation.InvestigationResult{InvestigationName: investigationName}
+	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CPD", logging.RawLogger)
 
 	if r.Cluster.Status().State() == "ready" {

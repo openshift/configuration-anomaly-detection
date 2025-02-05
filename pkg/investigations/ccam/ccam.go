@@ -24,11 +24,6 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 	cluster := r.Cluster
 	ocmClient := r.OcmClient
 	pdClient := r.PdClient
-	alertType, ok := r.AdditionalResources["alertType"].(string)
-	if !ok {
-		return result, fmt.Errorf("Missing required CCAM field 'alertType'")
-	}
-	result.InvestigationName = alertType
 	bpError, ok := r.AdditionalResources["error"].(error)
 	if !ok {
 		return result, fmt.Errorf("Missing required CCAM field 'error'")

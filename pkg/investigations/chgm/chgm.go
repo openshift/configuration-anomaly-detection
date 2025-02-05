@@ -22,8 +22,6 @@ import (
 )
 
 var (
-	investigationName = "ClusterHasGoneMissing"
-
 	chgmSL = ocm.ServiceLog{
 		Severity:     "Critical",
 		Summary:      "Action required: cluster not checking in",
@@ -40,7 +38,7 @@ var (
 
 // Investigate runs the investigation for a triggered chgm pagerduty event
 func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
-	result := investigation.InvestigationResult{InvestigationName: investigationName}
+	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CHGM", logging.RawLogger)
 
 	// 1. Check if the user stopped instances
