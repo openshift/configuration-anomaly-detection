@@ -120,13 +120,18 @@ func run(_ *cobra.Command, _ []string) error {
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		return ccam.Evaluate(cluster, err, ocmClient, pdClient, alertInvestigation.Name)
+		ccamResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
+		result, err := ccam.Investigate(ccamResources)
+		updateMetrics(alertInvestigation.Name, &result)
+		return err
 	}
 
 	investigationResources := &investigation.Resources{Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
-	return alertInvestigation.Run(investigationResources)
+	result, err := alertInvestigation.Run(investigationResources)
+	updateMetrics(alertInvestigation.Name, &result)
+	return err
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
@@ -169,4 +174,16 @@ func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.Sdk
 		return false, pdClient.EscalateIncidentWithNote("CAD is unable to run against access protected clusters. Please investigate.")
 	}
 	return true, nil
+}
+
+func updateMetrics(investigationName string, result *investigation.InvestigationResult) {
+	if result.ServiceLogSent.Performed {
+		metrics.Inc(metrics.ServicelogSent, append([]string{investigationName}, result.ServiceLogSent.Labels...)...)
+	}
+	if result.ServiceLogPrepared.Performed {
+		metrics.Inc(metrics.ServicelogPrepared, append([]string{investigationName}, result.ServiceLogPrepared.Labels...)...)
+	}
+	if result.LimitedSupportSet.Performed {
+		metrics.Inc(metrics.LimitedSupportSet, append([]string{investigationName}, result.LimitedSupportSet.Labels...)...)
+	}
 }

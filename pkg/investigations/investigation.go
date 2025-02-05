@@ -9,23 +9,35 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
+type InvestigationStep struct {
+	Performed bool
+	Labels    []string
+}
+
+type InvestigationResult struct {
+	LimitedSupportSet  InvestigationStep
+	ServiceLogPrepared InvestigationStep
+	ServiceLogSent     InvestigationStep
+}
+
 // Investigation serves as a parent class
 // This enables the structure of cmd/investigate.go
 type Investigation struct {
-	Run  func(resources *Resources) error
+	Run  func(resources *Resources) (InvestigationResult, error)
 	Name string
 }
 
 // NewInvestigation creates a new investigation
-func NewInvestigation(investigationFn func(resources *Resources) error, name string) *Investigation {
+func NewInvestigation(investigationFn func(resources *Resources) (InvestigationResult, error), name string) *Investigation {
 	return &Investigation{investigationFn, name}
 }
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Cluster           *cmv1.Cluster
-	ClusterDeployment *hivev1.ClusterDeployment
-	AwsClient         aws.Client
-	OcmClient         ocm.Client
-	PdClient          pagerduty.Client
+	Cluster             *cmv1.Cluster
+	ClusterDeployment   *hivev1.ClusterDeployment
+	AwsClient           aws.Client
+	OcmClient           ocm.Client
+	PdClient            pagerduty.Client
+	AdditionalResources map[string]interface{}
 }

@@ -3,11 +3,23 @@ package ccam
 import (
 	"errors"
 	"testing"
+
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 )
 
 func TestEvaluateRandomError(t *testing.T) {
 	timeoutError := errors.New("credentials are there, error is different: timeout")
-	err := Evaluate(nil, errors.New("timeout"), nil, nil, "")
+	input := investigation.Resources{
+		Cluster:           nil,
+		ClusterDeployment: nil,
+		AwsClient:         nil,
+		OcmClient:         nil,
+		PdClient:          nil,
+		AdditionalResources: map[string]interface{}{
+			"error": errors.New("timeout"),
+		},
+	}
+	_, err := Investigate(&input)
 	if err.Error() != timeoutError.Error() {
 		t.Fatalf("Expected error %v, but got %v", timeoutError, err)
 	}
