@@ -5,21 +5,21 @@ import (
 	"os"
 
 	configv1 "github.com/openshift/api/config/v1"
-	bplogin "github.com/openshift/backplane-cli/cmd/ocm-backplane/login"
 	"github.com/openshift/backplane-cli/pkg/cli/config"
+	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func New(clusterID string, ocmClient ocm.Client) (client.Client, error) {
+func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Client, error) {
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
 		return nil, fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
 	}
 
-	cfg, err := bplogin.GetRestConfigWithConn(config.BackplaneConfiguration{URL: backplaneURL}, ocmClient.GetConnection(), clusterID)
+	cfg, err := bpremediation.CreateRemediationWithConn(config.BackplaneConfiguration{URL: backplaneURL}, ocmClient.GetConnection(), clusterID, remediation)
 	if err != nil {
 		return nil, err
 	}

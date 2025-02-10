@@ -28,7 +28,7 @@ func GetInvestigation(alertTitle string) *investigation.Investigation {
 		// We don't care this is a single case switch (gocritic), this should just be extensible
 		switch { //nolint:gocritic
 		case strings.Contains(alertTitle, "ClusterMonitoringErrorBudgetBurnSRE"):
-			return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "ClusterMonitoringErrorBudgetBurnSRE")
+			return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "clustermonitoringerrorbudgetburn")
 		}
 	}
 

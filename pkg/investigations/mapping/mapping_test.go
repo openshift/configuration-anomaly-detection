@@ -37,7 +37,7 @@ func TestGetInvestigation(t *testing.T) {
 			name:            "Experimental feature enabled - ClusterMonitoringErrorBudgetBurnSRE",
 			alertTitle:      "ClusterMonitoringErrorBudgetBurnSRE ",
 			experimentalEnv: true,
-			expectedType:    "ClusterMonitoringErrorBudgetBurnSRE",
+			expectedType:    "clustermonitoringerrorbudgetburn",
 		},
 		{
 			name:            "Experimental feature disabled - ClusterMonitoringErrorBudgetBurnSRE",
