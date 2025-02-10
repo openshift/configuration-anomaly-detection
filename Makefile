@@ -1,4 +1,11 @@
-include project.mk
+IMAGE_REGISTRY?=quay.io
+IMAGE_REPOSITORY?=app-sre
+IMAGE_NAME?=configuration-anomaly-detection
+DOCKERFILE?=./build/Dockerfile
+define ADDITIONAL_IMAGE_SPECS
+./build/Dockerfile $(IMAGE_REGISTRY)/$(IMAGE_REPOSITORY)/$(IMAGE_NAME):$(CURRENT_COMMIT)
+endef
+
 include boilerplate/generated-includes.mk
 
 GOLANGCI_LINT_VERSION=v1.59.1

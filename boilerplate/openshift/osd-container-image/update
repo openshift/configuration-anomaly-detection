@@ -10,13 +10,22 @@ source $CONVENTION_ROOT/_lib/common.sh
 # Expect POST
 [[ "$1" == "POST" ]] || err "Got a parameter I don't understand: '$1'. Did the infrastructure change?"
 
+# Add OWNERS_ALIASES to $REPO_ROOT
+echo "Copying OWNERS_ALIASES to your repository root."
+cp ${HERE}/OWNERS_ALIASES $REPO_ROOT
+
+# Add dependabot configuration
+mkdir -p $REPO_ROOT/.github
+echo "Copying dependabot.yml to .github/dependabot.yml"
+cp ${HERE}/dependabot.yml ${REPO_ROOT}/.github/dependabot.yml
+
 echo "Writing .ci-operator.yaml in your repository root with:"
 echo "    namespace: $IMAGE_NAMESPACE"
 echo "    name: $IMAGE_NAME"
 echo "    tag: $LATEST_IMAGE_TAG"
 ${SED?} "s/__NAMESPACE__/$IMAGE_NAMESPACE/; s/__NAME__/$IMAGE_NAME/; s/__TAG__/$LATEST_IMAGE_TAG/" ${HERE}/.ci-operator.yaml > $REPO_ROOT/.ci-operator.yaml
 
-cat <<EOF
+cat <<'EOF'
 
 =====================
 THINGS YOU NEED TO DO

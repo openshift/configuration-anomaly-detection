@@ -11,6 +11,14 @@ ifndef IMAGE_NAME
 $(error IMAGE_NAME is not set)
 endif
 
+# In openshift ci (Prow), we need to set $HOME to a writable directory else tests will fail
+# because they don't have permissions to create /.local or /.cache directories
+# as $HOME is set to "/" by default.
+ifeq ($(HOME),/)
+export HOME=/tmp/home
+endif
+PWD=$(shell pwd)
+
 ### Accommodate docker or podman
 #
 # The docker/podman creds cache needs to be in a location unique to this

@@ -1,5 +1,4 @@
-ARG BUILDER_IMG=registry.ci.openshift.org/openshift/release:golang-1.21
-FROM $BUILDER_IMG as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v6.0.1 as builder
 
 ADD . /opt
 WORKDIR /opt
