@@ -12,7 +12,7 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
@@ -92,6 +92,8 @@ var _ = Describe("chgm", func() {
 		mockCtrl.Finish()
 	})
 
+	inv := CHGM{}
+
 	Describe("Triggered", func() {
 		When("Triggered finds instances stopped by the customer", func() {
 			It("should send a service log and silence the alert", func() {
@@ -107,7 +109,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any())
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
@@ -129,7 +131,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any())
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
@@ -142,7 +144,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fakeErr)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
@@ -160,7 +162,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().GetSubnetID(gomock.Eq(infraID)).Return([]string{"string1", "string2"}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
@@ -177,7 +179,7 @@ var _ = Describe("chgm", func() {
 
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -194,7 +196,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
 				// Act
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).ToNot(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -211,7 +213,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 				// Act
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				// Assert
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
@@ -233,7 +235,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -253,7 +255,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -274,7 +276,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Any(), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -295,7 +297,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -315,7 +317,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -335,7 +337,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -355,7 +357,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -375,7 +377,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -395,7 +397,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -415,7 +417,7 @@ var _ = Describe("chgm", func() {
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().GetServiceLog(gomock.Eq(cluster), gomock.Eq("log_type='cluster-state-updates'")).Return(&servicelogsv1.ClusterLogsUUIDListResponse{}, nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -432,7 +434,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -449,7 +451,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -466,7 +468,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -482,7 +484,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -500,7 +502,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -518,7 +520,7 @@ var _ = Describe("chgm", func() {
 				r.OcmClient.(*ocmmock.MockClient).EXPECT().PostServiceLog(gomock.Eq(cluster.ID()), gomock.Eq(&chgmSL)).Return(nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().SilenceIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeTrue())
@@ -536,7 +538,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -554,7 +556,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -572,7 +574,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -590,7 +592,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())
@@ -608,7 +610,7 @@ var _ = Describe("chgm", func() {
 				r.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return([]cloudtrailv2types.Event{event}, nil)
 				r.PdClient.(*pdmock.MockClient).EXPECT().EscalateIncidentWithNote(gomock.Any()).Return(nil)
 
-				result, gotErr := Investigate(r)
+				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
 				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
 				Expect(result.ServiceLogSent.Performed).To(BeFalse())

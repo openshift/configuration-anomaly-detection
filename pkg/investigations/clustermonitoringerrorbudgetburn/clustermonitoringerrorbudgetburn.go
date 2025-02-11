@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
@@ -25,7 +25,9 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 	InternalOnly: false,
 }
 
-func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+type CMEBB struct{}
+
+func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	// Initialize k8s client
 	// This would be better suited to be passend in with the investigation resources
 	// In turn we would need to split out ccam and k8sclient, as those are tied to a cluster
@@ -80,6 +82,22 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to a broken UWM configmap")
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+}
+
+func (c *CMEBB) Name() string {
+	return "ClusterMonitoringErrorBudgetBurn"
+}
+
+func (c *CMEBB) Description() string {
+	return "Investigate the cluster monitoring error budget burn alert"
+}
+
+func (c *CMEBB) ShouldInvestigateAlert(alert string) bool {
+	return strings.Contains(alert, "ClusterMonitoringErrorBudgetBurnSRE")
+}
+
+func (c *CMEBB) IsExperimental() bool {
+	return true
 }
 
 // Check if the `Available` status condition reports a broken UWM config

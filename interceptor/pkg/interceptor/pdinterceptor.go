@@ -8,9 +8,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
-	investigation_mapping "github.com/openshift/configuration-anomaly-detection/pkg/investigations/mapping"
+	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	triggersv1 "github.com/tektoncd/triggers/pkg/apis/triggers/v1beta1"
 	"github.com/tektoncd/triggers/pkg/interceptors"
@@ -106,7 +107,8 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 		return interceptors.Failf(codes.InvalidArgument, "could not initialize pagerduty client: %v", err)
 	}
 
-	investigation := investigation_mapping.GetInvestigation(pdClient.GetTitle())
+	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
+	investigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 	// If the alert is not in the whitelist, return `Continue: false` as interceptor response
 	// and escalate the alert to SRE
 	if investigation == nil {
