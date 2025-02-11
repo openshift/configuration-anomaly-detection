@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 export VAULT_ADDR="https://vault.devshift.net"
 export VAULT_TOKEN="$(vault login -method=oidc -token-only)"
@@ -12,5 +12,4 @@ unset VAULT_ADDR VAULT_TOKEN
 export CAD_EXPERIMENTAL_ENABLED=true
 export BACKPLANE_PROXY=http://squid.corp.redhat.com:3128
 
-echo
-
+set +euo pipefail
