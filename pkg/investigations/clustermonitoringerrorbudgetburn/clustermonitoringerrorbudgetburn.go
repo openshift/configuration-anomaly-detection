@@ -3,6 +3,7 @@ package clustermonitoringerrorbudgetburn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -31,6 +32,13 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
+	defer func() {
+		deferErr := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
+		if deferErr != nil {
+			logging.Error(deferErr)
+			err = errors.Join(err, deferErr)
+		}
+	}()
 
 	// Initialize PagerDuty note writer
 	notes := notewriter.New(r.Name, logging.RawLogger)
