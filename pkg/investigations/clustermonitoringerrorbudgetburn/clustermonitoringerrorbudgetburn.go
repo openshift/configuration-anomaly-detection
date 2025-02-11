@@ -27,13 +27,13 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	// Initialize k8s client
 	result := investigation.InvestigationResult{}
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient)
+	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
 
 	// Initialize PagerDuty note writer
-	notes := notewriter.New("ClusterMonitoringErrorBudgetBurn", logging.RawLogger)
+	notes := notewriter.New(r.Name, logging.RawLogger)
 
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}

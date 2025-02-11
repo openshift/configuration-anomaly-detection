@@ -12,6 +12,9 @@ import (
 )
 
 // GetInvestigation will return the investigation function for the identified alert
+//
+// Please note that when adding an investigation the name and the directory need to be the same,
+// so that backplane-api can fetch the metadata.yaml
 func GetInvestigation(alertTitle string) *investigation.Investigation {
 	// We currently map to the alert by using the title, we should use the name in the alert note in the future.
 	// This currently isn't feasible yet, as CPD's alertmanager doesn't allow for the field to exist.
@@ -28,7 +31,7 @@ func GetInvestigation(alertTitle string) *investigation.Investigation {
 		// We don't care this is a single case switch (gocritic), this should just be extensible
 		switch { //nolint:gocritic
 		case strings.Contains(alertTitle, "ClusterMonitoringErrorBudgetBurnSRE"):
-			return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "ClusterMonitoringErrorBudgetBurnSRE")
+			return investigation.NewInvestigation(clustermonitoringerrorbudgetburn.Investigate, "clustermonitoringerrorbudgetburn")
 		}
 	}
 

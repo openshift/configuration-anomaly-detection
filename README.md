@@ -130,6 +130,8 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 ### Required ENV variables
 
+**Note:** For local execution, these can exported from vault with `source test/set_stage_env.sh`
+
 * `CAD_OCM_CLIENT_ID`: refers to the OCM client ID used by CAD to initialize the OCM client
 * `CAD_OCM_CLIENT_SECRET`: refers to the OCM client secret used by CAD to initialize the OCM client
 * `CAD_OCM_URL`: refers to the used OCM url used by CAD to initialize the OCM client
@@ -150,8 +152,10 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 ### Optional ENV variables
 
-* `BACKPLANE_PROXY`: refers to the proxy CAD uses for the isolated backplane access flow. 
+- `BACKPLANE_PROXY`: refers to the proxy CAD uses for the isolated backplane access flow.
 
 **Note:** `BACKPLANE_PROXY` is required for local development, as a backplane api is only accessible through the proxy.
+
+- `CAD_EXPERIMENTAL_ENABLED`: enables experimental investigations when set to `true`, see mapping.go
 
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
