@@ -8,6 +8,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
@@ -23,6 +24,8 @@ func GetInvestigation(alertTitle string) *investigation.Investigation {
 		return investigation.NewInvestigation(chgm.Investigate, "ClusterHasGoneMissing")
 	case strings.Contains(alertTitle, "ClusterProvisioningDelay -"):
 		return investigation.NewInvestigation(cpd.Investigate, "ClusterProvisioningDelay")
+	case strings.Contains(alertTitle, "InsightsOperatorDownSRE"):
+		return investigation.NewInvestigation(insightsoperatordown.Investigate, "InsightsOperatorDown")
 	}
 
 	if experimentalFeaturesEnabled() {
