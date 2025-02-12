@@ -3,7 +3,6 @@ package clustermonitoringerrorbudgetburn
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -33,15 +32,14 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 	// We can revisit backplane-apis remediation implementation to improve this behavior, by e.g.
 	// patching the existing RBAC etc...
 	result := investigation.InvestigationResult{}
+
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
 	defer func() {
-		deferErr := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
-		if deferErr != nil {
-			logging.Error(deferErr)
-			err = errors.Join(err, deferErr)
+		if err := k8scli.Close(); err != nil {
+			logging.Error("Error closing k8s client:", err)
 		}
 	}()
 

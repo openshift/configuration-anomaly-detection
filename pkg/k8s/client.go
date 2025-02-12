@@ -10,10 +10,25 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	k8scli "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Client, error) {
+type Client struct {
+	k8scli.Client
+	clusterID   string
+	ocmClient   ocm.Client
+	remediation string
+}
+
+func (c *Client) Close() error {
+	backplaneURL := os.Getenv("BACKPLANE_URL")
+	if backplaneURL == "" {
+		return fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
+	}
+	return bpremediation.DeleteRemediationWithConn(config.BackplaneConfiguration{URL: backplaneURL}, c.ocmClient.GetConnection(), c.clusterID, c.remediation)
+}
+
+func New(clusterID string, ocmClient ocm.Client, remediation string) (*Client, error) {
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
 		return nil, fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
@@ -29,15 +44,12 @@ func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Cli
 		return nil, err
 	}
 
-	return client.New(cfg, client.Options{Scheme: scheme})
-}
-
-func Cleanup(clusterID string, ocmClient ocm.Client, remediation string) error {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
-	if backplaneURL == "" {
-		return fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
+	k8scli, err := k8scli.New(cfg, k8scli.Options{Scheme: scheme})
+	if err != nil {
+		return nil, err
 	}
-	return bpremediation.DeleteRemediationWithConn(config.BackplaneConfiguration{URL: backplaneURL}, ocmClient.GetConnection(), clusterID, remediation)
+
+	return &Client{Client: k8scli, clusterID: clusterID, ocmClient: ocmClient, remediation: remediation}, nil
 }
 
 // Initialize all apis we need in CAD
