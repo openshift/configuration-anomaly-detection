@@ -32,6 +32,14 @@ func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Cli
 	return client.New(cfg, client.Options{Scheme: scheme})
 }
 
+func Cleanup(clusterID string, ocmClient ocm.Client, remediation string) error {
+	backplaneURL := os.Getenv("BACKPLANE_URL")
+	if backplaneURL == "" {
+		return fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
+	}
+	return bpremediation.DeleteRemediationWithConn(config.BackplaneConfiguration{URL: backplaneURL}, ocmClient.GetConnection(), clusterID, remediation)
+}
+
 // Initialize all apis we need in CAD
 func initScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
