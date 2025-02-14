@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
@@ -36,8 +36,10 @@ var (
 	}
 )
 
-// Investigate runs the investigation for a triggered chgm pagerduty event
-func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+type CHGM struct{}
+
+// Run runs the investigation for a triggered chgm pagerduty event
+func (c *CHGM) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CHGM", logging.RawLogger)
 
@@ -114,6 +116,22 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+}
+
+func (c *CHGM) Name() string {
+	return "Cluster Has Gone Missing (CHGM)"
+}
+
+func (c *CHGM) Description() string {
+	return "Detects reason for clusters that have gone missing"
+}
+
+func (c *CHGM) ShouldInvestigateAlert(alert string) bool {
+	return strings.Contains(alert, "has gone missing")
+}
+
+func (c *CHGM) IsExperimental() bool {
+	return false
 }
 
 // investigateHibernation checks if the cluster was recently woken up from

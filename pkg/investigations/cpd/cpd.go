@@ -2,13 +2,17 @@
 package cpd
 
 import (
+	"strings"
+
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
+
+type CPD struct{}
 
 // https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
 var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
@@ -23,7 +27,7 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation 
 // - always escalate the alert to primary
 // The reasoning for this is that we don't fully trust network verifier yet.
 // In the future, we want to automate service logs based on the network verifier output.
-func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *CPD) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CPD", logging.RawLogger)
 
@@ -113,6 +117,22 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 	// We currently always escalate, in the future, when network verifier is reliable,
 	// we would silence the alert when we had a service log in the case of network verifier detecting failures.
 	return result, r.PdClient.EscalateIncident()
+}
+
+func (c *CPD) Name() string {
+	return "ClusterProvisioningDelay"
+}
+
+func (c *CPD) Description() string {
+	return "Investigates the ClusterProvisioningDelay alert"
+}
+
+func (c *CPD) ShouldInvestigateAlert(alert string) bool {
+	return strings.Contains(alert, "ClusterProvisioningDelay -")
+}
+
+func (c *CPD) IsExperimental() bool {
+	return false
 }
 
 func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {

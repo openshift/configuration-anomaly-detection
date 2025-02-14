@@ -7,10 +7,12 @@ import (
 	"regexp"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
+
+type CCAM struct{}
 
 var ccamLimitedSupport = &ocm.LimitedSupportReason{
 	Summary: "Restore missing cloud credentials",
@@ -19,7 +21,7 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func Investigate(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *CCAM) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	cluster := r.Cluster
 	ocmClient := r.OcmClient
@@ -60,6 +62,22 @@ func Investigate(r *investigation.Resources) (investigation.InvestigationResult,
 		// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
 		return result, pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 	}
+}
+
+func (c *CCAM) Name() string {
+	return "Cluster Credentials Are Missing (CCAM)"
+}
+
+func (c *CCAM) Description() string {
+	return "Detects missing cluster credentials"
+}
+
+func (c *CCAM) ShouldInvestigateAlert(alert string) bool {
+	return false
+}
+
+func (c *CCAM) IsExperimental() bool {
+	return false
 }
 
 // userCausedErrors contains the list of backplane returned error strings that we map to

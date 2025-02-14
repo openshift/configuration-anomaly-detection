@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 )
 
 func TestEvaluateRandomError(t *testing.T) {
@@ -19,7 +19,10 @@ func TestEvaluateRandomError(t *testing.T) {
 			"error": errors.New("timeout"),
 		},
 	}
-	_, err := Investigate(&input)
+
+	inv := CCAM{}
+
+	_, err := inv.Run(&input)
 	if err.Error() != timeoutError.Error() {
 		t.Fatalf("Expected error %v, but got %v", timeoutError, err)
 	}

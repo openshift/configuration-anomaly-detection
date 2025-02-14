@@ -20,16 +20,12 @@ type InvestigationResult struct {
 	ServiceLogSent     InvestigationStep
 }
 
-// Investigation serves as a parent class
-// This enables the structure of cmd/investigate.go
-type Investigation struct {
-	Run  func(resources *Resources) (InvestigationResult, error)
-	Name string
-}
-
-// NewInvestigation creates a new investigation
-func NewInvestigation(investigationFn func(resources *Resources) (InvestigationResult, error), name string) *Investigation {
-	return &Investigation{investigationFn, name}
+type Investigation interface {
+	Run(resources *Resources) (InvestigationResult, error)
+	Name() string
+	Description() string
+	IsExperimental() bool
+	ShouldInvestigateAlert(string) bool
 }
 
 // Resources holds all resources/tools required for alert investigations

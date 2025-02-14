@@ -22,9 +22,9 @@ import (
 	"path/filepath"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
-	investigation_mapping "github.com/openshift/configuration-anomaly-detection/pkg/investigations/mapping"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -71,7 +71,8 @@ func run(_ *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	alertInvestigation := investigation_mapping.GetInvestigation(pdClient.GetTitle())
+	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
+	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
@@ -82,7 +83,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	metrics.Inc(metrics.Alerts, alertInvestigation.Name)
+	metrics.Inc(metrics.Alerts, alertInvestigation.Name())
 
 	// clusterID can end up being either be the internal or external ID.
 	// We don't really care, as we only use this to initialize the cluster object,
@@ -121,16 +122,17 @@ func run(_ *cobra.Command, _ []string) error {
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
 		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
-		result, err := ccam.Investigate(ccamResources)
-		updateMetrics(alertInvestigation.Name, &result)
+		inv := ccam.CCAM{}
+		result, err := inv.Run(ccamResources)
+		updateMetrics(alertInvestigation.Name(), &result)
 		return err
 	}
 
-	investigationResources := &investigation.Resources{Name: alertInvestigation.Name, Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
+	investigationResources := &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
 	result, err := alertInvestigation.Run(investigationResources)
-	updateMetrics(alertInvestigation.Name, &result)
+	updateMetrics(alertInvestigation.Name(), &result)
 	return err
 }
 
