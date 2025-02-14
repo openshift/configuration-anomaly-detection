@@ -88,8 +88,15 @@ if [ -z "$pd_token" ]; then
   exit 0
 fi
 
-curl --silent --request GET \
+# Pagerduty seems to need a short while to create the incident
+# Added this as we intermittently fail to get the incident id otherwise
+sleep 2
+
+INCIDENT_ID=$(curl --silent --request GET \
   --url "https://api.pagerduty.com/incidents?incident_key=${dedup_key}" \
   --header 'Accept: application/json' \
   --header "Authorization: Token token=${pd_token}" \
-  --header 'Content-Type: application/json' | jq -r '.incidents[0].id'
+  --header 'Content-Type: application/json' | jq -r '.incidents[0].id')
+echo $INCIDENT_ID
+echo '{"__pd_metadata":{"incident":{"id":"'$INCIDENT_ID'"}}}' > ./payload
+echo "Created ./payload"
