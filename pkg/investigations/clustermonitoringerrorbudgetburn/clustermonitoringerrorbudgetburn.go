@@ -85,7 +85,7 @@ func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResu
 }
 
 func (c *CMEBB) Name() string {
-	return "ClusterMonitoringErrorBudgetBurn"
+	return "clustermonitoringerrorbudgetburn"
 }
 
 func (c *CMEBB) Description() string {
