@@ -22,6 +22,8 @@ type InvestigationResult struct {
 
 type Investigation interface {
 	Run(resources *Resources) (InvestigationResult, error)
+	// Please note that when adding an investigation the name and the directory currently need to be the same,
+	// so that backplane-api can fetch the metadata.yaml
 	Name() string
 	Description() string
 	IsExperimental() bool
