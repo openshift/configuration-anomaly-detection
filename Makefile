@@ -77,6 +77,11 @@ test-interceptor: check-go121-install check-jq-install check-vault-install build
 	@echo "Running e2e tests for interceptor..."
 	cd interceptor && ./test/e2e.sh
 
+##@ Boilerplate:
+.PHONY: boilerplate
+bootstrap-investigation: ## Bootstrap a new boilerplate investigation
+	@cd hack && ./bootstrap-investigation.sh
+
 ##@ Template-updater:
 .PHONY: template-updater
 template-updater: build-template-updater lint-template-updater ## Run all targets for template-updater
