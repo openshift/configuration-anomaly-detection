@@ -83,6 +83,13 @@ test-interceptor-e2e: check-go121-install check-jq-install check-vault-install b
 	@echo "Running e2e tests for interceptor..."
 	cd interceptor && ./test/e2e.sh
 
+.PHONY: run-local-interceptor
+run-local-interceptor: build-interceptor ## Create placeholder variables for interceptor local environment and run 
+	@echo
+	@echo "Warning: The run-local-interceptor's variables are placeholders and can be set to stage env variables with either test/set_stage_env.sh or using the E2E script."
+	@echo
+	CAD_SILENT_POLICY=test CAD_PD_TOKEN=test TOKEN=test ./bin/interceptor
+	
 ##@ Template-updater:
 .PHONY: template-updater
 template-updater: build-template-updater lint-template-updater ## Run all targets for template-updater
