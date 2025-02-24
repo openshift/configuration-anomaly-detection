@@ -10,3 +10,7 @@ rbac:
       resources:
         - clusteroperators
 customerDataAccess: false
+sop: https://github.com/openshift/ops-sop/blob/master/v4/troubleshoot/clusteroperators/monitoring.md
+issues:
+  - issue: https://issues.redhat.com/browse/OCPBUGS-33863
+    removeAfter: 4.17
