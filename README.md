@@ -66,7 +66,7 @@ The required investigation is identified by CAD based on the incident and its pa
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
-- create a mapping for the alert to the `GetInvestigation` function in `mapping.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
+- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
