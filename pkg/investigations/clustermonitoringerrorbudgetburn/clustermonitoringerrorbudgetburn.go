@@ -35,9 +35,15 @@ func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResu
 	// We can revisit backplane-apis remediation implementation to improve this behavior, by e.g.
 	// patching the existing RBAC etc...
 	result := investigation.InvestigationResult{}
+
+	// Initialize PagerDuty note writer
+	notes := notewriter.New(r.Name, logging.RawLogger)
+
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
-		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
+		str := "unable to initialize k8s cli: %w"
+		notes.AppendWarning(str, err)
+		return result, fmt.Errorf(str, err)
 	}
 	defer func() {
 		deferErr := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
@@ -45,22 +51,27 @@ func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResu
 			logging.Error(deferErr)
 			err = errors.Join(err, deferErr)
 		}
+		if err != nil {
+			notes.AppendWarning("CAD investigation failed, CAD team has been notified. Please investigate manually.")
+			_ = r.PdClient.EscalateIncidentWithNote(notes.String())
+		}
 	}()
-
-	// Initialize PagerDuty note writer
-	notes := notewriter.New(r.Name, logging.RawLogger)
 
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
 	err = k8scli.List(context.TODO(), coList, listOptions)
 	if err != nil {
-		return result, fmt.Errorf("unable to list monitoring clusteroperator: %w", err)
+		str := "unable to list monitoring clusteroperator: %w"
+		notes.AppendWarning(str, err)
+		return result, fmt.Errorf(str, err)
 	}
 
 	// Make sure our list output only finds a single cluster operator for `metadata.name = monitoring`
 	if len(coList.Items) != 1 {
-		return result, fmt.Errorf("found %d clusteroperators, expected 1", len(coList.Items))
+		str := "found %d clusteroperators, expected 1"
+		notes.AppendWarning(str, len(coList.Items))
+		return result, fmt.Errorf(str, len(coList.Items))
 	}
 	monitoringCo := coList.Items[0]
 
@@ -70,7 +81,9 @@ func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResu
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
 		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmMisconfiguredSL)
 		if err != nil {
-			return result, fmt.Errorf("failed posting servicelog: %w", err)
+			str := "failed posting servicelog: %w"
+			notes.AppendWarning(str, err)
+			return result, fmt.Errorf(str, err)
 		}
 		// XXX: No metric before
 		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
