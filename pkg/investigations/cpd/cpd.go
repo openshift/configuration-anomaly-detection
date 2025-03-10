@@ -31,6 +31,12 @@ func (c *CPD) Run(r *investigation.Resources) (investigation.InvestigationResult
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CPD", logging.RawLogger)
 
+	defer func() {
+		if err := r.PdClient.EscalateIncidentWithNote(notes.String()); err != nil {
+			logging.Error("Failed to add incident notes to PagerDuty: ", err)
+		}
+	}()
+
 	if r.Cluster.Status().State() == "ready" {
 		// We are unsure when this happens, in theory, if the cluster is ready, the alert shouldn't fire or should autoresolve.
 		// We currently believe this never happens, but want to be made aware if it does.
@@ -61,10 +67,12 @@ func (c *CPD) Run(r *investigation.Resources) (investigation.InvestigationResult
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
 			isValid, err := isSubnetRouteValid(r.AwsClient, subnet)
 			if err != nil {
+				notes.AppendWarning("Failed to check subnet %s routing: %s", subnet, err)
 				logging.Error(err)
 			}
 			if !isValid {
 				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL); err != nil {
+					notes.AppendWarning("CAD investigation error: %s", err)
 					return result, err
 				}
 				// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
