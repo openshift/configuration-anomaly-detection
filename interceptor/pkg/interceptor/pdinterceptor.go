@@ -90,10 +90,11 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
 
-	// logging request headers
-	pdi.Logger.Info("Request header: %v", r.Header)
-
 	var ireq triggersv1.InterceptorRequest
+
+	// logging request
+	pdi.Logger.Info("Request header: %v", r.Header)
+	pdi.Logger.Info("Request body: ", body.String())
 
 	token, _ := os.LookupEnv("PD_SIGNATURE")
 
