@@ -19,7 +19,7 @@ fi
 read -p "Should Investigate Alert (y/n): " INVESTIGATE_ALERT_BOOL
 if [[ "${INVESTIGATE_ALERT_BOOL}" == "y" ]] ; then
 	read -p "Investigation alert string: " INVESTIGATION_ALERT_STRING
-	INVESTIGATION_ALERT="strings.Contains(alert, ${INVESTIGATION_ALERT_STRING})"
+	INVESTIGATION_ALERT="strings.Contains(alert, \"${INVESTIGATION_ALERT_STRING}\")"
 elif [[ "${INVESTIGATE_ALERT_BOOL}" == "n" ]] ; then
 	INVESTIGATION_ALERT="false"
 else
