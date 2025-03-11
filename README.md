@@ -66,8 +66,26 @@ The required investigation is identified by CAD based on the incident and its pa
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
-- create a mapping for the alert to the `GetInvestigation` function in `mapping.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
-- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
+- Create a mapping for the alert in `registry.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
+- investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
+
+### Integrations
+
+> **Note:** When writing an investiation, you can use them right away.
+They are initialized for you and passed to the investigation via investigation.Resources.
+
+
+* [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
+    - See `pkg/aws`
+* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes.
+    - See `pkg/pagerduty`
+* [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
+    - See `pkg/ocm`
+    - In case of missing permissions to query an ocm resource, add it to the Configuration-Anomaly-Detection role in uhc-account-manager
+* [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
+* [k8sclient](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client) -- Interact with clusters kube-api
+    - Requires RBAC definitions for your investigation to be added to `metadata.yaml`
+
 
 ## Testing locally
 
@@ -97,13 +115,6 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
 Every alert managed by CAD corresponds to an investigation, representing the executed code associated with the alert.
 
 Investigation specific documentation can be found in the according investigation folder,  e.g. for [ClusterHasGoneMissing](./pkg/investigations/chgm/README.md).
-
-### Integrations
-
-* [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
-* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
-* [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
-* [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 
 ### Templates
 
