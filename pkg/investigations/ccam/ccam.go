@@ -12,7 +12,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
-type CCAM struct{}
+type Investigation struct{}
 
 var ccamLimitedSupport = &ocm.LimitedSupportReason{
 	Summary: "Restore missing cloud credentials",
@@ -21,14 +21,14 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func (c *CCAM) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	cluster := r.Cluster
 	ocmClient := r.OcmClient
 	pdClient := r.PdClient
 	bpError, ok := r.AdditionalResources["error"].(error)
 	if !ok {
-		return result, fmt.Errorf("Missing required CCAM field 'error'")
+		return result, fmt.Errorf("Missing required Investigation field 'error'")
 	}
 	logging.Info("Investigating possible missing cloud credentials...")
 
@@ -64,19 +64,19 @@ func (c *CCAM) Run(r *investigation.Resources) (investigation.InvestigationResul
 	}
 }
 
-func (c *CCAM) Name() string {
+func (c *Investigation) Name() string {
 	return "Cluster Credentials Are Missing (CCAM)"
 }
 
-func (c *CCAM) Description() string {
+func (c *Investigation) Description() string {
 	return "Detects missing cluster credentials"
 }
 
-func (c *CCAM) ShouldInvestigateAlert(alert string) bool {
+func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 	return false
 }
 
-func (c *CCAM) IsExperimental() bool {
+func (c *Investigation) IsExperimental() bool {
 	return false
 }
 

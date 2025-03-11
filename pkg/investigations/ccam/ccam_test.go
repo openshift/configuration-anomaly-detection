@@ -20,7 +20,7 @@ func TestEvaluateRandomError(t *testing.T) {
 		},
 	}
 
-	inv := CCAM{}
+	inv := Investigation{}
 
 	_, err := inv.Run(&input)
 	if err.Error() != timeoutError.Error() {
