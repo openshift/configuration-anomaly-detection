@@ -67,7 +67,7 @@ As PagerDuty itself does not provide finer granularity for webhooks than service
 
 To add a new alert investigation:
 - Create a mapping for the alert in `registry.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
-- investigation.Resources contain intizialized clients for the clusters aws environment, ocm and more, see [Integrations](#integrations)
+- investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
 
 ### Integrations
 
