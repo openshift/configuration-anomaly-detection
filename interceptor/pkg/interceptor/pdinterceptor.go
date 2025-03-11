@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/PagerDuty/go-pagerduty/webhookv3"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	triggersv1 "github.com/tektoncd/triggers/pkg/apis/triggers/v1beta1"
@@ -39,6 +40,7 @@ func (pdi PagerDutyInterceptor) ServeHTTP(w http.ResponseWriter, r *http.Request
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}
+
 	w.Header().Add("Content-Type", "application/json")
 	if _, err := w.Write(b); err != nil {
 		pdi.Logger.Errorf("failed to write response: %s", err)
@@ -86,7 +88,44 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 	if _, err := io.Copy(&body, r.Body); err != nil {
 		return nil, internal(fmt.Errorf("failed to read body: %w", err))
 	}
+	r.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
+
+	// originalReq is the original request that was sent to the interceptor,
+	// due to be unwrapped into a new header and body for signature verification.
+	var originalReq struct {
+		Body   string              `json:"body"`
+		Header map[string][]string `json:"header"`
+	}
+	if err := json.Unmarshal(body.Bytes(), &originalReq); err != nil {
+		return nil, badRequest(fmt.Errorf("failed to parse request body: %w", err))
+	}
+
+	extractedRequest, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), bytes.NewReader([]byte(originalReq.Body)))
+	if err != nil {
+		return nil, internal(fmt.Errorf("malformed body/header in unwrapped request: %w", err))
+	}
+
+	for k, v := range originalReq.Header {
+		for _, v := range v {
+			extractedRequest.Header.Add(k, v)
+		}
+	}
+
 	var ireq triggersv1.InterceptorRequest
+
+	// logging request
+	pdi.Logger.Info("Wrapped Request header: %v", r.Header)
+	pdi.Logger.Info("Wrapped Request body: ", body.String())
+	pdi.Logger.Info("Unwrapped Request header: %v", extractedRequest.Header)
+	pdi.Logger.Info("Unwrapped Request body: ", originalReq.Body)
+
+	token, _ := os.LookupEnv("PD_SIGNATURE")
+
+	err = webhookv3.VerifySignature(extractedRequest, token)
+	if err != nil {
+		return nil, badRequest(fmt.Errorf("failed to verify signature: %w", err))
+	}
+
 	if err := json.Unmarshal(body.Bytes(), &ireq); err != nil {
 		return nil, badRequest(fmt.Errorf("failed to parse body as InterceptorRequest: %w", err))
 	}
