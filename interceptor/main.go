@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,8 +11,7 @@ import (
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/interceptor/pkg/interceptor"
-	"go.uber.org/zap"
-	"knative.dev/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"knative.dev/pkg/signals"
 )
 
@@ -24,25 +22,13 @@ const (
 	idleTimeout  = 60 * time.Second
 )
 
-var logger = &zap.SugaredLogger{}
+var logger = logging.InitLogger(logging.LogLevelString, "")
 
 func main() {
 	// set up signals so we handle the first shutdown signal gracefully
 	ctx := signals.NewContext()
 
-	zap, err := zap.NewProduction()
-	if err != nil {
-		log.Fatalf("failed to initialize logger: %s", err)
-	}
-	logger = zap.Sugar()
-	ctx = logging.WithLogger(ctx, logger)
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Fatalf("failed to sync the logger: %s", err)
-		}
-	}()
-
-	service := interceptor.PagerDutyInterceptor{Logger: logger}
+	service := interceptor.PagerDutyInterceptor{}
 	mux := http.NewServeMux()
 	mux.Handle("/", service)
 	mux.HandleFunc("/ready", readinessHandler)
