@@ -28,6 +28,7 @@ type Investigation interface {
 	Description() string
 	IsExperimental() bool
 	ShouldInvestigateAlert(string) bool
+	RequiresAwsClient() bool
 }
 
 // Resources holds all resources/tools required for alert investigations

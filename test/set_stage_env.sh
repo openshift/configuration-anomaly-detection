@@ -10,6 +10,7 @@ for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/pd
 unset VAULT_ADDR VAULT_TOKEN
 
 export CAD_EXPERIMENTAL_ENABLED=true
-export BACKPLANE_PROXY=http://squid.corp.redhat.com:3128
+# export BACKPLANE_PROXY=http://squid.corp.redhat.com:3128
+export BACKPLANE_URL=https://localhost:8001
 
 set +euo pipefail
