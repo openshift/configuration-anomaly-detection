@@ -10,10 +10,10 @@ import (
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
-	&ccam.CCAM{},
-	&chgm.CHGM{},
-	&clustermonitoringerrorbudgetburn.CMEBB{},
-	&cpd.CPD{},
+	&ccam.Investigation{},
+	&chgm.Investiation{},
+	&clustermonitoringerrorbudgetburn.Investigation{},
+	&cpd.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.

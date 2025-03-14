@@ -25,9 +25,9 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 	InternalOnly: false,
 }
 
-type CMEBB struct{}
+type Investigation struct{}
 
-func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	// Initialize k8s client
 	// This would be better suited to be passend in with the investigation resources
 	// In turn we would need to split out ccam and k8sclient, as those are tied to a cluster
@@ -84,20 +84,20 @@ func (c *CMEBB) Run(r *investigation.Resources) (investigation.InvestigationResu
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-func (c *CMEBB) Name() string {
+func (c *Investigation) Name() string {
 	return "clustermonitoringerrorbudgetburn"
 }
 
-func (c *CMEBB) Description() string {
+func (c *Investigation) Description() string {
 	return "Investigate the cluster monitoring error budget burn alert"
 }
 
-func (c *CMEBB) ShouldInvestigateAlert(alert string) bool {
+func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 	return strings.Contains(alert, "ClusterMonitoringErrorBudgetBurnSRE")
 }
 
-func (c *CMEBB) IsExperimental() bool {
-	return true
+func (c *Investigation) IsExperimental() bool {
+	return false
 }
 
 // Check if the `Available` status condition reports a broken UWM config
