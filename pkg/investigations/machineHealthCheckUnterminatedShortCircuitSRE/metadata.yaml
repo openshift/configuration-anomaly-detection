@@ -8,5 +8,5 @@ rbac:
       apiGroups:
         - "machine.openshift.io"
       resources:
-        - machine
+        - machines
 customerDataAccess: true
