@@ -6,12 +6,13 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
 	&ccam.Investigation{},
-	&chgm.Investiation{},
+	&chgm.Investigation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&cpd.Investigation{},
 }
@@ -26,5 +27,6 @@ func GetInvestigation(title string, experimental bool) investigation.Investigati
 			return inv
 		}
 	}
+	logging.Debugf("No investigation found for: %s", title)
 	return nil
 }

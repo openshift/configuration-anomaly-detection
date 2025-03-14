@@ -19,6 +19,10 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
 
+func (c *Investigation) RequiresAwsClient() bool {
+	return false
+}
+
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {

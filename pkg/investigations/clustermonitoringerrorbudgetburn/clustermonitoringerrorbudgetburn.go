@@ -27,6 +27,10 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 
 type Investigation struct{}
 
+func (c *Investigation) RequiresAwsClient() bool {
+	return false
+}
+
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	// Initialize k8s client
 	// This would be better suited to be passend in with the investigation resources

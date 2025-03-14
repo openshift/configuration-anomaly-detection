@@ -36,10 +36,14 @@ var (
 	}
 )
 
-type Investiation struct{}
+type Investigation struct{}
 
+
+func (c *Investigation) RequiresAwsClient() bool {
+	return true
+}
 // Run runs the investigation for a triggered chgm pagerduty event
-func (c *Investiation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CHGM", logging.RawLogger)
 
@@ -118,19 +122,19 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-func (c *Investiation) Name() string {
+func (c *Investigation) Name() string {
 	return "Cluster Has Gone Missing (CHGM)"
 }
 
-func (c *Investiation) Description() string {
+func (c *Investigation) Description() string {
 	return "Detects reason for clusters that have gone missing"
 }
 
-func (c *Investiation) ShouldInvestigateAlert(alert string) bool {
+func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 	return strings.Contains(alert, "has gone missing")
 }
 
-func (c *Investiation) IsExperimental() bool {
+func (c *Investigation) IsExperimental() bool {
 	return false
 }
 
