@@ -97,7 +97,7 @@ func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 }
 
 func (c *Investigation) IsExperimental() bool {
-	return true
+	return false
 }
 
 // Check if the `Available` status condition reports a broken UWM config
