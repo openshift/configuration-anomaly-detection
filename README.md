@@ -124,6 +124,8 @@ If you are not using pd_token, create the payload file with the incidentID manua
     ./bin/cadctl investigate --payload-path payload
     ```
 
+    > If you are testing a new invesitigation using k8sclient, you need to run backplane locally and the metadata file needs to be temporarily commited to main.
+
 ### Logging levels
 
 CAD allows for different logging levels (debug, info, warn, error, fatal, panic). The log level is determind through a hierarchy, where the cli flag `log-level`
