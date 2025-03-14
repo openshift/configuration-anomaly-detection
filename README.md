@@ -90,23 +90,39 @@ They are initialized for you and passed to the investigation via investigation.R
 ## Testing locally
 
 ### Pre-requirements
-- an existing cluster
-- an existing PagerDuty incident for the cluster and alert type that is being tested
+- An existing stage cluster
+- A Pagerduty incident
 
-To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`.
-Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrrrrrrrrrrhkaj`.
+```bash
+# (Optional) Export you pagerduty token to automatically retireve the incident id
+export pd_token=<your_pd_token>
+# Generates incident and creates payload file with incident ID
+./test/generate_incident.sh <alertname> <clusterid>
+```
 
-### Running cadctl for an incident ID
-1) Export the required ENV variables, see [required ENV variables](#required-env-variables).
-2) Create a payload file containing the incident ID
+If you are not using pd_token, create the payload file with the incidentID manually
   ```bash
   export INCIDENT_ID=
   echo '{"__pd_metadata":{"incident":{"id":"'${INCIDENT_ID}'"}}}' > ./payload
   ```
+
+### Running cadctl
+
+1) Run backplane-api locally in a second terminal ( requires being logged into ocm )
+
+    ```
+    ./test/backplane.sh
+    ```
+
+    > If there is an issue with this step, comment out the `BACKPLANE_URL` env in `set_stage_env.sh`. You will then run against stage backplane, meaning backplane wont be able to see any local changes to metadata files, expect errors like `file not found`
+2) Export the required ENV variables, see [required ENV variables](#required-env-variables).
+    ```
+    source test/set_stage_env.sh
+    ```
 3) Run `cadctl` using the payload file
-  ```bash
-  ./bin/cadctl investigate --payload-path payload
-  ```
+    ```bash
+    ./bin/cadctl investigate --payload-path payload
+    ```
 
 ### Logging levels
 
