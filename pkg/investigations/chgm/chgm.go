@@ -38,10 +38,10 @@ var (
 
 type Investigation struct{}
 
-
 func (c *Investigation) RequiresAwsClient() bool {
 	return true
 }
+
 // Run runs the investigation for a triggered chgm pagerduty event
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
