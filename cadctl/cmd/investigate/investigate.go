@@ -43,13 +43,13 @@ var InvestigateCmd = &cobra.Command{
 }
 
 var (
-	logLevelString = "info"
-	payloadPath    = "./payload.json"
+	logLevelFlag = ""
+	payloadPath  = "./payload.json"
 )
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
-	InvestigateCmd.Flags().StringVarP(&logLevelString, "log-level", "l", logLevelString, "the log level [debug,info,warn,error,fatal], default = info")
+	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
 
 	err := InvestigateCmd.MarkFlagRequired("payload-path")
 	if err != nil {
@@ -57,7 +57,12 @@ func init() {
 	}
 }
 
-func run(_ *cobra.Command, _ []string) error {
+func run(cmd *cobra.Command, _ []string) error {
+	// early init of logger for logs before clusterID is known
+	if cmd.Flags().Changed("log-level") {
+		flagValue, _ := cmd.Flags().GetString("log-level")
+		logging.RawLogger = logging.InitLogger(flagValue, "")
+	}
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -106,8 +111,13 @@ func run(_ *cobra.Command, _ []string) error {
 	// For installing clusters, externalID can be empty.
 	internalClusterID := cluster.ID()
 
-	// initialize logger for the internal-cluster-id context
-	logging.RawLogger = logging.InitLogger(logLevelString, internalClusterID)
+	// re-initialize logger for the internal-cluster-id context
+	// if log-level flag is set, take priority over env + default
+	if cmd.Flags().Changed("log-level") {
+		logging.RawLogger = logging.InitLogger(logLevelFlag, internalClusterID)
+	} else {
+		logging.RawLogger = logging.InitLogger(logging.LogLevelString, internalClusterID)
+	}
 
 	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
 	if err != nil || !requiresInvestigation {

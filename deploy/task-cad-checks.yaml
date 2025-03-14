@@ -32,6 +32,8 @@ spec:
           value: aggregation-pushgateway:9091
         - name: CAD_EXPERIMENTAL_ENABLED
           value: ${CAD_EXPERIMENTAL_ENABLED}
+        - name: LOG_LEVEL
+          value: ${LOG_LEVEL}
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:

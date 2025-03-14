@@ -13,37 +13,34 @@ import (
 
 	"github.com/PagerDuty/go-pagerduty/webhookv3"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	triggersv1 "github.com/tektoncd/triggers/pkg/apis/triggers/v1beta1"
 	"github.com/tektoncd/triggers/pkg/interceptors"
 	"google.golang.org/grpc/codes"
-
-	"go.uber.org/zap"
 )
 
 // ErrInvalidContentType is returned when the content-type is not a JSON body.
 var ErrInvalidContentType = errors.New("form parameter encoding not supported, please change the hook to send JSON payloads")
 
-type PagerDutyInterceptor struct {
-	Logger *zap.SugaredLogger
-}
+type PagerDutyInterceptor struct{}
 
 func (pdi PagerDutyInterceptor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b, err := pdi.executeInterceptor(r)
 	if err != nil {
 		var e Error
 		if errors.As(err, &e) {
-			pdi.Logger.Infof("HTTP %d - %s", e.Status(), e)
+			logging.Infof("HTTP %d - %s", e.Status(), e)
 			http.Error(w, e.Error(), e.Status())
 		} else {
-			pdi.Logger.Errorf("Non Status Error: %s", err)
+			logging.Errorf("Non Status Error: %s", err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		}
 	}
 
 	w.Header().Add("Content-Type", "application/json")
 	if _, err := w.Write(b); err != nil {
-		pdi.Logger.Errorf("failed to write response: %s", err)
+		logging.Errorf("failed to write response: %s", err)
 	}
 }
 
@@ -114,10 +111,8 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 	var ireq triggersv1.InterceptorRequest
 
 	// logging request
-	pdi.Logger.Info("Wrapped Request header: %v", r.Header)
-	pdi.Logger.Info("Wrapped Request body: ", body.String())
-	pdi.Logger.Info("Unwrapped Request header: %v", extractedRequest.Header)
-	pdi.Logger.Info("Unwrapped Request body: ", originalReq.Body)
+	logging.Debug("Unwrapped Request header: %v", extractedRequest.Header)
+	logging.Debug("Unwrapped Request body: ", originalReq.Body)
 
 	token, _ := os.LookupEnv("PD_SIGNATURE")
 
@@ -126,13 +121,15 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 		return nil, badRequest(fmt.Errorf("failed to verify signature: %w", err))
 	}
 
+	logging.Info("Signature verified successfully")
+
 	if err := json.Unmarshal(body.Bytes(), &ireq); err != nil {
 		return nil, badRequest(fmt.Errorf("failed to parse body as InterceptorRequest: %w", err))
 	}
-	pdi.Logger.Debugf("Interceptor request body is: %s", ireq.Body)
+	logging.Debugf("Interceptor request body is: %s", ireq.Body)
 
 	iresp := pdi.Process(ctx, &ireq)
-	pdi.Logger.Debugf("Interceptor response is: %+v", iresp)
+	logging.Debugf("Interceptor response is: %+v", iresp)
 	respBytes, err := json.Marshal(iresp)
 	if err != nil {
 		return nil, internal(err)
@@ -151,10 +148,10 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 	// If the alert is not in the whitelist, return `Continue: false` as interceptor response
 	// and escalate the alert to SRE
 	if investigation == nil {
-		pdi.Logger.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
+		logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
 		err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖")
 		if err != nil {
-			pdi.Logger.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
+			logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
 		}
 
 		return &triggersv1.InterceptorResponse{
@@ -162,7 +159,7 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 		}
 	}
 
-	pdi.Logger.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name)
+	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name)
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
 	}

@@ -10,8 +10,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+var LogLevelString = getLogLevel()
+
 // RawLogger is the raw global logger object used for calls wrapped by the logging package
-var RawLogger = InitLogger("info", "")
+var RawLogger = InitLogger(LogLevelString, "")
 
 // InitLogger initializes a cluster-id specific child logger
 func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
@@ -91,4 +93,12 @@ func Errorf(template string, args ...interface{}) {
 // Fatalf wraps zap's SugaredLogger.Fatalf()
 func Fatalf(template string, args ...interface{}) {
 	RawLogger.Fatalf(template, args...)
+}
+
+// getLogLevel returns the log level from the environment variable LOG_LEVEL
+func getLogLevel() string {
+	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
+		return envLogLevel
+	}
+	return "info"
 }

@@ -11,6 +11,8 @@ parameters:
   value: configuration-anomaly-detection
 - name: CAD_EXPERIMENTAL_ENABLED
   value: "FALSE"
+- name: LOG_LEVEL
+  value: info
 objects:
 - apiVersion: apps/v1
   kind: Deployment
@@ -35,6 +37,8 @@ objects:
           env:
           - name: CAD_EXPERIMENTAL_ENABLED
             value: ${CAD_EXPERIMENTAL_ENABLED}
+          - name: LOG_LEVEL
+            value: ${LOG_LEVEL}
           envFrom:
           - secretRef:
               name: cad-pd-token
@@ -318,6 +322,8 @@ objects:
         value: aggregation-pushgateway:9091
       - name: CAD_EXPERIMENTAL_ENABLED
         value: ${CAD_EXPERIMENTAL_ENABLED}
+      - name: LOG_LEVEL
+        value: ${LOG_LEVEL}
       envFrom:
       - secretRef:
           name: cad-aws-credentials

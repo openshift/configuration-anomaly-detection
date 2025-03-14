@@ -25,6 +25,8 @@ spec:
         env:
         - name: CAD_EXPERIMENTAL_ENABLED
           value: ${CAD_EXPERIMENTAL_ENABLED}
+        - name: LOG_LEVEL
+          value: ${LOG_LEVEL}
         resources:
           limits:
             cpu: "100m"
