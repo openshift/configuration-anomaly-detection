@@ -42,6 +42,7 @@ ls "${INVESTIGATION_DIR}"
 touch "${INVESTIGATION_DIR}/${INVESTIGATION_NAME}.go"
 touch "${INVESTIGATION_DIR}/metadata.yaml"
 touch "${INVESTIGATION_DIR}/README.md"
+mkdir "${INVESTIGATION_DIR}/testing/"
 
 # Create README.md file
 cat <<EOF > "${INVESTIGATION_DIR}/README.md"
@@ -49,7 +50,21 @@ cat <<EOF > "${INVESTIGATION_DIR}/README.md"
 
 ${INVESTIGATION_DESCRIPTION}
 
+## Testing
+
+Refer to the [testing README](./testing/README.md) for instructions on testing this investigation
+
 EOF
+
+# Create testing/README.md file
+cat <<EOF > "${INVESTIGATION_DIR}/testing/README.md"
+# Testing ${INVESTIGATION_NAME} Investigation
+
+TODO:
+- Add a test script or test objects to this `testing/` directory for future maintainers to use
+- Edit this README file and add detailed instructions on how to use the script/objects to recreate the conditions for the investigation. Be sure to include any assumptions or prerequisites about the environment (disable hive syncsetting, etc)
+EOF
+
 
 # Create metadata.yaml file
 cat <<EOF > "${INVESTIGATION_DIR}/metadata.yaml"
