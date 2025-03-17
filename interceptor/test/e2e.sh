@@ -9,35 +9,40 @@ NC='\033[0m'
 # Load pd token from vault - needed by interceptor
 export VAULT_ADDR="https://vault.devshift.net"
 export VAULT_TOKEN="$(vault login -method=oidc -token-only)"
-for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/cad-testing | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done	
+for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/cad-testing | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done
 unset VAULT_ADDR VAULT_TOKEN
-echo 
+echo
 
 temp_log_file=$(mktemp)
 
 # Function to send an interceptor request and check the response
 function test_interceptor {
+
+    local incident_id=$1
+    local expected_response=$2
+
     # Run the interceptor and print logs to temporary log file
     CAD_PD_TOKEN=$(echo $pd_test_token) CAD_SILENT_POLICY=$(echo $pd_test_silence_policy) ./../bin/interceptor > $temp_log_file  2>&1 &
     PD_SIGNATURE="test"
-    PAYLOAD="{\"body\":\"{\\\"__pd_metadata\\\":{\\\"incident\\\":{\\\"id\\\":\\\"$incident_id\\\"}}}\",\"header\":{\"Content-Type\":[\"application/json\"]},\"extensions\":{},\"interceptor_params\":{},\"context\":null}"
-    SIGN=$(echo -n "$PAYLOAD" | sha256hmac -K $PD_SIGNATURE | tr -d "[:space:]-")
-    echo "Sign: $SIGN"
+    PAYLOAD_BODY="{\\\"__pd_metadata\\\":{\\\"incident\\\":{\\\"id\\\":\\\"$incident_id\\\"}}}"
+    PAYLOAD_BODY_FORMATTED='{"__pd_metadata":{"incident":{"id":"'$incident_id'"}}}'
+    SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | sha256hmac -K $PD_SIGNATURE | tr -d "[:space:]-")
 
     # Store the PID of the interceptor process
     INTERCEPTOR_PID=$!
 
+    # Wrap the webhook originating payload (this is the expected format of the payload sent to the interceptor)
+    WRAPPED_PAYLOAD="{\"header\":{\"Content-Type\":[\"application/json\"],\"X-PagerDuty-Signature\":[\"v1=$SIGN\"]},\"body\":\"$PAYLOAD_BODY\"}"
+
     # Wait for 1 second to allow the interceptor to start up
     sleep 5
 
-    local incident_id=$1
-    local expected_response=$2
 
     # Send an interceptor request to localhost:8080
     # See https://pkg.go.dev/github.com/tektoncd/triggers/pkg/apis/triggers/v1alpha1#InterceptorRequest
     CURL_EXITCODE=0
     CURL_OUTPUT=$(curl -s -X POST -H "X-PagerDuty-Signature:v1=${SIGN}" -H "Content-Type: application/json" \
-        -d "$PAYLOAD" \
+        -d "$WRAPPED_PAYLOAD" \
         http://localhost:8080) || CURL_EXITCODE=$?
 
     # Check if the curl output matches the expected response
@@ -66,6 +71,7 @@ function test_interceptor {
 # See https://github.com/tektoncd/triggers/blob/v0.27.0/pkg/apis/triggers/v1alpha1/interceptor_types.go#L134
 EXPECTED_RESPONSE_CONTINUE='{"continue":true,"status":{}}'
 EXPECTED_RESPONSE_STOP='{"continue":false,"status":{}}'
+EXPECTED_RESPONSE_SIGNATURE_ERROR='failed to verify signature: invalid webhook signature'
 
 echo "========= TESTS ============="
 # Test for a pre-existing alert we handle (ClusterProvisioningDelay)
@@ -76,6 +82,7 @@ test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_CONTINUE"
 echo "Test 2: unhandled alerts returns a 'continue: false' response"
 test_interceptor "Q3722KGCG12ZWD" "$EXPECTED_RESPONSE_STOP"
 
+# Test for an alert with invalid signature
 echo "Test 3: expected failure due to invalid signature"
 PD_SIGNATURE="invalid-signature"
-test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_STOP"
+test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_SIGNATURE_ERROR"
