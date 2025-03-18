@@ -145,12 +145,6 @@ objects:
     bindings:
     - ref: cad-check-trigger
     interceptors:
-    - params:
-      - name: filter
-        value: header.canonical('X-Secret-Token').compareSecret('X_SECRET_TOKEN',
-          'cad-pd-token')
-      ref:
-        name: cel
     - ref:
         kind: NamespacedInterceptor
         name: cad-interceptor
@@ -289,7 +283,6 @@ objects:
     CAD_PD_USERNAME: CHANGEME
     CAD_SILENT_POLICY: CHANGEME
     PD_SIGNATURE: CHANGEME
-    X_SECRET_TOKEN: CHANGEME
   type: Opaque
 - apiVersion: tekton.dev/v1beta1
   kind: Task
