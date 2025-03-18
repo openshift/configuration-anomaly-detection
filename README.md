@@ -69,6 +69,7 @@ To add a new alert investigation:
 
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
+- Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
 
 ### Integrations
 
