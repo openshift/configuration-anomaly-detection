@@ -1,0 +1,14 @@
+name: pruningcronjoberror
+rbac:
+  roles: []
+  clusterRoleRules:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "config.openshift.io"
+      resources:
+        - clusteroperators
+        - pods
+        - namespaces
+customerDataAccess: false
