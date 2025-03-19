@@ -9,6 +9,11 @@ rbac:
         - "config.openshift.io"
       resources:
         - clusteroperators
+    - apiGroups:
+        - ""
+      resources:
         - pods
-        - namespaces
+      verbs:
+        - get
+        - list
 customerDataAccess: false
