@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v6.0.1 as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v6.0.2 as builder
 
 ADD . /opt
 WORKDIR /opt
