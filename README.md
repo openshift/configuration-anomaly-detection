@@ -76,7 +76,6 @@ To add a new alert investigation:
 > **Note:** When writing an investiation, you can use them right away.
 They are initialized for you and passed to the investigation via investigation.Resources.
 
-
 * [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
     - See `pkg/aws`
 * [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes.
@@ -90,24 +89,28 @@ They are initialized for you and passed to the investigation via investigation.R
 
 ## Testing locally
 
-### Pre-requirements
-- an existing cluster
-- an existing PagerDuty incident for the cluster and alert type that is being tested
+Requires an existing cluster.
 
-To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`.
-Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrrrrrrrrrrhkaj`.
+1. Create a test incident and payload file for your cluster
 
-### Running cadctl for an incident ID
-1) Export the required ENV variables, see [required ENV variables](#required-env-variables).
-2) Create a payload file containing the incident ID
-  ```bash
-  export INCIDENT_ID=
-  echo '{"__pd_metadata":{"incident":{"id":"'${INCIDENT_ID}'"}}}' > ./payload
-  ```
-3) Run `cadctl` using the payload file
-  ```bash
-  ./bin/cadctl investigate --payload-path payload
-  ```
+   ```bash
+   ./test/generate_incident.sh <alertname> <clusterid>
+   ```
+
+2. Export the required env variables from vault
+
+   > **Note:** For information on the envs see [required env variables](#required-env-variables).
+
+   ```
+   source test/set_stage_env.sh
+   ```
+
+3. `make build`
+4. Run `cadctl` with the payload file created by `test/generate_incident.sh`
+
+   ```bash
+   ./bin/cadctl investigate --payload-path payload
+   ```
 
 ### Logging levels
 
