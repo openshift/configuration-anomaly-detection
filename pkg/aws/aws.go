@@ -625,7 +625,7 @@ func eventContainsInstances(instances []ec2v2types.Instance, event cloudtrailv2t
 
 func getTime(rawReason string) (time.Time, error) {
 	subMatches := stopInstanceDateRegex.FindStringSubmatch(rawReason)
-	if subMatches == nil || len(subMatches) < 2 {
+	if len(subMatches) < 2 {
 		return time.Time{}, fmt.Errorf("did not find matches: raw data %s", rawReason)
 	}
 	if len(subMatches) != 2 {
