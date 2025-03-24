@@ -1,0 +1,12 @@
+name: upgradeconfigsyncfailureover4hr
+rbac:
+  roles: []
+  clusterRoleRules:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "config.openshift.io"
+      resources:
+        - clusteroperators
+customerDataAccess: false
