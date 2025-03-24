@@ -5,7 +5,6 @@ rbac:
       rules:
         - verbs:
             - "get"
-            - "list"
           apiGroups:
             - ""
           resources:
