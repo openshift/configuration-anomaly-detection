@@ -8,5 +8,5 @@ rbac:
       apiGroups:
         - "config.openshift.io"
       resources:
-        - clusteroperators
+        - secrets
 customerDataAccess: false
