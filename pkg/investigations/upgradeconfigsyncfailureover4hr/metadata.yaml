@@ -6,7 +6,7 @@ rbac:
         - "get"
         - "list"
       apiGroups:
-        - "config.openshift.io"
+        - ""
       resources:
         - secrets
 customerDataAccess: false
