@@ -1,12 +1,21 @@
 name: MachineHealthCheckUnterminatedShortCircuitSRE
 rbac:
-  roles: []
+  roles:
+    - namespace: "openshift-machine-api"
+      rules:
+        - verbs:
+            - "get"
+            - "list"
+          apiGroups:
+            - "machine.openshift.io"
+          resources:
+            - "machines"
   clusterRoleRules:
     - verbs:
         - "get"
         - "list"
       apiGroups:
-        - "machine.openshift.io"
+        - ""
       resources:
-        - machines
+        - "nodes"
 customerDataAccess: true
