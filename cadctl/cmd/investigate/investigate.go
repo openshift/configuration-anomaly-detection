@@ -140,7 +140,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	investigationResources := &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
 
-	logging.Infof("Starting investigation for %s", alertInvestigation.Name)
+	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)
 	updateMetrics(alertInvestigation.Name(), &result)
 	return err
