@@ -110,8 +110,6 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 
 	var ireq triggersv1.InterceptorRequest
 
-	// logging request
-	logging.Debug("Unwrapped Request header: %v", extractedRequest.Header)
 	logging.Debug("Unwrapped Request body: ", originalReq.Body)
 
 	token, _ := os.LookupEnv("PD_SIGNATURE")
@@ -159,7 +157,7 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 		}
 	}
 
-	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name)
+	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name())
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
 	}
