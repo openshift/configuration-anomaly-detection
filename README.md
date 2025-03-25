@@ -43,31 +43,50 @@ CAD consists of:
 
 1) [PagerDuty Webhooks](https://support.pagerduty.com/docs/webhooks) are used to trigger Configuration-Anomaly-Detection when a [PagerDuty incident](https://support.pagerduty.com/docs/incidents) is created
 2) The webhook routes to a [Tekton EventListener](https://tekton.dev/docs/triggers/eventlisteners/)
-3) Received webhooks are filtered by a [Tekton Interceptor](https://tekton.dev/docs/triggers/interceptors/) that uses the payload to evaluate whether the alert has an implemented handler function in `cadctl` or not. If there is no handler implemented, the alert is directly forwarded to a human SRE. 
+3) Received webhooks are filtered by a [Tekton Interceptor](https://tekton.dev/docs/triggers/interceptors/) that uses the payload to evaluate whether the alert has an implemented handler function in `cadctl` or not, and validates the webhook against the `X-PagerDuty-Signature` header. If there is no handler implemented, the alert is directly forwarded to a human SRE.
 4) If `cadctl` implements a handler for the received payload/alert, a [Tekton PipelineRun](https://tekton.dev/docs/pipelines/pipelineruns/) is started.
-5) The pipeline runs `cadctl` which determines the handler function by itself based on the payload. 
+5) The pipeline runs `cadctl` which determines the handler function by itself based on the payload.
 
 ![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
 ![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
 
-## Contributing 
+## Contributing
 
 ### Building
 
-For build targets, see `make help`. 
+For build targets, see `make help`.
 
 ### Adding a new investigation
 
 CAD investigations are triggered by PagerDuty webhooks. Currently, CAD supports the following two formats of webhooks:
--  WebhookV3 
+-  WebhookV3
 -  EventOrchestrationWebhook
 
-The required investigation is identified by CAD based on the incident and its payload. 
+The required investigation is identified by CAD based on the incident and its payload.
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
-- create a mapping for the alert to the `GetInvestigation` function in `mapping.go` and write a corresponding CAD investigation (e.g. `Investigate()` in `chgm.go`).
-- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
+
+- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
+- investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
+- Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
+
+### Integrations
+
+> **Note:** When writing an investiation, you can use them right away.
+They are initialized for you and passed to the investigation via investigation.Resources.
+
+
+* [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
+    - See `pkg/aws`
+* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes.
+    - See `pkg/pagerduty`
+* [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
+    - See `pkg/ocm`
+    - In case of missing permissions to query an ocm resource, add it to the Configuration-Anomaly-Detection role in uhc-account-manager
+* [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
+* [k8sclient](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client) -- Interact with clusters kube-api
+    - Requires RBAC definitions for your investigation to be added to `metadata.yaml`
 
 ## Testing locally
 
@@ -75,7 +94,7 @@ To add a new alert investigation:
 - an existing cluster
 - an existing PagerDuty incident for the cluster and alert type that is being tested
 
-To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`. 
+To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`.
 Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrrrrrrrrrrhkaj`.
 
 ### Running cadctl for an incident ID
@@ -90,6 +109,11 @@ Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrr
   ./bin/cadctl investigate --payload-path payload
   ```
 
+### Logging levels
+
+CAD allows for different logging levels (debug, info, warn, error, fatal, panic). The log level is determind through a hierarchy, where the cli flag `log-level`
+is checked first, and if not set the optional environment variable `LOG_LEVEL` is used. If neither is set, the log level defaults to `info`.
+
 ## Documentation
 
 ### Investigations
@@ -101,7 +125,7 @@ Investigation specific documentation can be found in the according investigation
 ### Integrations
 
 * [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
-* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes. 
+* [PagerDuty](https://github.com/PagerDuty/go-pagerduty) -- Retrieving alert info, esclating or silencing incidents, and adding notes.
 * [OCM](https://github.com/openshift-online/ocm-sdk-go) -- Retrieving cluster info, sending service logs, and managing (post, delete) limited support reasons.
 * [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 
@@ -159,3 +183,5 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 - `CAD_EXPERIMENTAL_ENABLED`: enables experimental investigations when set to `true`, see mapping.go
 
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
+
+- `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See

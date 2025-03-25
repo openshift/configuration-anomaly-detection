@@ -1,0 +1,14 @@
+name: upgradeconfigsyncfailureover4hr
+rbac:
+  roles:
+    - namespace: "openshift-config"
+      rules:
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - "secrets"
+          resourceNames:
+            - "pull-secret"
+customerDataAccess: false

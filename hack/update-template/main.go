@@ -32,6 +32,7 @@ var saasTemplateFile = Template{
 		{Name: "REGISTRY_IMG", Value: "quay.io/app-sre/configuration-anomaly-detection"},
 		{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		{Name: "CAD_EXPERIMENTAL_ENABLED", Value: "FALSE"},
+		{Name: "LOG_LEVEL", Value: "info"},
 	},
 }
 

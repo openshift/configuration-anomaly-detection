@@ -92,7 +92,7 @@ var _ = Describe("chgm", func() {
 		mockCtrl.Finish()
 	})
 
-	inv := CHGM{}
+	inv := Investiation{}
 
 	Describe("Triggered", func() {
 		When("Triggered finds instances stopped by the customer", func() {

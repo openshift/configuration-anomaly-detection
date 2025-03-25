@@ -36,10 +36,10 @@ var (
 	}
 )
 
-type CHGM struct{}
+type Investiation struct{}
 
 // Run runs the investigation for a triggered chgm pagerduty event
-func (c *CHGM) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investiation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CHGM", logging.RawLogger)
 
@@ -118,19 +118,19 @@ func (c *CHGM) Run(r *investigation.Resources) (investigation.InvestigationResul
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-func (c *CHGM) Name() string {
+func (c *Investiation) Name() string {
 	return "Cluster Has Gone Missing (CHGM)"
 }
 
-func (c *CHGM) Description() string {
+func (c *Investiation) Description() string {
 	return "Detects reason for clusters that have gone missing"
 }
 
-func (c *CHGM) ShouldInvestigateAlert(alert string) bool {
+func (c *Investiation) ShouldInvestigateAlert(alert string) bool {
 	return strings.Contains(alert, "has gone missing")
 }
 
-func (c *CHGM) IsExperimental() bool {
+func (c *Investiation) IsExperimental() bool {
 	return false
 }
 

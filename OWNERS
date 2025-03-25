@@ -1,25 +1,23 @@
 reviewers:
 - Makdaam
 - Nikokolas3270
-- Tessg22
-- ninabauer
 - rafael-azevedo
 - RaphaelBut
 - bng0y
 - typeid
 - tnierman
-- sam-nguyen7
 - zmird-r
+- joshbranham
 approvers:
 - Makdaam
 - Nikokolas3270
-- Tessg22
-- ninabauer
 - rafael-azevedo
 - RaphaelBut
 - bng0y
 - typeid
-- sam-nguyen7
+- tnierman
 - zmird-r
+- joshbranham
+- srep-team-leads
 maintainers:
 - rafael-azevedo
