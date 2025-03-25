@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -129,13 +130,18 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
 	}
 
-	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
-	if err != nil {
-		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
-		inv := ccam.Investigation{}
-		result, err := inv.Run(ccamResources)
-		updateMetrics(alertInvestigation.Name(), &result)
-		return err
+	var customerAwsClient *aws.SdkClient
+	if alertInvestigation.RequiresAwsClient() {
+		customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
+		if err != nil {
+			ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
+			inv := ccam.Investigation{}
+			result, err := inv.Run(ccamResources)
+			updateMetrics(alertInvestigation.Name(), &result)
+			return err
+		}
+	} else {
+		customerAwsClient = &aws.SdkClient{}
 	}
 
 	investigationResources := &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
