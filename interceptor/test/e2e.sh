@@ -20,12 +20,19 @@ function test_interceptor {
 
     local incident_id=$1
     local expected_response=$2
+    local override_signature=$3
 
     # Run the interceptor and print logs to temporary log file
+    export PD_SIGNATURE="test"
     CAD_PD_TOKEN=$(echo $pd_test_token) CAD_SILENT_POLICY=$(echo $pd_test_silence_policy) ./../bin/interceptor > $temp_log_file  2>&1 &
-    PD_SIGNATURE="test"
     PAYLOAD_BODY="{\\\"__pd_metadata\\\":{\\\"incident\\\":{\\\"id\\\":\\\"$incident_id\\\"}}}"
     PAYLOAD_BODY_FORMATTED='{"__pd_metadata":{"incident":{"id":"'$incident_id'"}}}'
+
+    # Allow for test 3; override the signature after correct one has already been added to env
+    if [[ "$override_signature" != "" ]]; then
+      export PD_SIGNATURE=$override_signature
+    fi
+
     SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | sha256hmac -K $PD_SIGNATURE | tr -d "[:space:]-")
 
     # Store the PID of the interceptor process
@@ -85,4 +92,4 @@ test_interceptor "Q3722KGCG12ZWD" "$EXPECTED_RESPONSE_STOP"
 # Test for an alert with invalid signature
 echo "Test 3: expected failure due to invalid signature"
 PD_SIGNATURE="invalid-signature"
-test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_SIGNATURE_ERROR"
+test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_SIGNATURE_ERROR" "invalid-signature"

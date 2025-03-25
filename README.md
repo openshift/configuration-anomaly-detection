@@ -69,12 +69,12 @@ To add a new alert investigation:
 
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
+- Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
 
 ### Integrations
 
 > **Note:** When writing an investiation, you can use them right away.
 They are initialized for you and passed to the investigation via investigation.Resources.
-
 
 * [AWS](https://github.com/aws/aws-sdk-go) -- Logging into the cluster, retreiving instance info and AWS CloudTrail events.
     - See `pkg/aws`
@@ -89,24 +89,28 @@ They are initialized for you and passed to the investigation via investigation.R
 
 ## Testing locally
 
-### Pre-requirements
-- an existing cluster
-- an existing PagerDuty incident for the cluster and alert type that is being tested
+Requires an existing cluster.
 
-To quickly create an incident for a cluster_id, you can run `./test/generate_incident.sh <alertname> <clusterid>`.
-Example usage:`./test/generate_incident.sh ClusterHasGoneMissing 2b94brrrrrrrrrrrrrrrrrrhkaj`.
+1. Create a test incident and payload file for your cluster
 
-### Running cadctl for an incident ID
-1) Export the required ENV variables, see [required ENV variables](#required-env-variables).
-2) Create a payload file containing the incident ID
-  ```bash
-  export INCIDENT_ID=
-  echo '{"__pd_metadata":{"incident":{"id":"'${INCIDENT_ID}'"}}}' > ./payload
-  ```
-3) Run `cadctl` using the payload file
-  ```bash
-  ./bin/cadctl investigate --payload-path payload
-  ```
+   ```bash
+   ./test/generate_incident.sh <alertname> <clusterid>
+   ```
+
+2. Export the required env variables from vault
+
+   > **Note:** For information on the envs see [required env variables](#required-env-variables).
+
+   ```
+   source test/set_stage_env.sh
+   ```
+
+3. `make build`
+4. Run `cadctl` with the payload file created by `test/generate_incident.sh`
+
+   ```bash
+   ./bin/cadctl investigate --payload-path payload
+   ```
 
 ### Logging levels
 
