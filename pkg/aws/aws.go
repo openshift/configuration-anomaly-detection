@@ -4,9 +4,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"os"
-	"path"
-	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -29,10 +26,8 @@ import (
 )
 
 const (
-	accessKeyIDFilename       string = "aws_access_key_id"
-	secretAccessKeyIDFilename string = "aws_secret_access_key" /* #nosec G101 -- this is just the fileName, not a key*/
-	maxRetries                int    = 3
-	backoffUpperLimit                = 5 * time.Minute
+	maxRetries        int = 3
+	backoffUpperLimit     = 5 * time.Minute
 )
 
 var stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
@@ -96,26 +91,6 @@ func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error)
 		Ec2Client:        ec2v2.NewFromConfig(config),
 		StsClient:        stsv2.NewFromConfig(config),
 	}, nil
-}
-
-// NewClientFromFileCredentials creates a new client by reading credentials from a file
-func NewClientFromFileCredentials(dir string, region string) (*SdkClient, error) {
-	dir = strings.TrimSuffix(dir, "/")
-	dir = filepath.Clean(dir)
-
-	accessKeyBytesPath := filepath.Clean(path.Join(dir, accessKeyIDFilename))
-	accessKeyBytes, err := os.ReadFile(accessKeyBytesPath)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read accessKeyID '%s' from path  %s", accessKeyIDFilename, dir)
-	}
-	secretKeyBytesPath := filepath.Clean(path.Join(dir, secretAccessKeyIDFilename))
-	secretKeyBytes, err := os.ReadFile(secretKeyBytesPath)
-	if err != nil {
-		return nil, fmt.Errorf("cannot read secretKeyID '%s' from path  %s", secretAccessKeyIDFilename, dir)
-	}
-	accessKeyID := strings.TrimRight(string(accessKeyBytes), "\n")
-	secretKeyID := strings.TrimRight(string(secretKeyBytes), "\n")
-	return NewClient(accessKeyID, secretKeyID, "", region)
 }
 
 // GetAWSCredentials gets the AWS credentials
