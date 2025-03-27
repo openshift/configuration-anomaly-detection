@@ -5,6 +5,7 @@ import (
 	"os"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -21,7 +22,7 @@ func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Cli
 
 	cfg, err := bpremediation.CreateRemediationWithConn(config.BackplaneConfiguration{URL: backplaneURL}, ocmClient.GetConnection(), clusterID, remediation)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create remediation: %w", err)
 	}
 
 	scheme, err := initScheme()
@@ -53,5 +54,11 @@ func initScheme() (*runtime.Scheme, error) {
 	if err := configv1.Install(scheme); err != nil {
 		return nil, fmt.Errorf("unable to add openshift/api/config scheme: %w", err)
 	}
+
+	// Add config.openshift.io/v1 to scheme for clusteroperator
+	if err := machinev1beta1.Install(scheme); err != nil {
+		return nil, fmt.Errorf("unable to add openshift/api/machine/v1beta1 scheme: %w", err)
+	}
+
 	return scheme, nil
 }
