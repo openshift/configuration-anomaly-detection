@@ -252,18 +252,6 @@ objects:
 - apiVersion: v1
   kind: Secret
   metadata:
-    name: cad-aws-credentials
-  stringData:
-    AWS_ACCESS_KEY_ID: CHANGEME
-    AWS_DEFAULT_REGION: CHANGEME
-    AWS_SECRET_ACCESS_KEY: CHANGEME
-    AWS_SESSION_TOKEN: CHANGEME
-    CAD_AWS_CSS_JUMPROLE: CHANGEME
-    CAD_AWS_SUPPORT_JUMPROLE: CHANGEME
-  type: Opaque
-- apiVersion: v1
-  kind: Secret
-  metadata:
     name: cad-backplane-secret
   stringData:
     BACKPLANE_INITIAL_ARN: CHANGEME

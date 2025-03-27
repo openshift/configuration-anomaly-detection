@@ -162,10 +162,6 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `CAD_OCM_CLIENT_ID`: refers to the OCM client ID used by CAD to initialize the OCM client
 * `CAD_OCM_CLIENT_SECRET`: refers to the OCM client secret used by CAD to initialize the OCM client
 * `CAD_OCM_URL`: refers to the used OCM url used by CAD to initialize the OCM client
-* `AWS_ACCESS_KEY_ID`: refers to the access key id of the base AWS account used by CAD
-* `AWS_SECRET_ACCESS_KEY`: refers to the secret access key of the base AWS account used by CAD
-* `CAD_AWS_CSS_JUMPROLE`:  refers to the arn of the RH-SRE-CCS-Access jumprole
-* `CAD_AWS_SUPPORT_JUMPROLE`: refers to the arn of the RH-Technical-Support-Access jumprole
 * `CAD_PD_EMAIL`: refers  to the email for a login via mail/pw credentials
 * `CAD_PD_PW`: refers to the password for a login via mail/pw credentials
 * `CAD_PD_TOKEN`: refers to the generated private access token for token-based authentication
