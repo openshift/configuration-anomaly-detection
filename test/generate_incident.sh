@@ -16,6 +16,7 @@ declare -A alert_mapping=(
     ["ClusterHasGoneMissing"]="cadtest has gone missing"
     ["ClusterProvisioningDelay"]="ClusterProvisioningDelay -"
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
+    ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
 )
 
 # Function to print help message
@@ -25,7 +26,7 @@ print_help() {
     for alert_name in "${!alert_mapping[@]}"; do
         echo -n "$alert_name, "
     done
-    echo 
+    echo
 }
 # Check if the correct number of arguments is provided
 if [ "$#" -ne 2 ]; then
@@ -49,9 +50,9 @@ alert_title="${alert_mapping[$alert_name]}"
 # Load testing routing key and test service url from vault
 export VAULT_ADDR="https://vault.devshift.net"
 export VAULT_TOKEN="$(vault login -method=oidc -token-only)"
-for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/cad-testing | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done	
+for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/cad-testing | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done
 unset VAULT_ADDR VAULT_TOKEN
-echo 
+echo
 
 dedup_key=$(uuidgen)
 

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: "test-cad"
+  name: test-cad
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "test-cad"
+  template:
+    metadata:
+      labels:
+        app: "test-cad"
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: Exists
+            weight: 1
+      containers:
+      - command:
+          - "sleep"
+          - "infinity"
+        image: "quay.io/app-sre/ubi8-ubi:latest"
+        imagePullPolicy: IfNotPresent
+        name: test
+      restartPolicy: Always
