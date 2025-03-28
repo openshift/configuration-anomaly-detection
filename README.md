@@ -168,7 +168,6 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * `CAD_PD_USERNAME`: refers to the username of CAD on PagerDuty
 * `CAD_SILENT_POLICY`: refers to the silent policy CAD should use if the incident shall be silent
 * `PD_SIGNATURE`: refers to the PagerDuty webhook signature (HMAC+SHA256)
-* `X_SECRET_TOKEN`: refers to our custom Secret Token for authenticating against our pipeline
 * `CAD_PROMETHEUS_PUSHGATEWAY`: refers to the URL cad will push metrics to
 * `BACKPLANE_URL`: refers to the backplane url to use
 * `BACKPLANE_INITIAL_ARN`: refers to the initial ARN used for the isolated backplane jumprole flow
