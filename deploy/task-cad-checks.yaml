@@ -37,8 +37,6 @@ spec:
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
-            name: cad-aws-credentials
-        - secretRef:
             name: cad-ocm-client-secret
         - secretRef:
             name: cad-pd-token
