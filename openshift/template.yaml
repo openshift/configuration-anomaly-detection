@@ -314,8 +314,6 @@ objects:
         value: ${LOG_LEVEL}
       envFrom:
       - secretRef:
-          name: cad-aws-credentials
-      - secretRef:
           name: cad-ocm-client-secret
       - secretRef:
           name: cad-pd-token
