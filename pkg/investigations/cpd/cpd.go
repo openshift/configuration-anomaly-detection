@@ -30,6 +30,7 @@ var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation 
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CPD", logging.RawLogger)
+	defer func() { r.Notes = notes }()
 
 	if r.Cluster.Status().State() == "ready" {
 		// We are unsure when this happens, in theory, if the cluster is ready, the alert shouldn't fire or should autoresolve.

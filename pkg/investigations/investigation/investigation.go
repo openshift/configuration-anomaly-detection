@@ -4,6 +4,7 @@ package investigation
 import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -38,5 +39,6 @@ type Resources struct {
 	AwsClient           aws.Client
 	OcmClient           ocm.Client
 	PdClient            pagerduty.Client
+	Notes               *notewriter.NoteWriter
 	AdditionalResources map[string]interface{}
 }

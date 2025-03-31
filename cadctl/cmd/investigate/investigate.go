@@ -76,6 +76,14 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
+	var investigationResources *investigation.Resources
+
+	defer func() {
+		if err != nil {
+			handleCADFailure(err, investigationResources)
+		}
+	}()
+
 	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 
@@ -131,19 +139,34 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
 	if err != nil {
-		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": err}}
+		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil, AdditionalResources: map[string]interface{}{"error": err}}
 		inv := ccam.Investigation{}
 		result, err := inv.Run(ccamResources)
 		updateMetrics(alertInvestigation.Name(), &result)
 		return err
 	}
 
-	investigationResources := &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient}
+	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)
 	updateMetrics(alertInvestigation.Name(), &result)
+
 	return err
+}
+
+func handleCADFailure(err error, resources *investigation.Resources) {
+	logging.Errorf("CAD investigation failed: %v", err)
+
+	notes := resources.Notes
+
+	notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
+	pdErr := resources.PdClient.EscalateIncidentWithNote(notes.String())
+	if pdErr != nil {
+		logging.Errorf("Failed to escalate notes to PagerDuty: %v", pdErr)
+	} else {
+		logging.Info("CAD failure & incident notes added to PagerDuty")
+	}
 }
 
 // GetOCMClient will retrieve the OcmClient from the 'ocm' package
