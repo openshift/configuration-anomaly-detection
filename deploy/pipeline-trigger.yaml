@@ -32,6 +32,15 @@ spec:
         params:
           - name: payload
             value: $(tt.params.payload)
+        taskRunSpecs:
+          - pipelineTaskName: perform-cad-checks
+            computeResources:
+              requests:
+                cpu: 100m
+                memory: 64Mi
+              limits:
+                cpu: 500m
+                memory: 256Mi
 
 ---
 apiVersion: triggers.tekton.dev/v1beta1
