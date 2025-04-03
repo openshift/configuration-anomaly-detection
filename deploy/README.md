@@ -27,7 +27,7 @@ See [../pkg/pagerduty/](../pkg/pagerduty/) for more details.
 ##### OCM
 [task-cad-checks-secrets-ocm-client.yaml](./task-cad-checks-secrets-ocm-client.yaml) This will hold the ocm creds.
 
-CAD_OCM_CLIENT_* env vars are in internal kv store. 
+CAD_OCM_CLIENT_* env vars are in internal kv store.
 
 See [../pkg/ocm/](../pkg/ocm/) for more details.
 
@@ -49,11 +49,11 @@ Install CAD by running the following commands:
     ```
 
 2. Configure secrets
-   
+
     See section at the bottom of `Tasks Secrets` to configure.
 
 3. Deploy container image
-   
+
     The repo builds the binary to a container using [../Dockerfile](a container file). build it using:
 
     ```console
@@ -92,7 +92,7 @@ Install CAD by running the following commands:
 Pipeline runs can be started via the following post command:
 
 ```console
-oc exec -it deploy/el-cad-event-listener -- curl -X POST -H 'X-Secret-Token: samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
+oc exec -it deploy/el-cad-event-listener -- curl -X POST -H 'X-PagerDuty-Signature: v1=samplesecret' --connect-timeout 1 -v --data '{"event": {"data": {"id":"12312"}}}' http://el-cad-event-listener.configuration-anomaly-detection.svc.cluster.local:8080
 ```
 
 For more details, see the [Tekton Documentation](https://github.com/tektoncd/triggers/tree/main/examples#invoking-the-triggers-locally).
@@ -110,7 +110,7 @@ The `tkn` tool is pulled from https://github.com/tektoncd/cli.
 The result of the last runs can be seen with:
 
 ```console
-tkn pipelinerun list -n configuration-anomaly-detection 
+tkn pipelinerun list -n configuration-anomaly-detection
 ```
 
 See the [Tekton documentation](https://docs.openshift.com/container-platform/4.4/cli_reference/tkn_cli/op-tkn-reference.html) for further commands.
