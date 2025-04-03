@@ -27,14 +27,13 @@ var uwmMisconfiguredSL = ocm.ServiceLog{
 
 type Investigation struct{}
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(r *investigation.Resources) (result investigation.InvestigationResult, err error) {
 	// Initialize k8s client
 	// This would be better suited to be passend in with the investigation resources
 	// In turn we would need to split out ccam and k8sclient, as those are tied to a cluster
 	// Failing the cleanup call is not critical as there is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
 	// We can revisit backplane-apis remediation implementation to improve this behavior, by e.g.
 	// patching the existing RBAC etc...
-	result := investigation.InvestigationResult{}
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
@@ -49,6 +48,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 
 	// Initialize PagerDuty note writer
 	notes := notewriter.New(r.Name, logging.RawLogger)
+	defer func() { r.Notes = notes }()
 
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}

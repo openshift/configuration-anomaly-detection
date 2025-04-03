@@ -42,6 +42,7 @@ type Investiation struct{}
 func (c *Investiation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CHGM", logging.RawLogger)
+	defer func() { r.Notes = notes }()
 
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)

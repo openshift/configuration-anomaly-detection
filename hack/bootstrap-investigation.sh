@@ -96,6 +96,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 
 	// Initialize PagerDuty note writer
 	notes := notewriter.New(r.Name, logging.RawLogger)
+	defer func() { r.Notes = notes }()
 
 	// TODO: Implement investigation logic here
 
