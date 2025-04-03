@@ -31,6 +31,10 @@ spec:
                   memory: 256Mi
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
+              securityContext:
+                runAsUser: 1000
+                runAsGroup: 1000
+                runAsNonRoot: true
           dnsPolicy: ClusterFirst
           restartPolicy: Never
           schedulerName: default-scheduler

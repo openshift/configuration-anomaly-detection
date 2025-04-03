@@ -136,6 +136,15 @@ objects:
         pipelineRef:
           name: cad-checks-pipeline
         serviceAccountName: cad-sa
+        taskRunSpecs:
+        - computeResources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          pipelineTaskName: perform-cad-checks
         timeout: 30m
 - apiVersion: triggers.tekton.dev/v1beta1
   kind: Trigger
@@ -358,6 +367,10 @@ objects:
                 requests:
                   cpu: 100m
                   memory: 64Mi
+              securityContext:
+                runAsGroup: 1000
+                runAsNonRoot: true
+                runAsUser: 1000
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
