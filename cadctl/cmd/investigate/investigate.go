@@ -80,7 +80,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	defer func() {
 		if err != nil {
-			handleCADFailure(err, investigationResources)
+			handleCADFailure(err, investigationResources, pdClient)
 		}
 	}()
 
@@ -155,17 +155,26 @@ func run(cmd *cobra.Command, _ []string) error {
 	return err
 }
 
-func handleCADFailure(err error, resources *investigation.Resources) {
+func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
-	notes := resources.Notes
-
-	notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
-	pdErr := resources.PdClient.EscalateIncidentWithNote(notes.String())
-	if pdErr != nil {
-		logging.Errorf("Failed to escalate notes to PagerDuty: %v", pdErr)
+	var notes string
+	if resources != nil && resources.Notes != nil {
+		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
+		notes = resources.Notes.String()
 	} else {
-		logging.Info("CAD failure & incident notes added to PagerDuty")
+		notes = "🚨 CAD investigation failed prior to resource initilization, CAD team has been notified. Please investigate manually. 🚨"
+	}
+
+	if pdClient != nil {
+		pdErr := pdClient.EscalateIncidentWithNote(notes)
+		if pdErr != nil {
+			logging.Errorf("Failed to escalate notes to PagerDuty: %v", pdErr)
+		} else {
+			logging.Info("CAD failure & incident notes added to PagerDuty")
+		}
+	} else {
+		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
 }
 
