@@ -8,7 +8,7 @@ endef
 
 include boilerplate/generated-includes.mk
 
-GOLANGCI_LINT_VERSION=v1.59.1
+GOLANGCI_LINT_VERSION=v2.0.2
 MOCKGEN_VERSION=v0.5.0
 
 .DEFAULT_GOAL := all

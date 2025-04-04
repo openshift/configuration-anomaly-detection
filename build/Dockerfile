@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v6.0.1 as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v7.0.0 as builder
 
 ADD . /opt
 WORKDIR /opt
@@ -18,23 +18,23 @@ ARG VCS_REF
 ARG DOCKERFILE_PATH
 
 LABEL vendor="RedHat" \
-    name="openshift/configuration-anomaly-detection" \
-    description="a CLI tool to detect and mitigate configuration mishaps" \
-    io.k8s.display-name="openshift/configuration-anomaly-detection" \
-    io.k8s.description="a CLI tool to detect and mitigate configuration mishaps" \
-    maintainer="RedHat <>" \
-    version="$VERSION" \
-    org.label-schema.build-date=$BUILD_DATE \
-    org.label-schema.description="a CLI tool to detect and mitigate configuration mishaps" \
-    org.label-schema.docker.cmd="docker run --rm openshift/configuration-anomaly-detection" \
-    org.label-schema.docker.dockerfile=$DOCKERFILE_PATH \
-    org.label-schema.name="openshift/configuration-anomaly-detection" \
-    org.label-schema.schema-version="0.1.0" \
-    org.label-schema.vcs-branch=$VCS_BRANCH \
-    org.label-schema.vcs-ref=$VCS_REF \
-    org.label-schema.vcs-url="https://github.com/openshift/configuration-anomaly-detection" \
-    org.label-schema.vendor="openshift/configuration-anomaly-detection" \
-    org.label-schema.version=$VERSION
+  name="openshift/configuration-anomaly-detection" \
+  description="a CLI tool to detect and mitigate configuration mishaps" \
+  io.k8s.display-name="openshift/configuration-anomaly-detection" \
+  io.k8s.description="a CLI tool to detect and mitigate configuration mishaps" \
+  maintainer="RedHat <>" \
+  version="$VERSION" \
+  org.label-schema.build-date=$BUILD_DATE \
+  org.label-schema.description="a CLI tool to detect and mitigate configuration mishaps" \
+  org.label-schema.docker.cmd="docker run --rm openshift/configuration-anomaly-detection" \
+  org.label-schema.docker.dockerfile=$DOCKERFILE_PATH \
+  org.label-schema.name="openshift/configuration-anomaly-detection" \
+  org.label-schema.schema-version="0.1.0" \
+  org.label-schema.vcs-branch=$VCS_BRANCH \
+  org.label-schema.vcs-ref=$VCS_REF \
+  org.label-schema.vcs-url="https://github.com/openshift/configuration-anomaly-detection" \
+  org.label-schema.vendor="openshift/configuration-anomaly-detection" \
+  org.label-schema.version=$VERSION
 
 RUN microdnf install jq
 
