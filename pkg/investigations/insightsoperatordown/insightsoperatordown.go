@@ -61,7 +61,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	co := coList.Items[0]
 
 	if isOCPBUG22226(&co) {
-		notes.AppendWarning("Found symptom of OCPBUG22226. Try deleting the insights operator pod to remediate.\n$ oc -n openshift-insights delete pods -l app=insights-operator --wait=false")
+		notes.AppendWarning("Found symptom of OCPBUGS-22226. Try deleting the insights operator pod to remediate.\n$ oc -n openshift-insights delete pods -l app=insights-operator --wait=false")
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	} else {
 		notes.AppendSuccess("Ruled out OCPBUGS-22226")

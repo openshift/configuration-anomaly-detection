@@ -1,6 +1,6 @@
 # Testing InsightsOperatorDownSRE
 
-# OCPBUGS-22222
+# OCPBUGS-22226
 
 We can induce the symptom of `Failed to pull SCA certs` on a stage cluster by blocking `https://api.stage.openshift.com`
 The provided script creates a Rule Group and associates it with your clusters VPC.
