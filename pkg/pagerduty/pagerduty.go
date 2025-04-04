@@ -14,7 +14,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"gopkg.in/yaml.v2"
 
-	"github.com/PagerDuty/go-pagerduty"
 	sdk "github.com/PagerDuty/go-pagerduty"
 )
 
@@ -470,7 +469,7 @@ func extractAlertDetails(sdkAlert sdk.IncidentAlert) (AlertDetails, error) {
 	}
 
 	alertDetails := AlertDetails{
-		ID:        sdkAlert.APIObject.ID,
+		ID:        sdkAlert.ID,
 		ClusterID: clusterID,
 	}
 	return alertDetails, nil
@@ -525,7 +524,7 @@ func (c *SdkClient) EscalateIncidentWithNote(notes string) error {
 // EscalateIncident escalates an incident to incident level 2.
 // This currently assumes that we are always at level 1.
 func (c *SdkClient) EscalateIncident() error {
-	o := []pagerduty.ManageIncidentsOptions{
+	o := []sdk.ManageIncidentsOptions{
 		{
 			ID:              c.GetIncidentID(),
 			EscalationLevel: 2, // TODO: This is hardcoded because there's no way to check the "current" level. Ideally this should be `current + 1`
