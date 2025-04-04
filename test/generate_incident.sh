@@ -7,6 +7,7 @@ declare -A alert_mapping=(
     ["ClusterHasGoneMissing"]="cadtest has gone missing"
     ["ClusterProvisioningDelay"]="ClusterProvisioningDelay -"
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
+    ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
 )
 
 # Function to print help message
