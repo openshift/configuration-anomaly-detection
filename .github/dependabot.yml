@@ -1,13 +1,5 @@
 version: 2
 updates:
-  - package-ecosystem: "gomod"
-    directories:
-      - "/"
-      - "interceptor/"
-    allow:
-      - dependency-type: all
-    schedule:
-      interval: "daily"
   - package-ecosystem: "docker"
     directory: "/build"
     labels:
