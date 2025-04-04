@@ -10,6 +10,7 @@ declare -A alert_mapping=(
     ["InsightsOperatorDown"]="InsightsOperatorDown"
     ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
     ["ApiErrorBudgetBurn"]="api-ErrorBudgetBurn k8sgpt test CRITICAL (1)"
+    ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
 )
 
 # Function to print help message
