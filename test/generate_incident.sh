@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 set -e
 
 # Define the mapping of alert names to titles
@@ -8,6 +8,7 @@ declare -A alert_mapping=(
     ["ClusterProvisioningDelay"]="ClusterProvisioningDelay -"
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
     ["InsightsOperatorDown"]="InsightsOperatorDown"
+    ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
 )
 
 # Function to print help message
