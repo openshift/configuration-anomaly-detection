@@ -12,6 +12,7 @@ import (
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
 
+	amv1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsv1alpha1 "github.com/openshift/aws-account-operator/api/v1alpha1"
@@ -307,4 +308,31 @@ func (c *SdkClient) IsAccessProtected(cluster *cmv1.Cluster) (bool, error) {
 		return false, fmt.Errorf("unable to get AccessProtection status for cluster")
 	}
 	return enabled, nil
+}
+
+func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {
+	logging.Debugf("Getting subscription from cluster: %s", cluster.ID())
+	cmv1Subscription, ok := cluster.GetSubscription()
+	if !ok {
+		return nil, fmt.Errorf("failed to get subscription from cluster: %s", cluster.ID())
+	}
+	subscriptionResponse, err := ocmConn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
+	if err != nil {
+		return nil, err
+	}
+
+	subscription, ok := subscriptionResponse.GetBody()
+	if !ok {
+		return nil, errors.New("failed to get subscription")
+	}
+
+	if status := subscription.Status(); status != "Active" {
+		return nil, fmt.Errorf("Expecting status 'Active' found %v\n", status)
+	}
+
+	creator, ok := subscription.GetCreator()
+	if !ok {
+		return nil, errors.New("failed to get creator from subscription")
+	}
+	return creator, nil
 }
