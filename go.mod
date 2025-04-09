@@ -1,8 +1,6 @@
 module github.com/openshift/configuration-anomaly-detection
 
-go 1.22.7
-
-toolchain go1.22.12
+go 1.23.0
 
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
@@ -18,7 +16,7 @@ require (
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
 	github.com/openshift/backplane-cli v0.1.39
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
-	github.com/openshift/osd-network-verifier v1.2.1
+	github.com/openshift/osd-network-verifier v1.2.3
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/common v0.54.0
 	github.com/spf13/cobra v1.8.1

@@ -1,13 +1,11 @@
 module github.com/openshift/configuration-anomaly-detection/interceptor
 
-go 1.22.7
-
-toolchain go1.22.12
+go 1.23.0
 
 require (
+	github.com/PagerDuty/go-pagerduty v1.8.0
 	github.com/openshift/configuration-anomaly-detection v0.0.0-00010101000000-000000000000
 	github.com/tektoncd/triggers v0.27.0
-	go.uber.org/zap v1.27.0
 	google.golang.org/grpc v1.67.3
 	knative.dev/pkg v0.0.0-20240521083825-99e1685a7997
 )
@@ -19,7 +17,6 @@ require (
 	github.com/99designs/keyring v1.2.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/PagerDuty/go-pagerduty v1.8.0 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
@@ -123,7 +120,7 @@ require (
 	github.com/openshift/backplane-cli v0.1.39 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f // indirect
-	github.com/openshift/osd-network-verifier v1.2.1 // indirect
+	github.com/openshift/osd-network-verifier v1.2.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/perimeterx/marshmallow v1.1.4 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
@@ -150,6 +147,7 @@ require (
 	github.com/zalando/go-keyring v0.2.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/oauth2 v0.25.0 // indirect

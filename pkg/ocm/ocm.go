@@ -327,7 +327,7 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 	}
 
 	if status := subscription.Status(); status != "Active" {
-		return nil, fmt.Errorf("Expecting status 'Active' found %v\n", status)
+		return nil, fmt.Errorf("expecting status 'Active' found %v", status)
 	}
 
 	creator, ok := subscription.GetCreator()
