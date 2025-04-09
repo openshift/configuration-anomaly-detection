@@ -1,8 +1,6 @@
 module github.com/openshift/configuration-anomaly-detection/interceptor
 
-go 1.22.7
-
-toolchain go1.22.12
+go 1.23.0
 
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0

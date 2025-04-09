@@ -203,8 +203,8 @@ func (c *SdkClient) PollInstanceStopEventsFor(instances []ec2v2types.Instance, r
 	idToCloudtrailEvent := make(map[string]cloudtrailv2types.Event)
 
 	var executionError error
-	var stoppedInstanceEvents []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
-	var terminatedInstanceEvents []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
+	stoppedInstanceEvents := make([]cloudtrailv2types.Event, 0)
+	terminatedInstanceEvents := make([]cloudtrailv2types.Event, 0)
 	err = wait.ExponentialBackoff(backoffOptions, func() (bool, error) {
 		executionError = nil
 
@@ -483,7 +483,7 @@ func (c *SdkClient) listAllInstancesAttribute(att cloudtrailv2types.LookupAttrib
 	// exhaust 90 days of events might take *very* long in big accounts
 	// otherwise.
 	maxNumberEvents := 1000
-	var events []cloudtrailv2types.Event = make([]cloudtrailv2types.Event, 0)
+	events := make([]cloudtrailv2types.Event, 0)
 	in := &cloudtrailv2.LookupEventsInput{
 		LookupAttributes: []cloudtrailv2types.LookupAttribute{att},
 		StartTime:        &since,
@@ -600,7 +600,7 @@ func eventContainsInstances(instances []ec2v2types.Instance, event cloudtrailv2t
 
 func getTime(rawReason string) (time.Time, error) {
 	subMatches := stopInstanceDateRegex.FindStringSubmatch(rawReason)
-	if subMatches == nil || len(subMatches) < 2 {
+	if len(subMatches) < 2 {
 		return time.Time{}, fmt.Errorf("did not find matches: raw data %s", rawReason)
 	}
 	if len(subMatches) != 2 {

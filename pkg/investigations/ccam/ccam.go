@@ -28,7 +28,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	pdClient := r.PdClient
 	bpError, ok := r.AdditionalResources["error"].(error)
 	if !ok {
-		return result, fmt.Errorf("Missing required Investigation field 'error'")
+		return result, fmt.Errorf("missing required Investigation field 'error'")
 	}
 	logging.Info("Investigating possible missing cloud credentials...")
 

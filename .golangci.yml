@@ -1,106 +1,86 @@
+version: "2"
 run:
-  # Our CI expects a vendor directory, hence we have to use -mod=readonly here as well.
   modules-download-mode: readonly
-  # Timeout for analysis, e.g. 30s, 5m.
-  # Default: 1m
-  timeout: 15m
-
-issues:
-  # on default, golangci-lint excludes gosec. Hence, we have to
-  # explicitly disable the exclude-use-default: https://github.com/golangci/golangci-lint/issues/1504
-  exclude-use-default: false
-
-# output configuration options
 output:
-  # colored-line-number|line-number|json|tab|checkstyle|code-climate|junit-xml|github-actions
-  # default is "colored-line-number"
-
-  # print lines of code with issue, default is true
-  print-issued-lines: true
-
-  # print linter name in the end of issue text, default is true
-  print-linter-name: true
-
-  # make issues output unique by line, default is true
-  uniq-by-line: true
-
-  # add a prefix to the output file references; default is no prefix
   path-prefix: ""
-
-  # sorts results by: filepath, line and column
-  sort-results: false
-
-# default linters are enabled `golangci-lint help linters`
 linters:
-  disable-all: true
+  default: none
   enable:
-    ## enabled by default
-    - errcheck # checking for unchecked errors, these unchecked errors can be critical bugs in some cases
-    - gosimple # specializes in simplifying a code
-    - govet # reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
-    - ineffassign # detects when assignments to existing variables are not used
-    - staticcheck # is a go vet on steroids, applying a ton of static analysis checks
-    - typecheck # like the front-end of a Go compiler, parses and type-checks Go code
-    - unused # checks for unused constants, variables, functions and types
-
-    ## disabled by default
-    - asasalint # Check for pass []any as any in variadic func(...any)
-    - asciicheck # Simple linter to check that your code does not contain non-ASCII identifiers
-    - bidichk # Checks for dangerous unicode character sequences
-    - bodyclose # Checks whether HTTP response body is closed successfully
-    - decorder # Check declaration order and count of types, constants, variables and functions
-    - dupword # Checks for duplicate words in the source code
-    - durationcheck # Check for two durations multiplied together
-    - errchkjson # Checks types passed to the json encoding functions. Reports unsupported types and optionally reports occasions, where the check for the returned error can be omitted.
-    - errname # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
-    - errorlint # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13.
-    - exportloopref # Checks for pointers to enclosing loop variables
-    - ginkgolinter # Enforces standards of using ginkgo and gomega
-    - gocheckcompilerdirectives # Checks that go compiler directive comments (//go:) are valid.
-    - goconst # Finds repeated strings that could be replaced by a constant
-    - gocritic # Provides diagnostics that check for bugs, performance and style issues.
-    - gocyclo # Computes and checks the cyclomatic complexity of functions
-    - gofmt # Gofmt checks whether code was gofmt-ed. By default this tool runs with -s option to check for code simplification
-    - gofumpt # Gofumpt checks whether code was gofumpt-ed.
-    - goheader # Checks is file header matches to pattern
-    - goimports # Check import statements are formatted according to the 'goimport' command. Reformat imports in autofix mode.
-    - gomodguard # Allow and block list linter for direct Go module dependencies. This is different from depguard where there are different block types for example version constraints and module recommendations.
-    - gosec # Inspects source code for security problems
-    - grouper # An analyzer to analyze expression groups.
-    - importas # Enforces consistent import aliases
-    - loggercheck # Checks key value pairs for common logger libraries (kitlog,klog,logr,zap).
-    - maintidx # Maintidx measures the maintainability index of each function.
-    - makezero # Finds slice declarations with non-zero initial length
-    - misspell # Finds commonly misspelled English words in comments
-    - nestif # Reports deeply nested if statements
-    - nilerr # Finds the code that returns nil even if it checks that the error is not nil.
-    - nilnil # Checks that there is no simultaneous return of nil error and an invalid value.
-    - noctx # Noctx finds sending http request without context.Context
-    - nolintlint # Reports ill-formed or insufficient nolint directives
-    - nosprintfhostport # Checks for misuse of Sprintf to construct a host with port in a URL.
-    - prealloc # Finds slice declarations that could potentially be pre-allocated
-    - predeclared # Find code that shadows one of Go's predeclared identifiers
-    - promlinter # Check Prometheus metrics naming via promlint
-    - reassign # Checks that package variables are not reassigned
-    - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go. Drop-in replacement of golint.
-    - rowserrcheck # Checks whether Err of rows is checked successfully
-    - tenv # Tenv is analyzer that detects using os.Setenv instead of t.Setenv since Go1.17
-    - thelper # Thelper detects Go test helpers without t.Helper() call and checks the consistency of test helpers
-    - tparallel # Tparallel detects inappropriate usage of t.Parallel() method in your Go test codes
-    - unconvert # Remove unnecessary type conversions
-    - usestdlibvars # A linter that detect the possibility to use variables/constants from the Go standard library.
-    - wastedassign # Finds wasted assignment statements.
-    - whitespace # Tool for detection of leading and trailing whitespace
-
-linters-settings:
-  nestif:
-    min-complexity: 10
-  revive:
-    rules:
-      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#dot-imports
-      - name: dot-imports
-        severity: warning
-        disabled: false
-        exclude: [""]
-        arguments:
-          - allowedPackages: [github.com/onsi/ginkgo/v2, github.com/onsi/gomega]
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - decorder
+    - dupword
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - ginkgolinter
+    - gocheckcompilerdirectives
+    - goconst
+    - gocritic
+    - gocyclo
+    - goheader
+    - gomodguard
+    - gosec
+    - govet
+    - grouper
+    - importas
+    - ineffassign
+    - loggercheck
+    - maintidx
+    - makezero
+    - misspell
+    - nestif
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - prealloc
+    - predeclared
+    - promlinter
+    - reassign
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unused
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+  settings:
+    nestif:
+      min-complexity: 10
+    revive:
+      rules:
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/onsi/ginkgo/v2
+                - github.com/onsi/gomega
+          severity: warning
+          disabled: false
+          exclude:
+            - ""
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
