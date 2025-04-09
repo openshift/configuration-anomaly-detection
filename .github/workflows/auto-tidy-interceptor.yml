@@ -11,7 +11,7 @@ on:
 jobs:
   tidy:
     runs-on: ubuntu-latest
-    if: github.actor != 'dependabot[bot]'
+
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v4
