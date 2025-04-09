@@ -310,6 +310,21 @@ func (c *SdkClient) IsAccessProtected(cluster *cmv1.Cluster) (bool, error) {
 	return enabled, nil
 }
 
+func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, error) {
+	user, err := GetCreatorFromCluster(ocmClient.GetConnection(), cluster)
+	if err != nil {
+		return false, "encountered an issue when checking if the cluster owner is banned. Please investigate.", err
+	}
+
+	if user.Banned() {
+		noteMessage := fmt.Sprintf("User is banned %s. Ban description %s.\n Please open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
+		logging.Warnf(noteMessage)
+		return true, noteMessage, nil
+	} else {
+		return false, "User is not banned.", nil
+	}
+}
+
 func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {
 	logging.Debugf("Getting subscription from cluster: %s", cluster.ID())
 	cmv1Subscription, ok := cluster.GetSubscription()
@@ -335,4 +350,14 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 		return nil, errors.New("failed to get creator from subscription")
 	}
 	return creator, nil
+}
+
+func GetOCMPullSecret(ocmConn *sdk.Connection, userID string) (*amv1.RegistryCredentialsListResponse, error) {
+	searchString := fmt.Sprintf("account_id = '%s'", userID)
+	registryCredentials, err := ocmConn.AccountsMgmt().V1().RegistryCredentials().List().Search(searchString).Send()
+	if err != nil {
+		return nil, err
+	}
+	//slicedRegistryCredentials := registryCredentials.Items().Slice()
+	return registryCredentials, nil
 }
