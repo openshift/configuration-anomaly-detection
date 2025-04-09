@@ -76,8 +76,8 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 	}
 
 	return &verifier.ValidateEgressInput{
-		Timeout:      2 * time.Second,
-		Ctx:          context.TODO(),
+		Timeout:      5 * time.Second,
+		Ctx:          context.Background(),
 		SubnetID:     subnet,
 		InstanceType: "t3.micro",
 		Proxy:        proxy,
