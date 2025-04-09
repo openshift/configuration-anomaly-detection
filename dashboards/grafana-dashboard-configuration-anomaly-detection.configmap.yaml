@@ -308,7 +308,7 @@ data:
               },
               "editorMode": "code",
               "exemplar": true,
-              "expr": "sum(sum_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod) / sum(count_over_time(tekton_pipelines_controller_pipelinerun_duration_seconds{namespace=\"$namespace\", status=\"success\"}[$__range])) without (instance, pod)",
+              "expr": "avg by (pipeline) (\n  sum_over_time(\n    tekton_pipelines_controller_pipelinerun_duration_seconds_sum{\n      namespace=\"$namespace\", \n      status=\"success\"\n    }[$__range]\n  ) \n  / \n  sum_over_time(\n    tekton_pipelines_controller_pipelinerun_duration_seconds_count{\n      namespace=\"$namespace\", \n      status=\"success\"\n    }[$__range]\n  )\n)",
               "format": "time_series",
               "instant": false,
               "legendFormat": "Average Pipeline Runtime (in seconds)",
@@ -679,8 +679,8 @@ data:
           {
             "current": {
               "selected": true,
-              "text": "appsrep07ue1-prometheus",
-              "value": "appsrep07ue1-prometheus"
+              "text": "cadp01ue1-prometheus",
+              "value": "cadp01ue1-prometheus"
             },
             "description": "Datasource ( cad metrics )",
             "hide": 0,
@@ -691,15 +691,15 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(appsrep07ue1-prometheus)|(appsres07ue1-prometheus)",
+            "regex": "(cadp01ue1-prometheus)|(cads01ue1-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
           {
             "current": {
               "selected": true,
-              "text": "appsrep07ue1-cluster-prometheus",
-              "value": "appsrep07ue1-cluster-prometheus"
+              "text": "cadp01ue1-cluster-prometheus",
+              "value": "cadp01ue1-cluster-prometheus"
             },
             "hide": 0,
             "includeAll": false,
@@ -709,7 +709,7 @@ data:
             "query": "prometheus",
             "queryValue": "",
             "refresh": 1,
-            "regex": "(appsrep07ue1-cluster-prometheus)|(appsres07ue1-cluster-prometheus)",
+            "regex": "(cadp01ue1-cluster-prometheus)|(cads01ue1-cluster-prometheus)",
             "skipUrlSync": false,
             "type": "datasource"
           },
