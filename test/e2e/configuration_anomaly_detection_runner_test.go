@@ -25,5 +25,4 @@ func TestConfigurationAnomalyDetection(t *testing.T) {
 		reporterConfig.JUnitReport = filepath.Join(testResultsDirectory, jUnitOutputFilename)
 	}
 	RunSpecs(t, "Configuration Anomaly Detection", suiteConfig, reporterConfig)
-
 }

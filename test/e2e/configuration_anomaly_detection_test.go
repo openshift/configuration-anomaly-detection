@@ -68,5 +68,4 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ocmCli.Connection.Close()
 		}
 	})
-
 })

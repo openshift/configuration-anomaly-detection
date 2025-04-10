@@ -6,7 +6,7 @@ metadata:
 parameters:
   - name: OSDE2E_CONFIGS
     required: true
-  - name: TEST_HARNESS_IMAGE
+  - name: TEST_E2E_SUITE_IMAGE
     required: true
   - name: OCM_TOKEN
     required: true
@@ -55,8 +55,8 @@ objects:
                 seccompProfile:
                   type: RuntimeDefault
               env:
-                - name: TEST_HARNESSES
-                  value: ${TEST_HARNESS_IMAGE}:${IMAGE_TAG}
+                - name: TEST_E2E_SUITEES
+                  value: ${TEST_E2E_SUITE_IMAGE}:${IMAGE_TAG}
                 - name: OCM_TOKEN
                   value: ${OCM_TOKEN}
                 - name: OCM_CCS
