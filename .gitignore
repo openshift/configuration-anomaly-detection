@@ -6,3 +6,4 @@ dist
 .idea
 .vscode
 cad_testing
+e2e-suite.test
