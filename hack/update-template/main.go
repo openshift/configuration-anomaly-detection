@@ -33,6 +33,8 @@ var saasTemplateFile = Template{
 		{Name: "NAMESPACE_NAME", Value: "configuration-anomaly-detection"},
 		{Name: "CAD_EXPERIMENTAL_ENABLED", Value: "FALSE"},
 		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "TEKTON_RESOURCE_PRUNER_IMAGE", Value: "quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8"},
+		{Name: "TEKTON_RESOURCE_PRUNER_SHA", Value: ""},
 	},
 }
 

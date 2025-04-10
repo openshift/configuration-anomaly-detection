@@ -19,7 +19,7 @@ spec:
               command:
                 - /bin/sh
                 - -c
-              image: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8@sha256:e1fa47811f156e48a61741aabe73ef85078960567822a4b23c174c0d9b4d0ee6
+              image: ${TEKTON_RESOURCE_PRUNER_IMAGE}@${TEKTON_RESOURCE_PRUNER_SHA}
               imagePullPolicy: IfNotPresent
               name: tekton-resource-pruner
               resources:
