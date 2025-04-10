@@ -11,6 +11,7 @@
   - [Contributing](#contributing)
     - [Building](#building)
     - [Adding a new investigation](#adding-a-new-investigation)
+    - [Graduating an investigation](#graduating-an-investigation)
   - [Testing locally](#testing-locally)
     - [Pre-requirements](#pre-requirements)
     - [Running cadctl for an incident ID](#running-cadctl-for-an-incident-id)
@@ -20,6 +21,7 @@
     - [Templates](#templates)
     - [Dashboards](#dashboards)
     - [Deployment](#deployment)
+    - [Progressive Delivery](#progressive-delivery)
     - [Boilerplate](#boilerplate)
     - [PipelinePruner](#pipelinepruner)
     - [Required ENV variables](#required-env-variables)
@@ -70,6 +72,27 @@ To add a new alert investigation:
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
+
+### Graduating an investigation
+
+New investigations and their remediation steps are deployed in advancing stages through a progressive delivery strategy (see [Progressive Delivery](#progressive-delivery)).
+
+1. **Informing stage (Read-only):**
+    The investigation is merely informative through PagerDuty at this stage; remediation _**does not involve any write operations**_. Notes are collected throughout the investigation, and upon the investigation's conclusion are posted to PagerDuty.
+
+    **Aim**: Validating the investigation's accuracy and usefulness **without performing any write actions**.
+
+    **Validation Criteria:** The investigation successfully carries out each step on it's respective incident type, over a span of several days. It provides useful information (equivalent to a manual investigation) to SREs through PagerDuty.
+
+2. **Incubation / Canary (Limited Write):**
+    The remediation continues to be limited to information gathering on the majority of clusters, however write operations are validated on a small subset of clusters.
+
+    **Aim:** Validating the remediation's **_write operations_** on a controlled subset of the fleet.
+
+    **Validation Criteria:** Write operations perform successfully and as expected on the defined subset of clusters; potential issues with write actions should be caught at this stage.
+
+3. **Graduation (Read & Write):**
+    The investigation's remediation functions, including **read and write**, are performed on all applicable clusters (high-impact clusters should remain read-only).
 
 ### Integrations
 
@@ -146,6 +169,24 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 * [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
 * [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
 * [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
+
+### Progressive Delivery
+
+New investigations are deployed following a "Canary Deployment Strategy". This allows for a monitored, progressive deployment of new investigations and remediative steps, and limits fleet-wide issues.
+
+Investigations and their respective remediation capabilities are promoted as follows:
+
+1. Read-only (informing) on stage & production
+
+2. Read/Write investigation implemented on stage
+
+3. Read/Write promoted to production canary clusters
+
+4. Soak time
+
+5. Full investigation (read/write) promoted fleet-wide
+
+> **Note:** A workaround "fast-track" graduation is possible in instances of necessity to force changes fleet-wide as quickly as possible.
 
 ### Boilerplate
 
