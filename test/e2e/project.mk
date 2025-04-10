@@ -9,7 +9,7 @@ REGISTRY_USER?=$(QUAY_USER)
 REGISTRY_TOKEN?=$(QUAY_TOKEN)
 
 ######################
-# Targets used by e2e test harness
+# Targets used by e2e test suite
 ######################
 
 # create binary
