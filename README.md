@@ -151,10 +151,6 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
 
-### PipelinePruner
-
-* [PipelinePruner](./openshift/PipelinePruning.md) -- Documentation about PipelineRun pruning.
-
 ### Required ENV variables
 
 **Note:** For local execution, these can exported from vault with `source test/set_stage_env.sh`
