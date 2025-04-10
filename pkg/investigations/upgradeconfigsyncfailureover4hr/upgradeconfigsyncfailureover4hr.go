@@ -52,62 +52,61 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	} else {
 		notes.AppendSuccess("User is not banned.")
 	}
-
-	logging.Infof("############### Checking the secret ############")
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
 	logging.Infof("User ID is: %v", user.ID())
-	clusterSecretEmail, clusterSecretToken, err := getClusterPullSecret(k8scli, *notes)
+	clusterSecretToken, err := getClusterPullSecret(k8scli, *notes)
 	if err != nil {
 		logging.Errorf("Failure getting ClusterSecret: %v", err)
 	}
-	logging.Infof("Cluster Secret Email Is: %s", clusterSecretEmail)
-	registrycredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
+	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
 		logging.Infof("Error getting OCMPullSecret: %v", err)
 	}
-	logging.Infof("Token is %s", clusterSecretToken)
-	logging.Infof("Email is: %s", clusterSecretEmail)
-	logging.Infof("registryCredential is: %v", registrycredential)
-	return result, r.PdClient.EscalateIncidentWithNote("testing")
+	if clusterSecretToken == registryCredential {
+		notes.AppendSuccess("Pull Secret matches on cluster and in OCM.")
+	} else {
+		notes.AppendWarning("Pull secret does not match on cluster and in OCM.")
+	}
+	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-func getClusterPullSecret(k8scli client.Client, notes notewriter.NoteWriter) (string, string, error) {
+type SecretGetter interface {
+	Get(ctx context.Context, key client.ObjectKey, obj client.Object) error
+}
+
+func getClusterPullSecret(k8scli SecretGetter, notes notewriter.NoteWriter) (secretToken string, error error) {
 	secret := &corev1.Secret{}
 	err := k8scli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "openshift-config",
 		Name:      "pull-secret",
 	}, secret)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-
 	if secret.Data == nil {
-		return "", "", err
+		return "", err
 	}
-
 	secretValue, exists := secret.Data[".dockerconfigjson"]
 	if !exists {
-		return "", "", err
+		return "", err
 	}
 
 	dockerConfigJson, err := v1.UnmarshalAccessToken(secretValue)
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
-
-	cloudOpenshiftAuth, exists := dockerConfigJson.Auths()["cloud.openshift.com"]
+	_, exists = dockerConfigJson.Auths()["cloud.openshift.com"]
 	if !exists {
-		notes.AppendWarning("cloud.openshift.com value not found. This almost certainly means there is an issue with the pull secret on the cluster.")
-		return "", "", err
+		notes.AppendWarning("cloud.openshift.com value not found in clusterPullSecret. This almost certainly means there is an issue with the pull secret on the cluster.")
+		return "", nil
 	}
 
-	email := cloudOpenshiftAuth.Email()
 	value, err := base64.StdEncoding.DecodeString(dockerConfigJson.Auths()["registry.connect.redhat.com"].Auth())
 	if err != nil {
-		return "", "", err
+		return "", err
 	}
 	_, splitValue, _ := strings.Cut(string(value), ":")
-	return string(email), splitValue, nil
+	return splitValue, nil
 }
 
 func (c *Investigation) Name() string {

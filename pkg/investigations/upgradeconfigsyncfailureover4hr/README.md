@@ -1,0 +1,4 @@
+# upgradeconfigsyncfailureover4hr Investigation
+
+Package upgradeconfigsyncfailureover4hr contains functionality for the UpgradeConfigSyncFailureOver4HrSRE investigation
+
