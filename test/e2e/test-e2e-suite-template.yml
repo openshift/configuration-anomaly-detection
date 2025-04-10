@@ -55,7 +55,7 @@ objects:
                 seccompProfile:
                   type: RuntimeDefault
               env:
-                - name: TEST_E2E_SUITEES
+                - name: TEST_HARNESSES
                   value: ${TEST_E2E_SUITE_IMAGE}:${IMAGE_TAG}
                 - name: OCM_TOKEN
                   value: ${OCM_TOKEN}
