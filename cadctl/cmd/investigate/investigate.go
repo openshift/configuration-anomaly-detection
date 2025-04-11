@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
@@ -46,6 +47,8 @@ var (
 	logLevelFlag = ""
 	payloadPath  = "./payload.json"
 )
+
+const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
@@ -151,8 +154,11 @@ func run(cmd *cobra.Command, _ []string) error {
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)
 	updateMetrics(alertInvestigation.Name(), &result)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return updateIncidentTitle(pdClient)
 }
 
 func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
@@ -230,4 +236,17 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 	if result.LimitedSupportSet.Performed {
 		metrics.Inc(metrics.LimitedSupportSet, append([]string{investigationName}, result.LimitedSupportSet.Labels...)...)
 	}
+}
+
+func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {
+	currentTitle := pdClient.GetTitle()
+	if strings.Contains(currentTitle, pagerdutyTitlePrefix) {
+		return nil
+	}
+	newTitle := fmt.Sprintf("[CAD Investigated] %s", currentTitle)
+	err := pdClient.UpdateIncidentTitle(newTitle)
+	if err != nil {
+		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
+	}
+	return nil
 }

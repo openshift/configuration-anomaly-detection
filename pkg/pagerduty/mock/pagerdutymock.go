@@ -122,3 +122,17 @@ func (mr *MockClientMockRecorder) SilenceIncidentWithNote(notes any) *gomock.Cal
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SilenceIncidentWithNote", reflect.TypeOf((*MockClient)(nil).SilenceIncidentWithNote), notes)
 }
+
+// UpdateIncidentTitle mocks base method.
+func (m *MockClient) UpdateIncidentTitle(title string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateIncidentTitle", title)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateIncidentTitle indicates an expected call of UpdateIncidentTitle.
+func (mr *MockClientMockRecorder) UpdateIncidentTitle(title any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateIncidentTitle", reflect.TypeOf((*MockClient)(nil).UpdateIncidentTitle), title)
+}
