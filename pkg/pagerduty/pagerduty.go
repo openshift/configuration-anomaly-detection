@@ -51,6 +51,7 @@ type Client interface {
 	GetServiceID() string
 	EscalateIncidentWithNote(notes string) error
 	EscalateIncident() error
+	UpdateIncidentTitle(title string) error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
@@ -228,22 +229,22 @@ func (c *SdkClient) SetIncidentData(incidentData *IncidentData) {
 	c.incidentData = incidentData
 }
 
-// GetServiceID returns the event type of the webhook
+// GetServiceID returns the ID of the pagerduty service containing the client's incident
 func (c *SdkClient) GetServiceID() string {
 	return c.incidentData.ServiceID
 }
 
-// GetServiceName returns the event type of the webhook
+// GetServiceName returns the pagerduty service containing the client's incident
 func (c *SdkClient) GetServiceName() string {
 	return c.incidentData.ServiceSummary
 }
 
-// GetTitle returns the event type of the webhook
+// GetTitle returns the title of the client's incident
 func (c *SdkClient) GetTitle() string {
 	return c.incidentData.IncidentTitle
 }
 
-// GetIncidentID returns the event type of the webhook
+// GetIncidentID returns the ID of the client's incident
 func (c *SdkClient) GetIncidentID() string {
 	return c.incidentData.IncidentID
 }
@@ -538,6 +539,21 @@ func (c *SdkClient) EscalateIncident() error {
 			return nil
 		}
 		return fmt.Errorf("could not escalate the incident: %w", err)
+	}
+	return nil
+}
+
+func (c *SdkClient) UpdateIncidentTitle(title string) error {
+	o := []sdk.ManageIncidentsOptions{
+		{
+			ID:    c.GetIncidentID(),
+			Title: title,
+		},
+	}
+
+	err := c.updateIncident(o)
+	if err != nil {
+		return fmt.Errorf("failed to update incident: %w", err)
 	}
 	return nil
 }
