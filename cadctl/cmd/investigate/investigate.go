@@ -243,7 +243,7 @@ func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {
 	if strings.Contains(currentTitle, pagerdutyTitlePrefix) {
 		return nil
 	}
-	newTitle := fmt.Sprintf("[CAD Investigated] %s", currentTitle)
+	newTitle := fmt.Sprintf("%s %s", pagerdutyTitlePrefix, currentTitle)
 	err := pdClient.UpdateIncidentTitle(newTitle)
 	if err != nil {
 		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
