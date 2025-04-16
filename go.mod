@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
 	github.com/aws/aws-sdk-go v1.44.110
-	github.com/aws/aws-sdk-go-v2 v1.36.0
+	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.57
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5
