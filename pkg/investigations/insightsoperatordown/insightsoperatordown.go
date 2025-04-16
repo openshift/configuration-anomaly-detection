@@ -38,6 +38,10 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	// We continue with the next step OCPBUG22226 even if the user is banned.
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
+		if errors.Is(k8sclient.ErrAPIServerUnavailable, err) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to  cluster's kube-api. Please investigate manually.")
+		}
+
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
 	defer func() {
