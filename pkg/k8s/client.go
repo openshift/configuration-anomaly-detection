@@ -25,7 +25,7 @@ func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Cli
 	)
 	if err != nil {
 		if isAPIServerUnavailable(err) {
-			return nil, fmt.Errorf("%w: %v", ErrAPIServerUnavailable, err)
+			return nil, fmt.Errorf("%w: %w", ErrAPIServerUnavailable, err)
 		}
 		return nil, err
 	}
