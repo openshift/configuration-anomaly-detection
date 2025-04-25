@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ai"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -149,7 +150,15 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	investigationResources = &investigation.Resources{
+		Name:              alertInvestigation.Name(),
+		Cluster:           cluster,
+		ClusterDeployment: clusterDeployment,
+		AwsClient:         customerAwsClient,
+		OcmClient:         ocmClient,
+		PdClient:          pdClient,
+		Notes:             nil,
+		AIClient:          ai.New()}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)

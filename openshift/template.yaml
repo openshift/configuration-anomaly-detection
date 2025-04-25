@@ -317,6 +317,11 @@ objects:
         value: ${CAD_EXPERIMENTAL_ENABLED}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
+      - name: CAD_HCM_AI_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: token
+            name: srep-ai-sa-token
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret

@@ -54,6 +54,13 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 	notes := notewriter.New(r.Name, logging.RawLogger)
 	defer func() { r.Notes = notes }()
 
+	// AI POC
+	aiOutput, err := r.AIClient.Ask(fmt.Sprintf("How do I react to this alert: %s", r.Name))
+	if err != nil {
+		notes.AppendWarning("Failed to get AI answer: %s", err)
+	}
+	notes.AppendAutomation(aiOutput)
+
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
