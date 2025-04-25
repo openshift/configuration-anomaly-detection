@@ -32,7 +32,7 @@ func New() *AIClient {
 
 func (ai *AIClient) Ask(ask string) (string, error) {
 	messages := []openai.ChatCompletionMessageParamUnion{
-		openai.SystemMessage("You are a Site Reliability Engineer for Managed Openshift"),
+		openai.SystemMessage("You are a Site Reliability Engineer working for RedHat's Managed Openshift service. You give short, useful and specific investigation hints derived from the information, logs, etc. that is provided to you."),
 		openai.UserMessage(ask),
 	}
 	aiOutput, err := ai.Client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
