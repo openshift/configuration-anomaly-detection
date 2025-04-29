@@ -54,9 +54,12 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	}
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
 	logging.Infof("User ID is: %v", user.ID())
-	clusterSecretToken, err := getClusterPullSecret(k8scli, *notes)
+	clusterSecretToken, note, err := getClusterPullSecret(k8scli)
 	if err != nil {
 		logging.Errorf("Failure getting ClusterSecret: %v", err)
+	}
+	if note != "" {
+		notes.AppendWarning(note)
 	}
 	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
@@ -70,43 +73,38 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-type SecretGetter interface {
-	Get(ctx context.Context, key client.ObjectKey, obj client.Object) error
-}
-
-func getClusterPullSecret(k8scli SecretGetter, notes notewriter.NoteWriter) (secretToken string, error error) {
+func getClusterPullSecret(k8scli client.Client) (secretToken string, note string, error error) {
 	secret := &corev1.Secret{}
 	err := k8scli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "openshift-config",
 		Name:      "pull-secret",
 	}, secret)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if secret.Data == nil {
-		return "", err
+		return "", "Cluster pull secret Data is empty.", err
 	}
 	secretValue, exists := secret.Data[".dockerconfigjson"]
 	if !exists {
-		return "", err
+		return "", "Cluster pull secret does not contain the necessary .dockerconfigjson", err
 	}
 
 	dockerConfigJson, err := v1.UnmarshalAccessToken(secretValue)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	_, exists = dockerConfigJson.Auths()["cloud.openshift.com"]
 	if !exists {
-		notes.AppendWarning("cloud.openshift.com value not found in clusterPullSecret. This almost certainly means there is an issue with the pull secret on the cluster.")
-		return "", nil
+		return "", "cloud.openshift.com value not found in clusterPullSecret. This almost certainly means there is an issue with the pull secret on the cluster.", err
 	}
 
 	value, err := base64.StdEncoding.DecodeString(dockerConfigJson.Auths()["registry.connect.redhat.com"].Auth())
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	_, splitValue, _ := strings.Cut(string(value), ":")
-	return splitValue, nil
+	return splitValue, "", nil
 }
 
 func (c *Investigation) Name() string {
