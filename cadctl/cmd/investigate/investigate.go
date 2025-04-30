@@ -44,13 +44,15 @@ var InvestigateCmd = &cobra.Command{
 }
 
 var (
-	logLevelFlag = ""
-	payloadPath  = "./payload.json"
+	informingModeFlag = false
+	logLevelFlag      = ""
+	payloadPath       = "./payload.json"
 )
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 func init() {
+	InvestigateCmd.Flags().BoolVar(&informingModeFlag, "informing-mode", informingModeFlag, "limit remediation capability to read-only")
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
 
@@ -149,7 +151,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, InformingModeFlag: informingModeFlag, Notes: nil}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)

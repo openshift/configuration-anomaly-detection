@@ -11,6 +11,7 @@
   - [Contributing](#contributing)
     - [Building](#building)
     - [Adding a new investigation](#adding-a-new-investigation)
+    - [Graduating an investigation](#graduating-an-investigation)
   - [Testing locally](#testing-locally)
     - [Pre-requirements](#pre-requirements)
     - [Running cadctl for an incident ID](#running-cadctl-for-an-incident-id)
@@ -70,6 +71,26 @@ To add a new alert investigation:
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
+
+### Graduating an investigation
+
+New investigations and their remediation steps are deployed in advancing stages through a progressive deployment strategy.
+
+1. **Informing Stage (Read-only):**
+    The investigation is merely informative through PagerDuty at this stage; remediation _**does not involve any write operations**_. Notes are collected throughout the investigation, and upon the investigation's conclusion are posted to PagerDuty.
+
+    **How:** Informing is set to true by default in the [new investigation boilerplate](#adding-a-new-investigation). The investigation should be deployed and validated in both staging and production environments at this informing-only stage.
+
+    **Aim:** Validating the investigation's accuracy and usefulness **without performing any write actions**.
+
+    **Validation Criteria:**
+    * The investigation successfully carries out each step on it's respective incident type, on both staging and production environments.
+    * It provides useful information (equivalent to a manual investigation) to SREs through PagerDuty.
+
+2. **Actioning Stage (Read/Write):**
+    The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable clusters (high-impact clusters may be set to remain read-only).
+
+    **How:** The `informingOnly` value is changed to `false`. If the `informing-mode` flag is set (i.e. exceptions for high-impact clusters), it takes precedence.
 
 ### Integrations
 
