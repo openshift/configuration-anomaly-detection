@@ -120,6 +120,13 @@ func (c *Investigation) IsExperimental() bool {
 	return true
 }
 
+// The investigation is forced into informing mode. Once the investigation is promoted to
+// "actioning mode", the flag should be uncommented to allow for it to control the variable.
+func (c *Investigation) InformingMode(flag bool) bool {
+	informingOnly := true // TODO: Update to false when promoting investigation to "actioning mode" (See README)
+	return informingOnly || flag
+}
+
 EOF
 
 echo "${INVESTIGATION_NAME} created in ${INVESTIGATION_DIR}"
