@@ -10,6 +10,7 @@ rbac:
             - "machine.openshift.io"
           resources:
             - "machines"
+            - "machinehealthchecks"
   clusterRoleRules:
     - verbs:
         - "get"
