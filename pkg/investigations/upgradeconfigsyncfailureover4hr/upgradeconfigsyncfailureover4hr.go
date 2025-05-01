@@ -66,7 +66,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		logging.Infof("Error getting OCMPullSecret: %v", err)
 	}
 	if clusterSecretToken == registryCredential {
-		notes.AppendSuccess("Pull Secret matches on cluster and in OCM.")
+		notes.AppendSuccess("Pull Secret matches on cluster and in OCM. Please continue investigation.")
 	} else {
 		notes.AppendWarning("Pull secret does not match on cluster and in OCM.")
 	}
