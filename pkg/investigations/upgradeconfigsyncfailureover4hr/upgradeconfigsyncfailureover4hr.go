@@ -19,8 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-type Investigation struct {
-}
+type Investigation struct{}
 
 const (
 	alertname       = "UpgradeConfigSyncFailureOver4HrSRE"
