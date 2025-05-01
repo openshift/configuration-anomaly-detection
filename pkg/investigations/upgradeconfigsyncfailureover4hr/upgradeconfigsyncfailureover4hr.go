@@ -73,9 +73,9 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
-func getClusterPullSecret(k8scli client.Client) (secretToken string, note string, error error) {
+func getClusterPullSecret(k8scli client.Client) (secretToken string, note string, err error) {
 	secret := &corev1.Secret{}
-	err := k8scli.Get(context.TODO(), types.NamespacedName{
+	err = k8scli.Get(context.TODO(), types.NamespacedName{
 		Namespace: "openshift-config",
 		Name:      "pull-secret",
 	}, secret)
