@@ -22,12 +22,9 @@ import (
 )
 
 var (
-	chgmSL = ocm.ServiceLog{
-		Severity:     "Critical",
-		Summary:      "Action required: cluster not checking in",
-		ServiceName:  "SREManualAction",
-		Description:  "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager. Possible causes include stopped instances or a networking misconfiguration. If you have stopped the cluster instances, please start them again - stopping instances is not supported. If you intended to terminate this cluster then please delete the cluster in the Red Hat console",
-		InternalOnly: false,
+	stoppedInfraLS = ocm.LimitedSupportReason{
+		Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
+		Details: "Your cluster is no longer checking in with Red Hat OpenShift Cluster Manager due to stopped or terminated instances. If the instances were stopped, please restart them, as stopping instances is not supported. If you intended to terminate the cluster, please delete it in the Red Hat console",
 	}
 
 	egressLS = ocm.LimitedSupportReason{
@@ -54,9 +51,9 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		return result, utils.WithRetries(func() error {
-			err := postChgmSLAndSilence(r.Cluster.ID(), r.OcmClient, r.PdClient)
+			err := postStoppedInfraLimitedSupport(r.Cluster.ID(), r.OcmClient, r.PdClient)
 			// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
-			result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
+			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
 
 			return err
 		})
@@ -308,7 +305,7 @@ func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev
 	return output, nil
 }
 
-// GetRunningNodesCount return the number of running nodes that are currently running in the cluster
+// GetRunningNodesCount return the number of nodes that are currently running in the cluster
 func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount, error) {
 	instances, err := awsCli.ListRunningInstances(infraID)
 	if err != nil {
@@ -341,12 +338,11 @@ func getRunningNodesCount(infraID string, awsCli aws.Client) (*runningNodesCount
 	return runningNodesCount, nil
 }
 
-// GetExpectedNodesCount returns the mininum number of nodes that are supposed to be in the cluster
+// GetExpectedNodesCount returns the minimum number of nodes that are supposed to be in the cluster
 // We do not use nodes.GetTotal() here, because total seems to be always 0.
 func getExpectedNodesCount(cluster *cmv1.Cluster, ocmCli ocm.Client) (*expectedNodesCount, error) {
 	nodes, ok := cluster.GetNodes()
 	if !ok {
-		// We do not error out here, because we do not want to fail the whole run, because of one missing metric
 		logging.Errorf("node data is missing, dumping cluster object: %#v", cluster)
 		return nil, fmt.Errorf("failed to retrieve cluster node data")
 	}
@@ -452,9 +448,9 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	return res, nil
 }
 
-// postChgmSLAndSilence will send the CHGM SL and silence the alert
-func postChgmSLAndSilence(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
-	err := ocmCli.PostServiceLog(clusterID, &chgmSL)
+// postStoppedInfraLimitedSupport will put the cluster on limited support because the user has stopped instances
+func postStoppedInfraLimitedSupport(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
+	err := ocmCli.PostLimitedSupportReason(&stoppedInfraLS, clusterID)
 	if err != nil {
 		return fmt.Errorf("failed sending service log: %w", err)
 	}
