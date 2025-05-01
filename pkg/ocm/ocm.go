@@ -320,9 +320,8 @@ func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, e
 		noteMessage := fmt.Sprintf("User is banned %s. Ban description %s.\n Please open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
 		logging.Warnf(noteMessage)
 		return true, noteMessage, nil
-	} else {
-		return false, "User is not banned.", nil
 	}
+	return false, "User is not banned.", nil
 }
 
 func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {

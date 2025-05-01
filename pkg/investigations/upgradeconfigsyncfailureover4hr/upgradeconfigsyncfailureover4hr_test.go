@@ -1,7 +1,6 @@
 package upgradeconfigsyncfailureover4hr
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -53,7 +52,6 @@ func TestGetClusterPullSecret(t *testing.T) {
 			}
 			k8scli := fake.NewClientBuilder().WithObjects(secretTest).Build()
 			result, note, _ := getClusterPullSecret(k8scli)
-			fmt.Printf("Note is %s", note)
 			if result != tt.secretToken {
 				if !strings.Contains(note, tt.expectedNote) {
 					t.Errorf("Expected note message: %s. Got %s", tt.expectedNote, note)

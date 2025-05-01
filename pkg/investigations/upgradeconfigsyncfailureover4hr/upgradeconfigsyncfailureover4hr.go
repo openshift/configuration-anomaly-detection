@@ -56,14 +56,16 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	logging.Infof("User ID is: %v", user.ID())
 	clusterSecretToken, note, err := getClusterPullSecret(k8scli)
 	if err != nil {
-		logging.Errorf("Failure getting ClusterSecret: %v", err)
+		notes.AppendWarning("Failre getting ClusterSecret: %s", err)
+		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if note != "" {
 		notes.AppendWarning(note)
 	}
 	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
-		logging.Infof("Error getting OCMPullSecret: %v", err)
+		notes.AppendWarning("Error getting OCMPullSecret: %s", err)
+		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if clusterSecretToken == registryCredential {
 		notes.AppendSuccess("Pull Secret matches on cluster and in OCM. Please continue investigation.")
@@ -96,7 +98,7 @@ func getClusterPullSecret(k8scli client.Client) (secretToken string, note string
 	}
 	_, exists = dockerConfigJson.Auths()["cloud.openshift.com"]
 	if !exists {
-		return "", "cloud.openshift.com value not found in clusterPullSecret. This almost certainly means there is an issue with the pull secret on the cluster.", err
+		return "", "cloud.openshift.com value not found in clusterPullSecret. This means there is an issue with the pull secret on the cluster.", err
 	}
 
 	value, err := base64.StdEncoding.DecodeString(dockerConfigJson.Auths()["registry.connect.redhat.com"].Auth())
