@@ -64,5 +64,4 @@ func TestGetClusterPullSecret(t *testing.T) {
 			}
 		})
 	}
-
 }
