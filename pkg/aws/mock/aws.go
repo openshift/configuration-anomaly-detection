@@ -46,6 +46,26 @@ func (m *MockEC2API) EXPECT() *MockEC2APIMockRecorder {
 	return m.recorder
 }
 
+// AuthorizeSecurityGroupEgress mocks base method.
+func (m *MockEC2API) AuthorizeSecurityGroupEgress(ctx context.Context, params *ec2.AuthorizeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.AuthorizeSecurityGroupEgressOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AuthorizeSecurityGroupEgress", varargs...)
+	ret0, _ := ret[0].(*ec2.AuthorizeSecurityGroupEgressOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthorizeSecurityGroupEgress indicates an expected call of AuthorizeSecurityGroupEgress.
+func (mr *MockEC2APIMockRecorder) AuthorizeSecurityGroupEgress(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthorizeSecurityGroupEgress", reflect.TypeOf((*MockEC2API)(nil).AuthorizeSecurityGroupEgress), varargs...)
+}
+
 // DescribeInstances mocks base method.
 func (m *MockEC2API) DescribeInstances(ctx context.Context, in *ec2.DescribeInstancesInput, optFns ...func(*ec2.Options)) (*ec2.DescribeInstancesOutput, error) {
 	m.ctrl.T.Helper()
@@ -124,6 +144,26 @@ func (mr *MockEC2APIMockRecorder) DescribeSubnets(ctx, in any, optFns ...any) *g
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockEC2API)(nil).DescribeSubnets), varargs...)
+}
+
+// RevokeSecurityGroupEgress mocks base method.
+func (m *MockEC2API) RevokeSecurityGroupEgress(ctx context.Context, params *ec2.RevokeSecurityGroupEgressInput, optFns ...func(*ec2.Options)) (*ec2.RevokeSecurityGroupEgressOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RevokeSecurityGroupEgress", varargs...)
+	ret0, _ := ret[0].(*ec2.RevokeSecurityGroupEgressOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RevokeSecurityGroupEgress indicates an expected call of RevokeSecurityGroupEgress.
+func (mr *MockEC2APIMockRecorder) RevokeSecurityGroupEgress(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeSecurityGroupEgress", reflect.TypeOf((*MockEC2API)(nil).RevokeSecurityGroupEgress), varargs...)
 }
 
 // MockCloudTrailAPI is a mock of CloudTrailAPI interface.

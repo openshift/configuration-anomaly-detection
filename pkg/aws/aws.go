@@ -39,6 +39,8 @@ type EC2API interface {
 	DescribeSecurityGroups(ctx context.Context, in *ec2v2.DescribeSecurityGroupsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSecurityGroupsOutput, error)
 	DescribeSubnets(ctx context.Context, in *ec2v2.DescribeSubnetsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSubnetsOutput, error)
 	DescribeRouteTables(ctx context.Context, in *ec2v2.DescribeRouteTablesInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeRouteTablesOutput, error)
+	RevokeSecurityGroupEgress(ctx context.Context, params *ec2v2.RevokeSecurityGroupEgressInput, optFns ...func(*ec2v2.Options)) (*ec2v2.RevokeSecurityGroupEgressOutput, error)
+	AuthorizeSecurityGroupEgress(ctx context.Context, params *ec2v2.AuthorizeSecurityGroupEgressInput, optFns ...func(*ec2v2.Options)) (*ec2v2.AuthorizeSecurityGroupEgressOutput, error)
 }
 
 type CloudTrailAPI interface {
