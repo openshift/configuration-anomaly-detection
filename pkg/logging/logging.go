@@ -2,7 +2,6 @@
 package logging
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -13,18 +12,35 @@ import (
 var LogLevelString = getLogLevel()
 
 // RawLogger is the raw global logger object used for calls wrapped by the logging package
-var RawLogger = InitLogger(LogLevelString, "")
+var RawLogger = InitLogger(LogLevelString)
 
-// InitLogger initializes a cluster-id specific child logger
-func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
+// InitLogger initializes a logger with the given log level string
+func InitLogger(logLevelString string) *zap.SugaredLogger {
 	logLevel, err := zap.ParseAtomicLevel(logLevelString)
 	if err != nil {
 		log.Fatalln("Invalid log level:", logLevelString)
 	}
 
-	pipelineName := os.Getenv("PIPELINE_NAME")
-	if pipelineName == "" {
-		fmt.Println("Warning: Unable to retrieve the pipeline ID on logger creation. Continuing with empty value.")
+	config := zap.NewProductionConfig()
+	config.EncoderConfig.TimeKey = "timestamp"
+	config.Level = logLevel
+	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+	config.EncoderConfig.StacktraceKey = "" // to hide stacktrace info
+	config.EncoderConfig.CallerKey = "caller"
+
+	logger, err := config.Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return logger.Sugar()
+}
+
+// InitLoggerWithPipelineName initializes a logger with a cluster-id specific child logger and a pipeline name
+func InitLoggerWithPipelineName(logLevelString string, clusterID string, pipelineName string) *zap.SugaredLogger {
+	logLevel, err := zap.ParseAtomicLevel(logLevelString)
+	if err != nil {
+		log.Fatalln("Invalid log level:", logLevelString)
 	}
 
 	config := zap.NewProductionConfig()

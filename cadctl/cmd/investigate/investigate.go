@@ -62,10 +62,19 @@ func init() {
 
 func run(cmd *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
+	pipelineName := os.Getenv("PIPELINE_NAME")
+	if pipelineName == "" {
+		logging.Warn("Warning: Unable to retrieve the pipeline ID on logger creation. Continuing with empty value.")
+	}
+
 	if cmd.Flags().Changed("log-level") {
 		flagValue, _ := cmd.Flags().GetString("log-level")
-		logging.RawLogger = logging.InitLogger(flagValue, "")
+		logging.RawLogger = logging.InitLoggerWithPipelineName(flagValue, "", pipelineName)
 	}
+
+	// set up metics
+	metrics.Push()
+
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -125,9 +134,9 @@ func run(cmd *cobra.Command, _ []string) error {
 	// re-initialize logger for the internal-cluster-id context
 	// if log-level flag is set, take priority over env + default
 	if cmd.Flags().Changed("log-level") {
-		logging.RawLogger = logging.InitLogger(logLevelFlag, internalClusterID)
+		logging.RawLogger = logging.InitLoggerWithPipelineName(logLevelFlag, internalClusterID, pipelineName)
 	} else {
-		logging.RawLogger = logging.InitLogger(logging.LogLevelString, internalClusterID)
+		logging.RawLogger = logging.InitLoggerWithPipelineName(logging.LogLevelString, internalClusterID, pipelineName)
 	}
 
 	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
