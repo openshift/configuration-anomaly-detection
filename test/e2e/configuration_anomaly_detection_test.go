@@ -5,7 +5,6 @@ package osde2etests
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
 
@@ -24,8 +23,8 @@ import (
 
 var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 	var (
-		ocmCli    *ocme2e.Client
-		ocmlsCli  ocm.Client
+		ocme2eCli *ocme2e.Client
+		ocmCli    ocm.Client
 		k8s       *openshift.Client
 		region    string
 		provider  string
@@ -36,15 +35,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 	)
 
-	// Helper function to post Limited Support reason and silence PagerDuty alert
-	postStoppedInfraLimitedSupport := func(clusterID string, ocmlsCli ocm.Client) error {
-		err := ocmlsCli.PostLimitedSupportReason(&egressLS, clusterID)
-		if err != nil {
-			return fmt.Errorf("failed sending service log: %w", err)
-		}
-		return nil
-	}
-
 	ginkgo.BeforeAll(func(ctx context.Context) {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
@@ -53,13 +43,15 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		clientID := os.Getenv("CLIENT_ID")
 		clientSecret := os.Getenv("CLIENT_SECRET")
 		clusterID = os.Getenv("CLUSTER_ID")
+		cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
 		Expect(ocmToken).NotTo(BeEmpty(), "OCM_TOKEN must be set")
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
-		ocmCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
+		Expect(cadOcmFilePath).NotTo(BeEmpty(), "CAD_OCM_FILE_PATH must be set")
+		ocme2eCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
-		ocmlsCli, err = ocm.New("")
-		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup ocm client")
+		ocmCli, err = ocm.New(cadOcmFilePath)
+		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup ocm anomaly detection client")
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
 		region, err = k8s.GetRegion(ctx)
@@ -87,7 +79,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
 			awsCli, err := awsinternal.NewClient(awsAccessKey, awsSecretKey, "", region)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
-			clusterResource, err := ocmCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
 			Expect(err).NotTo(HaveOccurred(), "Failed to fetch cluster from OCM")
 			cluster := clusterResource.Body()
 			infraID := cluster.InfraID()
@@ -95,23 +87,37 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			sgID, err := awsCli.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
-			// Block egress
-			//Expect(awsinternal.BlockEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to block egress")
+			ginkgo.GinkgoWriter.Printf("About to block egress for security group: %s\n", sgID)
+			Expect(awsinternal.BlockEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to block egress")
 
-			//Post limited support reason and silence PagerDuty
-			err = postStoppedInfraLimitedSupport(clusterID, ocmlsCli)
-			Expect(err).NotTo(HaveOccurred(), "Failed to post limited support reason")
+			err = PostStoppedInfraLimitedSupport(clusterID, ocmCli)
 			ginkgo.GinkgoWriter.Printf("Limited support reason posted. Restoring egress...\n")
 
-			// Wait for 10 minutes
-			ginkgo.GinkgoWriter.Printf("Egress blocked. Waiting for 10 minutes to observe cluster behavior...\n")
+			lsResponse, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().List().Send()
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+
+			var reasonID string
+			lsReasons := lsResponse.Items()
+			for i := 0; i < lsReasons.Len(); i++ {
+				reason := lsReasons.Get(i)
+				if reason.Summary() == egressLS.Summary {
+					reasonID = reason.ID()
+					break
+				}
+			}
+
+			Expect(reasonID).NotTo(BeEmpty(), "Failed to find the posted limited support reason")
+			ginkgo.GinkgoWriter.Printf("Egress blocked")
 			time.Sleep(10 * time.Minute)
-			ginkgo.GinkgoWriter.Printf("10-minute wait completed. Posting limited support reason...\n")
 
-			// Restore egress
+			_, err = ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().
+				LimitedSupportReason(reasonID).Delete().Send()
+			Expect(err).NotTo(HaveOccurred(), "Failed to remove limited support reason")
+
 			Expect(awsinternal.RestoreEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to restore egress")
+			ginkgo.GinkgoWriter.Printf("Egress restored")
 
-			ocmCli.Connection.Close()
+			ocme2eCli.Connection.Close()
 		}
 	})
 

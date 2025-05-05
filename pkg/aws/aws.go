@@ -18,6 +18,7 @@ import (
 
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	stsv2 "github.com/aws/aws-sdk-go-v2/service/sts"
 
@@ -616,4 +617,48 @@ func getTime(rawReason string) (time.Time, error) {
 	}
 
 	return extractedTime, nil
+}
+
+func BlockEgress(ctx context.Context, ec2Client EC2API, securityGroupID string) error {
+	input := &ec2v2.RevokeSecurityGroupEgressInput{
+		GroupId: &securityGroupID,
+		IpPermissions: []types.IpPermission{
+			{
+				IpProtocol: awsString("-1"), // -1 = all protocols
+				IpRanges: []types.IpRange{
+					{CidrIp: awsString("0.0.0.0/0")},
+				},
+			},
+		},
+	}
+
+	_, err := ec2Client.RevokeSecurityGroupEgress(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to revoke egress: %w", err)
+	}
+	return nil
+}
+
+func RestoreEgress(ctx context.Context, ec2Client EC2API, securityGroupID string) error {
+	input := &ec2v2.AuthorizeSecurityGroupEgressInput{
+		GroupId: &securityGroupID,
+		IpPermissions: []types.IpPermission{
+			{
+				IpProtocol: awsString("-1"),
+				IpRanges: []types.IpRange{
+					{CidrIp: awsString("0.0.0.0/0")},
+				},
+			},
+		},
+	}
+
+	_, err := ec2Client.AuthorizeSecurityGroupEgress(ctx, input)
+	if err != nil {
+		return fmt.Errorf("failed to restore egress: %w", err)
+	}
+	return nil
+}
+
+func awsString(value string) *string {
+	return &value
 }
