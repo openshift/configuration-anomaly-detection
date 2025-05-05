@@ -17,6 +17,7 @@ limitations under the License.
 package cmd
 
 import (
+	examine "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/examine"
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/spf13/cobra"
@@ -39,4 +40,5 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(investigate.InvestigateCmd)
+	rootCmd.AddCommand(examine.ExamineCmd)
 }

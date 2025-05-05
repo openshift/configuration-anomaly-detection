@@ -121,11 +121,11 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 }
 
 func (c *Investigation) Name() string {
-	return "ClusterProvisioningDelay"
+	return "cpd"
 }
 
 func (c *Investigation) Description() string {
-	return "Investigates the ClusterProvisioningDelay alert"
+	return "ClusterProvisioningDelay: Investigates the ClusterProvisioningDelay alert"
 }
 
 func (c *Investigation) ShouldInvestigateAlert(alert string) bool {

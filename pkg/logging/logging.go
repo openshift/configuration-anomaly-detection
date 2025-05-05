@@ -61,6 +61,47 @@ func InitLoggerWithPipelineName(logLevelString string, clusterID string, pipelin
 	return logger.Sugar()
 }
 
+// InitConsoleLogger initializes a logger that outputs in console format using zapcore.NewConsoleEncoder
+func InitConsoleLogger(logLevelString string) *zap.SugaredLogger {
+	logLevel, err := zap.ParseAtomicLevel(logLevelString)
+	if err != nil {
+		log.Fatalln("Invalid log level:", logLevelString)
+	}
+
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "timestamp"
+	encoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+	encoderConfig.StacktraceKey = ""
+	encoderConfig.CallerKey = "caller"
+
+	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
+
+	stdoutSyncer := zapcore.Lock(os.Stdout)
+	stderrSyncer := zapcore.Lock(os.Stderr)
+
+	// Core for Info and below to stdout
+	stdoutCore := zapcore.NewCore(
+		consoleEncoder,
+		stdoutSyncer,
+		zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl < zapcore.ErrorLevel && lvl >= logLevel.Level()
+		}),
+	)
+
+	// Core for Error and above to stderr
+	stderrCore := zapcore.NewCore(
+		consoleEncoder,
+		stderrSyncer,
+		zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= zapcore.ErrorLevel && lvl >= logLevel.Level()
+		}),
+	)
+
+	core := zapcore.NewTee(stdoutCore, stderrCore)
+	logger := zap.New(core)
+	return logger.Sugar()
+}
+
 // Info wraps zap's SugaredLogger.Info()
 func Info(args ...interface{}) {
 	RawLogger.Info(args...)

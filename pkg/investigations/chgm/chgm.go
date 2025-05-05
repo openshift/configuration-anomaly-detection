@@ -117,11 +117,11 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 }
 
 func (c *Investiation) Name() string {
-	return "Cluster Has Gone Missing (CHGM)"
+	return "chgm"
 }
 
 func (c *Investiation) Description() string {
-	return "Detects reason for clusters that have gone missing"
+	return "Cluster Has Gone Missing: Detects reason for clusters that have gone missing"
 }
 
 func (c *Investiation) ShouldInvestigateAlert(alert string) bool {
