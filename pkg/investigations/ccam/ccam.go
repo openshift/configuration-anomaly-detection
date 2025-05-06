@@ -65,11 +65,11 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 }
 
 func (c *Investigation) Name() string {
-	return "Cluster Credentials Are Missing (CCAM)"
+	return "ccam"
 }
 
 func (c *Investigation) Description() string {
-	return "Detects missing cluster credentials"
+	return "Cluster Credentials Are Missing: Detects missing cluster credentials"
 }
 
 func (c *Investigation) ShouldInvestigateAlert(alert string) bool {

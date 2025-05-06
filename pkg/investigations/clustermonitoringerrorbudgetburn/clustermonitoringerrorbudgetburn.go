@@ -89,11 +89,11 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 }
 
 func (c *Investigation) Name() string {
-	return "clustermonitoringerrorbudgetburn"
+	return "cmebb"
 }
 
 func (c *Investigation) Description() string {
-	return "Investigate the cluster monitoring error budget burn alert"
+	return "clustermonitoringerrorbudgetburn: Investigate the cluster monitoring error budget burn alert"
 }
 
 func (c *Investigation) ShouldInvestigateAlert(alert string) bool {

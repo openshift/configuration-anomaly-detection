@@ -117,11 +117,11 @@ func isOCPBUG22226(co *configv1.ClusterOperator) bool {
 }
 
 func (c *Investigation) Name() string {
-	return "insightsoperatordown"
+	return "iod"
 }
 
 func (c *Investigation) Description() string {
-	return "Investigate insights operator down alert"
+	return "insightsoperatordown: Investigate insights operator down alert"
 }
 
 func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
