@@ -128,7 +128,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			Expect(reasonID).NotTo(BeEmpty(), "Failed to find the posted limited support reason")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
-			time.Sleep(20 * time.Minute)time.Sleep(20 * time.Minute)
+			time.Sleep(20 * time.Minute)
 
 			_, err = ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().
 				LimitedSupportReason(reasonID).Delete().Send()
