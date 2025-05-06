@@ -5,6 +5,7 @@ package osde2etests
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/util/retry"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -35,7 +38,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 	)
 
-	ginkgo.BeforeAll(func(ctx context.Context) {
+	BeforeAll(func(ctx context.Context) {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
 		ocmEnv := ocme2e.Stage
@@ -48,42 +51,59 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(ocmToken).NotTo(BeEmpty(), "OCM_TOKEN must be set")
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 		Expect(cadOcmFilePath).NotTo(BeEmpty(), "CAD_OCM_FILE_PATH must be set")
+
 		ocme2eCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
+
 		ocmCli, err = ocm.New(cadOcmFilePath)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup ocm anomaly detection client")
+
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
+
 		region, err = k8s.GetRegion(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine region")
+
 		provider, err = k8s.GetProvider(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
 	})
 
-	ginkgo.It("can fetch service logs", func(ctx context.Context) {
+	AfterAll(func() {
+		if ocme2eCli != nil && ocme2eCli.Connection != nil {
+			ocme2eCli.Connection.Close()
+		}
+	})
+
+	It("can fetch service logs", func(ctx context.Context) {
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 			Expect(awsAccessKey).NotTo(BeEmpty(), "awsAccessKey not found")
 			Expect(awsSecretKey).NotTo(BeEmpty(), "awsSecretKey not found")
-			_, err := session.NewSession(aws.NewConfig().WithCredentials(credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")).WithRegion(region))
+
+			_, err := session.NewSession(aws.NewConfig().WithCredentials(
+				credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")).WithRegion(region))
 			Expect(err).NotTo(HaveOccurred(), "Could not set up aws session")
 		}
 	})
 
-	ginkgo.It("AWS CCS: cluster has gone missing (blocked egress)", Label("aws", "ccs", "chgm", "limited-support", "blocking-egress"), func(ctx context.Context) {
+	It("AWS CCS: cluster has gone missing (blocked egress)", Label("aws", "ccs", "chgm", "limited-support", "blocking-egress"), func(ctx context.Context) {
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 			Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
 			Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
+
 			awsCli, err := awsinternal.NewClient(awsAccessKey, awsSecretKey, "", region)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
+
 			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
 			Expect(err).NotTo(HaveOccurred(), "Failed to fetch cluster from OCM")
+
 			cluster := clusterResource.Body()
 			infraID := cluster.InfraID()
 			Expect(infraID).NotTo(BeEmpty(), "InfraID missing from cluster")
+
 			sgID, err := awsCli.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
@@ -93,7 +113,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			err = PostStoppedInfraLimitedSupport(clusterID, ocmCli)
 			ginkgo.GinkgoWriter.Printf("Limited support reason posted. Restoring egress...\n")
 
-			lsResponse, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().List().Send()
+			lsResponse, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 
 			var reasonID string
@@ -107,8 +127,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			}
 
 			Expect(reasonID).NotTo(BeEmpty(), "Failed to find the posted limited support reason")
-			ginkgo.GinkgoWriter.Printf("Egress blocked")
-			time.Sleep(10 * time.Minute)
+			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
+			time.Sleep(20 * time.Minute)time.Sleep(20 * time.Minute)
 
 			_, err = ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().
 				LimitedSupportReason(reasonID).Delete().Send()
@@ -116,9 +136,136 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			Expect(awsinternal.RestoreEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to restore egress")
 			ginkgo.GinkgoWriter.Printf("Egress restored")
-
-			ocme2eCli.Connection.Close()
 		}
 	})
 
+	It("AWS CCS: cluster has gone missing (no known misconfiguration)", func(ctx context.Context) {
+		if provider == "aws" {
+			// Get cluster information from OCM
+			response, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			Expect(err).ToNot(HaveOccurred(), "failed to get cluster from OCM")
+			cluster := response.Body()
+			Expect(cluster).ToNot(BeNil(), "received nil cluster from OCM")
+
+			// Get service logs
+			logs, err := GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
+			logsBefore := logs.Items().Slice()
+
+			lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+			lsReasonsBefore := lsResponseBefore.Items().Len()
+
+			var zero int32 = 0
+
+			// Step 1: Scale down cluster-monitoring-operator with retry
+			fmt.Println("Step 1: Scaling down cluster-monitoring-operator")
+			var originalCMOReplicas int32
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				cmo := &appsv1.Deployment{}
+				err := k8s.Get(ctx, "cluster-monitoring-operator", "openshift-monitoring", cmo)
+				if err != nil {
+					return err
+				}
+				originalCMOReplicas = *cmo.Spec.Replicas
+				cmo.Spec.Replicas = &zero
+				return k8s.Update(ctx, cmo)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale down cluster-monitoring-operator")
+			fmt.Printf("Scaled down cluster-monitoring-operator from %d to 0 replicas\n", originalCMOReplicas)
+
+			// Step 2: Scale down prometheus-operator with retry
+			fmt.Println("Step 2: Scaling down prometheus-operator")
+			var originalPOReplicas int32
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				po := &appsv1.Deployment{}
+				err := k8s.Get(ctx, "prometheus-operator", "openshift-monitoring", po)
+				if err != nil {
+					return err
+				}
+				originalPOReplicas = *po.Spec.Replicas
+				po.Spec.Replicas = &zero
+				return k8s.Update(ctx, po)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale down prometheus-operator")
+			fmt.Printf("Scaled down prometheus-operator from %d to 0 replicas\n", originalPOReplicas)
+
+			// Step 3: Scale down alertmanager-main with retry
+			fmt.Println("Step 3: Scaling down alertmanager-main")
+			var originalAMReplicas int32
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				sts := &appsv1.StatefulSet{}
+				err := k8s.Get(ctx, "alertmanager-main", "openshift-monitoring", sts)
+				if err != nil {
+					return err
+				}
+				originalAMReplicas = *sts.Spec.Replicas
+				sts.Spec.Replicas = &zero
+				return k8s.Update(ctx, sts)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
+			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
+
+			// Step 4: Wait period
+			time.Sleep(20 * time.Minute)
+
+			logs, err = GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
+			logsAfter := logs.Items().Slice()
+
+			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+			lsReasonsAfter := lsResponseAfter.Items().Len()
+
+			// Step 5: Scale alertmanager-main back up with retry
+			fmt.Println("Step 5: Scaling alertmanager-main back up")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				sts := &appsv1.StatefulSet{}
+				err := k8s.Get(ctx, "alertmanager-main", "openshift-monitoring", sts)
+				if err != nil {
+					return err
+				}
+				replicas := originalAMReplicas
+				sts.Spec.Replicas = &replicas
+				return k8s.Update(ctx, sts)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale up alertmanager")
+			fmt.Printf("Alertmanager scaled back up to %d replicas\n", originalAMReplicas)
+
+			// Step 6: Scale prometheus-operator back up with retry
+			fmt.Println("Step 6: Scaling prometheus-operator back up")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				po := &appsv1.Deployment{}
+				err := k8s.Get(ctx, "prometheus-operator", "openshift-monitoring", po)
+				if err != nil {
+					return err
+				}
+				replicas := originalPOReplicas
+				po.Spec.Replicas = &replicas
+				return k8s.Update(ctx, po)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale up prometheus-operator")
+			fmt.Printf("Prometheus-operator scaled back up to %d replicas\n", originalPOReplicas)
+
+			// Step 7: Scale cluster-monitoring-operator back up with retry
+			fmt.Println("Step 7: Scaling cluster-monitoring-operator back up")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				cmo := &appsv1.Deployment{}
+				err := k8s.Get(ctx, "cluster-monitoring-operator", "openshift-monitoring", cmo)
+				if err != nil {
+					return err
+				}
+				replicas := originalCMOReplicas
+				cmo.Spec.Replicas = &replicas
+				return k8s.Update(ctx, cmo)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale up cluster-monitoring-operator")
+			fmt.Printf("Cluster-monitoring-operator scaled back up to %d replicas\n", originalCMOReplicas)
+
+			Expect(logsAfter).To(HaveLen(len(logsBefore)), "Service logs count changed after scale down/up")
+			Expect(lsReasonsAfter).To(Equal(lsReasonsBefore), "Limited support reasons changed after scale down/up")
+
+			fmt.Println("Test completed: All components restored to original replica counts.")
+		}
+	})
 })
