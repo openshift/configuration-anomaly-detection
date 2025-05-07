@@ -116,8 +116,13 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	cluster, err := ocmClient.GetClusterInfo(clusterID)
 	if err != nil {
+		if strings.Contains(err.Error(), "no cluster found") {
+			logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
+			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		}
 		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
 	}
+
 	// From this point on, we normalize to internal ID, as this ID always exists.
 	// For installing clusters, externalID can be empty.
 	internalClusterID := cluster.ID()
