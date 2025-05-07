@@ -19,11 +19,10 @@ package investigate
 import (
 	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/cadctl/config"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -41,19 +40,45 @@ var InvestigateCmd = &cobra.Command{
 	Use:          "investigate",
 	SilenceUsage: true,
 	Short:        "Filter for and investigate supported alerts",
-	RunE:         run,
+	PreRunE: func(cmd *cobra.Command, _ []string) error {
+		var err error
+		var c config.Config
+
+		c, err = config.BuildConfig(cmd)
+		if err != nil {
+			return fmt.Errorf("failed to build config: %w", err)
+		}
+
+		// Initialize the logger here because it depends on user input
+		logging.RawLogger = logging.InitLogger(c.LogLevel)
+		logging.RawLogger = logging.WithPipelineName(logging.RawLogger, c.PipelineName)
+
+		// configure the RunE command using a wrapper to
+		// append the configuration into the command
+		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			if err := run(c, cmd, args); err != nil {
+				logging.Error(err)
+			}
+			return err
+		}
+
+		return nil
+	},
+	RunE: func(_ *cobra.Command, _ []string) error {
+		// DO NOT REMOVE
+		// this ensures RunE work as expected
+		// RunE is set in the PreRunE function
+		// this works because the RunE is always called after PreRunE
+		return nil
+	},
 }
 
-var (
-	logLevelFlag = ""
-	payloadPath  = "./payload.json"
-)
+var payloadPath = "./payload.json"
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
-	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
 
 	err := InvestigateCmd.MarkFlagRequired("payload-path")
 	if err != nil {
@@ -61,19 +86,33 @@ func init() {
 	}
 }
 
-func run(cmd *cobra.Command, _ []string) error {
-	// early init of logger for logs before clusterID is known
-	if cmd.Flags().Changed("log-level") {
-		flagValue, _ := cmd.Flags().GetString("log-level")
-		logging.RawLogger = logging.InitLogger(flagValue, "")
+func run(c config.Config, _ *cobra.Command, _ []string) error {
+	var err error
+
+	if c.PrometheusPushGateway == "" {
+		logging.Warn("metrics disabled, set env 'CAD_PROMETHEUS_PUSHGATEWAY' to push metrics")
 	}
+
+	err = metrics.Push(c.PrometheusPushGateway)
+	if err != nil {
+		logging.Warnf("failed to push metrics: %v", err)
+	}
+
+	// early init of logger for logs before clusterID is known
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
 	}
 	logging.Info("Running CAD with webhook payload:", string(payload))
 
-	pdClient, err := pagerduty.GetPDClient(payload)
+	if c.PagerDutyToken == "" {
+		return fmt.Errorf("missing PagerDuty token")
+	}
+	if c.PagerDutySilentPolicy == "" {
+		return fmt.Errorf("missing PagerDuty silent policy")
+	}
+
+	pdClient, err := pagerduty.GetPDClient(payload, c.PagerDutyToken, c.PagerDutySilentPolicy)
 	if err != nil {
 		return fmt.Errorf("could not initialize pagerduty client: %w", err)
 	}
@@ -88,9 +127,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
-	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
-	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
+	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), c.Experimental)
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
@@ -111,8 +148,11 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ocmClient, err := GetOCMClient()
-	if err != nil {
+	var ocmClient *ocm.SdkClient
+	var ocmErr error
+
+	ocmClient, ocmErr = ocm.NewFromClientKeyPair(c.CadOcmURL, c.CadOcmClientID, c.CadOcmClientSecret)
+	if ocmErr != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
@@ -129,13 +169,8 @@ func run(cmd *cobra.Command, _ []string) error {
 	// For installing clusters, externalID can be empty.
 	internalClusterID := cluster.ID()
 
-	// re-initialize logger for the internal-cluster-id context
-	// if log-level flag is set, take priority over env + default
-	if cmd.Flags().Changed("log-level") {
-		logging.RawLogger = logging.InitLogger(logLevelFlag, internalClusterID)
-	} else {
-		logging.RawLogger = logging.InitLogger(logging.LogLevelString, internalClusterID)
-	}
+	// add the internal-cluster-id context to the logger
+	logging.RawLogger = logging.WithClusterID(logging.RawLogger, internalClusterID)
 
 	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
 	if err != nil || !requiresInvestigation {
@@ -147,7 +182,23 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
 	}
 
-	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
+	if c.BackplaneURL == "" {
+		return fmt.Errorf("missing backplane URL")
+	}
+	if c.BackplaneProxyURL == "" {
+		logging.Warn("missing backplane proxy URL, using default")
+	}
+	if c.BackplaneInitialARN == "" {
+		return fmt.Errorf("missing backplane initial ARN")
+	}
+	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(
+		cluster,
+		ocmClient,
+		c.BackplaneURL,
+		c.BackplaneProxyURL,
+		c.BackplaneInitialARN,
+		c.AWSProxy,
+	)
 	if err != nil {
 		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil, AdditionalResources: map[string]interface{}{"error": err}}
 		inv := ccam.Investigation{}
@@ -156,7 +207,16 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	investigationResources = &investigation.Resources{
+		Name:              alertInvestigation.Name(),
+		BackplaneURL:      c.BackplaneURL,
+		Cluster:           cluster,
+		ClusterDeployment: clusterDeployment,
+		AwsClient:         customerAwsClient,
+		OcmClient:         ocmClient,
+		PdClient:          pdClient,
+		Notes:             nil,
+	}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)
@@ -189,22 +249,6 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 	} else {
 		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
-}
-
-// GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (*ocm.SdkClient, error) {
-	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
-
-	_, err := os.Stat(cadOcmFilePath)
-	if os.IsNotExist(err) {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return nil, err
-		}
-		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
-	}
-
-	return ocm.New(cadOcmFilePath)
 }
 
 // Checks pre-requisites for a cluster investigation:

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
+	logging "github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
 func setupSubnetMock(t *testing.T, gatewayId *string, mapPublicIps bool) EC2API {
@@ -41,6 +42,8 @@ func setupSubnetMock(t *testing.T, gatewayId *string, mapPublicIps bool) EC2API 
 }
 
 func TestSdkClient_IsSubnetPrivate(t *testing.T) {
+	logging.RawLogger = logging.InitLogger("info")
+
 	type fields struct {
 		Region           string
 		StsClient        StsAPI

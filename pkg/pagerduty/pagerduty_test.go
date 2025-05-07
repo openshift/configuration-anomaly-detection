@@ -9,7 +9,12 @@ import (
 	. "github.com/onsi/gomega"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
+	logging "github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
+
+func init() {
+	logging.RawLogger = logging.InitLogger("info")
+}
 
 var _ = Describe("Pagerduty", func() {
 	var (

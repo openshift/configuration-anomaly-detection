@@ -3,7 +3,6 @@ package k8sclient
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
@@ -27,8 +26,8 @@ type clientImpl struct {
 }
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
-func New(clusterID string, ocmClient ocm.Client, remediationName string) (kclient Client, err error) {
-	cfg, err := NewCfg(clusterID, ocmClient, remediationName)
+func New(clusterID string, ocmClient ocm.Client, remediationName string, backplaneURL string) (kclient Client, err error) {
+	cfg, err := NewCfg(clusterID, ocmClient, remediationName, backplaneURL)
 	if err != nil {
 		return nil, err
 	}
@@ -66,19 +65,15 @@ type remediationCleaner struct {
 	clusterID             string
 	ocmClient             ocm.Client
 	remediationInstanceId string
+	backplaneURL          string
 }
 
 func (cleaner remediationCleaner) Clean() error {
-	return deleteRemediation(cleaner.clusterID, cleaner.ocmClient, cleaner.remediationInstanceId)
+	return deleteRemediation(cleaner.clusterID, cleaner.ocmClient, cleaner.remediationInstanceId, cleaner.backplaneURL)
 }
 
 // New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
-func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
-	if backplaneURL == "" {
-		return nil, fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
-	}
-
+func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string, backplaneURL string) (cfg *Config, err error) {
 	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
 		config.BackplaneConfiguration{URL: backplaneURL},
 		ocmClient.GetConnection(),
@@ -92,16 +87,11 @@ func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg
 		return nil, err
 	}
 
-	return &Config{*decoratedCfg, remediationCleaner{clusterID, ocmClient, remediationInstanceId}}, nil
+	return &Config{*decoratedCfg, remediationCleaner{clusterID, ocmClient, remediationInstanceId, backplaneURL}}, nil
 }
 
 // Cleanup removes the remediation created for the cluster.
-func deleteRemediation(clusterID string, ocmClient ocm.Client, remediationInstanceId string) error {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
-	if backplaneURL == "" {
-		return fmt.Errorf("could not clean up k8sclient: missing environment variable BACKPLANE_URL")
-	}
-
+func deleteRemediation(clusterID string, ocmClient ocm.Client, remediationInstanceId string, backplaneURL string) error {
 	return bpremediation.DeleteRemediationWithConn(
 		config.BackplaneConfiguration{URL: backplaneURL},
 		ocmClient.GetConnection(),

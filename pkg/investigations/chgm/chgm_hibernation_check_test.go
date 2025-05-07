@@ -6,7 +6,13 @@ import (
 	"time"
 
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
+
+func init() {
+	// Initialize the logger
+	logging.RawLogger = logging.InitLogger("info")
+}
 
 func TestCreateHibernationTimeLine(t *testing.T) {
 	type args struct {

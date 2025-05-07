@@ -34,6 +34,7 @@ type Investigation interface {
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
 	Name                string
+	BackplaneURL        string // URL to the backplane API meant as a temporary workaround
 	Cluster             *cmv1.Cluster
 	ClusterDeployment   *hivev1.ClusterDeployment
 	AwsClient           aws.Client

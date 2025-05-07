@@ -12,12 +12,16 @@ import (
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	logging "github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"go.uber.org/mock/gomock"
 )
+
+func init() {
+	logging.RawLogger = logging.InitLogger("info")
+}
 
 var _ = Describe("chgm", func() {
 	// this is a var but I use it as a const
@@ -37,7 +41,7 @@ var _ = Describe("chgm", func() {
 		event             cloudtrailv2types.Event
 	)
 	BeforeEach(func() {
-		logging.InitLogger("fatal", "") // Mute logger for the tests
+		logging.InitLogger("fatal") // Mute logger for the tests
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		var err error

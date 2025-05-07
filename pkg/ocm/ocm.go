@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -57,35 +55,23 @@ type SdkClient struct {
 
 // New will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
-func New(ocmConfigFile string) (*SdkClient, error) {
+func NewFromClientKeyPair(ocmURL string, clientID string, clientSecret string) (*SdkClient, error) {
 	var err error
 	client := SdkClient{}
 
-	// The debug environment variable ensures that we will never use
-	// an ocm config file on a cluster deployment. The debug environment variable
-	// is only for local cadctl development
-	debugMode := os.Getenv("CAD_DEBUG")
-
-	// strconv.ParseBool raises an error when debugMode is empty, thus
-	// we have to set it to false if the value is empty.
-	if debugMode == "" {
-		debugMode = "false"
+	if ocmURL == "" {
+		return nil, fmt.Errorf("need ocm url")
 	}
 
-	debugEnabled, err := strconv.ParseBool(debugMode)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CAD_DEBUG value '%s': %w", debugMode, err)
+	if clientID == "" {
+		return nil, fmt.Errorf("need ocm client id")
 	}
 
-	if debugEnabled {
-		client.conn, err = newConnectionFromFile(ocmConfigFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
-		}
-		return &client, nil
+	if clientSecret == "" {
+		return nil, fmt.Errorf("need ocm client secret")
 	}
 
-	client.conn, err = newConnectionFromClientPair()
+	client.conn, err = sdk.NewConnectionBuilder().URL(ocmURL).Client(clientID, clientSecret).Insecure(false).Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection from client key pair: %w", err)
 	}
@@ -93,15 +79,24 @@ func New(ocmConfigFile string) (*SdkClient, error) {
 	return &client, nil
 }
 
-// newConnectionFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
-// and creates a connection.
-func newConnectionFromFile(ocmConfigFile string) (*sdk.Connection, error) {
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return nil, err
-		}
+// NewFromConfig creates a new connection from the config file
+// The ocm configuration file stored by the ocm login command
+// is used to create the connection.
+// By the time this is called the ocmConfigFile is already set
+// either from flag, env or default location
+// see the main command.
+// The config file is stored in the default location:
+//   - ocmConfigFile,
+//   - ~/.ocm.json,
+//   - /ocm/ocm.json
+func NewFromConfig(ocmConfigFile string) (*SdkClient, error) {
+	if ocmConfigFile == "" {
+		return nil, fmt.Errorf("no config file configured see help")
 	}
+
+	client := SdkClient{}
+	var err error
+
 	// Load the configuration file from std path
 	cfg, err := Load()
 	if err != nil {
@@ -110,19 +105,11 @@ func newConnectionFromFile(ocmConfigFile string) (*sdk.Connection, error) {
 	if cfg == nil || cfg == (&Config{}) {
 		return nil, fmt.Errorf("not logged in")
 	}
-	return cfg.Connection()
-}
-
-// newConnectionFromClientPair creates a new connection via set of client ID, client secret
-// and the target OCM API URL.
-func newConnectionFromClientPair() (*sdk.Connection, error) {
-	ocmClientID, hasOcmClientID := os.LookupEnv("CAD_OCM_CLIENT_ID")
-	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("CAD_OCM_CLIENT_SECRET")
-	ocmURL, hasOcmURL := os.LookupEnv("CAD_OCM_URL")
-	if !hasOcmClientID || !hasOcmClientSecret || !hasOcmURL {
-		return nil, fmt.Errorf("missing environment variables: CAD_OCM_CLIENT_ID CAD_OCM_CLIENT_SECRET CAD_OCM_URL")
+	client.conn, err = cfg.Connection()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
 	}
-	return sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(false).Build()
+	return &client, nil
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID

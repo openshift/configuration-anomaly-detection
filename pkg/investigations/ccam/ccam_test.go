@@ -5,12 +5,18 @@ import (
 	"testing"
 
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	logging "github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
+
+func init() {
+	logging.RawLogger = logging.InitLogger("info")
+}
 
 func TestEvaluateRandomError(t *testing.T) {
 	timeoutError := errors.New("credentials are there, error is different: timeout")
 	input := investigation.Resources{
 		Cluster:           nil,
+		BackplaneURL:      "",
 		ClusterDeployment: nil,
 		AwsClient:         nil,
 		OcmClient:         nil,
