@@ -26,8 +26,6 @@ import (
 
 const (
 	alertname = "MachineHealthCheckUnterminatedShortCircuitSRE"
-	// remediationName must match the name of this investigation's directory, so it can be looked up via the backplane-api
-	remediationName = "machineHealthCheckUnterminatedShortCircuitSRE"
 )
 
 type Investigation struct {
@@ -41,7 +39,7 @@ type Investigation struct {
 
 func (i *Investigation) setup(r *investigation.Resources) error {
 	// Setup investigation
-	k, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
+	k, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kubernetes client: %w", err)
 	}
@@ -68,7 +66,7 @@ func (i *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, fmt.Errorf("failed to setup investigation: %w", err)
 	}
 	defer func(r *investigation.Resources) {
-		err := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, remediationName)
+		err := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
 		if err != nil {
 			logging.Errorf("failed to cleanup investigation: %w", err)
 		}
@@ -313,7 +311,7 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 }
 
 func (i *Investigation) Name() string {
-	return alertname
+	return strings.ToLower(alertname)
 }
 
 func (i *Investigation) Description() string {
