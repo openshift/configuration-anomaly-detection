@@ -17,6 +17,8 @@ limitations under the License.
 package cmd
 
 import (
+
+	// "github.com/openshift-online/ocm-cli/pkg/config"
 	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -41,4 +43,6 @@ func Execute() {
 
 func init() {
 	rootCmd.AddCommand(investigate.InvestigateCmd)
+	rootCmd.PersistentFlags().StringP("ocmconfig", "c", "", "Path to the OCM config file to use for CLI requests. When not set the OCM_CONFIG environment variable will be used. If that is not set, the default OCM config locations will be file will be used.")
+	rootCmd.PersistentFlags().StringP("loglevel", "l", "info", "Log level to use. One of: debug, info, warn, error, fatal, panic")
 }
