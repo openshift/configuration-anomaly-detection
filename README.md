@@ -183,3 +183,5 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
 - `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See
+
+- `CAD_HCM_AI_TOKEN`: required for requests to the ai model

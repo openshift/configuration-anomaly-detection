@@ -82,6 +82,13 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
 	}
 
+	// AI POC
+	aiOutput, err := r.AIClient.Ask(fmt.Sprintf("How do I react to this alert: %s. Here is the full output of the CRD for the monitoring operator: %s. Is there anything in the status or events that might help understanding the issue. Please give a short answer.", r.Name, monitoringCo))
+	if err != nil {
+		notes.AppendWarning("Failed to get AI answer: %s", err)
+	}
+	notes.AppendAutomation(aiOutput)
+
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to a broken UWM configmap")

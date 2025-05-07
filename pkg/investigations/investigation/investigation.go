@@ -3,6 +3,7 @@ package investigation
 
 import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ai"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -40,5 +41,6 @@ type Resources struct {
 	OcmClient           ocm.Client
 	PdClient            pagerduty.Client
 	Notes               *notewriter.NoteWriter
+	AIClient            *ai.AIClient
 	AdditionalResources map[string]interface{}
 }

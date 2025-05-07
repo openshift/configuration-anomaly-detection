@@ -34,6 +34,11 @@ spec:
           value: ${CAD_EXPERIMENTAL_ENABLED}
         - name: LOG_LEVEL
           value: ${LOG_LEVEL}
+        - name: CAD_HCM_AI_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: srep-ai-sa-token
+              key: token
       # envFrom should pull all the secret information as envvars, so key names should be uppercase
       envFrom:
         - secretRef:
