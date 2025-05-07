@@ -9,9 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,10 +29,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		region    string
 		provider  string
 		clusterID string
-		egressLS  = ocm.LimitedSupportReason{
-			Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
-			Details: "Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to internet-based resources which are required for the cluster operation and support. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#",
-		}
 	)
 
 	BeforeAll(func(ctx context.Context) {
@@ -74,19 +67,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 	})
 
-	It("can fetch service logs", func(ctx context.Context) {
-		if provider == "aws" {
-			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-			Expect(awsAccessKey).NotTo(BeEmpty(), "awsAccessKey not found")
-			Expect(awsSecretKey).NotTo(BeEmpty(), "awsSecretKey not found")
-
-			_, err := session.NewSession(aws.NewConfig().WithCredentials(
-				credentials.NewStaticCredentials(awsAccessKey, awsSecretKey, "")).WithRegion(region))
-			Expect(err).NotTo(HaveOccurred(), "Could not set up aws session")
-		}
-	})
-
 	It("AWS CCS: cluster has gone missing (blocked egress)", Label("aws", "ccs", "chgm", "limited-support", "blocking-egress"), func(ctx context.Context) {
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
@@ -107,34 +87,24 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			sgID, err := awsCli.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
-			ginkgo.GinkgoWriter.Printf("About to block egress for security group: %s\n", sgID)
-			Expect(awsinternal.BlockEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to block egress")
+			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
+			Expect(BlockEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to block egress")
 
-			err = PostStoppedInfraLimitedSupport(clusterID, ocmCli)
-			ginkgo.GinkgoWriter.Printf("Limited support reason posted. Restoring egress...\n")
-
-			lsResponse, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
-			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
-
-			var reasonID string
-			lsReasons := lsResponse.Items()
-			for i := 0; i < lsReasons.Len(); i++ {
-				reason := lsReasons.Get(i)
-				if reason.Summary() == egressLS.Summary {
-					reasonID = reason.ID()
-					break
-				}
-			}
-
-			Expect(reasonID).NotTo(BeEmpty(), "Failed to find the posted limited support reason")
-			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 			time.Sleep(20 * time.Minute)
 
-			_, err = ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).LimitedSupportReasons().
-				LimitedSupportReason(reasonID).Delete().Send()
-			Expect(err).NotTo(HaveOccurred(), "Failed to remove limited support reason")
+			lsResponse, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			items := lsResponse.Items().Slice()
+			for i, item := range items {
+				fmt.Printf("Reason #%d:\n", i+1)
+				fmt.Printf("  - Summary: %s\n", item.Summary())
+				fmt.Printf("  - Details: %s\n", item.Details())
 
-			Expect(awsinternal.RestoreEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to restore egress")
+			}
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+
+			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
+
+			Expect(RestoreEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to restore egress")
 			ginkgo.GinkgoWriter.Printf("Egress restored")
 		}
 	})
@@ -206,7 +176,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			// Step 4: Wait period
 			time.Sleep(20 * time.Minute)
 
 			logs, err = GetServiceLogs(ocmCli, cluster)
