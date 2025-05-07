@@ -19,7 +19,6 @@ package investigate
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -35,12 +34,82 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var debugFlag = false
+var experimentalFlag = false
+var cadOcmClientID string
+var cadOcmClientSecret string
+var cadOcmURL string
+
 // InvestigateCmd represents the entry point for alert investigation
 var InvestigateCmd = &cobra.Command{
 	Use:          "investigate",
 	SilenceUsage: true,
 	Short:        "Filter for and investigate supported alerts",
-	RunE:         run,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		debugFlag, err := cmd.Flags().GetBool("debug")
+		if err != nil {
+			return fmt.Errorf("failed to get debug flag: %w", err)
+		}
+
+		if !debugFlag {
+			// check environment variable
+			debug, exist := os.LookupEnv("CAD_DEBUG")
+			if exist && debug == "true" {
+				debugFlag = true
+			}
+		}
+
+		if debugFlag && !ocm.HasConfigFile() {
+			return fmt.Errorf("debug flag is set, but no OCM config file found. When using debug mode the OCM config file must be set")
+		}
+
+		var exist bool
+		cadOcmURL, err = cmd.Flags().GetString("ocm-url")
+		if err != nil {
+			return fmt.Errorf("failed to get ocm-url flag: %w", err)
+		}
+		if cadOcmURL == "" {
+			cadOcmURL, exist = os.LookupEnv("CAD_OCM_URL")
+			if !exist && !debugFlag {
+				return fmt.Errorf("ocm-url flag or CAD_OCM_URL environment variable must be set")
+			}
+		}
+
+		cadOcmClientID, err = cmd.Flags().GetString("client-id")
+		if err != nil {
+			return fmt.Errorf("failed to get client-id flag: %w", err)
+		}
+		if cadOcmClientID == "" {
+			cadOcmClientID, exist = os.LookupEnv("CAD_OCM_CLIENT_ID")
+			if !exist && !debugFlag {
+				return fmt.Errorf("client-id flag or CAD_OCM_CLIENT_ID environment variable must be set")
+			}
+		}
+		cadOcmClientSecret, err = cmd.Flags().GetString("client-secret")
+		if err != nil {
+			return fmt.Errorf("failed to get client-secret flag: %w", err)
+		}
+		if cadOcmClientSecret == "" {
+			cadOcmClientSecret, exist = os.LookupEnv("CAD_OCM_CLIENT_SECRET")
+			if !exist && !debugFlag {
+				return fmt.Errorf("client-secret flag or CAD_OCM_CLIENT_SECRET environment variable must be set")
+			}
+		}
+
+		experimentalFlag, err = cmd.Flags().GetBool("experimental")
+		if err != nil {
+			return fmt.Errorf("failed to get experimental flag: %w", err)
+		}
+		if !experimentalFlag {
+			experimental, exist := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
+			if exist && experimental == "true" {
+				experimentalFlag = true
+			}
+		}
+
+		return nil
+	},
+	RunE: run,
 }
 
 var (
@@ -53,6 +122,11 @@ const pagerdutyTitlePrefix = "[CAD Investigated]"
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
+	InvestigateCmd.Flags().BoolP("debug", "d", false, "enable debugging mode, if not present CAD_DEBUG env is checked")
+	InvestigateCmd.Flags().StringP("ocm-url", "u", "", "the OCM URL, when not set the CAD_OCM_URL environment is used.")
+	InvestigateCmd.Flags().StringP("client-id", "i", "", "the OCM client ID, when not set the CAD_OCM_CLIENT_ID environment is used.")
+	InvestigateCmd.Flags().StringP("client-secret", "s", "", "the OCM client secret, when not set the CAD_OCM_CLIENT_SECRET environment is used.")
+	InvestigateCmd.Flags().BoolP("experimental", "e", false, "enable experimental features")
 
 	err := InvestigateCmd.MarkFlagRequired("payload-path")
 	if err != nil {
@@ -87,8 +161,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
-	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
+	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), experimentalFlag)
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
@@ -109,8 +182,14 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ocmClient, err := GetOCMClient()
-	if err != nil {
+	var ocmClient *ocm.SdkClient
+	var ocmErr error
+	if debugFlag {
+		ocmClient, ocmErr = ocm.NewFromConfig()
+	} else {
+		ocmClient, ocmErr = ocm.NewFromClientKeyPair(cadOcmURL, cadOcmClientID, cadOcmClientSecret)
+	}
+	if ocmErr != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
@@ -182,22 +261,6 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 	} else {
 		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
-}
-
-// GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (*ocm.SdkClient, error) {
-	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
-
-	_, err := os.Stat(cadOcmFilePath)
-	if os.IsNotExist(err) {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return nil, err
-		}
-		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
-	}
-
-	return ocm.New(cadOcmFilePath)
 }
 
 // Checks pre-requisites for a cluster investigation:
