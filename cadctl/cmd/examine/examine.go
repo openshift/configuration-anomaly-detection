@@ -67,6 +67,11 @@ func run(cmd *cobra.Command, args []string) error {
 		logging.Fatal("Cluster ID is required")
 	}
 
+	investigationName, _ = cmd.Flags().GetString("investigation")
+	// Always use experimental flag, when running the examine command
+	// the decision is up to the user
+	investigationInstance := investigations.GetInvestigationByName(investigationName)
+
 	logging.Info("Starting examine command")
 	return nil
 }
