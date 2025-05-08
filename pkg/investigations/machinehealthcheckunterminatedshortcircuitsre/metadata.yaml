@@ -19,4 +19,4 @@ rbac:
         - ""
       resources:
         - "nodes"
-customerDataAccess: true
+customerDataAccess: false
