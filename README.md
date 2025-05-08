@@ -134,7 +134,6 @@ Investigation specific documentation can be found in the according investigation
 
 ### Templates
 
-* [Update-Template](./hack/update-template/README.md) -- Updating configuration-anomaly-detection-template.Template.yaml.
 * [OpenShift](./openshift/README.md) -- Used by app-interface to deploy the CAD resources on a target cluster.
 
 ### Dashboards
