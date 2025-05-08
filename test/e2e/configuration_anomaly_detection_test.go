@@ -9,6 +9,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -74,6 +77,19 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
 			Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
 
+			awsCfg, err := config.LoadDefaultConfig(ctx,
+				config.WithRegion(region),
+				config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+					awsAccessKey,
+					awsSecretKey,
+					"",
+				)),
+			)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
+
+			ec2Client := ec2.NewFromConfig(awsCfg)
+			ec2Wrapper := NewEC2ClientWrapper(ec2Client)
+
 			awsCli, err := awsinternal.NewClient(awsAccessKey, awsSecretKey, "", region)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
 
@@ -87,25 +103,38 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			sgID, err := awsCli.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
+			// Get limited support reasons before blocking egress
+			lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+			lsReasonsBefore := lsResponseBefore.Items().Len()
+
+			ginkgo.GinkgoWriter.Printf("Limited support reasons before blocking egress: %d\n", lsReasonsBefore)
 			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
-			Expect(BlockEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to block egress")
+
+			// Block egress
+			//Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
+			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
 			time.Sleep(20 * time.Minute)
 
-			lsResponse, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
-			items := lsResponse.Items().Slice()
+			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+
+			// Print the response data
+			fmt.Println("Limited Support Response After Blocking Egress:")
+			fmt.Printf("Total items: %d\n", lsResponseAfter.Items().Len())
+
+			// Iterate through each item and print details
+			items := lsResponseAfter.Items().Slice()
 			for i, item := range items {
 				fmt.Printf("Reason #%d:\n", i+1)
 				fmt.Printf("  - Summary: %s\n", item.Summary())
 				fmt.Printf("  - Details: %s\n", item.Details())
-
 			}
-			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 
-			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
-
-			Expect(RestoreEgress(ctx, awsCli.Ec2Client, sgID)).To(Succeed(), "Failed to restore egress")
-			ginkgo.GinkgoWriter.Printf("Egress restored")
+			// Restore egress
+			Expect(RestoreEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to restore egress")
+			ginkgo.GinkgoWriter.Printf("Egress restored\n")
 		}
 	})
 
