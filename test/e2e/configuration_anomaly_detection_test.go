@@ -112,7 +112,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
 
 			// Block egress
-			//Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
+			Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
 			time.Sleep(20 * time.Minute)
