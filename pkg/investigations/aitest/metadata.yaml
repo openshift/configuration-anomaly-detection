@@ -5,5 +5,4 @@ rbac:
     - verbs: ["get", "watch", "list"]
       apiGroups: ["*"]
       resources: ["*"]
-customerDataAccess: false
-
+customerDataAccess: true
