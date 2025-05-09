@@ -1,4 +1,4 @@
-# Testing aitest Investigation
+# Testing apierrorbudgetburn Investigation
 
 TODO:
 - Add a test script or test objects to this  directory for future maintainers to use

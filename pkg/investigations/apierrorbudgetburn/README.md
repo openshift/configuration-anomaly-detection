@@ -1,6 +1,6 @@
-# aitest Investigation
+# apierrorbudgetburn Investigation
 
-Test investigation to run k8sgpt
+POC Api-ErrorBudgetBurn investigation using k8sgpt.
 
 ## Testing
 
