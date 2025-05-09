@@ -1,0 +1,9 @@
+name: aitest
+rbac:
+  roles: []
+  clusterRoleRules:
+    - verbs: ["get", "watch", "list"]
+      apiGroups: ["*"]
+      resources: ["*"]
+customerDataAccess: false
+
