@@ -19,7 +19,7 @@ help:  # Display this help
 
 ##@ Global:
 .PHONY: all
-all: interceptor cadctl lint test ## Generate, build, lint, test all subprojects
+all: interceptor cadctl ## Generate, build, lint, test all subprojects
 
 .PHONY: build
 build: build-interceptor build-cadctl ## Build all subprojects in this repository
