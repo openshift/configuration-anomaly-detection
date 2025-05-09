@@ -7,11 +7,27 @@ import (
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
 func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Client, error) {
+	cfg, err := NewCfg(clusterID, ocmClient, remediation)
+	if err != nil {
+		return nil, err
+	}
+
+	scheme, err := initScheme()
+	if err != nil {
+		return nil, err
+	}
+
+	return client.New(cfg, client.Options{Scheme: scheme})
+}
+
+// New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
+func NewCfg(clusterID string, ocmClient ocm.Client, remediation string) (*rest.Config, error) {
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
 		return nil, fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
@@ -30,12 +46,7 @@ func New(clusterID string, ocmClient ocm.Client, remediation string) (client.Cli
 		return nil, err
 	}
 
-	scheme, err := initScheme()
-	if err != nil {
-		return nil, err
-	}
-
-	return client.New(cfg, client.Options{Scheme: scheme})
+	return cfg, nil
 }
 
 // Cleanup removes the remediation created for the cluster.
