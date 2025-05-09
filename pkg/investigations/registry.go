@@ -1,6 +1,7 @@
 package investigations
 
 import (
+	cannotretrieveupdatessre "github.com/openshift/configuration-anomaly-detection/pkg/investigations/cannotretrieveupdatessre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
@@ -20,6 +21,7 @@ var availableInvestigations = []investigation.Investigation{
 	&insightsoperatordown.Investigation{},
 	&upgradeconfigsyncfailureover4hr.Investigation{},
 	&machinehealthcheckunterminatedshortcircuitsre.Investigation{},
+	&cannotretrieveupdatessre.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.
