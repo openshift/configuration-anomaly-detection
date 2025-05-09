@@ -17,9 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var (
-	model = "mistral-small-maas"
-)
+var model = "mistral-small-maas"
 
 func K8sGptAnalysis(k8sRestConfig *rest.Config) (string, error) {
 	ctrlClient, err := client.New(k8sRestConfig, client.Options{Scheme: runtime.NewScheme()})
@@ -42,9 +40,15 @@ func K8sGptAnalysis(k8sRestConfig *rest.Config) (string, error) {
 		BaseURL:  "https://mistral-small-maas-maas.apps.rosa.hcmaii01ue1.a9ro.p3.openshiftapps.com/v1", // TODO: Let's not hardcode this.
 		Password: aiToken,
 	}
-	aiClient.Configure(aiProvider)
+
+	if err = aiClient.Configure(aiProvider); err != nil {
+		return "", fmt.Errorf("unable to configure ai provider: %w", err)
+	}
 
 	cache, err := cache.GetCacheConfiguration()
+	if err != nil {
+		return "", fmt.Errorf("unable to get k8sgpt cache configuration: %w", err)
+	}
 	cache.DisableCache()
 
 	a := &analysis.Analysis{
