@@ -20,7 +20,6 @@
     - [Integrations](#integrations)
     - [Templates](#templates)
     - [Dashboards](#dashboards)
-    - [Deployment](#deployment)
     - [Boilerplate](#boilerplate)
     - [PipelinePruner](#pipelinepruner)
     - [Required ENV variables](#required-env-variables)
@@ -86,7 +85,8 @@ New investigations and their remediation steps are deployed in advancing stages 
     **Validation Criteria:**
     * The investigation successfully carries out each step on it's respective incident type, on both staging and production environments.
     * It provides useful information (equivalent to a manual investigation) to SREs through PagerDuty.
-    * The investigation should be accompanied by unit tests and/or step-by-step manual tests in the investigation's README.
+    * The investigation should be accompanied by unit tests and/or step-by-step manual tests in the investigation's testing README, including:
+        * A clear step-by-step process to manually test the investigation (e.g. cluster setup, other expected conditions).
 
 2. **Actioning Stage (Read/Write):**
     The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable clusters (high-impact clusters may be set to remain read-only).
@@ -94,7 +94,8 @@ New investigations and their remediation steps are deployed in advancing stages 
     **How:** The `informingOnly` value is changed to `false`. If the `informing-mode` flag is set (i.e. exceptions for high-impact clusters), it takes precedence.
 
     **Validation Criteria:**
-    * ...
+    * The investigation is verified to conduct remediations on staging as expected.
+    * E2E testing is desired for actioning investigations; the tests should cover the execution of remediative steps as well as verification of their effectiveness.
 
 ### Integrations
 
@@ -111,8 +112,6 @@ They are initialized for you and passed to the investigation via investigation.R
 * [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 * [k8sclient](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client) -- Interact with clusters kube-api
     - Requires RBAC definitions for your investigation to be added to `metadata.yaml`
-- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
-- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
 
@@ -167,12 +166,6 @@ Investigation specific documentation can be found in the according investigation
 ### Dashboards
 
 Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) directory. See app-interface for further documentation on dashboards.
-
-### Deployment
-
-* [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
-* [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
-* [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
 
 ### Boilerplate
 
