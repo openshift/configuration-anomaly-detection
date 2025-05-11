@@ -111,6 +111,8 @@ They are initialized for you and passed to the investigation via investigation.R
 * [osd-network-verifier](https://github.com/openshift/osd-network-verifier) -- Tool to verify the pre-configured networking components for ROSA and OSD CCS clusters.
 * [k8sclient](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/client) -- Interact with clusters kube-api
     - Requires RBAC definitions for your investigation to be added to `metadata.yaml`
+- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
+- if the alert is not yet routed to CAD, add a webhook to the service your alert fires on. For production, the service should also have an escalation policy that escalates to SRE on CAD automation timeout.
 
 ## Testing locally
 
