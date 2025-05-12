@@ -78,7 +78,7 @@ New investigations and their remediation steps are deployed in advancing stages 
 1. **Informing Stage (Read-only):**
     The investigation is merely informative through PagerDuty at this stage; remediation _**does not involve any write operations**_. Notes are collected throughout the investigation, and upon the investigation's conclusion are posted to PagerDuty.
 
-    **How:** Informing is set to true by default in the [new investigation boilerplate](#adding-a-new-investigation). The investigation should be deployed and validated in both staging and production environments at this informing-only stage.
+    **How:** Informing is set to true by default in the [new investigation boilerplate](#adding-a-new-investigation). The investigation should be deployed and validated in both staging and production environments at this informing-only stage (`IsExperimental()` should first be changed to "graduate" to production)
 
     **Aim:** Validating the investigation's accuracy and usefulness **without performing any write actions**.
 
@@ -160,7 +160,6 @@ Investigation specific documentation can be found in the according investigation
 
 ### Templates
 
-* [Update-Template](./hack/update-template/README.md) -- Updating configuration-anomaly-detection-template.Template.yaml.
 * [OpenShift](./openshift/README.md) -- Used by app-interface to deploy the CAD resources on a target cluster.
 
 ### Dashboards
@@ -203,3 +202,5 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
 - `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See
+
+- `CAD_HCM_AI_TOKEN`: required for requests to the ai model

@@ -86,7 +86,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID(), c.InformingMode(r.InformingModeFlag))
+			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID(), c.InformingMode())
 			if err != nil {
 				return result, err
 			}
@@ -98,7 +98,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 			return result, r.PdClient.SilenceIncidentWithNote(notes.String())
 		}
 
-		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason), c.InformingMode(r.InformingModeFlag))
+		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason), c.InformingMode())
 		if err != nil {
 			return result, err
 		}
@@ -132,9 +132,8 @@ func (c *Investiation) IsExperimental() bool {
 	return false
 }
 
-func (c *Investiation) InformingMode(flag bool) bool {
-	informingOnly := false
-	return informingOnly || flag
+func (c *Investiation) InformingMode() bool {
+	return false
 }
 
 // investigateHibernation checks if the cluster was recently woken up from

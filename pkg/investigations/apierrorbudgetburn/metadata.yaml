@@ -1,0 +1,8 @@
+name: apierrorbudgetburn
+rbac:
+  roles: []
+  clusterRoleRules:
+    - verbs: ["get", "watch", "list"]
+      apiGroups: ["*"]
+      resources: ["*"]
+customerDataAccess: true

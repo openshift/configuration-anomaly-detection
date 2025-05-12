@@ -28,7 +28,7 @@ type Investigation interface {
 	Name() string
 	Description() string
 	IsExperimental() bool
-	InformingMode(bool) bool
+	InformingMode() bool
 	ShouldInvestigateAlert(string) bool
 }
 
@@ -40,7 +40,6 @@ type Resources struct {
 	AwsClient           aws.Client
 	OcmClient           ocm.Client
 	PdClient            pagerduty.Client
-	InformingModeFlag   bool
 	Notes               *notewriter.NoteWriter
 	AdditionalResources map[string]interface{}
 }

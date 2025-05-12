@@ -44,15 +44,13 @@ var InvestigateCmd = &cobra.Command{
 }
 
 var (
-	informingModeFlag = false
-	logLevelFlag      = ""
-	payloadPath       = "./payload.json"
+	logLevelFlag = ""
+	payloadPath  = "./payload.json"
 )
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 func init() {
-	InvestigateCmd.Flags().BoolVar(&informingModeFlag, "informing-mode", informingModeFlag, "limit remediation capability to read-only")
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
 	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
 
@@ -118,8 +116,13 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	cluster, err := ocmClient.GetClusterInfo(clusterID)
 	if err != nil {
+		if strings.Contains(err.Error(), "no cluster found") {
+			logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
+			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		}
 		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
 	}
+
 	// From this point on, we normalize to internal ID, as this ID always exists.
 	// For installing clusters, externalID can be empty.
 	internalClusterID := cluster.ID()
@@ -151,7 +154,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, InformingModeFlag: informingModeFlag, Notes: nil}
+	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err := alertInvestigation.Run(investigationResources)

@@ -1,21 +1,27 @@
 package investigations
 
 import (
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/apierrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradeconfigsyncfailureover4hr"
 )
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
+	&apierrorbudgetburn.Investigation{},
 	&ccam.Investigation{},
 	&chgm.Investiation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&cpd.Investigation{},
 	&insightsoperatordown.Investigation{},
+	&upgradeconfigsyncfailureover4hr.Investigation{},
+	&machinehealthcheckunterminatedshortcircuitsre.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.

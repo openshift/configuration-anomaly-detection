@@ -65,14 +65,14 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 				logging.Error(err)
 			}
 			if !isValid {
-				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL, c.InformingMode(r.InformingModeFlag)); err != nil {
+				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL, c.InformingMode()); err != nil {
 					return result, err
 				}
 				// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 				result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
 				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
-				if !c.InformingMode(r.InformingModeFlag) {
+				if !c.InformingMode() {
 					notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
 				}
 				if err := r.PdClient.AddNote(notes.String()); err != nil {
@@ -138,9 +138,8 @@ func (c *Investigation) IsExperimental() bool {
 	return false
 }
 
-func (c *Investigation) InformingMode(flag bool) bool {
-	informingOnly := false
-	return informingOnly || flag
+func (c *Investigation) InformingMode() bool {
+	return false
 }
 
 func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {

@@ -48,7 +48,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		// Cluster is in functional state but we can't jumprole to it: post limited support
 		result.LimitedSupportSet.Performed = true
 		result.LimitedSupportSet.Labels = []string{ccamLimitedSupport.Summary}
-		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID(), c.InformingMode(r.InformingModeFlag))
+		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID(), c.InformingMode())
 		if err != nil {
 			return result, fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
@@ -80,9 +80,8 @@ func (c *Investigation) IsExperimental() bool {
 	return false
 }
 
-func (c *Investigation) InformingMode(flag bool) bool {
-	informingOnly := false
-	return informingOnly || flag
+func (c *Investigation) InformingMode() bool {
+	return false
 }
 
 // userCausedErrors contains the list of backplane returned error strings that we map to

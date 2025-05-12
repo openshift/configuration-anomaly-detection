@@ -132,7 +132,6 @@ func (c *Investigation) IsExperimental() bool {
 	return false
 }
 
-func (c Investigation) InformingMode(flag bool) bool {
-	informingOnly := false
-	return informingOnly || flag
+func (c Investigation) InformingMode() bool {
+	return false
 }

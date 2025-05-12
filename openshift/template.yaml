@@ -272,18 +272,6 @@ objects:
     CAD_OCM_CLIENT_SECRET: CHANGEME
     CAD_OCM_URL: https://api.stage.openshift.com
   type: Opaque
-- apiVersion: v1
-  kind: Secret
-  metadata:
-    name: cad-pd-token
-  stringData:
-    CAD_PD_EMAIL: CHANGEME
-    CAD_PD_PW: CHANGEME
-    CAD_PD_TOKEN: CHANGEME
-    CAD_PD_USERNAME: CHANGEME
-    CAD_SILENT_POLICY: CHANGEME
-    PD_SIGNATURE: CHANGEME
-  type: Opaque
 - apiVersion: tekton.dev/v1beta1
   kind: Task
   metadata:
@@ -317,6 +305,11 @@ objects:
         value: ${CAD_EXPERIMENTAL_ENABLED}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
+      - name: CAD_HCM_AI_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: token
+            name: srep-ai-sa-token
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret

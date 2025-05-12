@@ -120,8 +120,8 @@ func (c *Investigation) IsExperimental() bool {
 }
 
 func (c *Investigation) InformingMode(flag bool) bool {
-	informingOnly := true // TODO: Update to false when promoting investigation to "actioning mode" (See README)
-	return informingOnly || flag
+	// TODO: Update to false when graduating to actioning mode.
+	return true
 }
 
 EOF

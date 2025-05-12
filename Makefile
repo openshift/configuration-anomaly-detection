@@ -19,20 +19,20 @@ help:  # Display this help
 
 ##@ Global:
 .PHONY: all
-all: interceptor cadctl template-updater generate-template-file  ## Generate, build, lint, test all subprojects
+all: interceptor cadctl ## Generate, build, lint, test all subprojects
 
 .PHONY: build
-build: build-interceptor build-cadctl build-template-updater ## Build all subprojects in this repository
+build: build-interceptor build-cadctl ## Build all subprojects in this repository
 
 .PHONY: lint
-lint: lint-cadctl lint-interceptor lint-template-updater ## Lint all subprojects
+lint: lint-cadctl lint-interceptor ## Lint all subprojects
 
 .PHONY: test
 test: test-cadctl test-interceptor
 
 ##@ cadctl:
 .PHONY: cadctl
-cadctl: generate-cadctl build-cadctl test-cadctl lint-cadctl generate-template-file ## Run all targets for cadctl (generate, build, test, lint, generation)
+cadctl: generate-cadctl build-cadctl test-cadctl lint-cadctl ## Run all targets for cadctl (generate, build, test, lint, generation)
 
 .PHONY: generate-cadctl
 generate-cadctl: check-go121-install install-mockgen ## Generate mocks for cadctl
@@ -49,7 +49,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=/usr/lib/golang GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -72,7 +72,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=/usr/lib/golang GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor ## Run unit tests for interceptor
@@ -91,32 +91,14 @@ test-interceptor-e2e: check-go121-install check-jq-install check-vault-install b
 bootstrap-investigation: ## Bootstrap a new boilerplate investigation
 	@cd hack && ./bootstrap-investigation.sh
 
-##@ Template-updater:
-.PHONY: template-updater
-template-updater: build-template-updater lint-template-updater ## Run all targets for template-updater
-
-.PHONY: build-template-updater
-build-template-updater: ## Build the template-updater binary
-	@echo
-	@echo "Building template-updater..."
-	cd hack/update-template && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../../bin/template-updater .
-
-.PHONY: lint-template-updater
-lint-template-updater: install-linter ## Lint template-updater subproject
-	@echo
-	@echo "Linting template-updater..."
-	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	cd hack/update-template && GOROOT=/usr/lib/golang GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../../.golangci.yml
 
 .PHONY: boilerplate-update
 boilerplate-update: ## Update boilerplate version
 	@boilerplate/update
 
-.PHONY: generate-template-file
-generate-template-file: build-template-updater ## Generate deploy template file
-	@echo
-	@echo "Generating template file..."
-	cp ./bin/template-updater ./hack/update-template/ && cd ./hack/update-template/ && ./template-updater
+.PHONY:lint-rbac
+validate-rbac-informing: ## Verifies informing investigations do not have permission for kube-api write operations
+	@cd test && ./lint_informing_rbac.sh
 
 ### CI Only
 .PHONY: coverage
@@ -124,7 +106,7 @@ coverage:
 	hack/codecov.sh
 
 .PHONY: validate
-validate: generate-template-file isclean
+validate: isclean validate-rbac-informing
 
 ### Prerequisites
 ### It is assumed that 'make' is already installed

@@ -8,6 +8,8 @@ declare -A alert_mapping=(
     ["ClusterProvisioningDelay"]="ClusterProvisioningDelay -"
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
     ["InsightsOperatorDown"]="InsightsOperatorDown"
+    ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
+    ["ApiErrorBudgetBurn"]="api-ErrorBudgetBurn k8sgpt test CRITICAL (1)"
 )
 
 # Function to print help message
