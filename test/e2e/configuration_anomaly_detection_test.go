@@ -117,7 +117,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			time.Sleep(1 * time.Minute)
+			time.Sleep(20 * time.Minute)
 
 			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
@@ -207,7 +207,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			time.Sleep(1 * time.Minute)
+			time.Sleep(20 * time.Minute)
 
 			logs, err = GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
@@ -336,7 +336,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		// Step 5: Wait 20 minutes
 		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before restarting nodes...")
-		time.Sleep(2 * time.Minute)
+		time.Sleep(20 * time.Minute)
 
 		// Step 6: Get service logs after shutdown
 		serviceLogsAfter, err := GetServiceLogs(ocmCli, cluster)
