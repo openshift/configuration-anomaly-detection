@@ -305,6 +305,11 @@ objects:
         value: ${CAD_EXPERIMENTAL_ENABLED}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
+      - name: CAD_HCM_AI_TOKEN
+        valueFrom:
+          secretKeyRef:
+            key: token
+            name: srep-ai-sa-token
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
@@ -352,9 +357,9 @@ objects:
                   cpu: 100m
                   memory: 64Mi
               securityContext:
-                runAsGroup: 1000
+                runAsGroup: 65534
                 runAsNonRoot: true
-                runAsUser: 1000
+                runAsUser: 65534
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst

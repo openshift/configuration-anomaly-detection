@@ -19,7 +19,7 @@ help:  # Display this help
 
 ##@ Global:
 .PHONY: all
-all: interceptor cadctl  ## Generate, build, lint, test all subprojects
+all: interceptor cadctl ## Generate, build, lint, test all subprojects
 
 .PHONY: build
 build: build-interceptor build-cadctl ## Build all subprojects in this repository
@@ -49,7 +49,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=/usr/lib/golang GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -72,7 +72,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=/usr/lib/golang GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor ## Run unit tests for interceptor
