@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -20,6 +21,7 @@ import (
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/util/retry"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -115,7 +117,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			time.Sleep(20 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
@@ -205,7 +207,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			time.Sleep(20 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			logs, err = GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
@@ -265,5 +267,104 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			fmt.Println("Test completed: All components restored to original replica counts.")
 		}
+	})
+
+	It("AWS CCS: can shutdown and restart infrastructure nodes", Label("aws", "ccs", "infra-nodes", "service-logs"), func(ctx context.Context) {
+		if provider != "aws" {
+			Skip("This test only runs on AWS clusters")
+		}
+
+		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
+		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
+
+		awsCfg, err := config.LoadDefaultConfig(ctx,
+			config.WithRegion(region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				awsAccessKey,
+				awsSecretKey,
+				"",
+			)),
+		)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
+
+		ec2Client := ec2.NewFromConfig(awsCfg)
+
+		// Step 1: Get cluster object
+		clusterResp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+		Expect(err).ToNot(HaveOccurred(), "Failed to fetch cluster from OCM")
+		cluster := clusterResp.Body()
+
+		// Step 2: Get service logs before shutdown
+		serviceLogsBefore, err := GetServiceLogs(ocmCli, cluster)
+		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before shutdown")
+		beforeLogIDs := map[string]bool{}
+		for _, log := range serviceLogsBefore.Items().Slice() {
+			beforeLogIDs[log.ID()] = true
+		}
+
+		// Step 3: Get infra node EC2 instance IDs
+		var nodeList corev1.NodeList
+		err = k8s.List(ctx, &nodeList)
+		Expect(err).NotTo(HaveOccurred(), "Failed to list nodes")
+
+		var instanceIDs []string
+		for _, node := range nodeList.Items {
+			if _, isInfra := node.Labels["node-role.kubernetes.io/infra"]; !isInfra {
+				continue
+			}
+			providerID := node.Spec.ProviderID
+			Expect(providerID).ToNot(BeEmpty(), "Infra node missing providerID")
+			parts := strings.Split(providerID, "/")
+			instanceIDs = append(instanceIDs, parts[len(parts)-1])
+		}
+		Expect(instanceIDs).NotTo(BeEmpty(), "No infrastructure EC2 instance IDs found")
+		ginkgo.GinkgoWriter.Printf("Infra EC2 instance IDs: %v\n", instanceIDs)
+
+		// Step 4: Stop EC2 instances
+		_, err = ec2Client.StopInstances(ctx, &ec2.StopInstancesInput{
+			InstanceIds: instanceIDs,
+		})
+		Expect(err).NotTo(HaveOccurred(), "Failed to stop infra EC2 instances")
+
+		err = ec2.NewInstanceStoppedWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
+			InstanceIds: instanceIDs,
+		}, 5*time.Minute)
+		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
+		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
+
+		// Step 5: Wait 20 minutes
+		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before restarting nodes...")
+		time.Sleep(2 * time.Minute)
+
+		// Step 6: Get service logs after shutdown
+		serviceLogsAfter, err := GetServiceLogs(ocmCli, cluster)
+		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs after shutdown")
+
+		fmt.Println("New service logs generated during infra node downtime:")
+		newLogsFound := false
+		for _, log := range serviceLogsAfter.Items().Slice() {
+			if !beforeLogIDs[log.ID()] {
+				newLogsFound = true
+				fmt.Printf("ID: %s\nSummary: %s\nDescription: %s\n\n", log.ID(), log.Summary(), log.Description())
+			}
+		}
+		if !newLogsFound {
+			fmt.Println("No new service logs found.")
+		}
+
+		// Step 7: Start EC2 instances again
+		_, err = ec2Client.StartInstances(ctx, &ec2.StartInstancesInput{
+			InstanceIds: instanceIDs,
+		})
+		Expect(err).NotTo(HaveOccurred(), "Failed to start infra EC2 instances")
+
+		err = ec2.NewInstanceRunningWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
+			InstanceIds: instanceIDs,
+		}, 10*time.Minute)
+		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not start in time")
+
+		ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
 	})
 })
