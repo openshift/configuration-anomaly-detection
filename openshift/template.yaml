@@ -356,12 +356,6 @@ objects:
                 requests:
                   cpu: 100m
                   memory: 64Mi
-              securityContext:
-                runAsGroup: 65534
-                runAsNonRoot: true
-                runAsUser: 65534
-                seccompProfile:
-                  type: RuntimeDefault
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst
