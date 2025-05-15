@@ -558,6 +558,14 @@ func newFakeClient(objs ...client.Object) (client.Client, error) {
 	return client, nil
 }
 
+type clientImpl struct {
+	client.Client
+}
+
+func (client clientImpl) Clean() error {
+	return nil
+}
+
 func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {
 	fakeClient, err := newFakeClient(testObjects...)
 	if err != nil {
@@ -565,7 +573,7 @@ func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {
 	}
 
 	i := Investigation{
-		kclient:         fakeClient,
+		kclient:         clientImpl{fakeClient},
 		notes:           notewriter.New("testing", logging.RawLogger),
 		recommendations: investigationRecommendations{},
 	}

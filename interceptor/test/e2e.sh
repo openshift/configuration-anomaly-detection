@@ -33,7 +33,7 @@ function test_interceptor {
       export PD_SIGNATURE=$override_signature
     fi
 
-    SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | sha256hmac -K $PD_SIGNATURE | tr -d "[:space:]-")
+    SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | openssl dgst -sha256 -hmac $PD_SIGNATURE | sed 's/^.* //')
 
     # Store the PID of the interceptor process
     INTERCEPTOR_PID=$!
