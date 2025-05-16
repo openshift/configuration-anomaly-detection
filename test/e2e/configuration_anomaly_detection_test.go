@@ -294,8 +294,11 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		cluster := clusterResp.Body()
 
 		// Step 2: Get service logs before shutdown
+		ginkgo.GinkgoWriter.Println("Getting service logs before infra node shutdown...")
 		serviceLogsBefore, err := GetServiceLogs(ocmCli, cluster)
 		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before shutdown")
+
+		// Create a map of existing log IDs for quick lookup
 		beforeLogIDs := map[string]bool{}
 		for _, log := range serviceLogsBefore.Items().Slice() {
 			beforeLogIDs[log.ID()] = true
@@ -316,22 +319,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			instanceIDs = append(instanceIDs, parts[len(parts)-1])
 		}
 		Expect(instanceIDs).NotTo(BeEmpty(), "No infrastructure EC2 instance IDs found")
-		ginkgo.GinkgoWriter.Printf("Infra EC2 instance IDs: %v\n", instanceIDs)
-
-		// Step 4: Stop EC2 instances
-		_, err = ec2Client.StopInstances(ctx, &ec2.StopInstancesInput{
-			InstanceIds: instanceIDs,
-		})
-		Expect(err).NotTo(HaveOccurred(), "Failed to stop infra EC2 instances")
-		err = ec2.NewInstanceStoppedWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
-			InstanceIds: instanceIDs,
-		}, 5*time.Minute)
-		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
-		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
-
-		// Step 5: Wait 20 minutes
-		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before restarting nodes...")
-		time.Sleep(20 * time.Minute)
+		ginkgo.GinkgoWriter.Printf("Found %d infra node(s) with EC2 instance IDs: %v\n", len(instanceIDs), instanceIDs)
 
 		// Setup deferred EC2 restart to ensure it happens regardless of test outcome
 		defer func() {
@@ -347,18 +335,48 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
 		}()
 
+		// Step 4: Stop EC2 instances
+		ginkgo.GinkgoWriter.Println("Stopping infra nodes...")
+		_, err = ec2Client.StopInstances(ctx, &ec2.StopInstancesInput{
+			InstanceIds: instanceIDs,
+		})
+		Expect(err).NotTo(HaveOccurred(), "Failed to stop infra EC2 instances")
+		err = ec2.NewInstanceStoppedWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
+			InstanceIds: instanceIDs,
+		}, 5*time.Minute)
+		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
+		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
+
+		// Step 5: Wait 20 minutes
+		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before checking logs...")
+		time.Sleep(20 * time.Minute)
+
 		// Step 6: Get service logs after shutdown
+		ginkgo.GinkgoWriter.Println("Getting service logs after infra node shutdown...")
 		serviceLogsAfter, err := GetServiceLogs(ocmCli, cluster)
 		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs after shutdown")
 
-		fmt.Println("New service logs generated during infra node downtime:")
-		newLogsFound := false
+		var newLogs []interface{}
+
 		for _, log := range serviceLogsAfter.Items().Slice() {
 			if !beforeLogIDs[log.ID()] {
-				newLogsFound = true
-				fmt.Printf("ID: %s\nSummary: %s\nDescription: %s\n\n", log.ID(), log.Summary(), log.Description())
+				newLogs = append(newLogs, log)
 			}
 		}
-		Expect(newLogsFound).To(BeTrue(), "No new service logs were found after infrastructure node shutdown")
+
+		if len(newLogs) > 0 {
+			ginkgo.GinkgoWriter.Printf("Found %d new service logs during infra node downtime:\n", len(newLogs))
+			for _, logInterface := range newLogs {
+				log := logInterface.(interface{}) // Type assertion to access methods
+				ginkgo.GinkgoWriter.Printf("ID: %s\nSummary: %s\nDescription: %s\n\n",
+					log.(interface{ ID() string }).ID(),
+					log.(interface{ Summary() string }).Summary(),
+					log.(interface{ Description() string }).Description())
+			}
+		} else {
+			ginkgo.GinkgoWriter.Println("No new service logs found after infra node shutdown")
+		}
+
+		Expect(len(newLogs)).To(BeNumerically(">", 0), "No new service logs were found after infrastructure node shutdown")
 	})
 })
