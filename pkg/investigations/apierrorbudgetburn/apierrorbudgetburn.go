@@ -57,3 +57,7 @@ func (c *Investigation) IsExperimental() bool {
 	// This is an experimental investigation leveraging k8sgpt.
 	return true
 }
+
+func (c *Investigation) InformingMode() bool {
+	return false
+}
