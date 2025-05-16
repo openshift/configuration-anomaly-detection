@@ -43,7 +43,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		ocmToken := os.Getenv("OCM_TOKEN")
 		clientID := os.Getenv("CLIENT_ID")
 		clientSecret := os.Getenv("CLIENT_SECRET")
-		clusterID = os.Getenv("CLUSTER_ID")
+		clusterID = os.Getenv("OCM_CLUSTER_ID")
 		cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
 		Expect(ocmToken).NotTo(BeEmpty(), "OCM_TOKEN must be set")
@@ -273,12 +273,10 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		if provider != "aws" {
 			Skip("This test only runs on AWS clusters")
 		}
-
 		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
 		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
-
 		awsCfg, err := config.LoadDefaultConfig(ctx,
 			config.WithRegion(region),
 			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
@@ -288,7 +286,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			)),
 		)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
-
 		ec2Client := ec2.NewFromConfig(awsCfg)
 
 		// Step 1: Get cluster object
@@ -308,7 +305,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		var nodeList corev1.NodeList
 		err = k8s.List(ctx, &nodeList)
 		Expect(err).NotTo(HaveOccurred(), "Failed to list nodes")
-
 		var instanceIDs []string
 		for _, node := range nodeList.Items {
 			if _, isInfra := node.Labels["node-role.kubernetes.io/infra"]; !isInfra {
@@ -327,7 +323,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			InstanceIds: instanceIDs,
 		})
 		Expect(err).NotTo(HaveOccurred(), "Failed to stop infra EC2 instances")
-
 		err = ec2.NewInstanceStoppedWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
 			InstanceIds: instanceIDs,
 		}, 5*time.Minute)
@@ -337,6 +332,20 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		// Step 5: Wait 20 minutes
 		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before restarting nodes...")
 		time.Sleep(20 * time.Minute)
+
+		// Setup deferred EC2 restart to ensure it happens regardless of test outcome
+		defer func() {
+			ginkgo.GinkgoWriter.Println("Restarting infra nodes regardless of test status...")
+			_, err := ec2Client.StartInstances(ctx, &ec2.StartInstancesInput{
+				InstanceIds: instanceIDs,
+			})
+			Expect(err).NotTo(HaveOccurred(), "Failed to start infra EC2 instances")
+			err = ec2.NewInstanceRunningWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
+				InstanceIds: instanceIDs,
+			}, 10*time.Minute)
+			Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not start in time")
+			ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
+		}()
 
 		// Step 6: Get service logs after shutdown
 		serviceLogsAfter, err := GetServiceLogs(ocmCli, cluster)
@@ -350,21 +359,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 				fmt.Printf("ID: %s\nSummary: %s\nDescription: %s\n\n", log.ID(), log.Summary(), log.Description())
 			}
 		}
-		if !newLogsFound {
-			fmt.Println("No new service logs found.")
-		}
-
-		// Step 7: Start EC2 instances again
-		_, err = ec2Client.StartInstances(ctx, &ec2.StartInstancesInput{
-			InstanceIds: instanceIDs,
-		})
-		Expect(err).NotTo(HaveOccurred(), "Failed to start infra EC2 instances")
-
-		err = ec2.NewInstanceRunningWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
-			InstanceIds: instanceIDs,
-		}, 10*time.Minute)
-		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not start in time")
-
-		ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
+		Expect(newLogsFound).To(BeTrue(), "No new service logs were found after infrastructure node shutdown")
 	})
 })
