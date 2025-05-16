@@ -12,6 +12,7 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/interceptor/pkg/interceptor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	zap "go.uber.org/zap"
 	"knative.dev/pkg/signals"
 )
 
@@ -22,7 +23,7 @@ const (
 	idleTimeout  = 60 * time.Second
 )
 
-var logger = logging.InitLogger(logging.LogLevelString, "")
+var logger *zap.SugaredLogger
 
 func main() {
 	// set up signals so we handle the first shutdown signal gracefully
@@ -69,6 +70,17 @@ func main() {
 	}
 
 	logger.Infof("Server exiting")
+}
+
+func init() {
+	// read log level from environment variable
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel != "" {
+		logLevel = "info"
+	}
+
+	// set up logging
+	logger = logging.InitLogger(logLevel, logLevel)
 }
 
 func readinessHandler(w http.ResponseWriter, r *http.Request) {
