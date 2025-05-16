@@ -30,7 +30,7 @@ const (
 
 type Investigation struct {
 	// kclient provides access to on-cluster resources
-	kclient client.Client
+	kclient k8sclient.Client
 	// notes holds the messages that will be shared with Primary upon completion
 	notes *notewriter.NoteWriter
 	// recommendations holds the set of actions CAD recommends primary to take
@@ -50,6 +50,10 @@ func (i *Investigation) setup(r *investigation.Resources) error {
 	return nil
 }
 
+func (i *Investigation) teardown() error {
+	return i.kclient.Clean()
+}
+
 // Run investigates the MachineHealthCheckUnterminatedShortCircuitSRE alert
 //
 // The investigation seeks to provide exactly one recommended action per affected machine/node pair.
@@ -66,7 +70,7 @@ func (i *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, fmt.Errorf("failed to setup investigation: %w", err)
 	}
 	defer func(r *investigation.Resources) {
-		err := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
+		err := i.teardown()
 		if err != nil {
 			logging.Errorf("failed to cleanup investigation: %w", err)
 		}
@@ -319,7 +323,7 @@ func (i *Investigation) Description() string {
 }
 
 func (i *Investigation) IsExperimental() bool {
-	return true
+	return false
 }
 
 func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
