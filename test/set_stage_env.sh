@@ -8,7 +8,11 @@ for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/oc
 for v in $(vault kv get  -format=json osd-sre/configuration-anomaly-detection/pd/stg | jq -r ".data.data|to_entries|map(\"\(.key)=\(.value|tostring)\")|.[]"); do export $v; done
 unset VAULT_ADDR VAULT_TOKEN
 
+
+PROXY_URL="http://squid.corp.redhat.com:3128"
+
 export CAD_EXPERIMENTAL_ENABLED=true
-export BACKPLANE_PROXY=http://squid.corp.redhat.com:3128
+export BACKPLANE_PROXY=${PROXY_URL}
+export AWS_PROXY=${PROXY_URL}
 
 set +euo pipefail

@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 
+	ocmlog "github.com/openshift-online/ocm-sdk-go/logging"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/osd-network-verifier/pkg/data/cloud"
 	"github.com/openshift/osd-network-verifier/pkg/proxy"
@@ -76,7 +76,6 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 	}
 
 	return &verifier.ValidateEgressInput{
-		Timeout:      5 * time.Second,
 		Ctx:          context.Background(),
 		SubnetID:     subnet,
 		InstanceType: "t3.micro",
@@ -97,8 +96,13 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 		return Undefined, "", fmt.Errorf("failed to initialize validateEgressInput: %w", err)
 	}
 
-	credentials := awsClient.GetAWSCredentials()
-	awsVerifier, err := verifierAws.NewAwsVerifier(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID(), "", false)
+	// The network verifier requires a very specific type of logger (ocm logger)
+	logger, err := ocmlog.NewStdLoggerBuilder().Build()
+	if err != nil {
+		return Undefined, "", fmt.Errorf("unable to build network verifier logger: %w", err)
+	}
+
+	awsVerifier, err := verifierAws.NewAwsVerifierFromConfig(*awsClient.GetBaseConfig(), logger)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("could not build awsVerifier %w", err)
 	}
