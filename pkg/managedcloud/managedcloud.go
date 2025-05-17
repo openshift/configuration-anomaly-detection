@@ -2,8 +2,9 @@
 package managedcloud
 
 import (
-	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -37,10 +38,16 @@ func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.
 		return nil, fmt.Errorf("unable to query aws credentials from backplane: %w", err)
 	}
 
-	credentials, err := config.Credentials.Retrieve(context.TODO())
-	if err != nil {
-		return nil, fmt.Errorf("unable to retrieve aws credentials fetched configuration: %w", err)
+	awsProxy := os.Getenv("AWS_PROXY")
+	if awsProxy != "" {
+		config.HTTPClient = &http.Client{
+			Transport: &http.Transport{
+				Proxy: func(*http.Request) (*url.URL, error) {
+					return url.Parse(awsProxy)
+				},
+			},
+		}
 	}
 
-	return aws.NewClient(credentials.AccessKeyID, credentials.SecretAccessKey, credentials.SessionToken, cluster.Region().ID())
+	return aws.NewClient(config)
 }
