@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty/webhookv3"
@@ -141,7 +142,9 @@ func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.Inte
 		return interceptors.Failf(codes.InvalidArgument, "could not initialize pagerduty client: %v", err)
 	}
 
-	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
+	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
+	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
+
 	investigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 	// If the alert is not in the whitelist, return `Continue: false` as interceptor response
 	// and escalate the alert to SRE
