@@ -2,6 +2,7 @@ package osde2etests
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -86,7 +87,8 @@ func (c *client) CreateSilentRequest(alertName, clusterID string) (string, error
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", c.eventsURL, bytes.NewBuffer(body))
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "POST", c.eventsURL, bytes.NewBuffer(body))
 	if err != nil {
 		return "", err
 	}
@@ -97,10 +99,14 @@ func (c *client) CreateSilentRequest(alertName, clusterID string) (string, error
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %v", err)
+		return "", fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusAccepted && resp.StatusCode != http.StatusOK {
@@ -115,7 +121,9 @@ func (c *client) CreateSilentRequest(alertName, clusterID string) (string, error
 
 func (c *client) GetIncidentID(dedupKey string) (string, error) {
 	url := fmt.Sprintf("%s?incident_key=%s", c.apiURL, dedupKey)
-	req, err := http.NewRequest("GET", url, nil)
+
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +135,11 @@ func (c *client) GetIncidentID(dedupKey string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	var result struct {
 		Incidents []struct {
@@ -158,7 +170,8 @@ func (c *client) ResolveIncident(incidentID string) error {
 		return err
 	}
 
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(body))
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
@@ -170,7 +183,11 @@ func (c *client) ResolveIncident(incidentID string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to resolve incident, status code: %d", resp.StatusCode)
