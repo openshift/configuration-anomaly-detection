@@ -34,6 +34,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		region    string
 		provider  string
 		clusterID string
+		pdClient  PagerDutyClient
 	)
 
 	BeforeAll(func(ctx context.Context) {
@@ -64,6 +65,12 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		provider, err = k8s.GetProvider(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
+
+		pdRoutingKey := os.Getenv("PD_ROUTING_KEY")
+		pdToken := os.Getenv("PD_AUTH_TOKEN")
+		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
+		Expect(pdToken).NotTo(BeEmpty(), "PAGERDUTY_TOKEN must be set")
+		pdClient = NewClient(pdRoutingKey, pdToken)
 	})
 
 	AfterAll(func() {
@@ -117,7 +124,10 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			time.Sleep(20 * time.Minute)
+			_, err = pdClient.CreateSilentRequest("ClusterHasGoneMissing", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			time.Sleep(5 * time.Minute)
 
 			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
@@ -134,9 +144,19 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 				fmt.Printf("  - Details: %s\n", item.Details())
 			}
 
-			// Restore egress
-			Expect(RestoreEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to restore egress")
-			ginkgo.GinkgoWriter.Printf("Egress restored\n")
+			// Clean up: restore egress before checking test conditions
+			defer func() {
+				err := RestoreEgress(ctx, ec2Wrapper, sgID)
+				if err != nil {
+					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
+				} else {
+					ginkgo.GinkgoWriter.Printf("Egress restored\n")
+				}
+			}()
+
+			// Verify test result: Expect new limited support reasons to be found after blocking egress
+			Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
+				"No new limited support reasons found after blocking egress")
 		}
 	})
 
@@ -207,7 +227,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			time.Sleep(20 * time.Minute)
+			time.Sleep(1 * time.Minute)
 
 			logs, err = GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
@@ -269,7 +289,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 	})
 
-	It("AWS CCS: can shutdown and restart infrastructure nodes", Label("aws", "ccs", "infra-nodes", "service-logs"), func(ctx context.Context) {
+	It("AWS CCS: can shutdown and restart infrastructure nodes", Label("aws", "ccs", "infra-nodes", "limited-support"), func(ctx context.Context) {
 		if provider != "aws" {
 			Skip("This test only runs on AWS clusters")
 		}
@@ -289,20 +309,17 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		ec2Client := ec2.NewFromConfig(awsCfg)
 
 		// Step 1: Get cluster object
-		clusterResp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
-		Expect(err).ToNot(HaveOccurred(), "Failed to fetch cluster from OCM")
-		cluster := clusterResp.Body()
+		//clusterResp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+		//Expect(err).ToNot(HaveOccurred(), "Failed to fetch cluster from OCM")
+		//cluster := clusterResp.Body()
 
-		// Step 2: Get service logs before shutdown
-		ginkgo.GinkgoWriter.Println("Getting service logs before infra node shutdown...")
-		serviceLogsBefore, err := GetServiceLogs(ocmCli, cluster)
-		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before shutdown")
+		// Step 2: Get limited support reasons before shutdown
+		ginkgo.GinkgoWriter.Println("Getting limited support reasons before infra node shutdown...")
+		lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+		lsReasonsBefore := lsResponseBefore.Items().Len()
 
-		// Create a map of existing log IDs for quick lookup
-		beforeLogIDs := map[string]bool{}
-		for _, log := range serviceLogsBefore.Items().Slice() {
-			beforeLogIDs[log.ID()] = true
-		}
+		ginkgo.GinkgoWriter.Printf("Limited support reasons before infra node shutdown: %d\n", lsReasonsBefore)
 
 		// Step 3: Get infra node EC2 instance IDs
 		var nodeList corev1.NodeList
@@ -327,11 +344,17 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			_, err := ec2Client.StartInstances(ctx, &ec2.StartInstancesInput{
 				InstanceIds: instanceIDs,
 			})
-			Expect(err).NotTo(HaveOccurred(), "Failed to start infra EC2 instances")
+			if err != nil {
+				ginkgo.GinkgoWriter.Printf("Failed to start infra EC2 instances: %v\n", err)
+				return
+			}
 			err = ec2.NewInstanceRunningWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
 				InstanceIds: instanceIDs,
 			}, 10*time.Minute)
-			Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not start in time")
+			if err != nil {
+				ginkgo.GinkgoWriter.Printf("Infra EC2 instances did not start in time: %v\n", err)
+				return
+			}
 			ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
 		}()
 
@@ -343,40 +366,35 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to stop infra EC2 instances")
 		err = ec2.NewInstanceStoppedWaiter(ec2Client).Wait(ctx, &ec2.DescribeInstancesInput{
 			InstanceIds: instanceIDs,
-		}, 5*time.Minute)
+		}, 6*time.Minute)
 		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
 		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
 
-		// Step 5: Wait 20 minutes
-		ginkgo.GinkgoWriter.Println("Sleeping for 20 minutes before checking logs...")
-		time.Sleep(20 * time.Minute)
+		_, err = pdClient.CreateSilentRequest("ClusterHasGoneMissing", clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
-		// Step 6: Get service logs after shutdown
-		ginkgo.GinkgoWriter.Println("Getting service logs after infra node shutdown...")
-		serviceLogsAfter, err := GetServiceLogs(ocmCli, cluster)
-		Expect(err).ToNot(HaveOccurred(), "Failed to get service logs after shutdown")
+		// Step 5: Wait for some time
+		ginkgo.GinkgoWriter.Println("Sleeping for 2 minutes before checking limited support reasons...")
+		time.Sleep(2 * time.Minute)
 
-		var newLogs []interface{}
+		// Step 6: Get limited support reasons after shutdown
+		lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 
-		for _, log := range serviceLogsAfter.Items().Slice() {
-			if !beforeLogIDs[log.ID()] {
-				newLogs = append(newLogs, log)
-			}
+		// Print the response data
+		fmt.Println("Limited Support Response After Stopping Infra Nodes:")
+		fmt.Printf("Total items: %d\n", lsResponseAfter.Items().Len())
+
+		// Iterate through each item and print details
+		items := lsResponseAfter.Items().Slice()
+		for i, item := range items {
+			fmt.Printf("Reason #%d:\n", i+1)
+			fmt.Printf("  - Summary: %s\n", item.Summary())
+			fmt.Printf("  - Details: %s\n", item.Details())
 		}
 
-		if len(newLogs) > 0 {
-			ginkgo.GinkgoWriter.Printf("Found %d new service logs during infra node downtime:\n", len(newLogs))
-			for _, logInterface := range newLogs {
-				log := logInterface.(interface{}) // Type assertion to access methods
-				ginkgo.GinkgoWriter.Printf("ID: %s\nSummary: %s\nDescription: %s\n\n",
-					log.(interface{ ID() string }).ID(),
-					log.(interface{ Summary() string }).Summary(),
-					log.(interface{ Description() string }).Description())
-			}
-		} else {
-			ginkgo.GinkgoWriter.Println("No new service logs found after infra node shutdown")
-		}
-
-		Expect(len(newLogs)).To(BeNumerically(">", 0), "No new service logs were found after infrastructure node shutdown")
+		// Step 7: Check if limited support reasons changed
+		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
+			"Expected more limited support reasons after infrastructure node shutdown")
 	})
-})
+}, ginkgo.ContinueOnFailure)
