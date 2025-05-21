@@ -66,8 +66,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		provider, err = k8s.GetProvider(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
 
-		pdRoutingKey := os.Getenv("PD_ROUTING_KEY")
-		pdToken := os.Getenv("PD_AUTH_TOKEN")
+		pdRoutingKey := os.Getenv("CAD_PD_TOKEN")
+		pdToken := os.Getenv("CAD_PD_TOKEN")
 		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
 		Expect(pdToken).NotTo(BeEmpty(), "PAGERDUTY_TOKEN must be set")
 		pdClient = NewClient(pdRoutingKey, pdToken)
