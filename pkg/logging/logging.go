@@ -2,29 +2,20 @@
 package logging
 
 import (
-	"fmt"
 	"log"
-	"os"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-var LogLevelString = getLogLevel()
-
 // RawLogger is the raw global logger object used for calls wrapped by the logging package
-var RawLogger = InitLogger(LogLevelString, "")
+var RawLogger *zap.SugaredLogger
 
 // InitLogger initializes a cluster-id specific child logger
-func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
+func InitLogger(logLevelString string) *zap.SugaredLogger {
 	logLevel, err := zap.ParseAtomicLevel(logLevelString)
 	if err != nil {
 		log.Fatalln("Invalid log level:", logLevelString)
-	}
-
-	pipelineName := os.Getenv("PIPELINE_NAME")
-	if pipelineName == "" {
-		fmt.Println("Warning: Unable to retrieve the pipeline ID on logger creation. Continuing with empty value.")
 	}
 
 	config := zap.NewProductionConfig()
@@ -39,10 +30,15 @@ func InitLogger(logLevelString string, clusterID string) *zap.SugaredLogger {
 		log.Fatal(err)
 	}
 
-	logger = logger.With(zap.Field{Key: "cluster_id", Type: zapcore.StringType, String: clusterID},
-		zap.Field{Key: "pipeline_name", Type: zapcore.StringType, String: pipelineName})
-
 	return logger.Sugar()
+}
+
+func WithClusterID(logger *zap.SugaredLogger, clusterID string) *zap.SugaredLogger {
+	return logger.With(zap.String("cluster_id", clusterID))
+}
+
+func WithPipelineName(logger *zap.SugaredLogger, pipelineName string) *zap.SugaredLogger {
+	return logger.With(zap.String("pipeline_name", pipelineName))
 }
 
 // Info wraps zap's SugaredLogger.Info()
@@ -93,12 +89,4 @@ func Errorf(template string, args ...interface{}) {
 // Fatalf wraps zap's SugaredLogger.Fatalf()
 func Fatalf(template string, args ...interface{}) {
 	RawLogger.Fatalf(template, args...)
-}
-
-// getLogLevel returns the log level from the environment variable LOG_LEVEL
-func getLogLevel() string {
-	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
-		return envLogLevel
-	}
-	return "info"
 }

@@ -2,8 +2,6 @@
 package metrics
 
 import (
-	"os"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
@@ -11,21 +9,18 @@ import (
 )
 
 // Push collects and pushes metrics to the configured pushgateway
-func Push() {
-	var promPusher *push.Pusher
-	if pushgateway := os.Getenv("CAD_PROMETHEUS_PUSHGATEWAY"); pushgateway != "" {
-		promPusher = push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
-		promPusher.Collector(Alerts)
-		promPusher.Collector(LimitedSupportSet)
-		promPusher.Collector(ServicelogPrepared)
-		promPusher.Collector(ServicelogSent)
-		err := promPusher.Add()
-		if err != nil {
-			logging.Errorf("failed to push metrics: %w", err)
-		}
-	} else {
-		logging.Warn("metrics disabled, set env 'CAD_PROMETHEUS_PUSHGATEWAY' to push metrics")
+func Push(pushgateway string) error {
+	promPusher := push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
+	promPusher.Collector(Alerts)
+	promPusher.Collector(LimitedSupportSet)
+	promPusher.Collector(ServicelogPrepared)
+	promPusher.Collector(ServicelogSent)
+	err := promPusher.Add()
+	if err != nil {
+		return err
 	}
+
+	return nil
 }
 
 // Inc takes a counterVec and a set of label values and increases by one

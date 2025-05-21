@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -67,14 +66,7 @@ type SdkClient struct {
 }
 
 // GetPDClient will retrieve the PagerDuty from the 'pagerduty' package
-func GetPDClient(webhookPayload []byte) (*SdkClient, error) {
-	cadPD, hasCadPD := os.LookupEnv("CAD_PD_TOKEN")
-	cadSilentPolicy, hasCadSilentPolicy := os.LookupEnv("CAD_SILENT_POLICY")
-
-	if !hasCadSilentPolicy || !hasCadPD {
-		return nil, fmt.Errorf("one of the required envvars in the list '(CAD_SILENT_POLICY CAD_PD_TOKEN)' is missing")
-	}
-
+func GetPDClient(webhookPayload []byte, cadPD string, cadSilentPolicy string) (*SdkClient, error) {
 	client, err := NewWithToken(cadSilentPolicy, webhookPayload, cadPD)
 	if err != nil {
 		return nil, fmt.Errorf("could not initialize the client: %w", err)

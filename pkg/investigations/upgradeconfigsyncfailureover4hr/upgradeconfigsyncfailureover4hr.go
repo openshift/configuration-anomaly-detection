@@ -29,7 +29,7 @@ const (
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("UpgradeConfigSyncFailureOver4Hr", logging.RawLogger)
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
+	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName, r.BackplaneURL)
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
