@@ -45,10 +45,10 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 
 	switch cluster.State() {
 	case cmv1.ClusterStateReady:
-		// Cluster is in functional sate but we can't jumprole to it: post limited support
+		// Cluster is in functional state but we can't jumprole to it: post limited support
 		result.LimitedSupportSet.Performed = true
 		result.LimitedSupportSet.Labels = []string{ccamLimitedSupport.Summary}
-		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
+		err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID(), c.InformingMode())
 		if err != nil {
 			return result, fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 		}
@@ -77,6 +77,10 @@ func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 }
 
 func (c *Investigation) IsExperimental() bool {
+	return false
+}
+
+func (c *Investigation) InformingMode() bool {
 	return false
 }
 

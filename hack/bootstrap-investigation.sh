@@ -59,7 +59,6 @@ EOF
 # Create testing/README.md file
 cat <<EOF > "${INVESTIGATION_DIR}/testing/README.md"
 # Testing ${INVESTIGATION_NAME} Investigation
-
 TODO:
 - Add a test script or test objects to this `testing/` directory for future maintainers to use
 - Edit this README file and add detailed instructions on how to use the script/objects to recreate the conditions for the investigation. Be sure to include any assumptions or prerequisites about the environment (disable hive syncsetting, etc)
@@ -117,6 +116,11 @@ func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 
 func (c *Investigation) IsExperimental() bool {
 	// TODO: Update to false when graduating to production.
+	return true
+}
+
+func (c *Investigation) InformingMode(flag bool) bool {
+	// TODO: Update to false when graduating to actioning mode.
 	return true
 }
 

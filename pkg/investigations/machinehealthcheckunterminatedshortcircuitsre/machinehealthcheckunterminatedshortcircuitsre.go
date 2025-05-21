@@ -326,6 +326,10 @@ func (i *Investigation) IsExperimental() bool {
 	return false
 }
 
+func (c *Investigation) InformingMode() bool {
+	return false
+}
+
 func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
 	return strings.Contains(alert, alertname)
 }

@@ -123,3 +123,7 @@ func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 func (c *Investigation) IsExperimental() bool {
 	return false
 }
+
+func (c *Investigation) InformingMode() bool {
+	return false
+}

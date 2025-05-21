@@ -132,6 +132,6 @@ func (c *Investigation) IsExperimental() bool {
 	return false
 }
 
-func (c *Investigation) RequiresAwsClient() bool {
+func (c Investigation) InformingMode() bool {
 	return false
 }
