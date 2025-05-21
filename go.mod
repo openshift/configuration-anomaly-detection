@@ -16,7 +16,7 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.465
 	github.com/openshift/api v0.0.0-20240522145529-93d6bda14341
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
-	github.com/openshift/backplane-cli v0.0.0-20250514221021-ea337a6d563f
+	github.com/openshift/backplane-cli v0.1.47-0.20250521025004-fb46bb233d3d
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
 	github.com/openshift/osd-network-verifier v1.2.3
 	github.com/openshift/osde2e-common v0.0.0-20250409072139-f917c50a4bd2

@@ -1476,8 +1476,8 @@ github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
 github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221/go.mod h1:1PdbQqTDrejSl9zsScM1x59f0oHNTsAgoJqTZqTkH/U=
 github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70 h1:rUcdH93mEXHMviKxy1no2vFuQm0TiqA2vuCKnczeQ1k=
 github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70/go.mod h1:RuJZpJy45AJnkp7A0ZPTZhLOVkCGDLI6cGknKvp65LE=
-github.com/openshift/backplane-cli v0.0.0-20250514221021-ea337a6d563f h1:Pys9HP+jwQdtSWLhuzOTbdDSesc43QU3CCL4CZN3LqE=
-github.com/openshift/backplane-cli v0.0.0-20250514221021-ea337a6d563f/go.mod h1:DKTrs4gWVq+VMmGGHnxejfTfhz4r4Q4tpXivLBr2JJw=
+github.com/openshift/backplane-cli v0.1.47-0.20250521025004-fb46bb233d3d h1:yAspQxVId6fb0znYJc6fmn1ZPdAzlYvXjxUDWSQHX+s=
+github.com/openshift/backplane-cli v0.1.47-0.20250521025004-fb46bb233d3d/go.mod h1:DKTrs4gWVq+VMmGGHnxejfTfhz4r4Q4tpXivLBr2JJw=
 github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 h1:cHyxR+Y8rAMT6m1jQCaYGRwikqahI0OjjUDhFNf3ySQ=
 github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87/go.mod h1:DB/Mf2oTeiAmVVX1gN+NEqweonAPY0TKUwADizj8+ZA=
 github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f h1:CedFPNwCSYbjo7rCr9YrJs/0OrBf3m8sLlUZw66VDwY=

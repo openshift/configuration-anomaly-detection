@@ -92,7 +92,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ec2Client := ec2.NewFromConfig(awsCfg)
 			ec2Wrapper := NewEC2ClientWrapper(ec2Client)
 
-			awsCli, err := awsinternal.NewClient(awsAccessKey, awsSecretKey, "", region)
+			awsCli, err := awsinternal.NewClient(awsCfg)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
 
 			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -87,7 +88,8 @@ func run(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	_, cadExperimentalEnabled := os.LookupEnv("CAD_EXPERIMENTAL_ENABLED")
+	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
+	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 
 	// Escalate all unsupported alerts

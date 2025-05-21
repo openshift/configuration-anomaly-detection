@@ -215,7 +215,7 @@ require (
 	github.com/openshift/api v0.0.0-20240522145529-93d6bda14341 // indirect
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221 // indirect
 	github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70 // indirect
-	github.com/openshift/backplane-cli v0.0.0-20250514221021-ea337a6d563f // indirect
+	github.com/openshift/backplane-cli v0.1.47-0.20250521025004-fb46bb233d3d // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f // indirect
 	github.com/openshift/osd-network-verifier v1.2.3 // indirect

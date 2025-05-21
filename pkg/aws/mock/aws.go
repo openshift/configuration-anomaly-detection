@@ -238,18 +238,18 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// GetAWSCredentials mocks base method.
-func (m *MockClient) GetAWSCredentials() aws.Credentials {
+// GetBaseConfig mocks base method.
+func (m *MockClient) GetBaseConfig() *aws.Config {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAWSCredentials")
-	ret0, _ := ret[0].(aws.Credentials)
+	ret := m.ctrl.Call(m, "GetBaseConfig")
+	ret0, _ := ret[0].(*aws.Config)
 	return ret0
 }
 
-// GetAWSCredentials indicates an expected call of GetAWSCredentials.
-func (mr *MockClientMockRecorder) GetAWSCredentials() *gomock.Call {
+// GetBaseConfig indicates an expected call of GetBaseConfig.
+func (mr *MockClientMockRecorder) GetBaseConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAWSCredentials", reflect.TypeOf((*MockClient)(nil).GetAWSCredentials))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseConfig", reflect.TypeOf((*MockClient)(nil).GetBaseConfig))
 }
 
 // GetRouteTableForSubnet mocks base method.
