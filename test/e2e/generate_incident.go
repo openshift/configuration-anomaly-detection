@@ -88,7 +88,7 @@ func (c *client) CreateSilentRequest(alertName, clusterID string) (string, error
 	}
 
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "POST", c.eventsURL, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.eventsURL, bytes.NewBuffer(body))
 	if err != nil {
 		return "", err
 	}
@@ -123,7 +123,7 @@ func (c *client) GetIncidentID(dedupKey string) (string, error) {
 	url := fmt.Sprintf("%s?incident_key=%s", c.apiURL, dedupKey)
 
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -171,7 +171,7 @@ func (c *client) ResolveIncident(incidentID string) error {
 	}
 
 	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "PUT", url, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
