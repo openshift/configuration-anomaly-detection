@@ -1,4 +1,4 @@
-package osde2etests
+package utils
 
 import (
 	"context"

@@ -1,7 +1,7 @@
 //go:build osde2e
 // +build osde2e
 
-package osde2etests
+package utils
 
 import (
 	"fmt"

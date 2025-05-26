@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/gomega"
 	awsinternal "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/test/e2e/utils"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,13 +29,13 @@ import (
 
 var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 	var (
-		ocme2eCli *ocme2e.Client
-		ocmCli    ocm.Client
-		k8s       *openshift.Client
-		region    string
-		provider  string
-		clusterID string
-		pdClient  PagerDutyClient
+		ocme2eCli    *ocme2e.Client
+		ocmCli       ocm.Client
+		k8s          *openshift.Client
+		region       string
+		provider     string
+		clusterID    string
+		testPdClient utils.TestPagerDutyClient // Updated reference
 	)
 
 	BeforeAll(func(ctx context.Context) {
@@ -67,10 +68,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
 
 		pdRoutingKey := os.Getenv("CAD_PD_TOKEN")
-		pdToken := os.Getenv("CAD_PD_TOKEN")
 		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
-		Expect(pdToken).NotTo(BeEmpty(), "PAGERDUTY_TOKEN must be set")
-		pdClient = NewClient(pdRoutingKey, pdToken)
+		testPdClient = utils.NewClient(pdRoutingKey)
 	})
 
 	AfterAll(func() {
@@ -97,7 +96,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
 
 			ec2Client := ec2.NewFromConfig(awsCfg)
-			ec2Wrapper := NewEC2ClientWrapper(ec2Client)
+			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client) // Updated reference
 
 			awsCli, err := awsinternal.NewClient(awsCfg)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
@@ -113,7 +112,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
 			// Get limited support reasons before blocking egress
-			lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 			lsReasonsBefore := lsResponseBefore.Items().Len()
 
@@ -121,15 +120,15 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
 
 			// Block egress
-			Expect(BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
+			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress") // Updated reference
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			_, err = pdClient.CreateSilentRequest("ClusterHasGoneMissing", clusterID)
+			//_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
-			time.Sleep(5 * time.Minute)
+			time.Sleep(3 * time.Minute)
 
-			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 
 			// Print the response data
@@ -146,7 +145,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			// Clean up: restore egress before checking test conditions
 			defer func() {
-				err := RestoreEgress(ctx, ec2Wrapper, sgID)
+				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID) // Updated reference
 				if err != nil {
 					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
 				} else {
@@ -169,11 +168,11 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(cluster).ToNot(BeNil(), "received nil cluster from OCM")
 
 			// Get service logs
-			logs, err := GetServiceLogs(ocmCli, cluster)
+			logs, err := utils.GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
 			logsBefore := logs.Items().Slice()
 
-			lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 			lsReasonsBefore := lsResponseBefore.Items().Len()
 
@@ -227,13 +226,16 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
+			_, err = testPdClient.CreateRequest("AlertManagerDown", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
 			time.Sleep(1 * time.Minute)
 
-			logs, err = GetServiceLogs(ocmCli, cluster)
+			logs, err = utils.GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
 			logsAfter := logs.Items().Slice()
 
-			lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+			lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 			lsReasonsAfter := lsResponseAfter.Items().Len()
 
@@ -289,7 +291,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 	})
 
-	It("AWS CCS: can shutdown and restart infrastructure nodes", Label("aws", "ccs", "infra-nodes", "limited-support"), func(ctx context.Context) {
+	It("AWS CCS: Cluster has gone missing - Infra nodes turned off", Label("aws", "ccs", "infra-nodes", "limited-support"), func(ctx context.Context) {
 		if provider != "aws" {
 			Skip("This test only runs on AWS clusters")
 		}
@@ -308,20 +310,13 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
 		ec2Client := ec2.NewFromConfig(awsCfg)
 
-		// Step 1: Get cluster object
-		//clusterResp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
-		//Expect(err).ToNot(HaveOccurred(), "Failed to fetch cluster from OCM")
-		//cluster := clusterResp.Body()
-
-		// Step 2: Get limited support reasons before shutdown
 		ginkgo.GinkgoWriter.Println("Getting limited support reasons before infra node shutdown...")
-		lsResponseBefore, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+		lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 		lsReasonsBefore := lsResponseBefore.Items().Len()
 
 		ginkgo.GinkgoWriter.Printf("Limited support reasons before infra node shutdown: %d\n", lsReasonsBefore)
 
-		// Step 3: Get infra node EC2 instance IDs
 		var nodeList corev1.NodeList
 		err = k8s.List(ctx, &nodeList)
 		Expect(err).NotTo(HaveOccurred(), "Failed to list nodes")
@@ -358,7 +353,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Println("Infra nodes successfully restarted")
 		}()
 
-		// Step 4: Stop EC2 instances
 		ginkgo.GinkgoWriter.Println("Stopping infra nodes...")
 		_, err = ec2Client.StopInstances(ctx, &ec2.StopInstancesInput{
 			InstanceIds: instanceIDs,
@@ -370,15 +364,13 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
 		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
 
-		_, err = pdClient.CreateSilentRequest("ClusterHasGoneMissing", clusterID)
+		_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
-		// Step 5: Wait for some time
 		ginkgo.GinkgoWriter.Println("Sleeping for 2 minutes before checking limited support reasons...")
 		time.Sleep(2 * time.Minute)
 
-		// Step 6: Get limited support reasons after shutdown
-		lsResponseAfter, err := GetLimitedSupportReasons(ocme2eCli, clusterID)
+		lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 
 		// Print the response data
@@ -393,7 +385,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			fmt.Printf("  - Details: %s\n", item.Details())
 		}
 
-		// Step 7: Check if limited support reasons changed
 		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
 			"Expected more limited support reasons after infrastructure node shutdown")
 	})
