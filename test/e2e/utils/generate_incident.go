@@ -122,7 +122,7 @@ func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
 		return "", fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), "POST", PagerDutyEventsURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, PagerDutyEventsURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
@@ -133,7 +133,11 @@ func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -153,11 +157,10 @@ func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
 }
 
 func (c *client) ResolveIncident(incidentID string) error {
-	// For resolving, we need to send a "resolve" event with the same dedup_key
 	event := Event{
 		RoutingKey:  c.routingKey,
 		EventAction: "resolve",
-		DedupKey:    incidentID, // incidentID should be the dedup_key from the original event
+		DedupKey:    incidentID,
 	}
 
 	jsonData, err := json.Marshal(event)
@@ -165,7 +168,7 @@ func (c *client) ResolveIncident(incidentID string) error {
 		return fmt.Errorf("failed to marshal resolve event: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), "POST", PagerDutyEventsURL, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, PagerDutyEventsURL, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create resolve request: %w", err)
 	}
@@ -176,7 +179,11 @@ func (c *client) ResolveIncident(incidentID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to send resolve request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
@@ -187,10 +194,6 @@ func (c *client) ResolveIncident(incidentID string) error {
 }
 
 func (c *client) GetIncidentID(dedupKey string) (string, error) {
-	// To get incident ID from dedup key, you would need to use the REST API
-	// This requires different authentication (API token) and different endpoint
-	// For now, returning the dedupKey as it's often used interchangeably
-	// In practice, you might want to implement this using the PagerDuty REST API v2
 	return dedupKey, nil
 }
 
