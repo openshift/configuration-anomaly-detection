@@ -35,7 +35,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		region       string
 		provider     string
 		clusterID    string
-		testPdClient utils.TestPagerDutyClient // Updated reference
+		testPdClient utils.TestPagerDutyClient
 	)
 
 	BeforeAll(func(ctx context.Context) {
@@ -96,7 +96,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
 
 			ec2Client := ec2.NewFromConfig(awsCfg)
-			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client) // Updated reference
+			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
 
 			awsCli, err := awsinternal.NewClient(awsCfg)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
@@ -120,7 +120,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
 
 			// Block egress
-			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress") // Updated reference
+			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
 			//_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
@@ -145,7 +145,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			// Clean up: restore egress before checking test conditions
 			defer func() {
-				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID) // Updated reference
+				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID)
 				if err != nil {
 					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
 				} else {
