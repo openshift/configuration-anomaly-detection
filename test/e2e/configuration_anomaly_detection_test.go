@@ -379,4 +379,91 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
 			"Expected more limited support reasons after infrastructure node shutdown")
 	})
+
+	It("AWS CCS: InsightsOperatorDown (blocked egress)", Label("aws", "ccs", "insights-operator", "blocking-egress"), func(ctx context.Context) {
+		if provider == "aws" {
+			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+			Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
+			Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
+
+			awsCfg, err := config.LoadDefaultConfig(ctx,
+				config.WithRegion(region),
+				config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+					awsAccessKey,
+					awsSecretKey,
+					"",
+				)),
+			)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
+
+			ec2Client := ec2.NewFromConfig(awsCfg)
+			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
+
+			awsCli, err := awsinternal.NewClient(awsCfg)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
+
+			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			Expect(err).NotTo(HaveOccurred(), "Failed to fetch cluster from OCM")
+
+			cluster := clusterResource.Body()
+			infraID := cluster.InfraID()
+			Expect(infraID).NotTo(BeEmpty(), "InfraID missing from cluster")
+
+			sgID, err := awsCli.GetSecurityGroupID(infraID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
+
+			// Step 1: Get logs before action
+			ginkgo.GinkgoWriter.Printf("Step 1:Fetching service logs before action\n")
+			logsBefore, err := utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before action")
+
+			existingLogIDs := map[string]bool{}
+			for _, item := range logsBefore.Items().Slice() {
+				existingLogIDs[item.ID()] = true
+			}
+
+			// Step 2: Block egress
+			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
+			ginkgo.GinkgoWriter.Printf("Step 2: Egress blocked\n")
+
+			// Step 3: Scale down insights-operator
+			var zero int32 = 0
+			fmt.Println("Step 3: Scaling down insights-operator")
+			var originalIOReplicas int32
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				io := &appsv1.Deployment{}
+				err := k8s.Get(ctx, "insights-operator", "openshift-insights", io)
+				if err != nil {
+					return err
+				}
+				originalIOReplicas = *io.Spec.Replicas
+				io.Spec.Replicas = &zero
+				return k8s.Update(ctx, io)
+			})
+			Expect(err).ToNot(HaveOccurred(), "failed to scale down insights-operator")
+			fmt.Printf("Scaled down insights-operator from %d to 0 replicas\n", originalIOReplicas)
+
+			_, err = testPdClient.TriggerIncident("InsightsOperatorDown", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			// Step 4: Get logs again and find new entries
+			logsAfter, err := utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs after action")
+
+			newLogs := []interface{}{}
+			for _, item := range logsAfter.Items().Slice() {
+				if !existingLogIDs[item.ID()] {
+					newLogs = append(newLogs, item)
+				}
+			}
+
+			// Step 4: Verify no new logs were created
+			Expect(len(newLogs)).To(BeZero(), "Expected no new service logs after blocking egress and scaling down")
+
+			// Restore egress
+			Expect(utils.RestoreEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to restore egress")
+			ginkgo.GinkgoWriter.Printf("Egress restored\n")
+		}
+	})
 }, ginkgo.ContinueOnFailure)
