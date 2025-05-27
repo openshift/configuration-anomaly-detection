@@ -123,7 +123,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			//_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
+			_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 			time.Sleep(3 * time.Minute)
@@ -226,7 +226,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			_, err = testPdClient.CreateRequest("AlertManagerDown", clusterID)
+			_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 			time.Sleep(1 * time.Minute)

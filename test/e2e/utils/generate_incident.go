@@ -1,71 +1,37 @@
 package utils
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"time"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
 )
 
 const (
-	ClusterHasGoneMissing                         = "ClusterHasGoneMissing"
-	ClusterProvisioningDelay                      = "ClusterProvisioningDelay"
-	ClusterMonitoringErrorBudgetBurnSRE           = "ClusterMonitoringErrorBudgetBurnSRE"
-	InsightsOperatorDown                          = "InsightsOperatorDown"
-	MachineHealthCheckUnterminatedShortCircuitSRE = "MachineHealthCheckUnterminatedShortCircuitSRE"
-	ApiErrorBudgetBurn                            = "ApiErrorBudgetBurn"
-	AlertManagerDown                              = "AlertManagerDown"
-
-	// PagerDuty Events API endpoint
-	PagerDutyEventsURL = "https://events.pagerduty.com/v2/enqueue"
+	AlertClusterHasGoneMissing                         = "ClusterHasGoneMissing"
+	AlertClusterProvisioningDelay                      = "ClusterProvisioningDelay"
+	AlertClusterMonitoringErrorBudgetBurnSRE           = "ClusterMonitoringErrorBudgetBurnSRE"
+	AlertInsightsOperatorDown                          = "InsightsOperatorDown"
+	AlertMachineHealthCheckUnterminatedShortCircuitSRE = "MachineHealthCheckUnterminatedShortCircuitSRE"
+	AlertApiErrorBudgetBurn                            = "ApiErrorBudgetBurn"
 )
 
-// EventPayload represents the payload structure for PagerDuty Events API
-type EventPayload struct {
-	Summary   string                 `json:"summary"`
-	Source    string                 `json:"source"`
-	Severity  string                 `json:"severity"`
-	Timestamp string                 `json:"timestamp"`
-	Details   map[string]interface{} `json:"custom_details,omitempty"`
-}
-
-// Event represents the complete event structure for PagerDuty Events API
-type Event struct {
-	RoutingKey  string        `json:"routing_key"`
-	EventAction string        `json:"event_action"`
-	DedupKey    string        `json:"dedup_key,omitempty"`
-	Payload     *EventPayload `json:"payload"`
-}
-
-// EventResponse represents the response from PagerDuty Events API
-type EventResponse struct {
-	Status   string `json:"status"`
-	Message  string `json:"message"`
-	DedupKey string `json:"dedup_key"`
-}
-
-func GetAlertSummary(alertName string) (string, error) {
+func GetAlertTitle(alertName string) (string, error) {
 	switch alertName {
-	case ClusterHasGoneMissing:
+	case AlertClusterHasGoneMissing:
 		return "cadtest has gone missing", nil
-	case ClusterProvisioningDelay:
+	case AlertClusterProvisioningDelay:
 		return "ClusterProvisioningDelay -", nil
-	case ClusterMonitoringErrorBudgetBurnSRE:
+	case AlertClusterMonitoringErrorBudgetBurnSRE:
 		return "ClusterMonitoringErrorBudgetBurnSRE Critical (1)", nil
-	case InsightsOperatorDown:
+	case AlertInsightsOperatorDown:
 		return "InsightsOperatorDown", nil
-	case MachineHealthCheckUnterminatedShortCircuitSRE:
+	case AlertMachineHealthCheckUnterminatedShortCircuitSRE:
 		return "MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)", nil
-	case ApiErrorBudgetBurn:
+	case AlertApiErrorBudgetBurn:
 		return "api-ErrorBudgetBurn k8sgpt test CRITICAL (1)", nil
-	case AlertManagerDown:
-		return "Alert Manager Down", nil
 	default:
 		return "", fmt.Errorf("unknown alert name: %s", alertName)
 	}
@@ -76,36 +42,27 @@ type TestPagerDutyClient interface {
 	GetIncidentID(dedupKey string) (string, error)
 	ResolveIncident(incidentID string) error
 }
-
 type client struct {
 	routingKey string
 	apiClient  *sdk.Client
-	httpClient *http.Client
 }
 
 func NewClient(routingKey string) TestPagerDutyClient {
 	return &client{
 		routingKey: routingKey,
 		apiClient:  sdk.NewClient(routingKey),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
 }
-
 func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
-	summary, err := GetAlertSummary(alertName)
+	summary, err := GetAlertTitle(alertName)
 	if err != nil {
 		return "", err
 	}
-
-	dedupKey := generateUUID()
-
-	event := Event{
-		RoutingKey:  c.routingKey,
-		EventAction: "trigger",
-		DedupKey:    dedupKey,
-		Payload: &EventPayload{
+	event := sdk.V2Event{
+		RoutingKey: c.routingKey,
+		Action:     "trigger",
+		DedupKey:   generateUUID(),
+		Payload: &sdk.V2Payload{
 			Summary:   summary,
 			Source:    "cad-integration-testing",
 			Severity:  "critical",
@@ -116,87 +73,20 @@ func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
 			},
 		},
 	}
-
-	jsonData, err := json.Marshal(event)
+	resp, err := sdk.ManageEventWithContext(context.Background(), event)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal event: %w", err)
+		return "", err
 	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, PagerDutyEventsURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusAccepted {
-		return "", fmt.Errorf("PagerDuty API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var eventResponse EventResponse
-	if err := json.Unmarshal(body, &eventResponse); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	return eventResponse.DedupKey, nil
+	return resp.DedupKey, nil
 }
-
+func (c *client) GetIncidentID(dedupKey string) (string, error) {
+	// Implementation can be added if needed
+	return "", nil
+}
 func (c *client) ResolveIncident(incidentID string) error {
-	event := Event{
-		RoutingKey:  c.routingKey,
-		EventAction: "resolve",
-		DedupKey:    incidentID,
-	}
-
-	jsonData, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal resolve event: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, PagerDutyEventsURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create resolve request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send resolve request: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			fmt.Printf("Warning: failed to close response body: %v\n", closeErr)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusAccepted {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("PagerDuty API returned status %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Implementation can be added if needed
 	return nil
 }
-
-func (c *client) GetIncidentID(dedupKey string) (string, error) {
-	return dedupKey, nil
-}
-
 func generateUUID() string {
 	b := make([]byte, 16)
 	_, err := rand.Read(b)
