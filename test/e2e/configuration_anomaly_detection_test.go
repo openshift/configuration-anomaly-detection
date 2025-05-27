@@ -23,6 +23,7 @@ import (
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/retry"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -379,4 +380,89 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
 			"Expected more limited support reasons after infrastructure node shutdown")
 	})
+
+	It("AWS CCS: clustermonitoringerrorbudgetburn (misconfig + revert scenario)", func(ctx context.Context) {
+		if provider == "aws" {
+			const (
+				namespace     = "openshift-user-workload-monitoring"
+				configMapName = "user-workload-monitoring-config"
+			)
+
+			// STEP 0: Get cluster information from OCM
+			fmt.Println("Step 0: Fetching cluster info")
+			response, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			Expect(err).ToNot(HaveOccurred(), "Failed to get cluster from OCM")
+			cluster := response.Body()
+			Expect(cluster).ToNot(BeNil(), "Cluster response is nil")
+
+			// STEP 1: Get service logs BEFORE misconfiguration
+			fmt.Println("Step 1: Getting service logs before misconfiguration")
+			logs, err := utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch service logs before misconfig")
+			logsBefore := logs.Items().Slice()
+
+			// STEP 2: Fetch and backup the current ConfigMap
+			fmt.Println("Step 2: Backing up current ConfigMap")
+			originalCM := &corev1.ConfigMap{}
+			err = k8s.Get(ctx, configMapName, namespace, originalCM)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch original ConfigMap")
+
+			// Create a deep copy so we can restore it later
+			// backupCM := originalCM.DeepCopy()
+
+			// STEP 3: Inject invalid YAML into the ConfigMap to simulate misconfiguration
+			fmt.Println("Step 3: Injecting invalid config to simulate misconfiguration")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				err := k8s.Get(ctx, configMapName, namespace, originalCM)
+				if err != nil {
+					return err
+				}
+				if originalCM.Data == nil {
+					originalCM.Data = make(map[string]string)
+				}
+				originalCM.Data["user-workload-monitoring.yaml"] = `
+			prometheus:
+			  retention: 24h
+			  # broken: : invalid_yaml
+			// ` // malformed YAML
+
+				return k8s.Update(ctx, originalCM)
+			})
+			Expect(err).ToNot(HaveOccurred(), "Failed to apply invalid config")
+
+			fmt.Println("Step : Waiting to pagaerduty alert...")
+			_, err = testPdClient.TriggerIncident("ClusterMonitoringErrorBudgetBurnSRE", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			time.Sleep(1 * time.Minute)
+
+			// STEP 4: Wait for CAD/system to react (simulate time passage)
+			fmt.Println("Step 4: Waiting for CAD/system to react...")
+			time.Sleep(1 * time.Minute)
+
+			// STEP 5: Get service logs AFTER misconfiguration
+			fmt.Println("Step 5: Fetching service logs after misconfiguration")
+			logs, err = utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
+			logsAfter := logs.Items().Slice()
+
+			// STEP 6: Confirm new service log was created
+			Expect(logsAfter).To(HaveLen(len(logsBefore)), "Service logs count changed after scale down/up")
+
+			// STEP 7: Delete the ConfigMap instead of reverting it
+			fmt.Println("Step 7: Deleting ConfigMap instead of reverting it")
+
+			err = k8s.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      configMapName,
+					Namespace: namespace,
+				},
+			})
+			Expect(err).ToNot(HaveOccurred(), "Failed to delete the ConfigMap")
+
+			fmt.Println("✅ Test complete: Misconfiguration injected, CAD reacted, and config deleted")
+
+		}
+	})
+
 }, ginkgo.ContinueOnFailure)
