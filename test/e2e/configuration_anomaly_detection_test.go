@@ -407,9 +407,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			err = k8s.Get(ctx, configMapName, namespace, originalCM)
 			Expect(err).ToNot(HaveOccurred(), "Failed to fetch original ConfigMap")
 
-			// Create a deep copy so we can restore it later
-			// backupCM := originalCM.DeepCopy()
-
 			// STEP 3: Inject invalid YAML into the ConfigMap to simulate misconfiguration
 			fmt.Println("Step 3: Injecting invalid config to simulate misconfiguration")
 			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
