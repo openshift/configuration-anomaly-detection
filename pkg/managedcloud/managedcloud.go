@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	bpcloud "github.com/openshift/backplane-cli/cmd/ocm-backplane/cloud"
@@ -15,19 +14,14 @@ import (
 )
 
 // CreateCustomerAWSClient creates an aws.SdkClient to a cluster's AWS account
-func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.SdkClient, error) {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
-	if backplaneURL == "" {
-		return nil, fmt.Errorf("could not create new aws client: missing environment variable BACKPLANE_URL")
-	}
-
-	backplaneInitialARN := os.Getenv("BACKPLANE_INITIAL_ARN")
-	if backplaneInitialARN == "" {
-		return nil, fmt.Errorf("missing environment variable BACKPLANE_INITIAL_ARN")
-	}
-
-	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
-
+func CreateCustomerAWSClient(
+	cluster *cmv1.Cluster,
+	ocmClient ocm.Client,
+	backplaneURL string,
+	backplaneProxy string,
+	backplaneInitialARN string,
+	awsProxy string,
+) (*aws.SdkClient, error) {
 	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneURL, AssumeInitialArn: backplaneInitialARN}, Cluster: cluster}
 	if backplaneProxy != "" {
 		queryConfig.ProxyURL = &backplaneProxy
@@ -38,7 +32,6 @@ func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.
 		return nil, fmt.Errorf("unable to query aws credentials from backplane: %w", err)
 	}
 
-	awsProxy := os.Getenv("AWS_PROXY")
 	if awsProxy != "" {
 		config.HTTPClient = &http.Client{
 			Transport: &http.Transport{

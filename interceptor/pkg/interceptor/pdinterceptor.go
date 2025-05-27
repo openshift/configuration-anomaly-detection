@@ -24,7 +24,10 @@ import (
 // ErrInvalidContentType is returned when the content-type is not a JSON body.
 var ErrInvalidContentType = errors.New("form parameter encoding not supported, please change the hook to send JSON payloads")
 
-type PagerDutyInterceptor struct{}
+type PagerDutyInterceptor struct {
+	PagerDutyToken        string
+	PagerDutySilentPolicy string
+}
 
 func (pdi PagerDutyInterceptor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b, err := pdi.executeInterceptor(r)
@@ -137,7 +140,7 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 }
 
 func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.InterceptorRequest) *triggersv1.InterceptorResponse {
-	pdClient, err := pagerduty.GetPDClient([]byte(r.Body))
+	pdClient, err := pagerduty.GetPDClient([]byte(r.Body), pdi.PagerDutyToken, pdi.PagerDutySilentPolicy)
 	if err != nil {
 		return interceptors.Failf(codes.InvalidArgument, "could not initialize pagerduty client: %v", err)
 	}

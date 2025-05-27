@@ -34,7 +34,10 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 	// Failing the cleanup call is not critical as there is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
 	// We can revisit backplane-apis remediation implementation to improve this behavior, by e.g.
 	// patching the existing RBAC etc...
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
+	if r.BackplaneURL == "" {
+		return result, fmt.Errorf("backplane URL is not set")
+	}
+	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name, r.BackplaneURL)
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")

@@ -9,6 +9,10 @@ import (
 	sdk "github.com/openshift-online/ocm-sdk-go"
 )
 
+// ocmConfigFile is the path refers to existing ocm config file
+// set by the ocm command by calling ocm login
+var ocmConfigFile string
+
 // Config is the type used to store the configuration of the client.
 // There's no way to line-split or predefine tags, so...
 //
@@ -27,6 +31,24 @@ type Config struct {
 	URL          string   `json:"url,omitempty" doc:"URL of the API gateway. The value can be the complete URL or an alias. The valid aliases are 'production', 'staging' and 'integration'."`
 	User         string   `json:"user,omitempty" doc:"User name."`
 	Pager        string   `json:"pager,omitempty" doc:"Pager command, for example 'less'. If empty no pager will be used."`
+}
+
+func SetConfigFile(file string) {
+	ocmConfigFile = file
+}
+
+func HasConfigFile() bool {
+	if ocmConfigFile == "" {
+		return false
+	}
+	_, err := os.Stat(ocmConfigFile)
+	if os.IsNotExist(err) {
+		return false
+	}
+	if err != nil {
+		return false
+	}
+	return true
 }
 
 // Load loads the configuration from the configuration file. If the configuration file doesn't exist
@@ -66,32 +88,35 @@ func Load() (cfg *Config, err error) {
 // Location returns the location of the configuration file. If a configuration file
 // already exists in the HOME directory, it uses that, otherwise it prefers to
 // use the XDG config directory.
-func Location() (path string, err error) {
-	if ocmconfig := os.Getenv("OCM_CONFIG"); ocmconfig != "" {
-		return ocmconfig, nil
-	}
-
+func Location() (string, error) {
 	// Determine home directory to use for the legacy file path
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
 
-	path = filepath.Join(home, ".ocm.json")
-
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		// Determine standard config directory
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return path, err
-		}
-
-		// Use standard config directory
-		path = filepath.Join(configDir, "/ocm/ocm.json")
+	configPath := filepath.Join(home, ".ocm.json")
+	_, err = os.Stat(configPath)
+	if err == nil {
+		// File exists, use it
+		return configPath, nil
 	}
 
-	return path, nil
+	path, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+
+	// Use standard config directory
+	configPath = filepath.Join(path, "/ocm/ocm.json")
+	_, err = os.Stat(configPath)
+	if err == nil {
+		// File exists, use it
+		return configPath, nil
+	}
+
+	// Nothing found
+	return "", nil
 }
 
 // Connection creates a connection using this configuration.

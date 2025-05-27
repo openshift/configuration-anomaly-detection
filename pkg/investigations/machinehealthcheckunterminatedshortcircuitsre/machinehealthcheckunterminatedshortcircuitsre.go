@@ -39,7 +39,7 @@ type Investigation struct {
 
 func (i *Investigation) setup(r *investigation.Resources) error {
 	// Setup investigation
-	k, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
+	k, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name, r.BackplaneURL)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kubernetes client: %w", err)
 	}

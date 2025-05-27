@@ -17,8 +17,17 @@ limitations under the License.
 // Package main is the main package
 package main
 
-import "github.com/openshift/configuration-anomaly-detection/cadctl/cmd"
+import (
+	"fmt"
+	"os"
+
+	"github.com/openshift/configuration-anomaly-detection/cadctl/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	err := cmd.Execute()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to execute cadctl: %v\n", err)
+		os.Exit(1)
+	}
 }
