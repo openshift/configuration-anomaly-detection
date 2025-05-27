@@ -38,7 +38,7 @@ func GetAlertTitle(alertName string) (string, error) {
 }
 
 type TestPagerDutyClient interface {
-	CreateRequest(alertName, clusterID string) (string, error)
+	TriggerIncident(alertName, clusterID string) (string, error)
 	GetIncidentID(dedupKey string) (string, error)
 	ResolveIncident(incidentID string) error
 }
@@ -53,7 +53,8 @@ func NewClient(routingKey string) TestPagerDutyClient {
 		apiClient:  sdk.NewClient(routingKey),
 	}
 }
-func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
+
+func (c *client) TriggerIncident(alertName, clusterID string) (string, error) {
 	summary, err := GetAlertTitle(alertName)
 	if err != nil {
 		return "", err
@@ -79,14 +80,17 @@ func (c *client) CreateRequest(alertName, clusterID string) (string, error) {
 	}
 	return resp.DedupKey, nil
 }
+
 func (c *client) GetIncidentID(dedupKey string) (string, error) {
 	// Implementation can be added if needed
 	return "", nil
 }
+
 func (c *client) ResolveIncident(incidentID string) error {
 	// Implementation can be added if needed
 	return nil
 }
+
 func generateUUID() string {
 	b := make([]byte, 16)
 	_, err := rand.Read(b)

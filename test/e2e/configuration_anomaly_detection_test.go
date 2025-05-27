@@ -84,7 +84,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
 			Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
 			Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
-
 			awsCfg, err := config.LoadDefaultConfig(ctx,
 				config.WithRegion(region),
 				config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
@@ -94,36 +93,38 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 				)),
 			)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
-
 			ec2Client := ec2.NewFromConfig(awsCfg)
 			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
-
 			awsCli, err := awsinternal.NewClient(awsCfg)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
-
 			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
 			Expect(err).NotTo(HaveOccurred(), "Failed to fetch cluster from OCM")
-
 			cluster := clusterResource.Body()
 			infraID := cluster.InfraID()
 			Expect(infraID).NotTo(BeEmpty(), "InfraID missing from cluster")
-
 			sgID, err := awsCli.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
-
 			// Get limited support reasons before blocking egress
 			lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
 			lsReasonsBefore := lsResponseBefore.Items().Len()
-
 			ginkgo.GinkgoWriter.Printf("Limited support reasons before blocking egress: %d\n", lsReasonsBefore)
 			ginkgo.GinkgoWriter.Printf("Blocking egress for security group: %s\n", sgID)
-
 			// Block egress
 			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
 			ginkgo.GinkgoWriter.Printf("Egress blocked\n")
 
-			_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
+			// Clean up: restore egress - moved up to minimize risk of exits before cleanup
+			defer func() {
+				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID)
+				if err != nil {
+					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
+				} else {
+					ginkgo.GinkgoWriter.Printf("Egress restored\n")
+				}
+			}()
+
+			_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 			time.Sleep(3 * time.Minute)
@@ -139,19 +140,9 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			items := lsResponseAfter.Items().Slice()
 			for i, item := range items {
 				fmt.Printf("Reason #%d:\n", i+1)
-				fmt.Printf("  - Summary: %s\n", item.Summary())
-				fmt.Printf("  - Details: %s\n", item.Details())
+				fmt.Printf(" - Summary: %s\n", item.Summary())
+				fmt.Printf(" - Details: %s\n", item.Details())
 			}
-
-			// Clean up: restore egress before checking test conditions
-			defer func() {
-				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID)
-				if err != nil {
-					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
-				} else {
-					ginkgo.GinkgoWriter.Printf("Egress restored\n")
-				}
-			}()
 
 			// Verify test result: Expect new limited support reasons to be found after blocking egress
 			Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
@@ -226,7 +217,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 			fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-			_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
+			_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 			time.Sleep(1 * time.Minute)
@@ -364,7 +355,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
 		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
 
-		_, err = testPdClient.CreateRequest("ClusterHasGoneMissing", clusterID)
+		_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 		ginkgo.GinkgoWriter.Println("Sleeping for 2 minutes before checking limited support reasons...")
