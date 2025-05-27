@@ -427,15 +427,11 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			})
 			Expect(err).ToNot(HaveOccurred(), "Failed to apply invalid config")
 
-			fmt.Println("Step : Waiting to pagaerduty alert...")
+			fmt.Println("Step 4: Waiting to pagerduty alert...")
 			_, err = testPdClient.TriggerIncident("ClusterMonitoringErrorBudgetBurnSRE", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
-			time.Sleep(1 * time.Minute)
-
-			// STEP 4: Wait for CAD/system to react (simulate time passage)
-			fmt.Println("Step 4: Waiting for CAD/system to react...")
-			time.Sleep(1 * time.Minute)
+			time.Sleep(2 * time.Minute)
 
 			// STEP 5: Get service logs AFTER misconfiguration
 			fmt.Println("Step 5: Fetching service logs after misconfiguration")
@@ -457,7 +453,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			})
 			Expect(err).ToNot(HaveOccurred(), "Failed to delete the ConfigMap")
 
-			fmt.Println("✅ Test complete: Misconfiguration injected, CAD reacted, and config deleted")
+			fmt.Println("Test complete: Misconfiguration injected, CAD reacted, and config deleted")
 
 		}
 	})
