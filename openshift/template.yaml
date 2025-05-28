@@ -91,6 +91,8 @@ objects:
   kind: Service
   metadata:
     name: cad-interceptor-service
+    labels:
+      app: configuration-anomaly-detection
   spec:
     ports:
     - port: 8080
