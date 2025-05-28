@@ -95,7 +95,8 @@ objects:
       app: configuration-anomaly-detection
   spec:
     ports:
-    - port: 8080
+    - name: web
+      port: 8080
       protocol: TCP
       targetPort: 8080
     selector:
