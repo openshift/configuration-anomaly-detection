@@ -344,7 +344,12 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 		return nil, fmt.Errorf("expecting status 'Active' found %v", status)
 	}
 
-	creator, ok := subscription.GetCreator()
+	accountResponse, err := ocmConn.AccountsMgmt().V1().Accounts().Account(subscription.Creator().ID()).Get().Send()
+	if err != nil {
+		return nil, err
+	}
+
+	creator, ok := accountResponse.GetBody()
 	if !ok {
 		return nil, errors.New("failed to get creator from subscription")
 	}
