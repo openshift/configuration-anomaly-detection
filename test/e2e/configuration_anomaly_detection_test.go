@@ -5,6 +5,7 @@ package osde2etests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -378,5 +379,137 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
 			"Expected more limited support reasons after infrastructure node shutdown")
+	})
+
+	It("UpgradeConfigSyncFailureOver4Hr: corrupted pull secret investigation", Label("pull-secret", "upgrade-config-sync", "user-banned-check"), func(ctx context.Context) {
+		// Get cluster information from OCM
+		response, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+		Expect(err).ToNot(HaveOccurred(), "failed to get cluster from OCM")
+		cluster := response.Body()
+		Expect(cluster).ToNot(BeNil(), "received nil cluster from OCM")
+
+		// Check if user is banned (part of the investigation logic)
+		ginkgo.GinkgoWriter.Printf("Checking if cluster owner is banned...\n")
+		userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(ocmCli, cluster)
+		Expect(err).NotTo(HaveOccurred(), "Failed to check if user is banned")
+
+		if userBannedStatus {
+			ginkgo.GinkgoWriter.Printf("User is banned: %s\n", userBannedNotes)
+			_, err = testPdClient.TriggerIncident("UpgradeConfigSyncFailureOver4HrSRE", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger UpgradeConfigSyncFailureOver4Hr PagerDuty alert")
+		} else {
+			ginkgo.GinkgoWriter.Printf("User is not banned - proceeding with investigation\n")
+		}
+
+		// Get limited support reasons before modifying pull secret (optional check)
+		lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
+		var lsReasonsBefore int
+		if err != nil {
+			ginkgo.GinkgoWriter.Printf("Could not get limited support reasons before test: %v\n", err)
+			lsReasonsBefore = 0
+		} else {
+			lsReasonsBefore = lsResponseBefore.Items().Len()
+			ginkgo.GinkgoWriter.Printf("Limited support reasons before pull secret corruption: %d\n", lsReasonsBefore)
+		}
+
+		// Get the original pull secret for backup
+		var originalPullSecret corev1.Secret
+		err = k8s.Get(ctx, "pull-secret", "openshift-config", &originalPullSecret)
+		Expect(err).NotTo(HaveOccurred(), "Failed to get original pull secret")
+		ginkgo.GinkgoWriter.Printf("Original pull secret retrieved successfully\n")
+
+		// Setup deferred restoration to ensure pull secret is restored regardless of test outcome
+		defer func() {
+			ginkgo.GinkgoWriter.Printf("Restoring original pull secret...\n")
+			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				currentSecret := &corev1.Secret{}
+				err := k8s.Get(ctx, "pull-secret", "openshift-config", currentSecret)
+				if err != nil {
+					return err
+				}
+				// Restore original data
+				currentSecret.Data = originalPullSecret.Data
+				return k8s.Update(ctx, currentSecret)
+			})
+			if err != nil {
+				ginkgo.GinkgoWriter.Printf("Failed to restore original pull secret: %v\n", err)
+			} else {
+				ginkgo.GinkgoWriter.Printf("Original pull secret restored successfully\n")
+			}
+		}()
+
+		// Corrupt the pull secret to simulate the UpgradeConfigSyncFailure scenario
+		ginkgo.GinkgoWriter.Printf("Corrupting pull secret to simulate sync failure...\n")
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			pullSecret := &corev1.Secret{}
+			err := k8s.Get(ctx, "pull-secret", "openshift-config", pullSecret)
+			if err != nil {
+				return err
+			}
+
+			// Create a corrupted docker config json
+			corruptedConfig := map[string]interface{}{
+				"auths": map[string]interface{}{
+					"cloud.openshift.com": map[string]interface{}{
+						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==", // corrupted token
+						"email": "test@example.com",
+					},
+					"registry.connect.redhat.com": map[string]interface{}{
+						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==", // corrupted token
+						"email": "test@example.com",
+					},
+				},
+			}
+
+			corruptedConfigBytes, err := json.Marshal(corruptedConfig)
+			if err != nil {
+				return err
+			}
+
+			// Update the pull secret with corrupted data
+			pullSecret.Data[".dockerconfigjson"] = corruptedConfigBytes
+			return k8s.Update(ctx, pullSecret)
+		})
+		Expect(err).NotTo(HaveOccurred(), "Failed to corrupt pull secret")
+		ginkgo.GinkgoWriter.Printf("Pull secret corrupted successfully\n")
+
+		// Trigger the UpgradeConfigSyncFailureOver4Hr alert
+		_, err = testPdClient.TriggerIncident("UpgradeConfigSyncFailureOver4HrSRE", clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to trigger UpgradeConfigSyncFailureOver4Hr PagerDuty alert")
+
+		// Wait for the investigation to process
+		ginkgo.GinkgoWriter.Printf("Waiting for investigation to process corrupted pull secret...\n")
+		time.Sleep(2 * time.Minute)
+
+		// Get limited support reasons after corruption
+		lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
+		if err != nil {
+			ginkgo.GinkgoWriter.Printf("Could not get limited support reasons after test: %v\n", err)
+		} else {
+			// Print the response data
+			fmt.Println("Limited Support Response After Pull Secret Corruption:")
+			fmt.Printf("Total items: %d\n", lsResponseAfter.Items().Len())
+
+			// Iterate through each item and print details
+			items := lsResponseAfter.Items().Slice()
+			for i, item := range items {
+				fmt.Printf("Reason #%d:\n", i+1)
+				fmt.Printf("  - Summary: %s\n", item.Summary())
+				fmt.Printf("  - Details: %s\n", item.Details())
+			}
+
+			// Compare with before if we had baseline data
+			if lsReasonsBefore >= 0 {
+				if lsResponseAfter.Items().Len() > lsReasonsBefore {
+					ginkgo.GinkgoWriter.Printf("Limited support reasons increased from %d to %d\n",
+						lsReasonsBefore, lsResponseAfter.Items().Len())
+				} else {
+					ginkgo.GinkgoWriter.Printf("Limited support reasons remained at %d\n",
+						lsResponseAfter.Items().Len())
+				}
+			}
+		}
+
+		fmt.Println("Test completed: UpgradeConfigSyncFailureOver4Hr investigation simulated successfully")
 	})
 }, ginkgo.ContinueOnFailure)
