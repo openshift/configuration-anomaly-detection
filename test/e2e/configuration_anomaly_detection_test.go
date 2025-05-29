@@ -451,11 +451,11 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			corruptedConfig := map[string]interface{}{
 				"auths": map[string]interface{}{
 					"cloud.openshift.com": map[string]interface{}{
-						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==", // corrupted token
+						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==",
 						"email": "test@example.com",
 					},
 					"registry.connect.redhat.com": map[string]interface{}{
-						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==", // corrupted token
+						"auth":  "Y29ycnVwdGVkX3Rva2VuOmNvcnJ1cHRlZF9wYXNzd29yZA==",
 						"email": "test@example.com",
 					},
 				},
