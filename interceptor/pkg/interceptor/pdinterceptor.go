@@ -24,19 +24,35 @@ import (
 // ErrInvalidContentType is returned when the content-type is not a JSON body.
 var ErrInvalidContentType = errors.New("form parameter encoding not supported, please change the hook to send JSON payloads")
 
-type PagerDutyInterceptor struct{}
+type ErrorCodeWithReason struct {
+	ErrorCode int
+	Reason    string
+}
 
-func (pdi PagerDutyInterceptor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	b, err := pdi.executeInterceptor(r)
-	if err != nil {
-		var e Error
-		if errors.As(err, &e) {
-			logging.Infof("HTTP %d - %s", e.Status(), e)
-			http.Error(w, e.Error(), e.Status())
-		} else {
-			logging.Errorf("Non Status Error: %s", err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		}
+type InterceptorStats struct {
+	RequestsCount               uint64
+	CodeWithReasonToErrorsCount map[ErrorCodeWithReason]int
+}
+
+func CreateInterceptorStats() *InterceptorStats {
+	return &InterceptorStats{CodeWithReasonToErrorsCount: make(map[ErrorCodeWithReason]int)}
+}
+
+type interceptorHandler struct {
+	stats *InterceptorStats
+}
+
+func CreateInterceptorHandler(stats *InterceptorStats) http.Handler {
+	return &interceptorHandler{stats}
+}
+
+func (pdi interceptorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	pdi.stats.RequestsCount++
+
+	b, httpErr := pdi.executeInterceptor(r)
+	if httpErr != nil {
+		logging.Infof("HTTP %d - %s", httpErr.code, httpErr.err)
+		http.Error(w, httpErr.err.Error(), httpErr.code)
 	}
 
 	w.Header().Add("Content-Type", "application/json")
@@ -45,38 +61,27 @@ func (pdi PagerDutyInterceptor) ServeHTTP(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// Error represents a handler error. It provides methods for a HTTP status
-// code and embeds the built-in error interface.
-type Error interface {
-	error
-	Status() int
+// httpError represents an error with an associated HTTP status code.
+type httpError struct {
+	code int
+	err  error
 }
 
-// HTTPError represents an error with an associated HTTP status code.
-type HTTPError struct {
-	Code int
-	Err  error
+func (pdi *interceptorHandler) httpError(errorCode int, reason string, err error) *httpError {
+	pdi.stats.CodeWithReasonToErrorsCount[ErrorCodeWithReason{errorCode, reason}]++
+
+	return &httpError{code: errorCode, err: fmt.Errorf("%s: %w", reason, err)}
 }
 
-// Allows HTTPError to satisfy the error interface.
-func (se HTTPError) Error() string {
-	return se.Err.Error()
+func (pdi *interceptorHandler) badRequest(reason string, err error) *httpError {
+	return pdi.httpError(http.StatusBadRequest, reason, err)
 }
 
-// Returns our HTTP status code.
-func (se HTTPError) Status() int {
-	return se.Code
+func (pdi *interceptorHandler) internal(reason string, err error) *httpError {
+	return pdi.httpError(http.StatusInternalServerError, reason, err)
 }
 
-func badRequest(err error) HTTPError {
-	return HTTPError{Code: http.StatusBadRequest, Err: err}
-}
-
-func internal(err error) HTTPError {
-	return HTTPError{Code: http.StatusInternalServerError, Err: err}
-}
-
-func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, error) {
+func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *httpError) {
 	// Create a context
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
@@ -84,7 +89,7 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 	var body bytes.Buffer
 	defer r.Body.Close() //nolint:errcheck
 	if _, err := io.Copy(&body, r.Body); err != nil {
-		return nil, internal(fmt.Errorf("failed to read body: %w", err))
+		return nil, pdi.internal("failed to read body", err)
 	}
 	r.Body = io.NopCloser(bytes.NewReader(body.Bytes()))
 
@@ -95,12 +100,12 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 		Header map[string][]string `json:"header"`
 	}
 	if err := json.Unmarshal(body.Bytes(), &originalReq); err != nil {
-		return nil, badRequest(fmt.Errorf("failed to parse request body: %w", err))
+		return nil, pdi.badRequest("failed to parse body", err)
 	}
 
 	extractedRequest, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), bytes.NewReader([]byte(originalReq.Body)))
 	if err != nil {
-		return nil, internal(fmt.Errorf("malformed body/header in unwrapped request: %w", err))
+		return nil, pdi.internal("malformed body/header in unwrapped request", err)
 	}
 
 	for k, v := range originalReq.Header {
@@ -117,26 +122,26 @@ func (pdi *PagerDutyInterceptor) executeInterceptor(r *http.Request) ([]byte, er
 
 	err = webhookv3.VerifySignature(extractedRequest, token)
 	if err != nil {
-		return nil, badRequest(fmt.Errorf("failed to verify signature: %w", err))
+		return nil, pdi.badRequest("failed to verify signature", err)
 	}
 
 	logging.Info("Signature verified successfully")
 
 	if err := json.Unmarshal(body.Bytes(), &ireq); err != nil {
-		return nil, badRequest(fmt.Errorf("failed to parse body as InterceptorRequest: %w", err))
+		return nil, pdi.badRequest("failed to parse body as InterceptorRequest", err)
 	}
 	logging.Debugf("Interceptor request body is: %s", ireq.Body)
 
-	iresp := pdi.Process(ctx, &ireq)
+	iresp := pdi.process(ctx, &ireq)
 	logging.Debugf("Interceptor response is: %+v", iresp)
 	respBytes, err := json.Marshal(iresp)
 	if err != nil {
-		return nil, internal(err)
+		return nil, pdi.internal("failed to encode response", err)
 	}
 	return respBytes, nil
 }
 
-func (pdi *PagerDutyInterceptor) Process(ctx context.Context, r *triggersv1.InterceptorRequest) *triggersv1.InterceptorResponse {
+func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.InterceptorRequest) *triggersv1.InterceptorResponse {
 	pdClient, err := pagerduty.GetPDClient([]byte(r.Body))
 	if err != nil {
 		return interceptors.Failf(codes.InvalidArgument, "could not initialize pagerduty client: %v", err)
