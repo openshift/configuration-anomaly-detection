@@ -388,6 +388,16 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		cluster := response.Body()
 		Expect(cluster).ToNot(BeNil(), "received nil cluster from OCM")
 
+		lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
+		var lsReasonsBefore int
+		if err != nil {
+			ginkgo.GinkgoWriter.Printf("Could not get limited support reasons before test: %v\n", err)
+			lsReasonsBefore = 0
+		} else {
+			lsReasonsBefore = lsResponseBefore.Items().Len()
+			ginkgo.GinkgoWriter.Printf("Limited support reasons before pull secret corruption/user banned check: %d\n", lsReasonsBefore)
+		}
+
 		// Check if user is banned (part of the investigation logic)
 		ginkgo.GinkgoWriter.Printf("Checking if cluster owner is banned...\n")
 		userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(ocmCli, cluster)
@@ -401,26 +411,15 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Printf("User is not banned - proceeding with investigation\n")
 		}
 
-		// Get limited support reasons before modifying pull secret (optional check)
-		lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
-		var lsReasonsBefore int
-		if err != nil {
-			ginkgo.GinkgoWriter.Printf("Could not get limited support reasons before test: %v\n", err)
-			lsReasonsBefore = 0
-		} else {
-			lsReasonsBefore = lsResponseBefore.Items().Len()
-			ginkgo.GinkgoWriter.Printf("Limited support reasons before pull secret corruption: %d\n", lsReasonsBefore)
-		}
-
 		// Get the original pull secret for backup
 		var originalPullSecret corev1.Secret
 		err = k8s.Get(ctx, "pull-secret", "openshift-config", &originalPullSecret)
 		Expect(err).NotTo(HaveOccurred(), "Failed to get original pull secret")
-		ginkgo.GinkgoWriter.Printf("Original pull secret retrieved successfully\n")
+		ginkgo.GinkgoWriter.Print("Original pull secret retrieved successfully\n")
 
 		// Setup deferred restoration to ensure pull secret is restored regardless of test outcome
 		defer func() {
-			ginkgo.GinkgoWriter.Printf("Restoring original pull secret...\n")
+			ginkgo.GinkgoWriter.Print("Restoring original pull secret...\n")
 			err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				currentSecret := &corev1.Secret{}
 				err := k8s.Get(ctx, "pull-secret", "openshift-config", currentSecret)
@@ -432,14 +431,14 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 				return k8s.Update(ctx, currentSecret)
 			})
 			if err != nil {
-				ginkgo.GinkgoWriter.Printf("Failed to restore original pull secret: %v\n", err)
+				ginkgo.GinkgoWriter.Print("Failed to restore original pull secret: %v\n", err)
 			} else {
-				ginkgo.GinkgoWriter.Printf("Original pull secret restored successfully\n")
+				ginkgo.GinkgoWriter.Print("Original pull secret restored successfully\n")
 			}
 		}()
 
 		// Corrupt the pull secret to simulate the UpgradeConfigSyncFailure scenario
-		ginkgo.GinkgoWriter.Printf("Corrupting pull secret to simulate sync failure...\n")
+		ginkgo.GinkgoWriter.Print("Corrupting pull secret to simulate sync failure...\n")
 		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 			pullSecret := &corev1.Secret{}
 			err := k8s.Get(ctx, "pull-secret", "openshift-config", pullSecret)
@@ -471,14 +470,14 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			return k8s.Update(ctx, pullSecret)
 		})
 		Expect(err).NotTo(HaveOccurred(), "Failed to corrupt pull secret")
-		ginkgo.GinkgoWriter.Printf("Pull secret corrupted successfully\n")
+		ginkgo.GinkgoWriter.Print("Pull secret corrupted successfully\n")
 
 		// Trigger the UpgradeConfigSyncFailureOver4Hr alert
 		_, err = testPdClient.TriggerIncident("UpgradeConfigSyncFailureOver4HrSRE", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger UpgradeConfigSyncFailureOver4Hr PagerDuty alert")
 
 		// Wait for the investigation to process
-		ginkgo.GinkgoWriter.Printf("Waiting for investigation to process corrupted pull secret...\n")
+		ginkgo.GinkgoWriter.Print("Waiting for investigation to process corrupted pull secret...\n")
 		time.Sleep(2 * time.Minute)
 
 		// Get limited support reasons after corruption
