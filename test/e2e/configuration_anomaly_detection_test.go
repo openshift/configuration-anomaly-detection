@@ -400,7 +400,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ec2Client := ec2.NewFromConfig(awsCfg)
 			ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
 
-			awsCli, err := awsinternal.NewClient(awsCfg)
+			awsCad, err := awsinternal.NewClient(awsCfg)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create AWS client")
 
 			clusterResource, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
@@ -410,11 +410,10 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			infraID := cluster.InfraID()
 			Expect(infraID).NotTo(BeEmpty(), "InfraID missing from cluster")
 
-			sgID, err := awsCli.GetSecurityGroupID(infraID)
+			sgID, err := awsCad.GetSecurityGroupID(infraID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
 			// Step 1: Get logs before action
-			ginkgo.GinkgoWriter.Printf("Step 1:Fetching service logs before action\n")
 			logsBefore, err := utils.GetServiceLogs(ocmCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before action")
 
@@ -425,7 +424,16 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			// Step 2: Block egress
 			Expect(utils.BlockEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to block egress")
-			ginkgo.GinkgoWriter.Printf("Step 2: Egress blocked\n")
+
+			// Clean up: restore egress
+			defer func() {
+				err := utils.RestoreEgress(ctx, ec2Wrapper, sgID)
+				if err != nil {
+					ginkgo.GinkgoWriter.Printf("Failed to restore egress: %v\n", err)
+				} else {
+					ginkgo.GinkgoWriter.Printf("Egress restored\n")
+				}
+			}()
 
 			// Step 3: Scale down insights-operator
 			var zero int32 = 0
@@ -460,10 +468,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			// Step 4: Verify no new logs were created
 			Expect(len(newLogs)).To(BeZero(), "Expected no new service logs after blocking egress and scaling down")
-
-			// Restore egress
-			Expect(utils.RestoreEgress(ctx, ec2Wrapper, sgID)).To(Succeed(), "Failed to restore egress")
-			ginkgo.GinkgoWriter.Printf("Egress restored\n")
 		}
 	})
 }, ginkgo.ContinueOnFailure)
