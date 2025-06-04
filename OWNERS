@@ -9,6 +9,7 @@ reviewers:
 - zmird-r
 - joshbranham
 - MateSaary
+- srep-functional-team-orange
 approvers:
 - Makdaam
 - Nikokolas3270
@@ -20,6 +21,7 @@ approvers:
 - zmird-r
 - joshbranham
 - MateSaary
+- srep-functional-team-orange
 - srep-team-leads
 maintainers:
 - rafael-azevedo
