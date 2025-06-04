@@ -437,7 +437,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			// Step 3: Scale down insights-operator
 			var zero int32 = 0
-			fmt.Println("Step 3: Scaling down insights-operator")
 			var originalIOReplicas int32
 			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
 				io := &appsv1.Deployment{}
