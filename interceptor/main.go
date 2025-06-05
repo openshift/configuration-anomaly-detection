@@ -12,7 +12,9 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/interceptor/pkg/interceptor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"knative.dev/pkg/signals"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 const (
@@ -28,10 +30,12 @@ func main() {
 	// set up signals so we handle the first shutdown signal gracefully
 	ctx := signals.NewContext()
 
-	service := interceptor.PagerDutyInterceptor{}
+	stats := interceptor.CreateInterceptorStats()
 	mux := http.NewServeMux()
-	mux.Handle("/", service)
+	mux.Handle("/", interceptor.CreateInterceptorHandler(stats))
 	mux.HandleFunc("/ready", readinessHandler)
+	interceptor.CreateAndRegisterMetricsCollector(stats)
+	mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{Registry: metrics.Registry}))
 
 	srv := &http.Server{
 		Addr: fmt.Sprintf(":%d", HTTPPort),

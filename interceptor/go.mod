@@ -7,9 +7,11 @@ toolchain go1.23.9
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
 	github.com/openshift/configuration-anomaly-detection v0.0.0-00010101000000-000000000000
+	github.com/prometheus/client_golang v1.22.0
 	github.com/tektoncd/triggers v0.27.0
 	google.golang.org/grpc v1.70.0
 	knative.dev/pkg v0.0.0-20241026180704-25f6002b00f3
+	sigs.k8s.io/controller-runtime v0.19.3
 )
 
 require (
@@ -226,7 +228,6 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/prometheus/client_golang v1.22.0 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.63.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
@@ -306,7 +307,6 @@ require (
 	k8s.io/kubectl v0.32.2 // indirect
 	k8s.io/utils v0.0.0-20250502105355-0f33e8f1c979 // indirect
 	oras.land/oras-go v1.2.5 // indirect
-	sigs.k8s.io/controller-runtime v0.19.3 // indirect
 	sigs.k8s.io/gateway-api v1.2.1 // indirect
 	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
 	sigs.k8s.io/kustomize/api v0.18.0 // indirect
