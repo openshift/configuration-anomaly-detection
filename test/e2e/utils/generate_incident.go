@@ -16,6 +16,7 @@ const (
 	AlertInsightsOperatorDown                          = "InsightsOperatorDown"
 	AlertMachineHealthCheckUnterminatedShortCircuitSRE = "MachineHealthCheckUnterminatedShortCircuitSRE"
 	AlertApiErrorBudgetBurn                            = "ApiErrorBudgetBurn"
+	AlertUpgradeConfigSyncFailureOver4HrSRE            = "UpgradeConfigSyncFailureOver4HrSRE"
 )
 
 func GetAlertTitle(alertName string) (string, error) {
@@ -32,6 +33,8 @@ func GetAlertTitle(alertName string) (string, error) {
 		return "MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)", nil
 	case AlertApiErrorBudgetBurn:
 		return "api-ErrorBudgetBurn k8sgpt test CRITICAL (1)", nil
+	case AlertUpgradeConfigSyncFailureOver4HrSRE:
+		return "UpgradeConfigSyncFailureOver4HrSRE Critical (1)", nil
 	default:
 		return "", fmt.Errorf("unknown alert name: %s", alertName)
 	}
