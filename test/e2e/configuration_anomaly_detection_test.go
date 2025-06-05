@@ -505,5 +505,81 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ginkgo.GinkgoWriter.Println("Step 7: Test completed: Node NotReady condition simulated and checked.")
 		}
 	})
+  
+  It("AWS CCS: clustermonitoringerrorbudgetburn", func(ctx context.Context) {
+		if provider == "aws" {
+			const (
+				namespace     = "openshift-user-workload-monitoring"
+				configMapName = "user-workload-monitoring-config"
+			)
+
+			fmt.Println("Step 0: Fetching cluster info")
+			response, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			Expect(err).ToNot(HaveOccurred(), "Failed to get cluster from OCM")
+			cluster := response.Body()
+			Expect(cluster).ToNot(BeNil(), "Cluster response is nil")
+
+			fmt.Println("Step 1: Getting service logs before misconfiguration")
+			logs, err := utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch service logs before misconfig")
+			logsBefore := logs.Items().Slice()
+
+			fmt.Println("Step 2: Backing up current ConfigMap")
+			originalCM := &corev1.ConfigMap{}
+			err = k8s.Get(ctx, configMapName, namespace, originalCM)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch original ConfigMap")
+
+			backupCM := &corev1.ConfigMap{}
+			err = k8s.Get(ctx, configMapName, namespace, backupCM)
+			Expect(err).ToNot(HaveOccurred(), "Failed to backup original ConfigMap")
+
+			defer func() {
+				fmt.Println("Restore: Restore backup configmap")
+				err = k8s.Update(ctx, backupCM)
+				Expect(err).ToNot(HaveOccurred(), "Restore the backup ConfigMap")
+
+				fmt.Println("Restore: Get restore backup configmap")
+				restoreBackupCM := &corev1.ConfigMap{}
+				err = k8s.Get(ctx, configMapName, namespace, restoreBackupCM)
+				Expect(err).ToNot(HaveOccurred(), "Failed to backup original ConfigMap")
+
+				fmt.Println("Restore: Comparing backup and restored ConfigMaps")
+				Expect(restoreBackupCM.Data).To(Equal(backupCM.Data), "Restored ConfigMap data does not match the backup")
+				Expect(restoreBackupCM.BinaryData).To(Equal(backupCM.BinaryData), "Restored ConfigMap binary data does not match the backup")
+			}()
+
+			fmt.Println("Step 3: Injecting invalid config to simulate misconfiguration")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				err := k8s.Get(ctx, configMapName, namespace, originalCM)
+				if err != nil {
+					return err
+				}
+				if originalCM.Data == nil {
+					originalCM.Data = make(map[string]string)
+				}
+				originalCM.Data["user-workload-monitoring.yaml"] = `
+			prometheus:
+			  retention: 24h
+			  # broken: : invalid_yaml
+			// `
+
+				return k8s.Update(ctx, originalCM)
+			})
+			Expect(err).ToNot(HaveOccurred(), "Failed to apply invalid config")
+
+			fmt.Println("Step 4 : Waiting to pagerduty alert...")
+			_, err = testPdClient.TriggerIncident("ClusterMonitoringErrorBudgetBurnSRE", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			time.Sleep(2 * time.Minute)
+
+			fmt.Println("Step 5: Fetching service logs after misconfiguration")
+			logs, err = utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
+			logsAfter := logs.Items().Slice()
+
+			Expect(logsAfter).To(HaveLen(len(logsBefore)), "Service logs count changed after scale down/up")
+    }
+  })
 
 }, ginkgo.ContinueOnFailure)
