@@ -8,3 +8,5 @@ dist
 cad_testing
 e2e-suite.test
 payload
+test/testinfra/*.log
+test/testinfra/*.pem
