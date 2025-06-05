@@ -89,7 +89,8 @@ They are initialized for you and passed to the investigation via investigation.R
 
 ## Testing locally
 
-Requires an existing cluster.
+### Against upstream stage OCM Backplane
+Requires an existing cluster. Requires that the metadata.yaml is commited to the main branch of the upstream repo (see below for testing against a local metadata.yaml).
 
 1. Create a test incident and payload file for your cluster
 
@@ -111,6 +112,45 @@ Requires an existing cluster.
    ```bash
    ./bin/cadctl investigate --payload-path payload
    ```
+
+### Against local OCM Backplane
+Requires existing cluster, same as above.
+The requests to /backplane/remediate and /backplane/remediation OCM Backplane endpoints are redirected to the local instance of OCM Backplane.
+This means the metadata.yaml commited to the main branch on your local disk is used to grant permissions (an alternate branch will be available after SREP-636 is complete).
+
+Make sure to install the dependencies first with
+```
+dnf install jq openssl tinyproxy haproxy proxytunnel
+```
+It will run services on the following local ports:8001 8091 8443 8888
+
+1. Create a test incident and payload file for your cluster
+
+   ```bash
+   ./test/generate_incident.sh <alertname> <clusterid>
+   ```
+
+2. In a separate terminal start the local infrastructure
+> **Note:** You need to clone the backplane-api code repository to a local directory and copy ocm.json from a staging cluster to its ./configs dir.
+   ```
+   OCM_BACKPLANE_REPO_PATH=/home/me/backplane-api ./test/launch_local_env.sh
+   ```
+
+
+3. Export the required env variables from vault
+   > **Note:** For information on the envs see [required env variables](#required-env-variables).
+
+   ```
+   source test/set_stage_env.sh
+   ```
+
+4. `make build`
+5. Run `cadctl` with the payload file created by `test/generate_incident.sh` and proxy as well as the backplane URL set to localhost
+
+   ```bash
+   BACKPLANE_URL=https://localhost:8443 HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888 BACKPLANE_PROXY=http://127.0.0.1:8888  ./bin/cadctl investigate --payload-path ./payload --log-level debug"
+   ```
+6. Close the local infrastructure when done by sending SIGINT (Ctrl+C) to the launch_local_env.sh
 
 ### Logging levels
 
