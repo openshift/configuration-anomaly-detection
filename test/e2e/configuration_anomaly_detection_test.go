@@ -6,6 +6,7 @@ package osde2etests
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -16,14 +17,19 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	v1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsinternal "github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/test/e2e/utils"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
+	pclient "sigs.k8s.io/controller-runtime/pkg/client"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -127,7 +133,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
-			time.Sleep(3 * time.Minute)
+			time.Sleep(5 * time.Minute)
 
 			lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
 			Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
@@ -380,7 +386,203 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			"Expected more limited support reasons after infrastructure node shutdown")
 	})
 
-	It("AWS CCS: InsightsOperatorDown (blocked egress)", Label("aws", "ccs", "insights-operator", "blocking-egress"), func(ctx context.Context) {
+	It("AWS CCS: MachineHealthCheckUnterminatedShortCircuitSRE - node is NotReady", func(ctx context.Context) {
+		if provider == "aws" {
+			kubeConfigPath := os.Getenv("KUBECONFIG")
+			kubeClient, err := utils.CreateClientFromKubeConfig(kubeConfigPath)
+			if err != nil {
+				log.Fatalf("Error creating Kubernetes client: %v", err)
+			}
+
+			// Fetch machine list in the 'openshift-machine-api' namespace
+			machineList := &v1beta1.MachineList{}
+			err = kubeClient.List(context.TODO(), machineList, &pclient.ListOptions{
+				Namespace: machineutil.MachineNamespace,
+			})
+			Expect(err).ToNot(HaveOccurred(), "Failed to list machines")
+
+			// Get nodes for the first machine
+			machine := &machineList.Items[0]
+			node, err := machineutil.GetNodeForMachine(ctx, kubeClient, *machine)
+			Expect(err).NotTo(HaveOccurred(), "Failed to get Node for Machine")
+			Expect(node).NotTo(BeNil(), "Node for Machine is nil")
+
+			nodeName := node.Name
+			originalNodeCount := len(machineList.Items)
+			ginkgo.GinkgoWriter.Printf("Original node count: %d\n", originalNodeCount)
+
+			// Simulate 'NotReady' condition for the node
+			ginkgo.GinkgoWriter.Printf("Step 1: Changing status to NotReady for Node:: %s\n", nodeName)
+			retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				key := types.NamespacedName{Name: nodeName}
+				n := &corev1.Node{}
+				if err := kubeClient.Get(ctx, key, n); err != nil {
+					return err
+				}
+
+				updated := false
+				for i, cond := range n.Status.Conditions {
+					if cond.Type == corev1.NodeReady {
+						n.Status.Conditions[i].Status = corev1.ConditionFalse
+						updated = true
+						break
+					}
+				}
+				if !updated {
+					n.Status.Conditions = append(n.Status.Conditions, corev1.NodeCondition{
+						Type:               corev1.NodeReady,
+						Status:             corev1.ConditionFalse,
+						LastHeartbeatTime:  metav1.Now(),
+						LastTransitionTime: metav1.Now(),
+					})
+				}
+
+				return kubeClient.Status().Update(ctx, n)
+			})
+			Expect(retryErr).NotTo(HaveOccurred(), "Failed to update Node to simulate NotReady condition")
+
+			// Wait for fallback logic to take effect
+			ginkgo.GinkgoWriter.Println("Step 2: Node set to NotReady. Triggering PagerDuty Alert. Waiting.....")
+
+			_, err = testPdClient.TriggerIncident("MachineHealthCheckUnterminatedShortCircuitSRE", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			time.Sleep(5 * time.Second)
+
+			// Polling every 30 seconds to check if the original number of nodes are in Ready state and not SchedulingDisabled
+			checkInterval := 30 * time.Second
+			timeout := 6 * time.Minute // Total time to wait for nodes to be Ready
+
+			startTime := time.Now()
+			for {
+				// List all nodes in the cluster
+				nodeList := &corev1.NodeList{}
+				err = kubeClient.List(ctx, nodeList, &pclient.ListOptions{})
+				Expect(err).NotTo(HaveOccurred(), "Failed to list nodes")
+
+				// Check if the number of nodes is back to the original count
+				currentNodeCount := len(nodeList.Items)
+				if currentNodeCount > originalNodeCount {
+					ginkgo.GinkgoWriter.Printf("Step 3: Found %d nodes, waiting for node count to match original %d...\n", currentNodeCount, originalNodeCount)
+				}
+
+				// Counting ready nodes and checking if all are in the Ready state (and not SchedulingDisabled)
+				readyNodeCount := 0
+				for _, n := range nodeList.Items {
+					isReady := false
+					// Check if node is Ready
+					for _, cond := range n.Status.Conditions {
+						if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+							isReady = true
+							break
+						}
+					}
+
+					// Check if node is NOT SchedulingDisabled
+					if isReady && !n.Spec.Unschedulable {
+						readyNodeCount++
+					}
+				}
+
+				// Log node status and count after every check
+				ginkgo.GinkgoWriter.Printf("Step 4: Node status checked. Ready Node count: %d\n", readyNodeCount)
+
+				if readyNodeCount == originalNodeCount && currentNodeCount == originalNodeCount {
+					ginkgo.GinkgoWriter.Println("Step 5: All nodes are in Ready state and not SchedulingDisabled. Test passed.")
+					break
+				}
+
+				if time.Since(startTime) > timeout {
+					Expect(readyNodeCount).To(Equal(originalNodeCount), "Timed out waiting for all nodes to become Ready.")
+					break
+				}
+
+				// If not all nodes are ready or if there are more nodes, wait for the next interval
+				ginkgo.GinkgoWriter.Printf("Step 6: Not all nodes are Ready or node count mismatch. Waiting for %s...\n", checkInterval)
+				time.Sleep(checkInterval)
+			}
+
+			ginkgo.GinkgoWriter.Println("Step 7: Test completed: Node NotReady condition simulated and checked.")
+		}
+	})
+  
+  It("AWS CCS: clustermonitoringerrorbudgetburn", func(ctx context.Context) {
+		if provider == "aws" {
+			const (
+				namespace     = "openshift-user-workload-monitoring"
+				configMapName = "user-workload-monitoring-config"
+			)
+
+			fmt.Println("Step 0: Fetching cluster info")
+			response, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().Send()
+			Expect(err).ToNot(HaveOccurred(), "Failed to get cluster from OCM")
+			cluster := response.Body()
+			Expect(cluster).ToNot(BeNil(), "Cluster response is nil")
+
+			fmt.Println("Step 1: Getting service logs before misconfiguration")
+			logs, err := utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch service logs before misconfig")
+			logsBefore := logs.Items().Slice()
+
+			fmt.Println("Step 2: Backing up current ConfigMap")
+			originalCM := &corev1.ConfigMap{}
+			err = k8s.Get(ctx, configMapName, namespace, originalCM)
+			Expect(err).ToNot(HaveOccurred(), "Failed to fetch original ConfigMap")
+
+			backupCM := &corev1.ConfigMap{}
+			err = k8s.Get(ctx, configMapName, namespace, backupCM)
+			Expect(err).ToNot(HaveOccurred(), "Failed to backup original ConfigMap")
+
+			defer func() {
+				fmt.Println("Restore: Restore backup configmap")
+				err = k8s.Update(ctx, backupCM)
+				Expect(err).ToNot(HaveOccurred(), "Restore the backup ConfigMap")
+
+				fmt.Println("Restore: Get restore backup configmap")
+				restoreBackupCM := &corev1.ConfigMap{}
+				err = k8s.Get(ctx, configMapName, namespace, restoreBackupCM)
+				Expect(err).ToNot(HaveOccurred(), "Failed to backup original ConfigMap")
+
+				fmt.Println("Restore: Comparing backup and restored ConfigMaps")
+				Expect(restoreBackupCM.Data).To(Equal(backupCM.Data), "Restored ConfigMap data does not match the backup")
+				Expect(restoreBackupCM.BinaryData).To(Equal(backupCM.BinaryData), "Restored ConfigMap binary data does not match the backup")
+			}()
+
+			fmt.Println("Step 3: Injecting invalid config to simulate misconfiguration")
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				err := k8s.Get(ctx, configMapName, namespace, originalCM)
+				if err != nil {
+					return err
+				}
+				if originalCM.Data == nil {
+					originalCM.Data = make(map[string]string)
+				}
+				originalCM.Data["user-workload-monitoring.yaml"] = `
+			prometheus:
+			  retention: 24h
+			  # broken: : invalid_yaml
+			// `
+
+				return k8s.Update(ctx, originalCM)
+			})
+			Expect(err).ToNot(HaveOccurred(), "Failed to apply invalid config")
+
+			fmt.Println("Step 4 : Waiting to pagerduty alert...")
+			_, err = testPdClient.TriggerIncident("ClusterMonitoringErrorBudgetBurnSRE", clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
+
+			time.Sleep(2 * time.Minute)
+
+			fmt.Println("Step 5: Fetching service logs after misconfiguration")
+			logs, err = utils.GetServiceLogs(ocmCli, cluster)
+			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
+			logsAfter := logs.Items().Slice()
+
+			Expect(logsAfter).To(HaveLen(len(logsBefore)), "Service logs count changed after scale down/up")
+    }
+  })
+  
+  It("AWS CCS: InsightsOperatorDown (blocked egress)", Label("aws", "ccs", "insights-operator", "blocking-egress"), func(ctx context.Context) {
 		if provider == "aws" {
 			awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
 			awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
@@ -469,4 +671,5 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(len(newLogs)).To(BeZero(), "Expected no new service logs after blocking egress and scaling down")
 		}
 	})
+
 }, ginkgo.ContinueOnFailure)
