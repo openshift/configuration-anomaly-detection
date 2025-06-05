@@ -96,13 +96,17 @@ bootstrap-investigation: ## Bootstrap a new boilerplate investigation
 boilerplate-update: ## Update boilerplate version
 	@boilerplate/update
 
+.PHONY:lint-rbac
+validate-rbac-informing: ## Verifies informing investigations do not have permission for kube-api write operations
+	@cd test && ./lint_informing_rbac.sh
+
 ### CI Only
 .PHONY: coverage
 coverage:
 	hack/codecov.sh
 
 .PHONY: validate
-validate: isclean
+validate: isclean validate-rbac-informing
 
 ### Prerequisites
 ### It is assumed that 'make' is already installed

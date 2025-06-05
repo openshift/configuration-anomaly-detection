@@ -40,13 +40,14 @@ type ServiceLog struct {
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
-	PostServiceLog(clusterID string, sl *ServiceLog) error
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
+	// Write-operating functions (should take informingMode argument)
+	PostServiceLog(clusterID string, sl *ServiceLog, informingMode bool) error
+	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string, informingMode bool) error
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -206,7 +207,12 @@ func (c *SdkClient) getClusterResource(internalClusterID string, resourceKey str
 }
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
-func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error {
+func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string, informingMode bool) error {
+	if informingMode {
+		logging.Infof("Investigation is informing-only status: Skipping 'PostLimitedSupport'")
+		return nil
+	}
+
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
@@ -234,7 +240,11 @@ func (c *SdkClient) GetServiceLog(cluster *cmv1.Cluster, filter string) (*servic
 }
 
 // PostServiceLog allows to send a generic servicelog to a cluster.
-func (c *SdkClient) PostServiceLog(clusterID string, sl *ServiceLog) error {
+func (c *SdkClient) PostServiceLog(clusterID string, sl *ServiceLog, informingMode bool) error {
+	if informingMode {
+		logging.Infof("Investigation is informing-only status: Skipping PostServiceLog")
+		return nil
+	}
 	builder := &servicelogsv1.LogEntryBuilder{}
 	builder.Severity(servicelogsv1.Severity(sl.Severity))
 	builder.ServiceName(sl.ServiceName)
