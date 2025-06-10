@@ -21,7 +21,6 @@ import (
 	v1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsinternal "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/test/e2e/utils"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	"github.com/openshift/osde2e-common/pkg/clients/openshift"
@@ -37,7 +36,6 @@ import (
 var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 	var (
 		ocme2eCli    *ocme2e.Client
-		ocmCli       ocm.Client
 		k8s          *openshift.Client
 		region       string
 		provider     string
@@ -59,9 +57,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		ocme2eCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
-
-		ocmCli, err := ocm.New(ctx, os.Getenv("OCM_TOKEN"), ocmUrl)
-		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup ocm anomaly detection client")
 
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
@@ -164,7 +159,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(cluster).ToNot(BeNil(), "received nil cluster from OCM")
 
 			// Get service logs
-			logs, err := utils.GetServiceLogs(ocmCli, cluster)
+			logs, err := utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
 			logsBefore := logs.Items().Slice()
 
@@ -227,7 +222,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 			time.Sleep(1 * time.Minute)
 
-			logs, err = utils.GetServiceLogs(ocmCli, cluster)
+			logs, err = utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
 			logsAfter := logs.Items().Slice()
 
@@ -519,7 +514,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(cluster).ToNot(BeNil(), "Cluster response is nil")
 
 			fmt.Println("Step 1: Getting service logs before misconfiguration")
-			logs, err := utils.GetServiceLogs(ocmCli, cluster)
+			logs, err := utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to fetch service logs before misconfig")
 			logsBefore := logs.Items().Slice()
 
@@ -573,7 +568,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			time.Sleep(2 * time.Minute)
 
 			fmt.Println("Step 5: Fetching service logs after misconfiguration")
-			logs, err = utils.GetServiceLogs(ocmCli, cluster)
+			logs, err = utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs")
 			logsAfter := logs.Items().Slice()
 
@@ -615,7 +610,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to get security group ID")
 
 			// Step 1: Get logs before action
-			logsBefore, err := utils.GetServiceLogs(ocmCli, cluster)
+			logsBefore, err := utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs before action")
 
 			existingLogIDs := map[string]bool{}
@@ -658,7 +653,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			time.Sleep(2 * time.Minute)
 
 			// Step 4: Get logs again and find new entries
-			logsAfter, err := utils.GetServiceLogs(ocmCli, cluster)
+			logsAfter, err := utils.GetServiceLogs(ocme2eCli, cluster)
 			Expect(err).ToNot(HaveOccurred(), "Failed to get service logs after action")
 
 			newLogs := []interface{}{}
@@ -692,7 +687,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		// Check if user is banned (part of the investigation logic)
 		ginkgo.GinkgoWriter.Printf("Checking if cluster owner is banned...\n")
-		userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(ocmCli, cluster)
+		userBannedStatus, userBannedNotes, err := utils.IsUserBanned(ocme2eCli, cluster)
 		Expect(err).NotTo(HaveOccurred(), "Failed to check if user is banned")
 
 		if userBannedStatus {
