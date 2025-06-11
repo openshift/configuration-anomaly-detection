@@ -101,8 +101,12 @@ boilerplate-update: ## Update boilerplate version
 coverage:
 	hack/codecov.sh
 
+.PHONY: investigation-unit-tested
+investigation-unit-tested:
+	hack/investigation-test-coverage.sh
+
 .PHONY: validate
-validate: isclean
+validate: isclean investigation-unit-tested
 
 ### Prerequisites
 ### It is assumed that 'make' is already installed
