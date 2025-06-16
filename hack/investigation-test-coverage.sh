@@ -11,7 +11,7 @@ BASE_SHA=$(git ls-remote "https://github.com/openshift/configuration-anomaly-det
 PR_SHA=$(git rev-parse HEAD)
 
 # Obtaining instances of files added in the PR
-diff_files=$(git diff --name-status "$BASE_SHA" "$PR_SHA" | grep '^A' | awk '{print $2}')
+diff_files=$(git diff --name-status "$BASE_SHA" "$PR_SHA" | (grep '^A' || true;) | awk '{print $2}')
 
 # Filter to relevant directory (investigations folder)
 investigations=$(echo "$diff_files" | grep '^pkg/investigations/' || true)
