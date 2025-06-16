@@ -6,15 +6,12 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-base_sha=$(echo "$CLONEREFS_OPTIONS" | grep -o '"base_sha":"[^"]*"' | cut -d':' -f2 | tr -d '"' )
+BASE_SHA=$(git ls-remote "https://github.com/openshift/configuration-anomaly-detection.git" "refs/heads/main" | awk '{print $1}')
 
-if [[ -z "$base_sha" ]]; then
-	echo -e "${RED}Could not obtain base_sha"
-	exit 1
-fi
+PR_SHA=$(git rev-parse HEAD)
 
 # Obtaining instances of files added in the PR
-diff_files=$(git diff --name-status "$base_sha" HEAD | grep '^A' | awk '{print $2}')
+diff_files=$(git diff --name-status "$BASE_SHA" "$PR_SHA" | grep '^A' | awk '{print $2}')
 
 # Filter to relevant directory (investigations folder)
 investigations=$(echo "$diff_files" | grep '^pkg/investigations/' || true)
