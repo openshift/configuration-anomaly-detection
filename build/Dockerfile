@@ -36,6 +36,4 @@ LABEL vendor="RedHat" \
   org.label-schema.vendor="openshift/configuration-anomaly-detection" \
   org.label-schema.version=$VERSION
 
-RUN microdnf install jq
-
 ENTRYPOINT ["/bin/cadctl"]
