@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v7.0.0 as builder
+FROM registry.redhat.io/rhel8/go-toolset:1.23.9-2.1749483526 as builder
 
 ADD . /opt
 WORKDIR /opt
