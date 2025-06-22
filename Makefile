@@ -105,8 +105,12 @@ validate-rbac-informing: ## Verifies informing investigations do not have permis
 coverage:
 	hack/codecov.sh
 
+.PHONY: investigation-unit-tested
+investigation-unit-tested:
+	hack/investigation-test-coverage.sh
+
 .PHONY: validate
-validate: isclean validate-rbac-informing
+validate: isclean investigation-unit-tested validate-rbac-informing
 
 ### Prerequisites
 ### It is assumed that 'make' is already installed

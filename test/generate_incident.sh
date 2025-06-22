@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -e
 
 # Define the mapping of alert names to titles
@@ -10,6 +10,8 @@ declare -A alert_mapping=(
     ["InsightsOperatorDown"]="InsightsOperatorDown"
     ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
     ["ApiErrorBudgetBurn"]="api-ErrorBudgetBurn k8sgpt test CRITICAL (1)"
+    ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
+    ["UpgradeConfigSyncFailureOver4HrSRE"]="UpgradeConfigSyncFailureOver4HrSRE Critical (1)"
 )
 
 # Function to print help message

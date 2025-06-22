@@ -46,7 +46,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 		StsClient        StsAPI
 		Ec2Client        EC2API
 		CloudTrailClient CloudTrailAPI
-		Credentials      awsv2.Credentials
+		BaseConfig       awsv2.Config
 	}
 	type args struct {
 		subnet string
@@ -65,7 +65,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 				StsClient:        nil,
 				Ec2Client:        setupSubnetMock(t, nil, false),
 				CloudTrailClient: nil,
-				Credentials:      awsv2.Credentials{},
+				BaseConfig:       awsv2.Config{},
 			},
 			args: args{
 				subnet: "subnet-1",
@@ -80,7 +80,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 				StsClient:        nil,
 				Ec2Client:        setupSubnetMock(t, awsv2.String("igw-1"), true),
 				CloudTrailClient: nil,
-				Credentials:      awsv2.Credentials{},
+				BaseConfig:       awsv2.Config{},
 			},
 			args: args{
 				subnet: "subnet-1",
@@ -95,7 +95,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 				StsClient:        nil,
 				Ec2Client:        setupSubnetMock(t, awsv2.String("vgw-1"), false),
 				CloudTrailClient: nil,
-				Credentials:      awsv2.Credentials{},
+				BaseConfig:       awsv2.Config{},
 			},
 			args: args{
 				subnet: "subnet-1",
@@ -111,7 +111,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 				StsClient:        tt.fields.StsClient,
 				Ec2Client:        tt.fields.Ec2Client,
 				CloudtrailClient: tt.fields.CloudTrailClient,
-				Credentials:      tt.fields.Credentials,
+				BaseConfig:       &tt.fields.BaseConfig,
 			}
 			got, err := c.IsSubnetPrivate(tt.args.subnet)
 			if (err != nil) != tt.wantErr {

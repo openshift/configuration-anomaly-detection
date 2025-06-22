@@ -8,6 +8,8 @@ reviewers:
 - tnierman
 - zmird-r
 - joshbranham
+- MateSaary
+- srep-functional-team-orange
 approvers:
 - Makdaam
 - Nikokolas3270
@@ -18,6 +20,8 @@ approvers:
 - tnierman
 - zmird-r
 - joshbranham
+- MateSaary
+- srep-functional-team-orange
 - srep-team-leads
 maintainers:
 - rafael-azevedo

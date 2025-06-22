@@ -91,9 +91,12 @@ objects:
   kind: Service
   metadata:
     name: cad-interceptor-service
+    labels:
+      app: configuration-anomaly-detection
   spec:
     ports:
-    - port: 8080
+    - name: web
+      port: 8080
       protocol: TCP
       targetPort: 8080
     selector:
@@ -356,10 +359,6 @@ objects:
                 requests:
                   cpu: 100m
                   memory: 64Mi
-              securityContext:
-                runAsGroup: 1000
-                runAsNonRoot: true
-                runAsUser: 1000
               terminationMessagePath: /dev/termination-log
               terminationMessagePolicy: FallbackToLogsOnError
             dnsPolicy: ClusterFirst

@@ -20,7 +20,8 @@ function test_interceptor {
 
     local incident_id=$1
     local expected_response=$2
-    local override_signature=$3
+    local expected_metrics=$3
+    local override_signature=$4
 
     # Run the interceptor and print logs to temporary log file
     export PD_SIGNATURE="test"
@@ -33,7 +34,7 @@ function test_interceptor {
       export PD_SIGNATURE=$override_signature
     fi
 
-    SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | sha256hmac -K $PD_SIGNATURE | tr -d "[:space:]-")
+    SIGN=$(echo -n "$PAYLOAD_BODY_FORMATTED" | openssl dgst -sha256 -hmac $PD_SIGNATURE | sed 's/^.* //')
 
     # Store the PID of the interceptor process
     INTERCEPTOR_PID=$!
@@ -52,13 +53,10 @@ function test_interceptor {
         -d "$WRAPPED_PAYLOAD" \
         http://localhost:8080) || CURL_EXITCODE=$?
 
-    # Check if the curl output matches the expected response
-    if [[ "$CURL_OUTPUT" == "$expected_response" ]] && [[ "$CURL_EXITCODE" == "0" ]]; then
-        echo -e "${GREEN}Test passed for incident ID $incident_id: Response is as expected.${NC}"
+    local return_code=0
 
-        # Shut down the interceptor
-        kill $INTERCEPTOR_PID
-    else
+    # Check if the curl output differs from the expected response
+    if [[ "$CURL_OUTPUT" != "$expected_response" ]] || [[ "$CURL_EXITCODE" != "0" ]]; then
         echo -e "${RED}Test failed for incident ID $incident_id: Unexpected response.${NC}"
         echo -e "${RED}Expected: $expected_response${NC}"
         echo -e "${RED}Got: $CURL_OUTPUT${NC}"
@@ -66,12 +64,29 @@ function test_interceptor {
         echo -e ""
         echo -e "Interceptor logs"
         cat $temp_log_file
+        return_code=1
+    else
+        curl_metrics_exitcode=0
+        curl_metrics_output=$(curl -s http://localhost:8080/metrics | grep '^cad_interceptor_') || curl_metrics_exitcode=$?
 
-        # Shut down the interceptor
-        kill $INTERCEPTOR_PID
-
-        return 1
+        if [[ "$curl_metrics_output" != "$expected_metrics" ]] || [[ "$curl_metrics_exitcode" != "0" ]]; then
+            echo -e "${RED}Test failed for incident ID $incident_id: Unexpected metrics.${NC}"
+            echo -e "${RED}Expected: $expected_metrics${NC}"
+            echo -e "${RED}Got: $curl_metrics_output${NC}"
+            echo -e "${RED}Exit code: $curl_metrics_exitcode${NC}"
+            echo -e ""
+            echo -e "Interceptor logs"
+            cat $temp_log_file
+            return_code=1
+        else
+            echo -e "${GREEN}Test passed for incident ID $incident_id: Response and metrics are as expected.${NC}"
+        fi
     fi
+
+    # Shut down the interceptor
+    kill $INTERCEPTOR_PID
+
+    return $return_code
 }
 
 # Expected outputs
@@ -83,13 +98,13 @@ EXPECTED_RESPONSE_SIGNATURE_ERROR='failed to verify signature: invalid webhook s
 echo "========= TESTS ============="
 # Test for a pre-existing alert we handle (ClusterProvisioningDelay)
 echo "Test 1: alert with existing handling returns a 'continue: true' response"
-test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_CONTINUE"
+test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_CONTINUE" "cad_interceptor_requests_total 1"
 
 # Test for an alert we don't handle (alert called unhandled)
 echo "Test 2: unhandled alerts returns a 'continue: false' response"
-test_interceptor "Q3722KGCG12ZWD" "$EXPECTED_RESPONSE_STOP"
+test_interceptor "Q3722KGCG12ZWD" "$EXPECTED_RESPONSE_STOP" "cad_interceptor_requests_total 1"
 
 # Test for an alert with invalid signature
 echo "Test 3: expected failure due to invalid signature"
 PD_SIGNATURE="invalid-signature"
-test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_SIGNATURE_ERROR" "invalid-signature"
+test_interceptor "Q12WO44XJLR3H3" "$EXPECTED_RESPONSE_SIGNATURE_ERROR" 'cad_interceptor_errors_total{error_code="400",reason="failed to verify signature"} 1'$'\n''cad_interceptor_requests_total 1' "invalid-signature"

@@ -11,9 +11,6 @@ import (
 
 	// V2 SDK
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/aws/retry"
-	configv2 "github.com/aws/aws-sdk-go-v2/config"
-	credentialsv2 "github.com/aws/aws-sdk-go-v2/credentials"
 	cloudtrailv2 "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -52,7 +49,7 @@ type Client interface {
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	PollInstanceStopEventsFor(instances []ec2v2types.Instance, retryTimes int) ([]cloudtrailv2types.Event, error)
-	GetAWSCredentials() awsv2.Credentials
+	GetBaseConfig() *awsv2.Config
 	GetSecurityGroupID(infraID string) (string, error)
 	GetSubnetID(infraID string) ([]string, error)
 	IsSubnetPrivate(subnet string) (bool, error)
@@ -60,32 +57,16 @@ type Client interface {
 }
 
 type SdkClient struct {
-	Credentials      awsv2.Credentials
+	BaseConfig       *awsv2.Config
 	Region           string
 	CloudtrailClient CloudTrailAPI
 	Ec2Client        EC2API
 	StsClient        StsAPI
 }
 
-func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error) {
-	staticCredentials := awsv2.NewCredentialsCache(credentialsv2.NewStaticCredentialsProvider(accessID, accessSecret, token))
-	config, err := configv2.LoadDefaultConfig(context.TODO(),
-		configv2.WithRegion(region),
-		configv2.WithCredentialsProvider(staticCredentials),
-		configv2.WithRetryer(func() awsv2.Retryer {
-			return retry.AddWithMaxBackoffDelay(retry.AddWithMaxAttempts(retry.NewStandard(), maxRetries), time.Second*5)
-		}),
-	)
-	if err != nil {
-		return nil, err
-	}
-	creds, err := config.Credentials.Retrieve(context.TODO())
-	if err != nil {
-		return nil, err
-	}
+func NewClient(config awsv2.Config) (*SdkClient, error) {
 	return &SdkClient{
-		Credentials:      creds,
-		Region:           region,
+		BaseConfig:       &config,
 		CloudtrailClient: cloudtrailv2.NewFromConfig(config),
 		Ec2Client:        ec2v2.NewFromConfig(config),
 		StsClient:        stsv2.NewFromConfig(config),
@@ -93,27 +74,8 @@ func NewClient(accessID, accessSecret, token, region string) (*SdkClient, error)
 }
 
 // GetAWSCredentials gets the AWS credentials
-func (c *SdkClient) GetAWSCredentials() awsv2.Credentials {
-	return c.Credentials
-}
-
-// AssumeRole returns you a new client in the account specified in the roleARN
-func (c *SdkClient) AssumeRole(roleARN, region string) (*SdkClient, error) {
-	input := &stsv2.AssumeRoleInput{
-		RoleArn:         &roleARN,
-		RoleSessionName: awsv2.String("CAD"),
-	}
-	out, err := c.StsClient.AssumeRole(context.TODO(), input)
-	if err != nil {
-		return nil, err
-	}
-	if region == "" {
-		region = c.Region
-	}
-	return NewClient(*out.Credentials.AccessKeyId,
-		*out.Credentials.SecretAccessKey,
-		*out.Credentials.SessionToken,
-		region)
+func (c *SdkClient) GetBaseConfig() *awsv2.Config {
+	return c.BaseConfig
 }
 
 // ListRunningInstances lists all running or starting instances that belong to a cluster

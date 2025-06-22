@@ -26,14 +26,14 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, fmt.Errorf("unable to initialize k8s cli config: %w", err)
 	}
 	defer func() {
-		deferErr := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
+		deferErr := k8sConfig.Clean()
 		if deferErr != nil {
 			logging.Error(deferErr)
 			err = errors.Join(err, deferErr)
 		}
 	}()
 
-	analysis, err := k8sgpt.K8sGptAnalysis(k8sConfig)
+	analysis, err := k8sgpt.K8sGptAnalysis(&k8sConfig.Config)
 	if err != nil {
 		return result, fmt.Errorf("failed to run K8sGptAnalysis: %w", err)
 	}

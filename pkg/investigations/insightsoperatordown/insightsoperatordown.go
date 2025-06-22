@@ -45,7 +45,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
 	defer func() {
-		deferErr := k8sclient.Cleanup(r.Cluster.ID(), r.OcmClient, r.Name)
+		deferErr := k8scli.Clean()
 		if deferErr != nil {
 			logging.Error(deferErr)
 			err = errors.Join(err, deferErr)
