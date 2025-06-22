@@ -115,3 +115,7 @@ func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
 func (i *Investigation) IsExperimental() bool {
 	return true
 }
+
+func (i *Investigation) InformingMode() bool {
+	return false
+}

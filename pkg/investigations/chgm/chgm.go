@@ -51,7 +51,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		return result, utils.WithRetries(func() error {
-			err := postStoppedInfraLimitedSupport(r.Cluster.ID(), r.OcmClient, r.PdClient)
+			err := postStoppedInfraLimitedSupport(r.Cluster.ID(), r.OcmClient, r.PdClient, c.InformingMode())
 			// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
 
@@ -453,8 +453,8 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 }
 
 // postStoppedInfraLimitedSupport will put the cluster on limited support because the user has stopped instances
-func postStoppedInfraLimitedSupport(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
-	err := ocmCli.PostLimitedSupportReason(&stoppedInfraLS, clusterID, false)
+func postStoppedInfraLimitedSupport(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client, informingMode bool) error {
+	err := ocmCli.PostLimitedSupportReason(&stoppedInfraLS, clusterID, informingMode)
 	if err != nil {
 		return fmt.Errorf("failed sending service log: %w", err)
 	}
