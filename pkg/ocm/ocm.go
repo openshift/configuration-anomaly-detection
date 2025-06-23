@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -57,33 +56,9 @@ type SdkClient struct {
 
 // New will create a new ocm client by using the path to a config file
 // if no path is provided, it will assume it in the default path
-func New(ocmConfigFile string) (*SdkClient, error) {
+func New() (*SdkClient, error) {
 	var err error
 	client := SdkClient{}
-
-	// The debug environment variable ensures that we will never use
-	// an ocm config file on a cluster deployment. The debug environment variable
-	// is only for local cadctl development
-	debugMode := os.Getenv("CAD_DEBUG")
-
-	// strconv.ParseBool raises an error when debugMode is empty, thus
-	// we have to set it to false if the value is empty.
-	if debugMode == "" {
-		debugMode = "false"
-	}
-
-	debugEnabled, err := strconv.ParseBool(debugMode)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CAD_DEBUG value '%s': %w", debugMode, err)
-	}
-
-	if debugEnabled {
-		client.conn, err = newConnectionFromFile(ocmConfigFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create connection from ocm.json config file: %w", err)
-		}
-		return &client, nil
-	}
 
 	client.conn, err = newConnectionFromClientPair()
 	if err != nil {
@@ -91,26 +66,6 @@ func New(ocmConfigFile string) (*SdkClient, error) {
 	}
 
 	return &client, nil
-}
-
-// newConnectionFromFile loads the configuration file (ocmConfigFile, ~/.ocm.json, /ocm/ocm.json)
-// and creates a connection.
-func newConnectionFromFile(ocmConfigFile string) (*sdk.Connection, error) {
-	if ocmConfigFile != "" {
-		err := os.Setenv("OCM_CONFIG", ocmConfigFile)
-		if err != nil {
-			return nil, err
-		}
-	}
-	// Load the configuration file from std path
-	cfg, err := Load()
-	if err != nil {
-		return nil, err
-	}
-	if cfg == nil || cfg == (&Config{}) {
-		return nil, fmt.Errorf("not logged in")
-	}
-	return cfg.Connection()
 }
 
 // newConnectionFromClientPair creates a new connection via set of client ID, client secret

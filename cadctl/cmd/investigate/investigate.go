@@ -19,7 +19,6 @@ package investigate
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -111,7 +110,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ocmClient, err := GetOCMClient()
+	ocmClient, err := ocm.New()
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
@@ -189,22 +188,6 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 	} else {
 		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
-}
-
-// GetOCMClient will retrieve the OcmClient from the 'ocm' package
-func GetOCMClient() (*ocm.SdkClient, error) {
-	cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
-
-	_, err := os.Stat(cadOcmFilePath)
-	if os.IsNotExist(err) {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return nil, err
-		}
-		cadOcmFilePath = filepath.Join(configDir, "/ocm/ocm.json")
-	}
-
-	return ocm.New(cadOcmFilePath)
 }
 
 // Checks pre-requisites for a cluster investigation:
