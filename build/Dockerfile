@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v7.0.0 as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v7.3.0 as builder
 
 ADD . /opt
 WORKDIR /opt
@@ -7,7 +7,7 @@ RUN make CGO_ENABLED=0 build-cadctl
 RUN make CGO_ENABLED=0 build-interceptor
 
 
-FROM quay.io/app-sre/ubi8-ubi-minimal:8.10 as runner
+FROM quay.io/app-sre/ubi9-ubi-minimal:9.6 as runner
 
 COPY --from=builder /opt/bin/cadctl /bin/cadctl
 COPY --from=builder /opt/bin/interceptor /bin/interceptor
@@ -35,7 +35,5 @@ LABEL vendor="RedHat" \
   org.label-schema.vcs-url="https://github.com/openshift/configuration-anomaly-detection" \
   org.label-schema.vendor="openshift/configuration-anomaly-detection" \
   org.label-schema.version=$VERSION
-
-RUN microdnf install jq
 
 ENTRYPOINT ["/bin/cadctl"]
