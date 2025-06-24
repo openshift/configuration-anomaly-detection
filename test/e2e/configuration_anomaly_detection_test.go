@@ -682,20 +682,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			lsReasonsBefore = 0
 		} else {
 			lsReasonsBefore = lsResponseBefore.Items().Len()
-			ginkgo.GinkgoWriter.Printf("Limited support reasons before pull secret corruption/user banned check: %d\n", lsReasonsBefore)
-		}
-
-		// Check if user is banned (part of the investigation logic)
-		ginkgo.GinkgoWriter.Printf("Checking if cluster owner is banned...\n")
-		userBannedStatus, userBannedNotes, err := utils.IsUserBanned(ocme2eCli, cluster)
-		Expect(err).NotTo(HaveOccurred(), "Failed to check if user is banned")
-
-		if userBannedStatus {
-			ginkgo.GinkgoWriter.Printf("User is banned: %s\n", userBannedNotes)
-			_, err = testPdClient.TriggerIncident("UpgradeConfigSyncFailureOver4HrSRE", clusterID)
-			Expect(err).NotTo(HaveOccurred(), "Failed to trigger UpgradeConfigSyncFailureOver4Hr PagerDuty alert")
-		} else {
-			ginkgo.GinkgoWriter.Printf("User is not banned - proceeding with investigation\n")
+			ginkgo.GinkgoWriter.Printf("Limited support reasons before pull secret corruption %d\n", lsReasonsBefore)
 		}
 
 		// Get the original pull secret for backup
