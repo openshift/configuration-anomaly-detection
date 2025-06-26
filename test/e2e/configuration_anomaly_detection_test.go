@@ -52,16 +52,14 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		clientID := os.Getenv("CLIENT_ID")
 		clientSecret := os.Getenv("CLIENT_SECRET")
 		clusterID = os.Getenv("OCM_CLUSTER_ID")
-		cadOcmFilePath := os.Getenv("CAD_OCM_FILE_PATH")
 
 		Expect(ocmToken).NotTo(BeEmpty(), "OCM_TOKEN must be set")
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
-		Expect(cadOcmFilePath).NotTo(BeEmpty(), "CAD_OCM_FILE_PATH must be set")
 
 		ocme2eCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
 
-		ocmCli, err = ocm.New(cadOcmFilePath)
+		ocmCli, err = ocm.New()
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup ocm anomaly detection client")
 
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
