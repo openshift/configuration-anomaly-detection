@@ -1,6 +1,6 @@
 module github.com/openshift/configuration-anomaly-detection/interceptor
 
-go 1.23.6
+go 1.23.8
 
 toolchain go1.23.9
 
