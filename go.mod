@@ -21,7 +21,7 @@ require (
 	github.com/openshift/osd-network-verifier v1.2.3
 	github.com/openshift/osde2e-common v0.0.0-20250409072139-f917c50a4bd2
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prometheus/common v0.63.0
+	github.com/prometheus/common v0.65.0
 	github.com/spf13/cobra v1.9.1
 	go.uber.org/mock v0.5.0
 	go.uber.org/zap v1.27.0
@@ -230,7 +230,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/prometheus/prometheus v0.302.1 // indirect
 	github.com/prometheus/sigv4 v0.1.1 // indirect
