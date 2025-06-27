@@ -72,7 +72,7 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 	// If it is, send a service log and silence the alert.
 	if isUWMConfigInvalid(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmMisconfiguredSL)
+		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmMisconfiguredSL, c.InformingMode())
 		if err != nil {
 			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}
@@ -101,6 +101,10 @@ func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
 }
 
 func (c *Investigation) IsExperimental() bool {
+	return false
+}
+
+func (c *Investigation) InformingMode() bool {
 	return false
 }
 

@@ -51,7 +51,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		return result, utils.WithRetries(func() error {
-			err := postStoppedInfraLimitedSupport(r.Cluster.ID(), r.OcmClient, r.PdClient)
+			err := postStoppedInfraLimitedSupport(r.Cluster.ID(), r.OcmClient, r.PdClient, c.InformingMode())
 			// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
 
@@ -86,7 +86,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID())
+			err := r.OcmClient.PostLimitedSupportReason(&egressLS, r.Cluster.ID(), c.InformingMode())
 			if err != nil {
 				return result, err
 			}
@@ -98,7 +98,7 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 			return result, r.PdClient.SilenceIncidentWithNote(notes.String())
 		}
 
-		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason))
+		err := r.OcmClient.PostServiceLog(r.Cluster.ID(), createEgressSL(failureReason), c.InformingMode())
 		if err != nil {
 			return result, err
 		}
@@ -129,6 +129,10 @@ func (c *Investiation) ShouldInvestigateAlert(alert string) bool {
 }
 
 func (c *Investiation) IsExperimental() bool {
+	return false
+}
+
+func (c *Investiation) InformingMode() bool {
 	return false
 }
 
@@ -449,8 +453,8 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 }
 
 // postStoppedInfraLimitedSupport will put the cluster on limited support because the user has stopped instances
-func postStoppedInfraLimitedSupport(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client) error {
-	err := ocmCli.PostLimitedSupportReason(&stoppedInfraLS, clusterID)
+func postStoppedInfraLimitedSupport(clusterID string, ocmCli ocm.Client, pdCli pagerduty.Client, informingMode bool) error {
+	err := ocmCli.PostLimitedSupportReason(&stoppedInfraLS, clusterID, informingMode)
 	if err != nil {
 		return fmt.Errorf("failed sending service log: %w", err)
 	}

@@ -28,6 +28,7 @@ type Investigation interface {
 	Name() string
 	Description() string
 	IsExperimental() bool
+	InformingMode() bool
 	ShouldInvestigateAlert(string) bool
 }
 
