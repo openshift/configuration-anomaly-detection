@@ -11,9 +11,6 @@ import (
 
 const recentWakeupTime = 2 * time.Hour
 
-// 30 Days is always a problem as kubelet certificates will be expired
-const hibernationTooLong = 30 * 24 * time.Hour
-
 const (
 	hibernationStartEvent = "cluster_state_hibernating"
 	hibernationEndEvent   = "cluster_state_ready"
@@ -25,24 +22,6 @@ const (
 type hibernationPeriod struct {
 	HibernationDuration time.Duration
 	DehibernationTime   time.Time
-}
-
-func hibernatedTooLong(hibernations []*hibernationPeriod, now time.Time) bool {
-	if len(hibernations) == 0 {
-		return false
-	}
-	latestHibernation := hibernations[len(hibernations)-1]
-	// The cluster was woken up within the RECENT_WAKEUP_TIME which might
-	// indicate a CSR problem.
-	if now.Sub(latestHibernation.DehibernationTime) >= recentWakeupTime {
-		return false
-	}
-	// Only clusters that have hibernated for a long time are susceptible to
-	// have cert issues.
-	if latestHibernation.HibernationDuration >= hibernationTooLong {
-		return true
-	}
-	return false
 }
 
 func getHibernationStatusForCluster(ocmClient ocm.Client, cluster *cmv1.Cluster) ([]*hibernationPeriod, error) {
