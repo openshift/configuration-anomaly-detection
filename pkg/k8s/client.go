@@ -27,7 +27,7 @@ type clientImpl struct {
 }
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
-func New(clusterID string, ocmClient ocm.Client, remediationName string) (kclient Client, err error) {
+func New(clusterID string, ocmClient ocm.Client, remediationName string) (k8scli Client, err error) {
 	cfg, err := NewCfg(clusterID, ocmClient, remediationName)
 	if err != nil {
 		return nil, err

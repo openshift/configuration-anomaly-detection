@@ -29,8 +29,8 @@ const (
 )
 
 type Investigation struct {
-	// kclient provides access to on-cluster resources
-	kclient k8sclient.Client
+	// k8scli provides access to on-cluster resources
+	k8scli k8sclient.Client
 	// notes holds the messages that will be shared with Primary upon completion
 	notes *notewriter.NoteWriter
 	// recommendations holds the set of actions CAD recommends primary to take
@@ -39,11 +39,11 @@ type Investigation struct {
 
 func (i *Investigation) setup(r *investigation.Resources) error {
 	// Setup investigation
-	k, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
+	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return fmt.Errorf("failed to initialize kubernetes client: %w", err)
 	}
-	i.kclient = k
+	i.k8scli = k8scli
 	i.notes = notewriter.New(r.Name, logging.RawLogger)
 	i.recommendations = investigationRecommendations{}
 
@@ -51,7 +51,7 @@ func (i *Investigation) setup(r *investigation.Resources) error {
 }
 
 func (i *Investigation) teardown() error {
-	return i.kclient.Clean()
+	return i.k8scli.Clean()
 }
 
 // Run investigates the MachineHealthCheckUnterminatedShortCircuitSRE alert
@@ -106,7 +106,7 @@ func (i *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	// If one or more machines managed by the machinehealthcheck have not yet been identified as a problem, check on the machine's
 	// node to determine if there are node-level problems that need remediating
 	if len(targetMachines) > 0 {
-		targetNodes, err := machineutil.GetNodesForMachines(ctx, i.kclient, targetMachines)
+		targetNodes, err := machineutil.GetNodesForMachines(ctx, i.k8scli, targetMachines)
 		if err != nil {
 			i.notes.AppendWarning("failed to retrieve one or more target nodes: %v", err)
 		}
@@ -127,7 +127,7 @@ func (i *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 
 func (i *Investigation) getMachinesFromFailingMHC(ctx context.Context) ([]machinev1beta1.Machine, error) {
 	healthchecks := machinev1beta1.MachineHealthCheckList{}
-	err := i.kclient.List(ctx, &healthchecks, &client.ListOptions{Namespace: machineutil.MachineNamespace})
+	err := i.k8scli.List(ctx, &healthchecks, &client.ListOptions{Namespace: machineutil.MachineNamespace})
 	if err != nil {
 		return []machinev1beta1.Machine{}, fmt.Errorf("failed to retrieve machinehealthchecks from cluster: %w", err)
 	}
@@ -135,7 +135,7 @@ func (i *Investigation) getMachinesFromFailingMHC(ctx context.Context) ([]machin
 	targets := []machinev1beta1.Machine{}
 	for _, healthcheck := range healthchecks.Items {
 		if !machineutil.HealthcheckRemediationAllowed(healthcheck) {
-			machines, err := machineutil.GetMachinesForMHC(ctx, i.kclient, healthcheck)
+			machines, err := machineutil.GetMachinesForMHC(ctx, i.k8scli, healthcheck)
 			if err != nil {
 				i.notes.AppendWarning("failed to retrieve machines from machinehealthcheck %q: %v", healthcheck.Name, err)
 				continue
@@ -240,7 +240,7 @@ func (i *Investigation) investigateDeletingMachine(ctx context.Context, machine 
 		i.recommendations.addRecommendation(recommendationInvestigateMachine, machine.Name, notes)
 		return nil
 	}
-	node, err := machineutil.GetNodeForMachine(ctx, i.kclient, machine)
+	node, err := machineutil.GetNodeForMachine(ctx, i.k8scli, machine)
 	if err != nil {
 		notes := "machine's node could not be determined"
 		i.recommendations.addRecommendation(recommendationInvestigateMachine, machine.Name, notes)
