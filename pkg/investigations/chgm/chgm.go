@@ -61,15 +61,15 @@ func (c *Investiation) Run(r *investigation.Resources) (investigation.Investigat
 	notes.AppendSuccess("Customer did not stop nodes.")
 	logging.Info("The customer has not stopped/terminated any nodes.")
 
-	// 2. Check if the cluster is fresh out of a long hibernation
-	// TODO(Claudio): OSD-18775 - add the note regardless of how long the cluster was hibernated, as long as it came just out of hibernation.
-	longHibernation, err := investigateHibernation(r.Cluster, r.OcmClient)
+	// 2. Check if the cluster was hibernated and has recently resumed.
+	hibernationPeriods, err := getHibernationStatusForCluster(r.OcmClient, r.Cluster)
 	if err != nil {
 		logging.Warnf("could not check hibernation status of cluster: %w", err)
 	}
-	if longHibernation {
-		logging.Info("The cluster was hibernated for too long.")
-		notes.AppendWarning("Cluster was hibernated more than %.0f days - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", hibernationTooLong.Hours()/24)
+
+	if hasRecentlyResumed(hibernationPeriods, time.Now()) {
+		logging.Info("The cluster has recently resumed from hibernation.")
+		notes.AppendWarning("Cluster has resumed from hibernation within the last %.0f hours - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", recentWakeupTime.Hours())
 	} else {
 		logging.Info("The cluster was not hibernated for too long.")
 	}
@@ -132,20 +132,17 @@ func (c *Investiation) IsExperimental() bool {
 	return false
 }
 
-// investigateHibernation checks if the cluster was recently woken up from
-// hibernation. If clusters are hibernated for more than 30 days, the internal
-// certificates of the kubelets can expire and CSRs need to be approved
+// hasRecentlyResumed checks if the cluster was woken up from
+// hibernation within the last 2h. In that case, the internal
+// certificates of the kubelets could have expired and CSRs need to be approved
 // manually:
 // - https://github.com/openshift/hive/blob/master/docs/hibernating-clusters.md
-func investigateHibernation(cluster *cmv1.Cluster, client ocm.Client) (bool, error) {
-	hibernations, err := getHibernationStatusForCluster(client, cluster)
-	if err != nil {
-		return false, err
+func hasRecentlyResumed(hibernationPeriods []*hibernationPeriod, now time.Time) bool {
+	if len(hibernationPeriods) == 0 {
+		return false
 	}
-	if len(hibernations) == 0 {
-		return false, nil
-	}
-	return hibernatedTooLong(hibernations, time.Now()), nil
+	latestHibernation := hibernationPeriods[len(hibernationPeriods)-1]
+	return now.Sub(latestHibernation.DehibernationTime) <= recentWakeupTime
 }
 
 // isUserAllowedToStop verifies if a user is allowed to stop/terminate instances
