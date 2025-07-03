@@ -54,7 +54,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 
 		cfg, err := ocmConfig.Load()
-		if err != nil {
+		if err != nil || cfg == nil {
 			// Fall back to environment variables
 			clientID := os.Getenv("OCM_CLIENT_ID")
 			clientSecret := os.Getenv("OCM_CLIENT_SECRET")
