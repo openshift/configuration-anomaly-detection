@@ -7,7 +7,6 @@ define ADDITIONAL_IMAGE_SPECS
 endef
 
 include boilerplate/generated-includes.mk
-include test/e2e/project.mk
 
 GOLANGCI_LINT_VERSION=v2.0.2
 MOCKGEN_VERSION=v0.5.0
