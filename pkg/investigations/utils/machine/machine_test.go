@@ -264,13 +264,13 @@ func Test_GetNodeForMachine(t *testing.T) {
 				objs = append(objs, node)
 			}
 
-			kclient, err := newFakeClient(objs...)
+			k8scli, err := newFakeClient(objs...)
 			if err != nil {
 				t.Errorf("failed to create fake client for testing: %v", err)
 			}
 
 			// Execute
-			got, err := GetNodeForMachine(context.TODO(), kclient, *machine)
+			got, err := GetNodeForMachine(context.TODO(), k8scli, *machine)
 
 			// Validate results
 			if (err != nil) != tt.want.err {
