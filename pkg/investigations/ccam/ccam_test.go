@@ -9,15 +9,15 @@ import (
 
 func TestEvaluateRandomError(t *testing.T) {
 	timeoutError := errors.New("credentials are there, error is different: timeout")
-	input := investigation.Resources{
-		Cluster:           nil,
-		ClusterDeployment: nil,
-		AwsClient:         nil,
-		OcmClient:         nil,
-		PdClient:          nil,
-		AdditionalResources: map[string]interface{}{
-			"error": errors.New("timeout"),
+	input := investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			Cluster:           nil,
+			ClusterDeployment: nil,
+			AwsClient:         nil,
+			OcmClient:         nil,
+			PdClient:          nil,
 		},
+		BuildError: timeoutError,
 	}
 
 	inv := Investigation{}
