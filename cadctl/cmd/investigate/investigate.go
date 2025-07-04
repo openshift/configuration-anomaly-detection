@@ -31,6 +31,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/spf13/cobra"
 )
@@ -115,50 +116,29 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	cluster, err := ocmClient.GetClusterInfo(clusterID)
-	if err != nil {
-		if strings.Contains(err.Error(), "no cluster found") {
-			logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
-			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
-		}
-		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
-	}
-
-	// From this point on, we normalize to internal ID, as this ID always exists.
-	// For installing clusters, externalID can be empty.
-	internalClusterID := cluster.ID()
-
-	// re-initialize logger for the internal-cluster-id context
+	var logLevel string
 	// if log-level flag is set, take priority over env + default
 	if cmd.Flags().Changed("log-level") {
-		logging.RawLogger = logging.InitLogger(logLevelFlag, internalClusterID)
+		logLevel = logLevelFlag
 	} else {
-		logging.RawLogger = logging.InitLogger(logging.LogLevelString, internalClusterID)
+		logLevel = logging.LogLevelString
 	}
 
-	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
+	builder := &investigation.ResourceBuilder{}
+	// Prime the builder with information required for all investigations.
+	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevel)
+
+	requiresInvestigation, err := clusterRequiresInvestigation(builder)
 	if err != nil || !requiresInvestigation {
 		return err
 	}
 
-	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
-	if err != nil {
-		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
-	}
-
-	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
-	if err != nil {
-		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil, AdditionalResources: map[string]interface{}{"error": err}}
-		inv := ccam.Investigation{}
-		result, err := inv.Run(ccamResources)
-		updateMetrics(alertInvestigation.Name(), &result)
-		return err
-	}
-
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	inv := ccam.Investigation{}
+	result, err := inv.Run(builder)
+	updateMetrics(alertInvestigation.Name(), &result)
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
-	result, err := alertInvestigation.Run(investigationResources)
+	result, err = alertInvestigation.Run(builder)
 	updateMetrics(alertInvestigation.Name(), &result)
 	if err != nil {
 		return err
@@ -194,7 +174,14 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
 // - the cloud provider is supported by CAD (cluster is AWS)
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient, ocmClient *ocm.SdkClient) (bool, error) {
+func clusterRequiresInvestigation(builder *investigation.ResourceBuilder) (bool, error) {
+	resources, err := builder.Build()
+	if err != nil {
+		return false, err
+	}
+	cluster := resources.Cluster
+	pdClient := resources.PdClient
+	ocmClient := resources.OcmClient
 	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		return false, pdClient.SilenceIncidentWithNote("CAD: Cluster is already uninstalling, silencing alert.")
