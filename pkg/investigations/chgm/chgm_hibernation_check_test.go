@@ -71,15 +71,10 @@ func TestHibernatedTooLong(t *testing.T) {
 		now          time.Time
 	}
 	hibernationStartTime := time.Date(2023, 0o1, 0o1, 0o0, 0o0, 0o0, 0o0, time.Local)
-	hibernationShortStopTime := time.Date(2023, 0o1, 11, 0o0, 0o0, 0o0, 0o0, time.Local)
-	hibernationLongStopTime := time.Date(2023, 0o2, 11, 0o0, 0o0, 0o0, 0o0, time.Local)
-	shortHibernation := &hibernationPeriod{
-		HibernationDuration: hibernationShortStopTime.Sub(hibernationStartTime),
-		DehibernationTime:   hibernationShortStopTime,
-	}
-	longHibernation := &hibernationPeriod{
-		HibernationDuration: hibernationLongStopTime.Sub(hibernationStartTime),
-		DehibernationTime:   hibernationLongStopTime,
+	hibernationStopTime := time.Date(2023, 0o2, 11, 0o0, 0o0, 0o0, 0o0, time.Local)
+	hibernation := &hibernationPeriod{
+		HibernationDuration: hibernationStopTime.Sub(hibernationStartTime),
+		DehibernationTime:   hibernationStopTime,
 	}
 	tests := []struct {
 		name string
@@ -88,40 +83,32 @@ func TestHibernatedTooLong(t *testing.T) {
 	}{
 		// TODO: Add test cases.
 		{
-			name: "Cluster that hibernated for 10 days is ok",
+			name: "Cluster with a hibernation that was longer ago does not count as recently resumed",
 			args: args{
-				hibernations: []*hibernationPeriod{shortHibernation},
-				now:          hibernationShortStopTime.Add(1 * time.Hour),
+				hibernations: []*hibernationPeriod{hibernation},
+				now:          hibernationStopTime.Add(24 * time.Hour),
 			},
 			want: false,
 		},
 		{
-			name: "Cluster that hibernated for 30+ days is too long",
+			name: "Cluster that woke up 30 min ago counts as recently resumed",
 			args: args{
-				hibernations: []*hibernationPeriod{longHibernation},
-				now:          hibernationLongStopTime.Add(1 * time.Hour),
+				hibernations: []*hibernationPeriod{hibernation},
+				now:          hibernationStopTime.Add(30 * time.Minute),
 			},
 			want: true,
 		},
 		{
-			name: "Cluster that never hibernated is ok",
+			name: "Cluster that never hibernated does not count as recently resumed",
 			args: args{},
-			want: false,
-		},
-		{
-			name: "Cluster that woke up for 2+ hours ago ok",
-			args: args{
-				hibernations: []*hibernationPeriod{longHibernation},
-				now:          hibernationLongStopTime.Add(3 * time.Hour),
-			},
 			want: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := hibernatedTooLong(tt.args.hibernations, tt.args.now)
+			got := hasRecentlyResumed(tt.args.hibernations, tt.args.now)
 			if got != tt.want {
-				t.Errorf("HibernatedTooLong() = %v, want %v", got, tt.want)
+				t.Errorf("hasRecentlyResumed() = %v, want %v", got, tt.want)
 			}
 		})
 	}
