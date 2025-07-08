@@ -24,9 +24,19 @@ const (
 	idleTimeout  = 60 * time.Second
 )
 
-var logger = logging.InitLogger(logging.LogLevelString, "")
+var (
+	pipelineNameEnv = ""
+	logLevelEnv     = "info"
+)
+
+func init() {
+	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
+	logLevelEnv = os.Getenv("LOG_LEVEL")
+}
 
 func main() {
+	logger := logging.InitLogger(logLevelEnv, pipelineNameEnv, "")
+
 	// set up signals so we handle the first shutdown signal gracefully
 	ctx := signals.NewContext()
 

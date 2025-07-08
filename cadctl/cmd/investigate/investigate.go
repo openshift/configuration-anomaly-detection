@@ -44,28 +44,28 @@ var InvestigateCmd = &cobra.Command{
 }
 
 var (
-	logLevelFlag = ""
-	payloadPath  = "./payload.json"
+	logLevelFlag    = ""
+	payloadPath     = "./payload.json"
+	pipelineNameEnv = ""
 )
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 func init() {
-	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload")
-	InvestigateCmd.Flags().StringVarP(&logging.LogLevelString, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
+	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload, defaults to './payload.json'")
+	InvestigateCmd.Flags().StringVarP(&logLevelFlag, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
 
-	err := InvestigateCmd.MarkFlagRequired("payload-path")
-	if err != nil {
-		logging.Warn("Could not mark flag 'payload-path' as required")
+	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
+		logLevelFlag = envLogLevel
 	}
+
+	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
 }
 
 func run(cmd *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
-	if cmd.Flags().Changed("log-level") {
-		flagValue, _ := cmd.Flags().GetString("log-level")
-		logging.RawLogger = logging.InitLogger(flagValue, "")
-	}
+	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
+
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -129,12 +129,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	internalClusterID := cluster.ID()
 
 	// re-initialize logger for the internal-cluster-id context
-	// if log-level flag is set, take priority over env + default
-	if cmd.Flags().Changed("log-level") {
-		logging.RawLogger = logging.InitLogger(logLevelFlag, internalClusterID)
-	} else {
-		logging.RawLogger = logging.InitLogger(logging.LogLevelString, internalClusterID)
-	}
+	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, internalClusterID)
 
 	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
 	if err != nil || !requiresInvestigation {
