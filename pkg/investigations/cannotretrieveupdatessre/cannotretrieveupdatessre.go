@@ -1,7 +1,6 @@
 package cannotretrieveupdatessre
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,7 +11,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/version"
 )
 
 type Investigation struct{}
@@ -48,7 +48,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	}
 
 	// Check ClusterVersion
-	clusterVersion, err := getClusterVersion(k8scli)
+	clusterVersion, err := version.GetClusterVersion(k8scli)
 	if err != nil {
 		notes.AppendWarning("Failed to get ClusterVersion: %s", err.Error())
 	} else {
@@ -63,15 +63,6 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 	}
 	notes.AppendWarning("Alert escalated to on-call primary for review and please check the ClusterVersion.")
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
-}
-
-func getClusterVersion(k8scli client.Client) (*configv1.ClusterVersion, error) {
-	clusterVersion := &configv1.ClusterVersion{}
-	err := k8scli.Get(context.TODO(), client.ObjectKey{Name: "version"}, clusterVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ClusterVersion: %w", err)
-	}
-	return clusterVersion, nil
 }
 
 // getUpdateRetrievalFailures checks for update retrieval failures in the ClusterVersion

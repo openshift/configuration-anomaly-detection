@@ -29,9 +29,9 @@ func FindNoScheduleTaint(node corev1.Node) (corev1.Taint, bool) {
 }
 
 // GetNodes retrieves all nodes present in the cluster
-func GetAll(ctx context.Context, kclient client.Client) ([]corev1.Node, error) {
+func GetAll(ctx context.Context, k8scli client.Client) ([]corev1.Node, error) {
 	nodes := corev1.NodeList{}
-	err := kclient.List(ctx, &nodes)
+	err := k8scli.List(ctx, &nodes)
 	return nodes.Items, err
 }
 

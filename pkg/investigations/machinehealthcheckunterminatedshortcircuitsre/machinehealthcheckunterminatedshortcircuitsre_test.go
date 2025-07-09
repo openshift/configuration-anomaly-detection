@@ -573,7 +573,7 @@ func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {
 	}
 
 	i := Investigation{
-		kclient:         clientImpl{fakeClient},
+		k8scli:          clientImpl{fakeClient},
 		notes:           notewriter.New("testing", logging.RawLogger),
 		recommendations: investigationRecommendations{},
 	}

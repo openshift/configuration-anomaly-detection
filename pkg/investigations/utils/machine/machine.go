@@ -30,13 +30,13 @@ func HealthcheckRemediationAllowed(healthcheck machinev1beta1.MachineHealthCheck
 }
 
 // GetMachinesForMHC retrieves the machines managed by the given MachineHealthCheck object
-func GetMachinesForMHC(ctx context.Context, kclient client.Client, healthcheck machinev1beta1.MachineHealthCheck) ([]machinev1beta1.Machine, error) {
+func GetMachinesForMHC(ctx context.Context, k8scli client.Client, healthcheck machinev1beta1.MachineHealthCheck) ([]machinev1beta1.Machine, error) {
 	machines := machinev1beta1.MachineList{}
 	selector, err := metav1.LabelSelectorAsSelector(&healthcheck.Spec.Selector)
 	if err != nil {
 		return []machinev1beta1.Machine{}, fmt.Errorf("failed to convert machinehealthcheck %q .spec.selector: %w", healthcheck.Name, err)
 	}
-	err = kclient.List(ctx, &machines, client.MatchingLabelsSelector{Selector: selector}, &client.ListOptions{Namespace: MachineNamespace})
+	err = k8scli.List(ctx, &machines, client.MatchingLabelsSelector{Selector: selector}, &client.ListOptions{Namespace: MachineNamespace})
 	if err != nil {
 		return []machinev1beta1.Machine{}, fmt.Errorf("failed to retrieve machines from machinehealthcheck %q: %w", healthcheck.Name, err)
 	}
@@ -53,9 +53,9 @@ func GetRole(machine machinev1beta1.Machine) (string, error) {
 }
 
 // GetNodesForMachines retrieves the nodes for the given machines. Errors encountered are joined, but do not block the retrieval of other machines
-func GetNodesForMachines(ctx context.Context, kclient client.Client, machines []machinev1beta1.Machine) ([]corev1.Node, error) {
+func GetNodesForMachines(ctx context.Context, k8scli client.Client, machines []machinev1beta1.Machine) ([]corev1.Node, error) {
 	// Retrieving all nodes initially & filtering out irrelevant objects results in fewer API calls
-	nodes, err := node.GetAll(ctx, kclient)
+	nodes, err := node.GetAll(ctx, k8scli)
 	if err != nil {
 		return []corev1.Node{}, fmt.Errorf("failed to retrieve nodes: %w", err)
 	}
@@ -87,11 +87,11 @@ func findMatchingNode(machine machinev1beta1.Machine, nodes []corev1.Node) (core
 
 // GetNodeForMachine retrieves the node for the given machine. If the provided machine's .Status.NodeRef is empty,
 // an error is returned
-func GetNodeForMachine(ctx context.Context, kclient client.Client, machine machinev1beta1.Machine) (corev1.Node, error) {
+func GetNodeForMachine(ctx context.Context, k8scli client.Client, machine machinev1beta1.Machine) (corev1.Node, error) {
 	if machine.Status.NodeRef == nil || machine.Status.NodeRef.Name == "" {
 		return corev1.Node{}, fmt.Errorf("no .Status.NodeRef defined for machine %q", machine.Name)
 	}
 	node := &corev1.Node{}
-	err := kclient.Get(ctx, types.NamespacedName{Name: machine.Status.NodeRef.Name}, node)
+	err := k8scli.Get(ctx, types.NamespacedName{Name: machine.Status.NodeRef.Name}, node)
 	return *node, err
 }
