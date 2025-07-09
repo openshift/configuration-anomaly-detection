@@ -37,7 +37,7 @@ var uwmGenericMisconfiguredSL = ocm.ServiceLog{
 	Severity:     "Major",
 	Summary:      "Action required: review user-workload-monitoring configuration",
 	ServiceName:  "SREManualAction",
-	Description:  "Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
+	Description:  "Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
 	InternalOnly: false,
 }
 
