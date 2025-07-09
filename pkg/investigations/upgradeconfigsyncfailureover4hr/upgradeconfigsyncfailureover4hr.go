@@ -26,8 +26,12 @@ const (
 	remediationName = "upgradeconfigsyncfailureover4hr"
 )
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(b investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
+	r, err := b.Build()
+	if err != nil {
+		return result, err
+	}
 	notes := notewriter.New("UpgradeConfigSyncFailureOver4Hr", logging.RawLogger)
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
 	if err != nil {

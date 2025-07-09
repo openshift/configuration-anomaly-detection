@@ -21,23 +21,23 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 
 // Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	cluster := r.Cluster
-	ocmClient := r.OcmClient
-	pdClient := r.PdClient
-	bpError, ok := r.AdditionalResources["error"].(error)
-	if !ok {
-		return result, fmt.Errorf("missing required Investigation field 'error'")
-	}
+	// Apart from the defaults this investigation requires an AWS client which can fail to build
+	resources, err := r.WithAwsClient().Build()
 	logging.Info("Investigating possible missing cloud credentials...")
-
-	if customerRemovedPermissions := customerRemovedPermissions(bpError.Error()); !customerRemovedPermissions {
-		// We aren't able to jumpRole because of an error that is different than
-		// a removed support role/policy or removed installer role/policy
-		// This would normally be a backplane failure.
-		return result, fmt.Errorf("credentials are there, error is different: %w", bpError)
+	if err != nil {
+		if customerRemovedPermissions := customerRemovedPermissions(err.Error()); !customerRemovedPermissions {
+			// We aren't able to jumpRole because of an error that is different than
+			// a removed support role/policy or removed installer role/policy
+			// This would normally be a backplane failure.
+			return result, err
+		}
 	}
+
+	cluster := resources.Cluster
+	ocmClient := resources.OcmClient
+	pdClient := resources.PdClient
 
 	// The jumprole failed because of a missing support role/policy:
 	// we need to figure out if we cluster state allows us to set limited support

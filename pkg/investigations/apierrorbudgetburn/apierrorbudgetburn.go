@@ -14,8 +14,12 @@ import (
 
 type Investigation struct{}
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(b investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
+	r, err := b.Build()
+	if err != nil {
+		return result, err
+	}
 
 	k8sConfig, err := k8sclient.NewCfg(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
