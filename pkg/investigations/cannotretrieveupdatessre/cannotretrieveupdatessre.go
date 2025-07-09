@@ -15,18 +15,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const (
-	alertname       = "CannotRetrieveUpdatesSRE"
-	remediationName = "CannotRetrieveUpdatesSRE"
-)
-
 type Investigation struct{}
 
 // Run executes the investigation for the CannotRetrieveUpdatesSRE alert
 func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	notes := notewriter.New("CannotRetrieveUpdatesSRE", logging.RawLogger)
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
+	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
 		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
 	}
@@ -101,15 +96,15 @@ func checkCondition(condition configv1.ClusterOperatorStatusCondition) (string, 
 }
 
 func (i *Investigation) Name() string {
-	return alertname
+	return "cannotretrieveupdatessre"
 }
 
 func (i *Investigation) Description() string {
-	return fmt.Sprintf("Investigates '%s' alerts by running network verifier and checking ClusterVersion", alertname)
+	return fmt.Sprintf("Investigates '%s' alerts by running network verifier and checking ClusterVersion", i.Name())
 }
 
 func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, alertname)
+	return strings.Contains(alert, "CannotRetrieveUpdatesSRE")
 }
 
 func (i *Investigation) IsExperimental() bool {
