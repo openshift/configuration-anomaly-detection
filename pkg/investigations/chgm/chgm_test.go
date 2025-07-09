@@ -37,7 +37,7 @@ var _ = Describe("chgm", func() {
 		event             cloudtrailv2types.Event
 	)
 	BeforeEach(func() {
-		logging.InitLogger("fatal", "") // Mute logger for the tests
+		logging.InitLogger("fatal", "", "") // Mute logger for the tests
 		mockCtrl = gomock.NewController(GinkgoT())
 
 		var err error
