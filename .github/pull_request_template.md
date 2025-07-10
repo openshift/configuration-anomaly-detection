@@ -9,7 +9,7 @@
 ### Test Coverage
 #### Guidelines for CAD investigations
 - New investgations should be accompanied by unit tests and/or step-by-step manual tests in the investigation README.
-- E2E testing is desired for actioning investigations. See README for more info on investigation graduation process.
+- Actioning investigations should be locally tested in staging, and E2E testing is desired. See [README](https://github.com/openshift/configuration-anomaly-detection/blob/main/README.md#graduating-an-investigation) for more info on investigation graduation process.
 
 #### Test coverage checks
 - [ ] Added tests

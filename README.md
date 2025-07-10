@@ -11,6 +11,7 @@
   - [Contributing](#contributing)
     - [Building](#building)
     - [Adding a new investigation](#adding-a-new-investigation)
+    - [Graduating an investigation](#graduating-an-investigation)
   - [Testing locally](#testing-locally)
     - [Pre-requirements](#pre-requirements)
     - [Running cadctl for an incident ID](#running-cadctl-for-an-incident-id)
@@ -19,7 +20,6 @@
     - [Integrations](#integrations)
     - [Templates](#templates)
     - [Dashboards](#dashboards)
-    - [Deployment](#deployment)
     - [Boilerplate](#boilerplate)
     - [PipelinePruner](#pipelinepruner)
     - [Required ENV variables](#required-env-variables)
@@ -70,6 +70,29 @@ To add a new alert investigation:
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
 - investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
+
+### Graduating an investigation
+
+New investigations and their remediation steps should be deployed in advancing stages through a progressive deployment strategy.
+
+1. **Informing Stage (Read-only):**
+    The investigation is merely informative through PagerDuty at this stage; remediation _**does not involve any write operations**_. Notes are collected throughout the investigation, and upon the investigation's conclusion are posted to PagerDuty.
+
+    **Aim:** Validating the investigation's accuracy and usefulness **without performing any write actions**.
+
+    **Validation Criteria:**
+    * The investigation successfully carries out each step on it's respective incident type, on both staging and production environments.
+    * It provides useful information (equivalent to a manual investigation) to SREs through PagerDuty.
+    * The investigation should be accompanied by unit tests and/or step-by-step manual tests in the investigation's testing README, including:
+        * A clear step-by-step process to manually test the investigation (e.g. cluster setup, other expected conditions).
+
+2. **Actioning Stage (Read/Write):**
+    The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable clusters.
+
+    **Validation Criteria:**
+    * The investigation is verified to conduct remediations on staging as expected.
+    * The investigation should be locally tested in staging against a live alert.
+    * E2E testing is desired for actioning investigations; the tests should cover the execution of remediative steps as well as verification of their effectiveness.
 
 ### Integrations
 
@@ -179,12 +202,6 @@ Investigation specific documentation can be found in the according investigation
 ### Dashboards
 
 Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) directory. See app-interface for further documentation on dashboards.
-
-### Deployment
-
-* [Tekton](./deploy/README.md) -- Installation/configuration of Tekton and triggering pipeline runs.
-* [Skip Webhooks](./deploy/skip-webhook/README.md) -- Skipping the eventlistener and creating the pipelinerun directly.
-* [Namespace](./deploy/namespace/README.md) -- Allowing the code to ignore the namespace.
 
 ### Boilerplate
 
