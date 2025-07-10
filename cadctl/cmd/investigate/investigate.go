@@ -78,14 +78,6 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	var investigationResources *investigation.Resources
-
-	defer func() {
-		if err != nil {
-			handleCADFailure(err, investigationResources, pdClient)
-		}
-	}()
-
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
@@ -115,36 +107,54 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	builder := &investigation.ResourceBuilderT{}
+	defer func() {
+		if err != nil {
+			handleCADFailure(err, builder, pdClient)
+		}
+	}()
+
 	// Prime the builder with information required for all investigations.
 	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevelFlag, pipelineNameEnv)
 
+	// handleClusterNotFound centralizes the logic for this specific error case.
+	handleClusterNotFound := func(investigationErr error) error {
+		if investigationErr != nil && strings.Contains(investigationErr.Error(), "no cluster found") {
+			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		}
+		return investigationErr
+	}
+
 	precheck := precheck.Investigation{}
 	result, err := precheck.Run(builder)
-	if err != nil || result.StopInvestigations {
+	if err = handleClusterNotFound(err); err != nil || result.StopInvestigations {
 		return err
 	}
 
 	inv := ccam.Investigation{}
 	result, err = inv.Run(builder)
-	updateMetrics(alertInvestigation.Name(), &result)
-	if err != nil {
+	if err = handleClusterNotFound(err); err != nil {
 		return err
 	}
+	updateMetrics(alertInvestigation.Name(), &result)
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err = alertInvestigation.Run(builder)
-	updateMetrics(alertInvestigation.Name(), &result)
-	if err != nil {
+	if err = handleClusterNotFound(err); err != nil {
 		return err
 	}
+	updateMetrics(alertInvestigation.Name(), &result)
 
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, builder *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
+	// The builder caches resources, so we can access them here even if a later step failed.
+	// We ignore the error here because we just want to get any notes that were created.
+	resources, _ := builder.Build()
 	if resources != nil && resources.Notes != nil {
 		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
 		notes = resources.Notes.String()

@@ -77,6 +77,10 @@ type ResourceBuilderT struct {
 	name         string
 	logLevel     string
 	pipelineName string
+
+	// cache
+	builtResources *Resources
+	buildErr       error
 }
 
 func (r *ResourceBuilderT) WithCluster(clusterId string) ResourceBuilder {
@@ -123,66 +127,71 @@ func (r *ResourceBuilderT) WithLogger(logLevel string, pipelineName string) Reso
 }
 
 func (r *ResourceBuilderT) Build() (*Resources, error) {
-	var awsClient aws.Client
-	var cluster *cmv1.Cluster
-	var clusterDeployment *hivev1.ClusterDeployment
-	var notes *notewriter.NoteWriter
-	var internalClusterId string
+	if r.buildErr != nil {
+		return nil, r.buildErr
+	}
+
+	if r.builtResources == nil {
+		r.builtResources = &Resources{
+			Name:      r.name,
+			OcmClient: r.ocmClient,
+			PdClient:  r.pdClient,
+		}
+	}
+
 	var err error
 
 	if r.buildClusterDeployment && !r.buildCluster {
-		return nil, errors.New("can not build ClusterDeployment without Cluster")
+		r.buildErr = errors.New("cannot build ClusterDeployment without Cluster")
+		return nil, r.buildErr
+	}
+	if r.buildAwsClient && !r.buildCluster {
+		r.buildErr = errors.New("cannot build AwsClient without Cluster")
+		return nil, r.buildErr
 	}
 
-	if r.buildAwsClient {
-		awsClient, err = managedcloud.CreateCustomerAWSClient(cluster, r.ocmClient)
+	if r.buildCluster && r.builtResources.Cluster == nil {
+		r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
 		if err != nil {
+			// Let the caller handle how to respond to this error.
+			err = fmt.Errorf("could not retrieve cluster info for %s: %w", r.clusterId, err)
+			r.buildErr = err
 			return nil, err
 		}
 	}
 
-	if r.buildCluster {
-		cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
-		if err != nil {
-			if strings.Contains(err.Error(), "no cluster found") {
-				logging.Warnf("No cluster found with ID '%s'. Exiting.", r.clusterId)
-				err = r.pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
-				logging.Errorf("Could not escalate via PagerDuty: ", err)
-				return nil, errors.New("unable to find incident cluster in OCM")
+	// Dependent resources can only be built if a cluster object exists.
+	if r.builtResources.Cluster != nil {
+		internalClusterId := r.builtResources.Cluster.ID()
+
+		if r.buildAwsClient && r.builtResources.AwsClient == nil {
+			r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
+			if err != nil {
+				r.buildErr = err
+				return nil, err
 			}
-			return nil, fmt.Errorf("could not retrieve cluster info for %s: %w", r.clusterId, err)
 		}
 
-		// From this point on, we normalize to internal ID, as this ID always exists.
-		// For installing clusters, externalID can be empty.
-		internalClusterId = cluster.ID()
-	}
+		if r.buildClusterDeployment && r.builtResources.ClusterDeployment == nil {
+			r.builtResources.ClusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
+			if err != nil {
+				err = fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterId, err)
+				r.buildErr = err
+				return nil, err
+			}
+		}
 
-	if r.buildClusterDeployment {
-		clusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
-		if err != nil {
-			return nil, fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterId, err)
+		if r.buildLogger {
+			// Re-initialize the logger with the cluster ID.
+			logging.RawLogger = logging.InitLogger(r.logLevel, "", internalClusterId)
 		}
 	}
 
-	if r.buildLogger {
-		logging.RawLogger = logging.InitLogger(r.logLevel, "", internalClusterId)
+	if r.buildNotes && r.builtResources.Notes == nil {
+		r.builtResources.Notes = notewriter.New(r.name, logging.RawLogger)
 	}
 
-	if r.buildNotes {
-		// Initialize NoteWriter with sane defaults
-		notes = notewriter.New(r.name, logging.RawLogger)
-	}
-
-	return &Resources{
-		Name:              r.name,
-		Cluster:           cluster,
-		ClusterDeployment: clusterDeployment,
-		AwsClient:         awsClient,
-		OcmClient:         r.ocmClient,
-		PdClient:          r.pdClient,
-		Notes:             notes,
-	}, nil
+	return r.builtResources, nil
 }
 
 // This is an implementation to be used in tests, but putting it into a _test.go file will make it not resolvable.
