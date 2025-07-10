@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	aws "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -31,8 +32,10 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/dig"
 )
 
 // InvestigateCmd represents the entry point for alert investigation
@@ -63,6 +66,8 @@ func init() {
 }
 
 func run(cmd *cobra.Command, _ []string) error {
+	// Setup the dig container for DI
+	container := dig.New()
 	// early init of logger for logs before clusterID is known
 	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
 
@@ -79,13 +84,16 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	var investigationResources *investigation.Resources
-
 	defer func() {
 		if err != nil {
-			handleCADFailure(err, investigationResources, pdClient)
+			handleCADFailure(err, pdClient)
 		}
 	}()
+
+	err = container.Provide(func() pagerduty.Client { return pdClient })
+	if err != nil {
+		return err
+	}
 
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
@@ -98,6 +106,11 @@ func run(cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("could not escalate unsupported alert: %w", err)
 		}
 		return nil
+	}
+
+	err = container.Provide(func() string { return alertInvestigation.Name() })
+	if err != nil {
+		return err
 	}
 
 	metrics.Inc(metrics.Alerts, alertInvestigation.Name())
@@ -115,13 +128,39 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	cluster, err := ocmClient.GetClusterInfo(clusterID)
+	err = container.Provide(func() ocm.Client { return ocmClient })
 	if err != nil {
-		if strings.Contains(err.Error(), "no cluster found") {
-			logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
-			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		return err
+	}
+
+	err = container.Provide(func() (*cmv1.Cluster, error) {
+		cluster, err := ocmClient.GetClusterInfo(clusterID)
+		if err != nil {
+			if strings.Contains(err.Error(), "no cluster found") {
+				logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
+				escalationErr := pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+				if escalationErr != nil {
+					return nil, fmt.Errorf("failed to escalate 'cluster not found' to PagerDuty: %w", escalationErr)
+				}
+				// Return a recognizable error after successful escalation.
+				return nil, fmt.Errorf("no cluster found with ID '%s'", clusterID)
+			}
+			return nil, fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
 		}
-		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
+		return cluster, nil
+	})
+
+	var cluster *cmv1.Cluster
+	err = container.Invoke(func(c *cmv1.Cluster) {
+		cluster = c
+	})
+	if err != nil {
+		// The provider returns a specific error for "no cluster found" after escalating.
+		// We can check for this error and exit gracefully.
+		if strings.HasPrefix(err.Error(), "no cluster found with ID") {
+			return nil
+		}
+		return err
 	}
 
 	// From this point on, we normalize to internal ID, as this ID always exists.
@@ -136,24 +175,53 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
+	err = container.Provide(func() (*hivev1.ClusterDeployment, error) {
+		return ocmClient.GetClusterDeployment(internalClusterID)
+	})
 	if err != nil {
-		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
+		return err
 	}
 
-	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
-	if err != nil {
-		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil, AdditionalResources: map[string]interface{}{"error": err}}
+	customerAwsClient, awsErr := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
+	if awsErr != nil {
+		logging.Infof("Could not create AWS client (%s), running CCAM investigation as a fallback.", awsErr)
+		// Manually construct resources for the CCAM investigation.
+		// Note: This manual construction is an anti-pattern that can be improved in a future refactoring.
+		var clusterDeployment *hivev1.ClusterDeployment
+		invokeErr := container.Invoke(func(cd *hivev1.ClusterDeployment) {
+			clusterDeployment = cd
+		})
+		if invokeErr != nil {
+			return fmt.Errorf("failed to get clusterdeployment for ccam fallback: %w", invokeErr)
+		}
+		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, OcmClient: ocmClient, PdClient: pdClient, AdditionalResources: map[string]interface{}{"error": awsErr}}
 		inv := ccam.Investigation{}
 		result, err := inv.Run(ccamResources)
 		updateMetrics(alertInvestigation.Name(), &result)
 		return err
 	}
 
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	err = container.Provide(func() aws.Client { return customerAwsClient })
+	if err != nil {
+		return err
+	}
+
+	err = container.Provide(investigation.NewResources)
+	if err != nil {
+		return err
+	}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
-	result, err := alertInvestigation.Run(investigationResources)
+
+	var result investigation.InvestigationResult
+	err = container.Invoke(func(r *investigation.Resources) error {
+		res, err := alertInvestigation.Run(r)
+		if err != nil {
+			return err
+		}
+		result = res
+		return nil
+	})
 	updateMetrics(alertInvestigation.Name(), &result)
 	if err != nil {
 		return err
@@ -162,16 +230,10 @@ func run(cmd *cobra.Command, _ []string) error {
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
-	var notes string
-	if resources != nil && resources.Notes != nil {
-		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
-		notes = resources.Notes.String()
-	} else {
-		notes = "🚨 CAD investigation failed prior to resource initilization, CAD team has been notified. Please investigate manually. 🚨"
-	}
+	notes := "🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨"
 
 	if pdClient != nil {
 		pdErr := pdClient.EscalateIncidentWithNote(notes)
