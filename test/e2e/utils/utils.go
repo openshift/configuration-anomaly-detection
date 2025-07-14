@@ -29,14 +29,14 @@ func GetServiceLogs(ocmLike interface{}, cluster *cmv1.Cluster) (*servicelogsv1.
 	case ocm.Client:
 		clusterLogsUUIDListResponse, err := v.GetServiceLog(cluster, filter)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get service log: %w", err)
+			return nil, fmt.Errorf("failed to get service log: %w", err)
 		}
 		return clusterLogsUUIDListResponse, nil
 	case *ocme2e.Client:
 		adapter := &e2eOCMAdapter{conn: v.Connection}
 		clusterLogsUUIDListResponse, err := adapter.GetServiceLog(cluster, filter)
 		if err != nil {
-			return nil, fmt.Errorf("Failed to get service log (via adapter): %w", err)
+			return nil, fmt.Errorf("failed to get service log (via adapter): %w", err)
 		}
 		return clusterLogsUUIDListResponse, nil
 	default:
@@ -103,11 +103,11 @@ func getCreatorFromCluster(conn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.A
 func CreateClientFromKubeConfig(kubeConfigPath string) (pclient.Client, error) {
 	cfg, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build kubeconfig: %v", err)
+		return nil, fmt.Errorf("failed to build kubeconfig: %w", err)
 	}
 	cl, err := pclient.New(cfg, pclient.Options{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Kubernetes client: %v", err)
+		return nil, fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 	return cl, nil
 }
