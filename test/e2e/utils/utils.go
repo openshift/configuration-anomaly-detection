@@ -1,6 +1,3 @@
-//go:build osde2e
-// +build osde2e
-
 package utils
 
 import (

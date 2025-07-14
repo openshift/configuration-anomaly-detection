@@ -47,15 +47,13 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
 		ocmEnv := ocme2e.Stage
-		ocmToken := os.Getenv("OCM_TOKEN")
 		clientID := os.Getenv("CLIENT_ID")
 		clientSecret := os.Getenv("CLIENT_SECRET")
 		clusterID = os.Getenv("OCM_CLUSTER_ID")
 
-		Expect(ocmToken).NotTo(BeEmpty(), "OCM_TOKEN must be set")
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 
-		ocme2eCli, err = ocme2e.New(ctx, ocmToken, clientID, clientSecret, ocmEnv)
+		ocme2eCli, err = ocme2e.New(ctx, " ", clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
 
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
