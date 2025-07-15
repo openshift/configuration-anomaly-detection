@@ -13,15 +13,15 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.137.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.19
 	github.com/onsi/gomega v1.37.0
-	github.com/openshift-online/ocm-sdk-go v0.1.465
+	github.com/openshift-online/ocm-sdk-go v0.1.469
 	github.com/openshift/api v0.0.0-20240522145529-93d6bda14341
 	github.com/openshift/aws-account-operator/api v0.0.0-20231122143531-33ce90caf221
 	github.com/openshift/backplane-cli v0.1.47-0.20250521025004-fb46bb233d3d
 	github.com/openshift/hive/apis v0.0.0-20231116161336-9dd47f8bfa1f
 	github.com/openshift/osd-network-verifier v1.2.3
-	github.com/openshift/osde2e-common v0.0.0-20250409072139-f917c50a4bd2
+	github.com/openshift/osde2e-common v0.0.0-20250703192222-36c5869579b1
 	github.com/prometheus/client_golang v1.22.0
-	github.com/prometheus/common v0.63.0
+	github.com/prometheus/common v0.65.0
 	github.com/spf13/cobra v1.9.1
 	github.com/tektoncd/triggers v0.27.0
 	go.uber.org/mock v0.5.0
@@ -72,7 +72,7 @@ require (
 	github.com/MakeNowJust/heredoc v1.0.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/Masterminds/semver/v3 v3.3.1 // indirect
+	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/Microsoft/hcsshim v0.13.0 // indirect
@@ -233,6 +233,8 @@ require (
 	github.com/ollama/ollama v0.5.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/openshift-online/ocm-api-model/clientapi v0.0.0-20250619114224-37dc3401307a // indirect
+	github.com/openshift-online/ocm-api-model/model v0.0.0-20250619114224-37dc3401307a // indirect
 	github.com/openshift-online/ocm-cli v1.0.5 // indirect
 	github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
@@ -243,7 +245,7 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/prometheus/client_model v0.6.1 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/prometheus/prometheus v0.302.1 // indirect
 	github.com/prometheus/sigv4 v0.1.1 // indirect
