@@ -17,13 +17,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var uwmMisconfiguredSL = ocm.ServiceLog{
+var uwmConfigMapMisconfiguredSL = ocm.ServiceLog{
 	Severity:     "Major",
 	Summary:      "Action required: review user-workload-monitoring configuration",
 	ServiceName:  "SREManualAction",
 	Description:  "Your cluster's user workload monitoring is misconfigured: please review the user-workload-monitoring-config ConfigMap in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
 	InternalOnly: false,
 }
+
+var uwmAMMisconfiguredSL = ocm.ServiceLog{
+	Severity:     "Major",
+	Summary:      "Action required: review user-workload-monitoring configuration",
+	ServiceName:  "SREManualAction",
+	Description:  "Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
+	InternalOnly: false,
+}
+
+var uwmGenericMisconfiguredSL = ocm.ServiceLog{
+	Severity:     "Major",
+	Summary:      "Action required: review user-workload-monitoring configuration",
+	ServiceName:  "SREManualAction",
+	Description:  "Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
+	InternalOnly: false,
+}
+
+const available = "Available"
 
 type Investigation struct{}
 
@@ -72,7 +90,31 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 	// If it is, send a service log and silence the alert.
 	if isUWMConfigInvalid(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmMisconfiguredSL)
+		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmConfigMapMisconfiguredSL)
+		if err != nil {
+			return result, fmt.Errorf("failed posting servicelog: %w", err)
+		}
+		// XXX: No metric before
+		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
+
+		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+	}
+
+	if isUWMAlertManagerBroken(&monitoringCo) {
+		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager), sending service log and silencing the alert")
+		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmAMMisconfiguredSL)
+		if err != nil {
+			return result, fmt.Errorf("failed posting servicelog: %w", err)
+		}
+		// XXX: No metric before
+		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
+
+		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+	}
+
+	if isUWMPrometheusBroken(&monitoringCo) {
+		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus), sending service log and silencing the alert")
+		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmGenericMisconfiguredSL)
 		if err != nil {
 			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}
@@ -84,7 +126,7 @@ func (c *Investigation) Run(r *investigation.Resources) (result investigation.In
 
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
-	notes.AppendSuccess("Monitoring CO not degraded due to a broken UWM configmap")
+	notes.AppendSuccess("Monitoring CO not degraded due to UWM misconfiguration")
 	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 }
 
@@ -109,7 +151,29 @@ func isUWMConfigInvalid(monitoringCo *configv1.ClusterOperator) bool {
 	symptomStatusString := `the User Workload Configuration from "config.yaml" key in the "openshift-user-workload-monitoring/user-workload-monitoring-config" ConfigMap could not be parsed`
 
 	for _, condition := range monitoringCo.Status.Conditions {
-		if condition.Type == "Available" {
+		if condition.Type == available {
+			return strings.Contains(condition.Message, symptomStatusString)
+		}
+	}
+	return false
+}
+
+func isUWMAlertManagerBroken(monitoringCo *configv1.ClusterOperator) bool {
+	symptomStatusString := `UpdatingUserWorkloadAlertmanager: waiting for Alertmanager User Workload object changes failed: waiting for Alertmanager openshift-user-workload-monitoring/user-workload`
+
+	for _, condition := range monitoringCo.Status.Conditions {
+		if condition.Type == available {
+			return strings.Contains(condition.Message, symptomStatusString)
+		}
+	}
+	return false
+}
+
+func isUWMPrometheusBroken(monitoringCo *configv1.ClusterOperator) bool {
+	symptomStatusString := `UpdatingUserWorkloadPrometheus: Prometheus "openshift-user-workload-monitoring/user-workload": NoPodReady`
+
+	for _, condition := range monitoringCo.Status.Conditions {
+		if condition.Type == available {
 			return strings.Contains(condition.Message, symptomStatusString)
 		}
 	}
