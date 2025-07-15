@@ -28,7 +28,7 @@ check_presence "haproxy"
 check_presence "proxytunnel"
 
 #loading env vars
-. ${CAD_REPO_PATH}/test/set_stage_env.sh 
+. ${CAD_REPO_PATH}/test/set_stage_env.sh
 
 #checking env vars
 set +u
@@ -38,7 +38,7 @@ if [[ -z "${OCM_BACKPLANE_REPO_PATH}" ]]; then
 fi
 set -u
 
-if ! [ $(cat ${OCM_BACKPLANE_REPO_PATH}/configs/ocm.json | jq -r .client_id) = "ocm-backplane-staging" ]; then
+if ! [ "$(cat ${OCM_BACKPLANE_REPO_PATH}/configs/ocm.json | jq -r .client_id)" = "ocm-backplane-staging" ]; then
     echo "OCM Backplane ocm.json (${OCM_BACKPLANE_REPO_PATH}/configs/ocm.json) isn't the ocm-backplane-staging config."
     echo "Please get the config from a backplane pod on a staging backplanes0* cluster (in /ocm inside the pod)"
     echo "and place it in the configs subdirectory of the backplane-api repo."
