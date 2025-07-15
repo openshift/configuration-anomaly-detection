@@ -53,7 +53,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 
-		ocme2eCli, err = ocme2e.New(ctx, " ", clientID, clientSecret, ocmEnv)
+		ocme2eCli, err = ocme2e.New(ctx, "", clientID, clientSecret, ocmEnv)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
 
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
