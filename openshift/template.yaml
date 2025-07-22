@@ -416,3 +416,22 @@ objects:
   subjects:
   - kind: ServiceAccount
     name: cad-tekton-pruner
+- apiVersion: v1
+  kind: LimitRange
+  metadata:
+    name: cad-limitrange
+  spec:
+    limits:
+    - default:  # The default limits
+        cpu: 500m
+        memory: 256Mi
+      defaultRequest:  # The default requests
+        cpu: 100m
+        memory: 128Mi
+      max:  # The maximum limits
+        cpu: 1
+        memory: 1Gi
+      min:  # The minimum requests
+        cpu: 1m
+        memory: 32Mi
+      type: Container
