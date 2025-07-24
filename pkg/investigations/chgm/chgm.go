@@ -29,7 +29,7 @@ var (
 
 	egressLS = ocm.LimitedSupportReason{
 		Summary: "Cluster is in Limited Support due to unsupported cloud provider configuration",
-		Details: "Action required: Network configuration changes detected that block required internet egress, impacting cluster operation and support. Please revert these changes. For firewall requirements for PrivateLink clusters, see: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs and to determine broken URLs, see: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/networking/rosa-network-verification_ingress-node-firewall-operator",
+		Details: "Action required: Network configuration changes detected that block required internet egress, impacting cluster operation and support. Please revert these changes. For firewall requirements for PrivateLink clusters and troubleshooting help, see: https://access.redhat.com/articles/7128431",
 	}
 )
 
