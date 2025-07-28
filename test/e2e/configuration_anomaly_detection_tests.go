@@ -47,8 +47,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
 		ocmEnv := ocme2e.Stage
-		clientID := os.Getenv("CLIENT_ID")
-		clientSecret := os.Getenv("CLIENT_SECRET")
+		clientID := os.Getenv("OCM_CLIENT_ID")
+		clientSecret := os.Getenv("OCM_CLIENT_SECRET")
 		clusterID = os.Getenv("OCM_CLUSTER_ID")
 
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
