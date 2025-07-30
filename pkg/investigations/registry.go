@@ -1,7 +1,6 @@
 package investigations
 
 import (
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/apierrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cannotretrieveupdatessre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
@@ -15,7 +14,6 @@ import (
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
-	&apierrorbudgetburn.Investigation{},
 	&ccam.Investigation{},
 	&chgm.Investiation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
