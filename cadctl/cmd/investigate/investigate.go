@@ -118,34 +118,26 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
-	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil || result.StopInvestigations {
-		return err
+	if err != nil && strings.Contains(err.Error(), "no cluster found") {
+		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
 	}
 
 	ccamInvestigation := ccam.Investigation{}
 	result, err = ccamInvestigation.Run(builder)
-	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil {
+	if err != nil {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err = alertInvestigation.Run(builder)
-	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil {
+	if err != nil {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
 
 	return updateIncidentTitle(pdClient)
-}
-
-// handleClusterNotFound centralizes the logic for this specific error case.
-func handleClusterNotFound(clusterID string, pdClient *pagerduty.SdkClient, investigationErr error) error {
-	if investigationErr != nil && strings.Contains(investigationErr.Error(), "no cluster found") {
-		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
-		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
-	}
-	return investigationErr
 }
 
 func handleCADFailure(err error, rb *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
