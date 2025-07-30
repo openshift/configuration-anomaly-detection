@@ -53,7 +53,7 @@ For testing against clusters:
 **investigations** - Modular alert investigation implementations
 - Location: `pkg/investigations/`
 - Each investigation implements the `Investigation` interface
-- Investigations include: chgm, ccam, apierrorbudgetburn, etc.
+- Investigations include: chgm, ccam, clustermonitoringerrorbudgetburn, etc.
 
 ### Investigation Framework
 
