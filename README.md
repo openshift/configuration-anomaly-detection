@@ -113,7 +113,7 @@ They are initialized for you and passed to the investigation via investigation.R
 ## Testing locally
 
 ### Against upstream stage OCM Backplane
-Requires an existing cluster. Requires that the metadata.yaml is commited to the main branch of the upstream repo (see below for testing against a local metadata.yaml).
+Requires an existing cluster. Requires that the metadata.yaml is committed to the main branch of the upstream repo (see below for testing against a local metadata.yaml).
 
 1. Create a test incident and payload file for your cluster
 
@@ -139,7 +139,7 @@ Requires an existing cluster. Requires that the metadata.yaml is commited to the
 ### Against local OCM Backplane
 Requires existing cluster, same as above.
 The requests to /backplane/remediate and /backplane/remediation OCM Backplane endpoints are redirected to the local instance of OCM Backplane.
-This means the metadata.yaml commited to the main branch on your local disk is used to grant permissions (an alternate branch will be available after SREP-636 is complete).
+This means the metadata.yaml committed to the main branch on your local disk is used to grant permissions (an alternate branch will be available after SREP-636 is complete).
 
 Make sure to install the dependencies first with
 ```
