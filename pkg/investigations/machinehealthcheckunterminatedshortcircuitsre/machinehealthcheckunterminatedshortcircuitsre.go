@@ -60,12 +60,16 @@ func (i *Investigation) teardown() error {
 // The machine object is evaluated first, as it represents a lower-level object that could affect the health of the node.
 // If the investigation determines that the breakage is occurring at the machine-level, the corresponding node is *not* investigated.
 // After investigating all affected machines, potentially affected nodes are investigated.
-func (i *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
 	result := investigation.InvestigationResult{}
+	r, err := rb.Build()
+	if err != nil {
+		return result, err
+	}
 
 	// Setup & teardown
-	err := i.setup(r)
+	err = i.setup(r)
 	if err != nil {
 		return result, fmt.Errorf("failed to setup investigation: %w", err)
 	}

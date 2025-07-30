@@ -19,8 +19,12 @@ import (
 
 type Investigation struct{}
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
+	r, err := rb.WithAwsClient().Build()
+	if err != nil {
+		return result, err
+	}
 	notes := notewriter.New(r.Name, logging.RawLogger)
 
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)

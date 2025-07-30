@@ -18,8 +18,12 @@ import (
 type Investigation struct{}
 
 // Run executes the investigation for the CannotRetrieveUpdatesSRE alert
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
+	r, err := rb.WithAwsClient().Build()
+	if err != nil {
+		return result, err
+	}
 	notes := notewriter.New("CannotRetrieveUpdatesSRE", logging.RawLogger)
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
 	if err != nil {
