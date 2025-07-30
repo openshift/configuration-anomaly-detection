@@ -26,9 +26,9 @@ const (
 	remediationName = "upgradeconfigsyncfailureover4hr"
 )
 
-func (c *Investigation) Run(b investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := b.Build()
+	r, err := rb.Build()
 	if err != nil {
 		return result, err
 	}

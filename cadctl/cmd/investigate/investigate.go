@@ -148,13 +148,22 @@ func run(cmd *cobra.Command, _ []string) error {
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, builder *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
+// handleClusterNotFound centralizes the logic for this specific error case.
+func handleClusterNotFound(clusterID string, pdClient *pagerduty.SdkClient, investigationErr error) error {
+	if investigationErr != nil && strings.Contains(investigationErr.Error(), "no cluster found") {
+		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+	}
+	return investigationErr
+}
+
+func handleCADFailure(err error, rb *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
 	// The builder caches resources, so we can access them here even if a later step failed.
 	// We ignore the error here because we just want to get any notes that were created.
-	resources, _ := builder.Build()
+	resources, _ := rb.Build()
 	if resources != nil && resources.Notes != nil {
 		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
 		notes = resources.Notes.String()

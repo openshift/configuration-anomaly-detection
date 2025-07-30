@@ -18,9 +18,9 @@ import (
 type Investigation struct{}
 
 // Run executes the investigation for the CannotRetrieveUpdatesSRE alert
-func (c *Investigation) Run(b investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := b.WithAwsClient().Build()
+	r, err := rb.WithAwsClient().Build()
 	if err != nil {
 		return result, err
 	}

@@ -45,8 +45,8 @@ const available = "Available"
 
 type Investigation struct{}
 
-func (c *Investigation) Run(b investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
-	r, err := b.Build()
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
+	r, err := rb.Build()
 	if err != nil {
 		return investigation.InvestigationResult{}, err
 	}

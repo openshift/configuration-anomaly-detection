@@ -36,9 +36,9 @@ var (
 type Investiation struct{}
 
 // Run runs the investigation for a triggered chgm pagerduty event
-func (c *Investiation) Run(b investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := b.WithClusterDeployment().Build()
+	r, err := rb.WithClusterDeployment().Build()
 	if err != nil {
 		return result, err
 	}
