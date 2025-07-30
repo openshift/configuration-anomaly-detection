@@ -125,7 +125,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return investigationErr
 	}
 
-	precheck := precheck.Investigation{}
+	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
 	if err = handleClusterNotFound(err); err != nil || result.StopInvestigations {
 		return err

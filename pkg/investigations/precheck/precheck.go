@@ -6,13 +6,13 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
-type Investigation struct{}
+type ClusterStatePrecheck struct{}
 
 // Checks pre-requisites for a cluster investigation:
 // - the cluster's state is supported by CAD for an investigation (= not uninstalling)
 // - the cloud provider is supported by CAD (cluster is AWS)
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.Build()
 	if err != nil {

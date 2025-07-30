@@ -20,14 +20,14 @@ func TestInvestigation_Run(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		c       *Investigation
+		c       *ClusterStatePrecheck
 		args    args
 		want    investigation.InvestigationResult
 		wantErr bool
 	}{
 		{
 			"cloud provider unsupported stops investigation",
-			&Investigation{},
+			&ClusterStatePrecheck{},
 			args{rb: &investigation.ResourceBuilderMock{
 				Resources: &investigation.Resources{
 					Cluster:   &cmv1.Cluster{},
@@ -41,7 +41,7 @@ func TestInvestigation_Run(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Investigation{}
+			c := &ClusterStatePrecheck{}
 			got, err := c.Run(tt.args.rb)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Investigation.Run() error = %v, wantErr %v", err, tt.wantErr)
