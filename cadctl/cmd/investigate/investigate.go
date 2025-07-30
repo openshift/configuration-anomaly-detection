@@ -116,31 +116,22 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Prime the builder with information required for all investigations.
 	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevelFlag, pipelineNameEnv)
 
-	// handleClusterNotFound centralizes the logic for this specific error case.
-	handleClusterNotFound := func(investigationErr error) error {
-		if investigationErr != nil && strings.Contains(investigationErr.Error(), "no cluster found") {
-			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
-			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
-		}
-		return investigationErr
-	}
-
 	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
-	if err = handleClusterNotFound(err); err != nil || result.StopInvestigations {
+	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil || result.StopInvestigations {
 		return err
 	}
 
-	inv := ccam.Investigation{}
-	result, err = inv.Run(builder)
-	if err = handleClusterNotFound(err); err != nil {
+	ccamInvestigation := ccam.Investigation{}
+	result, err = ccamInvestigation.Run(builder)
+	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err = alertInvestigation.Run(builder)
-	if err = handleClusterNotFound(err); err != nil {
+	if err = handleClusterNotFound(clusterID, pdClient, err); err != nil {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
