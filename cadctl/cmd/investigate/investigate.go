@@ -28,7 +28,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
-	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 
 	"github.com/spf13/cobra"
@@ -101,26 +100,28 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ocmClient, err := ocm.New()
+	builder, err := investigation.NewResourceBuilder(pdClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv)
 	if err != nil {
-		return fmt.Errorf("could not initialize ocm client: %w", err)
+		return fmt.Errorf("failed to create resource builder: %w", err)
 	}
 
-	builder := &investigation.ResourceBuilderT{}
 	defer func() {
 		if err != nil {
 			handleCADFailure(err, builder, pdClient)
 		}
 	}()
 
-	// Prime the builder with information required for all investigations.
-	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevelFlag, pipelineNameEnv)
-
 	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
-	if err != nil && strings.Contains(err.Error(), "no cluster found") {
-		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
-		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+	if err != nil {
+		if strings.Contains(err.Error(), "no cluster found") {
+			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		}
+		return err
+	}
+	if result.StopInvestigations {
+		return nil
 	}
 
 	ccamInvestigation := ccam.Investigation{}
@@ -140,7 +141,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, rb *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
