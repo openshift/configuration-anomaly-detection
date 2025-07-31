@@ -68,7 +68,20 @@ As PagerDuty itself does not provide finer granularity for webhooks than service
 To add a new alert investigation:
 
 - run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
-- investigation.Resources contain initialized clients for the clusters aws environment, ocm and more. See [Integrations](#integrations)
+- The `Run` method of your investigation receives a `ResourceBuilder`. Use its `With...` methods to request the resources your investigation needs, then call `Build()` to get a `Resources` struct containing them. The builder automatically handles dependencies between resources (e.g., requesting an AWS client will also initialize the cluster object). For example:
+  ```go
+  func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+      result := investigation.InvestigationResult{}
+      // Request an AWS client. This will also ensure the Cluster resource is built.
+      r, err := rb.WithAwsClient().Build()
+      if err != nil {
+          return result, err
+      }
+      // Now you can use r.AwsClient, r.Cluster, r.PdClient, etc.
+      // ...
+  }
+  ```
+- The returned `Resources` struct contains initialized clients and cluster objects. See [Integrations](#integrations) for a full list of available resources.
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
 
 ### Graduating an investigation
