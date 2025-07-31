@@ -63,7 +63,7 @@ func (i *Investigation) teardown() error {
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
 	result := investigation.InvestigationResult{}
-	r, err := rb.Build()
+	r, err := rb.WithCluster().Build()
 	if err != nil {
 		return result, err
 	}
