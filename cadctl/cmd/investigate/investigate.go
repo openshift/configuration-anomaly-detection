@@ -17,7 +17,6 @@ limitations under the License.
 package investigate
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,7 +30,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
-	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 
 	"github.com/spf13/cobra"
@@ -143,13 +142,16 @@ func run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-
 	ocmClient, err := ocm.New(ocmClientID, ocmClientSecret, ocmURL)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	builder := &investigation.ResourceBuilderT{}
+	builder, err := investigation.NewResourceBuilder(pdClient, ocmClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv)
+	if err != nil {
+		return fmt.Errorf("failed to create resource builder: %w", err)
+	}
+
 	defer func() {
 		// The builder caches resources, so we can access them here even if a later step failed.
 		// We ignore the error here because we just want to get any resources that were created.
@@ -167,18 +169,18 @@ func run(cmd *cobra.Command, _ []string) error {
 			}
 		}
 		if err != nil {
-			handleCADFailure(err, resources, pdClient)
+			handleCADFailure(err, builder, pdClient)
 		}
 	}()
 
-	// Prime the builder with information required for all investigations.
-	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevelFlag, pipelineNameEnv)
-
 	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
-	if err != nil && strings.Contains(err.Error(), "no cluster found") {
-		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
-		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+	if err != nil {
+		if strings.Contains(err.Error(), "no cluster found") {
+			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+		}
+		return err
 	}
 	if result.StopInvestigations {
 		return nil
@@ -200,14 +202,12 @@ func run(cmd *cobra.Command, _ []string) error {
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
-	var docErr *ocm.DocumentationMismatchError
-	if errors.As(err, &docErr) {
-		escalateDocumentationMismatch(docErr, resources, pdClient)
-		return
-	}
-
+func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
+	resources, err := rb.Build()
+	if err != nil {
+		logging.Errorf("resource builder failed with error: %v", err)
+	}
 
 	var notes string
 	if resources != nil && resources.Notes != nil {

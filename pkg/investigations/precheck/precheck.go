@@ -14,7 +14,7 @@ type ClusterStatePrecheck struct{}
 // Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
 func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.Build()
+	r, err := rb.WithCluster().Build()
 	if err != nil {
 		return result, err
 	}
@@ -36,7 +36,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 	isAccessProtected, err := ocmClient.IsAccessProtected(cluster)
 	if err != nil {
 		logging.Warnf("failed to get access protection status for cluster: %v. Escalating for manual handling.", err)
-		result.StopInvestigations = true
+		result.StopInvestigations = errors.New("access protection could not be determined")
 		return result, pdClient.EscalateIncidentWithNote("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually.")
 	}
 	if isAccessProtected {

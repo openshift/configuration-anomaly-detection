@@ -41,7 +41,7 @@ func newBYOVPCRoutingSL(docLink string) *ocm.ServiceLog {
 // In the future, we want to automate service logs based on the network verifier output.
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithClusterDeployment().Build()
+	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
 	if err != nil {
 		return result, err
 	}

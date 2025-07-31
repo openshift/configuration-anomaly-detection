@@ -46,7 +46,7 @@ type Investigation struct {
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithK8sClient().Build()
+	r, err := rb.WithCluster().Build()
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
