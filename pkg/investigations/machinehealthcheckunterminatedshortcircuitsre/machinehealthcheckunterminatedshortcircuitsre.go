@@ -121,7 +121,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Summarize recommendations from investigation in PD notes, if any found
 	if len(i.recommendations) > 0 {
-		i.notes.AppendWarning(i.recommendations.summarize())
+		i.notes.AppendWarning("%s", i.recommendations.summarize())
 	} else {
 		i.notes.AppendSuccess("no recommended actions to take against cluster")
 	}

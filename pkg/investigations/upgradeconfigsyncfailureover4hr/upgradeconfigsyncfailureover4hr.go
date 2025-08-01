@@ -51,7 +51,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if userBannedStatus {
-		notes.AppendWarning(userBannedNotes)
+		notes.AppendWarning("%s", userBannedNotes)
 	} else {
 		notes.AppendSuccess("User is not banned.")
 	}
@@ -63,7 +63,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if note != "" {
-		notes.AppendWarning(note)
+		notes.AppendWarning("%s", note)
 	}
 	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
