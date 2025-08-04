@@ -24,8 +24,8 @@ type InvestigationResult struct {
 	ServiceLogSent     InvestigationStep
 
 	// If multiple investigations might be run this can indicate a fatal error that makes running additional investigations useless.
-	// Uses a false-default so it must be set expclicitly by an investigation.
-	StopInvestigations bool
+	// If nil, investigations should continue. If not nil, should contain a meaningful error message explaining why investigations must stop.
+	StopInvestigations error
 }
 
 func NewResourceBuilder(pdClient pagerduty.Client, clusterId string, name string, logLevel string, pipelineName string) (ResourceBuilder, error) {
