@@ -1,7 +1,6 @@
 package investigation
 
 import (
-	"errors"
 	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -25,8 +24,30 @@ type InvestigationResult struct {
 	ServiceLogSent     InvestigationStep
 
 	// If multiple investigations might be run this can indicate a fatal error that makes running additional investigations useless.
-	// Uses a false-default so it must be set expclicitly by an investigation.
-	StopInvestigations bool
+	// If nil, investigations should continue. If not nil, should contain a meaningful error message explaining why investigations must stop.
+	StopInvestigations error
+}
+
+func NewResourceBuilder(pdClient pagerduty.Client, clusterId string, name string, logLevel string, pipelineName string) (ResourceBuilder, error) {
+	ocmClient, err := ocm.New()
+	if err != nil {
+		return nil, fmt.Errorf("could not create ocm client: %w", err)
+	}
+
+	rb := &ResourceBuilderT{
+		buildLogger:  true,
+		clusterId:    clusterId,
+		name:         name,
+		logLevel:     logLevel,
+		pipelineName: pipelineName,
+		ocmClient:    ocmClient,
+		builtResources: &Resources{
+			PdClient:  pdClient,
+			OcmClient: ocmClient,
+		},
+	}
+
+	return rb, nil
 }
 
 type Investigation interface {
@@ -51,14 +72,10 @@ type Resources struct {
 }
 
 type ResourceBuilder interface {
-	WithCluster(clusterId string) ResourceBuilder
+	WithCluster() ResourceBuilder
 	WithClusterDeployment() ResourceBuilder
 	WithAwsClient() ResourceBuilder
-	WithOcmClient(*ocm.SdkClient) ResourceBuilder
-	WithPagerDutyClient(client *pagerduty.SdkClient) ResourceBuilder
 	WithNotes() ResourceBuilder
-	WithName(name string) ResourceBuilder
-	WithLogger(logLevel string, pipelineName string) ResourceBuilder
 	Build() (*Resources, error)
 }
 
@@ -69,43 +86,32 @@ type ResourceBuilderT struct {
 	buildNotes             bool
 	buildLogger            bool
 
-	// These clients are required for all investigations and all clusters, so they are pre-filled.
-	pdClient  *pagerduty.SdkClient
-	ocmClient *ocm.SdkClient
-
 	clusterId    string
 	name         string
 	logLevel     string
 	pipelineName string
+
+	ocmClient *ocm.SdkClient
 
 	// cache
 	builtResources *Resources
 	buildErr       error
 }
 
-func (r *ResourceBuilderT) WithCluster(clusterId string) ResourceBuilder {
+func (r *ResourceBuilderT) WithCluster() ResourceBuilder {
 	r.buildCluster = true
-	r.clusterId = clusterId
 	return r
 }
 
 func (r *ResourceBuilderT) WithClusterDeployment() ResourceBuilder {
+	r.WithCluster()
 	r.buildClusterDeployment = true
 	return r
 }
 
 func (r *ResourceBuilderT) WithAwsClient() ResourceBuilder {
+	r.WithCluster()
 	r.buildAwsClient = true
-	return r
-}
-
-func (r *ResourceBuilderT) WithOcmClient(client *ocm.SdkClient) ResourceBuilder {
-	r.ocmClient = client
-	return r
-}
-
-func (r *ResourceBuilderT) WithPagerDutyClient(client *pagerduty.SdkClient) ResourceBuilder {
-	r.pdClient = client
 	return r
 }
 
@@ -114,41 +120,15 @@ func (r *ResourceBuilderT) WithNotes() ResourceBuilder {
 	return r
 }
 
-func (r *ResourceBuilderT) WithName(name string) ResourceBuilder {
-	r.name = name
-	return r
-}
-
-func (r *ResourceBuilderT) WithLogger(logLevel string, pipelineName string) ResourceBuilder {
-	r.buildLogger = true
-	r.logLevel = logLevel
-	r.pipelineName = pipelineName
-	return r
-}
-
 func (r *ResourceBuilderT) Build() (*Resources, error) {
 	if r.buildErr != nil {
 		return nil, r.buildErr
 	}
 
-	if r.builtResources == nil {
-		r.builtResources = &Resources{
-			Name:      r.name,
-			OcmClient: r.ocmClient,
-			PdClient:  r.pdClient,
-		}
-	}
+	// The Name is now set during construction.
+	r.builtResources.Name = r.name
 
 	var err error
-
-	if r.buildClusterDeployment && !r.buildCluster {
-		r.buildErr = errors.New("cannot build ClusterDeployment without Cluster")
-		return nil, r.buildErr
-	}
-	if r.buildAwsClient && !r.buildCluster {
-		r.buildErr = errors.New("cannot build AwsClient without Cluster")
-		return nil, r.buildErr
-	}
 
 	if r.buildCluster && r.builtResources.Cluster == nil {
 		r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
@@ -183,7 +163,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 
 		if r.buildLogger {
 			// Re-initialize the logger with the cluster ID.
-			logging.RawLogger = logging.InitLogger(r.logLevel, "", internalClusterId)
+			logging.RawLogger = logging.InitLogger(r.logLevel, r.pipelineName, internalClusterId)
 		}
 	}
 
@@ -200,7 +180,7 @@ type ResourceBuilderMock struct {
 	BuildError error
 }
 
-func (r *ResourceBuilderMock) WithCluster(clusterId string) ResourceBuilder {
+func (r *ResourceBuilderMock) WithCluster() ResourceBuilder {
 	return r
 }
 
@@ -212,23 +192,7 @@ func (r *ResourceBuilderMock) WithAwsClient() ResourceBuilder {
 	return r
 }
 
-func (r *ResourceBuilderMock) WithOcmClient(client *ocm.SdkClient) ResourceBuilder {
-	return r
-}
-
-func (r *ResourceBuilderMock) WithPagerDutyClient(client *pagerduty.SdkClient) ResourceBuilder {
-	return r
-}
-
 func (r *ResourceBuilderMock) WithNotes() ResourceBuilder {
-	return r
-}
-
-func (r *ResourceBuilderMock) WithName(name string) ResourceBuilder {
-	return r
-}
-
-func (r *ResourceBuilderMock) WithLogger(logLevel string, pipelineName string) ResourceBuilder {
 	return r
 }
 

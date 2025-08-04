@@ -1,6 +1,7 @@
 package precheck
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestInvestigation_Run(t *testing.T) {
 					PdClient:  pdClient,
 				},
 			}},
-			investigation.InvestigationResult{StopInvestigations: true},
+			investigation.InvestigationResult{StopInvestigations: errors.New("unsupported cloud provider (non-AWS)")},
 			false,
 		},
 	}
