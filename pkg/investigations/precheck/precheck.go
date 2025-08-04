@@ -1,6 +1,8 @@
 package precheck
 
 import (
+	"errors"
+
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -23,13 +25,13 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 	ocmClient := r.OcmClient
 	if cluster.State() == cmv1.ClusterStateUninstalling {
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
-		result.StopInvestigations = true
+		result.StopInvestigations = errors.New("cluster is already uninstalling")
 		return result, pdClient.SilenceIncidentWithNote("CAD: Cluster is already uninstalling, silencing alert.")
 	}
 
 	if cluster.AWS() == nil {
 		logging.Info("Cloud provider unsupported, forwarding to primary.")
-		result.StopInvestigations = true
+		result.StopInvestigations = errors.New("unsupported cloud provider (non-AWS)")
 		return result, pdClient.EscalateIncidentWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
 	}
 
@@ -41,7 +43,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 	}
 	if isAccessProtected {
 		logging.Info("Cluster is access protected. Escalating alert.")
-		result.StopInvestigations = true
+		result.StopInvestigations = errors.New("cluster is access protected")
 		return result, pdClient.EscalateIncidentWithNote("CAD is unable to run against access protected clusters. Please investigate.")
 	}
 	return result, nil
