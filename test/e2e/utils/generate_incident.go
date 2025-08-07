@@ -64,7 +64,7 @@ func (c *client) TriggerIncident(alertName, clusterID string) (string, error) {
 		Action:     "trigger",
 		DedupKey:   generateUUID(),
 		Payload: &sdk.V2Payload{
-			Summary:   summary,
+			Summary:   summary + "- E2E",
 			Source:    "cad-integration-testing",
 			Severity:  "critical",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),

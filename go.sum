@@ -84,8 +84,8 @@ github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3 h1:bIqFDwgGXXN1Kpp99pDOdKMTTb5d
 github.com/aws/aws-sdk-go-v2/internal/ini v1.8.3/go.mod h1:H5O/EsxDWyU+LP/V8i5sm8cxoZgc2fdNR9bxlOFrQTo=
 github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5 h1:M173nCC5U4dTsUTxNbxNiyFq20LB33dtXkVbo8G2BP8=
 github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5/go.mod h1:/+sRHIT00VCsc4kPTtSFoQab044bx72J3Nbp9rH9orA=
-github.com/aws/aws-sdk-go-v2/service/ec2 v1.237.0 h1:XHE2G+yaDQql32FZt19QmQt4WuisqQJIkMUSCxeCUl8=
-github.com/aws/aws-sdk-go-v2/service/ec2 v1.237.0/go.mod h1:t11/j/nH9i6bbsPH9xc04BJOsV2nVPUqrB67/TLDsyM=
+github.com/aws/aws-sdk-go-v2/service/ec2 v1.239.0 h1:pPuzRQQoRY7pwxlNf1//yz5goxB98p1KMa3cdBO+E1E=
+github.com/aws/aws-sdk-go-v2/service/ec2 v1.239.0/go.mod h1:lhyI/MJGGbPnOdYmmQRZe07S+2fW2uWI1XrUfAZgXLM=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.0 h1:6+lZi2JeGKtCraAj1rpoZfKqnQ9SptseRZioejfUOLM=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.0/go.mod h1:eb3gfbVIxIoGgJsi9pGne19dhCBpK6opTYpQqAmdy44=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.1 h1:ky79ysLMxhwk5rxJtS+ILd3Mc8kC5fhsLBrP27r6h4I=
@@ -459,8 +459,8 @@ github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060 h1:MIseGDYL78F
 github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060/go.mod h1:XUEuhGkTuSXP+eb0LtY3/iJTs/3Fc18CVkqMsmgN+gg=
 github.com/openshift/osd-network-verifier v1.3.0 h1:dDBpsFLMkQ33rrF1BGMNU7A4qbqgoa8pZUSx0j4QPdM=
 github.com/openshift/osd-network-verifier v1.3.0/go.mod h1:oXfoEaGxqgiAvP5y1JJXKq/48n+3+1182wckkjZ5GjY=
-github.com/openshift/osde2e-common v0.0.0-20250731092101-e587d26fd3e2 h1:9ZdXhE7p+TQm3ZrkTmVO6fW+xTMN7UaBsDIIFwDQiNQ=
-github.com/openshift/osde2e-common v0.0.0-20250731092101-e587d26fd3e2/go.mod h1:9wgD0+/W3G9xanob51DtEk7rAfdQ9ZIaDIkY0mgmV0I=
+github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777 h1:tAgQfMTlBbfH88Q3pA6DeyifRZ4j0Yj6Wx9eySJDbuk=
+github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777/go.mod h1:PVd8CEETL2pM+J4f0yLF6B+6PLfaZ2hVKiAOm+ejoFQ=
 github.com/openzipkin/zipkin-go v0.4.3 h1:9EGwpqkgnwdEIJ+Od7QVSEIH+ocmm5nPat0G7sjsSdg=
 github.com/openzipkin/zipkin-go v0.4.3/go.mod h1:M9wCJZFWCo2RiY+o1eBCEMe0Dp2S5LDHcMZmk3RmK7c=
 github.com/pelletier/go-toml/v2 v2.2.3 h1:YmeHyLY8mFWbdkNWwpr+qIL2bEqT0o95WSdkNHvL12M=
