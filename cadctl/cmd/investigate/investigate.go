@@ -122,6 +122,9 @@ func run(cmd *cobra.Command, _ []string) error {
 		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
 		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
 	}
+	if result.StopInvestigations {
+		return nil
+	}
 
 	ccamInvestigation := ccam.Investigation{}
 	result, err = ccamInvestigation.Run(builder)
