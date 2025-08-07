@@ -35,7 +35,9 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 
 	isAccessProtected, err := ocmClient.IsAccessProtected(cluster)
 	if err != nil {
-		logging.Warnf("failed to get access protection status for cluster. %w. Continuing...")
+		logging.Warnf("failed to get access protection status for cluster: %v. Escalating for manual handling.", err)
+		result.StopInvestigations = true
+		return result, pdClient.EscalateIncidentWithNote("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually.")
 	}
 	if isAccessProtected {
 		logging.Info("Cluster is access protected. Escalating alert.")
