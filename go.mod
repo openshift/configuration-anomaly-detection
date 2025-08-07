@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.30.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.18.2
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.42.5
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.237.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.239.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.35.1
 	github.com/onsi/gomega v1.38.0
 	github.com/openshift-online/ocm-sdk-go v0.1.473
@@ -17,7 +17,7 @@ require (
 	github.com/openshift/backplane-cli v0.2.0
 	github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060
 	github.com/openshift/osd-network-verifier v1.3.0
-	github.com/openshift/osde2e-common v0.0.0-20250731092101-e587d26fd3e2
+	github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/common v0.65.0
 	github.com/spf13/cobra v1.9.1
