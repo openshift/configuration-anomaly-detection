@@ -21,3 +21,7 @@ updates:
       - dependency-type: all
     schedule:
       interval: "daily"
+    groups:
+      golang-dependencies:
+        patterns:
+          - "*"
