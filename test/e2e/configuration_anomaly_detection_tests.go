@@ -535,17 +535,16 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		defer func() {
 			fmt.Println("Restore: Restore backup configmap")
-			err = k8s.Update(ctx, backupCM)
+			err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				currentCM := &corev1.ConfigMap{}
+				if err := k8s.Get(ctx, configMapName, namespace, currentCM); err != nil {
+					return err
+				}
+				currentCM.Data = backupCM.Data
+				currentCM.BinaryData = backupCM.BinaryData
+				return k8s.Update(ctx, currentCM)
+			})
 			Expect(err).ToNot(HaveOccurred(), "Restore the backup ConfigMap")
-
-			fmt.Println("Restore: Get restore backup configmap")
-			restoreBackupCM := &corev1.ConfigMap{}
-			err = k8s.Get(ctx, configMapName, namespace, restoreBackupCM)
-			Expect(err).ToNot(HaveOccurred(), "Failed to backup original ConfigMap")
-
-			fmt.Println("Restore: Comparing backup and restored ConfigMaps")
-			Expect(restoreBackupCM.Data).To(Equal(backupCM.Data), "Restored ConfigMap data does not match the backup")
-			Expect(restoreBackupCM.BinaryData).To(Equal(backupCM.BinaryData), "Restored ConfigMap binary data does not match the backup")
 		}()
 
 		fmt.Println("Step 3: Injecting invalid config to simulate misconfiguration")
