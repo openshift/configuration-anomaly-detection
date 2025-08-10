@@ -113,7 +113,7 @@ They are initialized for you and passed to the investigation via investigation.R
 ## Testing locally
 
 ### Against upstream stage OCM Backplane
-Requires an existing cluster. Requires that the metadata.yaml is commited to the main branch of the upstream repo (see below for testing against a local metadata.yaml).
+Requires an existing cluster. Requires that the metadata.yaml is committed to the main branch of the upstream repo (see below for testing against a local metadata.yaml).
 
 1. Create a test incident and payload file for your cluster
 
@@ -139,7 +139,7 @@ Requires an existing cluster. Requires that the metadata.yaml is commited to the
 ### Against local OCM Backplane
 Requires existing cluster, same as above.
 The requests to /backplane/remediate and /backplane/remediation OCM Backplane endpoints are redirected to the local instance of OCM Backplane.
-This means the metadata.yaml commited to the main branch on your local disk is used to grant permissions (an alternate branch will be available after SREP-636 is complete).
+This means the metadata.yaml committed to the main branch on your local disk is used to grant permissions (an alternate branch will be available after SREP-636 is complete).
 
 Make sure to install the dependencies first with
 ```
@@ -171,7 +171,7 @@ It will run services on the following local ports:8001 8091 8443 8888
 5. Run `cadctl` with the payload file created by `test/generate_incident.sh` and proxy as well as the backplane URL set to localhost
 
    ```bash
-   BACKPLANE_URL=https://localhost:8443 HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888 BACKPLANE_PROXY=http://127.0.0.1:8888  ./bin/cadctl investigate --payload-path ./payload --log-level debug"
+   BACKPLANE_URL=https://localhost:8443 HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888 BACKPLANE_PROXY=http://127.0.0.1:8888  ./bin/cadctl investigate --payload-path ./payload --log-level debug
    ```
 6. Close the local infrastructure when done by sending SIGINT (Ctrl+C) to the launch_local_env.sh
 
@@ -239,5 +239,3 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
 - `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See
-
-- `CAD_HCM_AI_TOKEN`: required for requests to the ai model

@@ -45,7 +45,11 @@ const available = "Available"
 
 type Investigation struct{}
 
-func (c *Investigation) Run(r *investigation.Resources) (result investigation.InvestigationResult, err error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
+	r, err := rb.Build()
+	if err != nil {
+		return investigation.InvestigationResult{}, err
+	}
 	// Initialize k8s client
 	// This would be better suited to be passend in with the investigation resources
 	// In turn we would need to split out ccam and k8sclient, as those are tied to a cluster

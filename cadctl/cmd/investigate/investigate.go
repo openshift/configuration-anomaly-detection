@@ -22,12 +22,11 @@ import (
 	"strconv"
 	"strings"
 
-	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -79,14 +78,6 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	logging.Infof("Incident link: %s", pdClient.GetIncidentRef())
 
-	var investigationResources *investigation.Resources
-
-	defer func() {
-		if err != nil {
-			handleCADFailure(err, investigationResources, pdClient)
-		}
-	}()
-
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
@@ -115,57 +106,50 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	cluster, err := ocmClient.GetClusterInfo(clusterID)
-	if err != nil {
-		if strings.Contains(err.Error(), "no cluster found") {
-			logging.Warnf("No cluster found with ID '%s'. Exiting.", clusterID)
-			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+	builder := &investigation.ResourceBuilderT{}
+	defer func() {
+		if err != nil {
+			handleCADFailure(err, builder, pdClient)
 		}
-		return fmt.Errorf("could not retrieve cluster info for %s: %w", clusterID, err)
+	}()
+
+	// Prime the builder with information required for all investigations.
+	builder.WithName(alertInvestigation.Name()).WithCluster(clusterID).WithPagerDutyClient(pdClient).WithOcmClient(ocmClient).WithLogger(logLevelFlag, pipelineNameEnv)
+
+	precheck := precheck.ClusterStatePrecheck{}
+	result, err := precheck.Run(builder)
+	if err != nil && strings.Contains(err.Error(), "no cluster found") {
+		logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+		return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
+	}
+	if result.StopInvestigations {
+		return nil
 	}
 
-	// From this point on, we normalize to internal ID, as this ID always exists.
-	// For installing clusters, externalID can be empty.
-	internalClusterID := cluster.ID()
-
-	// re-initialize logger for the internal-cluster-id context
-	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, internalClusterID)
-
-	requiresInvestigation, err := clusterRequiresInvestigation(cluster, pdClient, ocmClient)
-	if err != nil || !requiresInvestigation {
+	ccamInvestigation := ccam.Investigation{}
+	result, err = ccamInvestigation.Run(builder)
+	if err != nil {
 		return err
 	}
-
-	clusterDeployment, err := ocmClient.GetClusterDeployment(internalClusterID)
-	if err != nil {
-		return fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterID, err)
-	}
-
-	customerAwsClient, err := managedcloud.CreateCustomerAWSClient(cluster, ocmClient)
-	if err != nil {
-		ccamResources := &investigation.Resources{Name: "ccam", Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil, AdditionalResources: map[string]interface{}{"error": err}}
-		inv := ccam.Investigation{}
-		result, err := inv.Run(ccamResources)
-		updateMetrics(alertInvestigation.Name(), &result)
-		return err
-	}
-
-	investigationResources = &investigation.Resources{Name: alertInvestigation.Name(), Cluster: cluster, ClusterDeployment: clusterDeployment, AwsClient: customerAwsClient, OcmClient: ocmClient, PdClient: pdClient, Notes: nil}
+	updateMetrics(alertInvestigation.Name(), &result)
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
-	result, err := alertInvestigation.Run(investigationResources)
-	updateMetrics(alertInvestigation.Name(), &result)
+	result, err = alertInvestigation.Run(builder)
 	if err != nil {
 		return err
 	}
+	updateMetrics(alertInvestigation.Name(), &result)
 
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, rb *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
+	// The builder caches resources, so we can access them here even if a later step failed.
+	// We ignore the error here because we just want to get any notes that were created.
+	resources, _ := rb.Build()
 	if resources != nil && resources.Notes != nil {
 		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
 		notes = resources.Notes.String()
@@ -183,32 +167,6 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 	} else {
 		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
-}
-
-// Checks pre-requisites for a cluster investigation:
-// - the cluster's state is supported by CAD for an investigation (= not uninstalling)
-// - the cloud provider is supported by CAD (cluster is AWS)
-// Performs according pagerduty actions and returns whether CAD needs to investigate the cluster
-func clusterRequiresInvestigation(cluster *cmv1.Cluster, pdClient *pagerduty.SdkClient, ocmClient *ocm.SdkClient) (bool, error) {
-	if cluster.State() == cmv1.ClusterStateUninstalling {
-		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
-		return false, pdClient.SilenceIncidentWithNote("CAD: Cluster is already uninstalling, silencing alert.")
-	}
-
-	if cluster.AWS() == nil {
-		logging.Info("Cloud provider unsupported, forwarding to primary.")
-		return false, pdClient.EscalateIncidentWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.")
-	}
-
-	isAccessProtected, err := ocmClient.IsAccessProtected(cluster)
-	if err != nil {
-		logging.Warnf("failed to get access protection status for cluster. %w. Continuing...")
-	}
-	if isAccessProtected {
-		logging.Info("Cluster is access protected. Escalating alert.")
-		return false, pdClient.EscalateIncidentWithNote("CAD is unable to run against access protected clusters. Please investigate.")
-	}
-	return true, nil
 }
 
 func updateMetrics(investigationName string, result *investigation.InvestigationResult) {

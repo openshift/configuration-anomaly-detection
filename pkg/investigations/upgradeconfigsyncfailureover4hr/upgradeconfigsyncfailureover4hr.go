@@ -26,8 +26,12 @@ const (
 	remediationName = "upgradeconfigsyncfailureover4hr"
 )
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
+	r, err := rb.Build()
+	if err != nil {
+		return result, err
+	}
 	notes := notewriter.New("UpgradeConfigSyncFailureOver4Hr", logging.RawLogger)
 	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
 	if err != nil {
@@ -47,7 +51,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if userBannedStatus {
-		notes.AppendWarning(userBannedNotes)
+		notes.AppendWarning("%s", userBannedNotes)
 	} else {
 		notes.AppendSuccess("User is not banned.")
 	}
@@ -59,7 +63,7 @@ func (c *Investigation) Run(r *investigation.Resources) (investigation.Investiga
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if note != "" {
-		notes.AppendWarning(note)
+		notes.AppendWarning("%s", note)
 	}
 	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
