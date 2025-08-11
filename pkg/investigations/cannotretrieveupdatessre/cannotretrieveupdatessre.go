@@ -20,7 +20,7 @@ type Investigation struct{}
 // Run executes the investigation for the CannotRetrieveUpdatesSRE alert
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithAwsClient().Build()
+	r, err := rb.WithAwsClient().WithClusterDeployment().Build()
 	if err != nil {
 		return result, err
 	}
