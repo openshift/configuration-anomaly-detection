@@ -20,7 +20,7 @@ func TestEvaluateRandomError(t *testing.T) {
 		BuildError: timeoutError,
 	}
 
-	inv := Investigation{}
+	inv := CloudCredentialsCheck{}
 
 	_, err := inv.Run(&input)
 	if err.Error() != timeoutError.Error() {

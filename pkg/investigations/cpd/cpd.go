@@ -1,9 +1,8 @@
-// Package cpd contains functionality for the ClusterProvisioningDelay investigation
+// Package cpd contains functionality for the ClusterProvisioningDelay investigation package cpd
 package cpd
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -145,12 +144,12 @@ func (c *Investigation) Name() string {
 	return "ClusterProvisioningDelay"
 }
 
-func (c *Investigation) Description() string {
-	return "Investigates the ClusterProvisioningDelay alert"
+func (c *Investigation) AlertTitle() string {
+	return "ClusterProvisioningDelay -"
 }
 
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "ClusterProvisioningDelay -")
+func (c *Investigation) Description() string {
+	return "Investigates the ClusterProvisioningDelay alert"
 }
 
 func (c *Investigation) IsExperimental() bool {

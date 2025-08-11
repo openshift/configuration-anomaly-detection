@@ -12,16 +12,16 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
-type Investigation struct{}
+type CloudCredentialsCheck struct{}
 
 var ccamLimitedSupport = &ocm.LimitedSupportReason{
 	Summary: "Restore missing cloud credentials",
 	Details: "Your cluster requires you to take action because Red Hat is not able to access the infrastructure with the provided credentials. Please restore the credentials and permissions provided during install",
 }
 
-// Evaluate estimates if the awsError is a cluster credentials are missing error. If it determines that it is,
+// Evaluates if the awsError is a cluster credentials are missing error. If it determines that it is,
 // the cluster is placed into limited support (if the cluster state allows it), otherwise an error is returned.
-func (c *Investigation) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	// Apart from the defaults this investigation requires an AWS client which can fail to build
 	resources, err := r.WithAwsClient().Build()
@@ -62,22 +62,6 @@ func (c *Investigation) Run(r investigation.ResourceBuilder) (investigation.Inve
 		}
 	}
 	return result, nil
-}
-
-func (c *Investigation) Name() string {
-	return "Cluster Credentials Are Missing (CCAM)"
-}
-
-func (c *Investigation) Description() string {
-	return "Detects missing cluster credentials"
-}
-
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return false
-}
-
-func (c *Investigation) IsExperimental() bool {
-	return false
 }
 
 // userCausedErrors contains the list of backplane returned error strings that we map to

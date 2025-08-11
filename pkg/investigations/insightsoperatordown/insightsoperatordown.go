@@ -119,18 +119,14 @@ func (c *Investigation) Name() string {
 	return "insightsoperatordown"
 }
 
+func (c *Investigation) AlertTitle() string {
+	return "InsightsOperatorDown"
+}
+
 func (c *Investigation) Description() string {
 	return "Investigate insights operator down alert"
 }
 
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "InsightsOperatorDown")
-}
-
 func (c *Investigation) IsExperimental() bool {
-	return false
-}
-
-func (c *Investigation) RequiresAwsClient() bool {
 	return false
 }
