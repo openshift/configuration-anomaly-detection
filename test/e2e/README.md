@@ -30,6 +30,12 @@ The value can be picked up from the Integration Key in the above link
 
 export CAD_PAGERDUTY_ROUTING_KEY=<url-integration-key-value>
 
+7. OCM_CLUSTER_ID
+
+For running the test cases set up the value of OCM_CLUSTER_ID from the Internal ID of the cluster created in Step #3.
+
+export OCM_CLUSTER_ID=<internal-cluster-id>
+
 7. Run test suite using 
  
 DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig  ./(path-to)/bin/ginkgo  --tags=osde2e -v test/e2e
