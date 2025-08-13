@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.239.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.35.1
 	github.com/onsi/gomega v1.38.0
+	github.com/openshift-online/ocm-common v0.0.30
 	github.com/openshift-online/ocm-sdk-go v0.1.473
 	github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c
 	github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583

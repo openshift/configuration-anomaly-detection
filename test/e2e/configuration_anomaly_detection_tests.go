@@ -18,6 +18,8 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	ocmConfig "github.com/openshift-online/ocm-common/pkg/ocm/config"
+	ocmConnBuilder "github.com/openshift-online/ocm-common/pkg/ocm/connection-builder"
 	v1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsinternal "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
@@ -47,14 +49,26 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		logger.SetLogger(ginkgo.GinkgoLogr)
 		var err error
 		ocmEnv := ocme2e.Stage
-		clientID := os.Getenv("OCM_CLIENT_ID")
-		clientSecret := os.Getenv("OCM_CLIENT_SECRET")
 		clusterID = os.Getenv("OCM_CLUSTER_ID")
 
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 
-		ocme2eCli, err = ocme2e.New(ctx, "", clientID, clientSecret, ocmEnv)
-		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
+		cfg, err := ocmConfig.Load()
+		if err != nil {
+			// Fall back to environment variables
+			clientID := os.Getenv("OCM_CLIENT_ID")
+			clientSecret := os.Getenv("OCM_CLIENT_SECRET")
+			Expect(clientID).NotTo(BeEmpty(), "OCM_CLIENT_ID must be set")
+			Expect(clientSecret).NotTo(BeEmpty(), "OCM_CLIENT_SECRET must be set")
+
+			ocme2eCli, err = ocme2e.New(ctx, "", clientID, clientSecret, ocmEnv)
+			Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
+		} else {
+			// Build connection based on local config
+			connection, err := ocmConnBuilder.NewConnection().Config(cfg).AsAgent("cad-local-e2e-tests").Build()
+			Expect(err).ShouldNot(HaveOccurred(), "Unable to build OCM connection")
+			ocme2eCli = &ocme2e.Client{Connection: connection}
+		}
 
 		k8s, err = openshift.New(ginkgo.GinkgoLogr)
 		Expect(err).ShouldNot(HaveOccurred(), "Unable to setup k8s client")
