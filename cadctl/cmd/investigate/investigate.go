@@ -26,6 +26,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -64,6 +65,15 @@ func init() {
 func run(cmd *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
 	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
+
+	// Load k8s environment variables
+	backplaneURL := os.Getenv("BACKPLANE_URL")
+	if backplaneURL == "" {
+		return fmt.Errorf("missing required environment variable BACKPLANE_URL")
+	}
+
+	// Set k8s environment configuration for this session
+	k8sclient.SetBackplaneURL(backplaneURL)
 
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {

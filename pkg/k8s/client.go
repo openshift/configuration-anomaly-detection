@@ -3,7 +3,6 @@ package k8sclient
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
@@ -11,6 +10,14 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var backplaneURL string
+
+// SetBackplaneURL sets the backplane URL to use for k8s client connections
+// FIXME: Replace with proper config mechanism when implemented service
+func SetBackplaneURL(url string) {
+	backplaneURL = url
+}
 
 type Cleaner interface {
 	Clean() error
@@ -74,9 +81,8 @@ func (cleaner remediationCleaner) Clean() error {
 
 // New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
 func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
-		return nil, fmt.Errorf("could not create new k8sclient: missing environment variable BACKPLANE_URL")
+		return nil, fmt.Errorf("could not create new k8sclient: backplane URL not configured, call SetBackplaneURL first")
 	}
 
 	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
@@ -97,9 +103,8 @@ func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg
 
 // Cleanup removes the remediation created for the cluster.
 func deleteRemediation(clusterID string, ocmClient ocm.Client, remediationInstanceId string) error {
-	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
-		return fmt.Errorf("could not clean up k8sclient: missing environment variable BACKPLANE_URL")
+		return fmt.Errorf("could not clean up k8sclient: backplane URL not configured, call SetBackplaneURL first")
 	}
 
 	return bpremediation.DeleteRemediationWithConn(
