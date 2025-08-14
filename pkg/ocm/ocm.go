@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -54,13 +53,12 @@ type SdkClient struct {
 	conn *sdk.Connection
 }
 
-// New will create a new ocm client by using the path to a config file
-// if no path is provided, it will assume it in the default path
-func New() (*SdkClient, error) {
+// New will create a new ocm client using the provided credentials
+func New(clientID, clientSecret, url string) (*SdkClient, error) {
 	var err error
 	client := SdkClient{}
 
-	client.conn, err = newConnectionFromClientPair()
+	client.conn, err = newConnectionFromClientPair(clientID, clientSecret, url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection from client key pair: %w", err)
 	}
@@ -70,14 +68,11 @@ func New() (*SdkClient, error) {
 
 // newConnectionFromClientPair creates a new connection via set of client ID, client secret
 // and the target OCM API URL.
-func newConnectionFromClientPair() (*sdk.Connection, error) {
-	ocmClientID, hasOcmClientID := os.LookupEnv("CAD_OCM_CLIENT_ID")
-	ocmClientSecret, hasOcmClientSecret := os.LookupEnv("CAD_OCM_CLIENT_SECRET")
-	ocmURL, hasOcmURL := os.LookupEnv("CAD_OCM_URL")
-	if !hasOcmClientID || !hasOcmClientSecret || !hasOcmURL {
-		return nil, fmt.Errorf("missing environment variables: CAD_OCM_CLIENT_ID CAD_OCM_CLIENT_SECRET CAD_OCM_URL")
+func newConnectionFromClientPair(clientID, clientSecret, url string) (*sdk.Connection, error) {
+	if clientID == "" || clientSecret == "" || url == "" {
+		return nil, fmt.Errorf("missing required parameters: clientID, clientSecret, or url")
 	}
-	return sdk.NewConnectionBuilder().URL(ocmURL).Client(ocmClientID, ocmClientSecret).Insecure(false).Build()
+	return sdk.NewConnectionBuilder().URL(url).Client(clientID, clientSecret).Insecure(false).Build()
 }
 
 // GetSupportRoleARN returns the support role ARN that allows the access to the cluster from internal cluster ID
