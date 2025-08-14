@@ -34,9 +34,9 @@ type Investigation interface {
 	// Please note that when adding an investigation the name and the directory currently need to be the same,
 	// so that backplane-api can fetch the metadata.yaml
 	Name() string
+	AlertTitle() string
 	Description() string
 	IsExperimental() bool
-	ShouldInvestigateAlert(string) bool
 }
 
 // Resources holds all resources/tools required for alert investigations
