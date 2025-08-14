@@ -91,6 +91,22 @@ func run(cmd *cobra.Command, _ []string) error {
 	managedcloud.SetBackplaneProxy(backplaneProxy)
 	managedcloud.SetAWSProxy(awsProxy)
 
+	// Load OCM environment variables
+	ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
+	if ocmClientID == "" {
+		return fmt.Errorf("missing required environment variable CAD_OCM_CLIENT_ID")
+	}
+
+	ocmClientSecret := os.Getenv("CAD_OCM_CLIENT_SECRET")
+	if ocmClientSecret == "" {
+		return fmt.Errorf("missing required environment variable CAD_OCM_CLIENT_SECRET")
+	}
+
+	ocmURL := os.Getenv("CAD_OCM_URL")
+	if ocmURL == "" {
+		return fmt.Errorf("missing required environment variable CAD_OCM_URL")
+	}
+
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -127,7 +143,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ocmClient, err := ocm.New()
+	ocmClient, err := ocm.New(ocmClientID, ocmClientSecret, ocmURL)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
