@@ -9,36 +9,8 @@ import (
 	sdk "github.com/PagerDuty/go-pagerduty"
 )
 
-const (
-	AlertClusterHasGoneMissing                         = "ClusterHasGoneMissing"
-	AlertClusterProvisioningDelay                      = "ClusterProvisioningDelay"
-	AlertClusterMonitoringErrorBudgetBurnSRE           = "ClusterMonitoringErrorBudgetBurnSRE"
-	AlertInsightsOperatorDown                          = "InsightsOperatorDown"
-	AlertMachineHealthCheckUnterminatedShortCircuitSRE = "MachineHealthCheckUnterminatedShortCircuitSRE"
-	UpgradeConfigSyncFailureOver4HrSRE                 = "UpgradeConfigSyncFailureOver4HrSRE"
-)
-
-func GetAlertTitle(alertName string) (string, error) {
-	switch alertName {
-	case AlertClusterHasGoneMissing:
-		return "cadtest has gone missing", nil
-	case AlertClusterProvisioningDelay:
-		return "ClusterProvisioningDelay -", nil
-	case AlertClusterMonitoringErrorBudgetBurnSRE:
-		return "ClusterMonitoringErrorBudgetBurnSRE Critical (1)", nil
-	case AlertInsightsOperatorDown:
-		return "InsightsOperatorDown", nil
-	case AlertMachineHealthCheckUnterminatedShortCircuitSRE:
-		return "MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)", nil
-	case UpgradeConfigSyncFailureOver4HrSRE:
-		return "UpgradeConfigSyncFailureOver4HrSRE Critical (1)", nil
-	default:
-		return "", fmt.Errorf("unknown alert name: %s", alertName)
-	}
-}
-
 type TestPagerDutyClient interface {
-	TriggerIncident(alertName, clusterID string) (string, error)
+	TriggerIncident(alertTitle, clusterID string) (string, error)
 	GetIncidentID(dedupKey string) (string, error)
 	ResolveIncident(incidentID string) error
 }
@@ -54,22 +26,19 @@ func NewClient(routingKey string) TestPagerDutyClient {
 	}
 }
 
-func (c *client) TriggerIncident(alertName, clusterID string) (string, error) {
-	summary, err := GetAlertTitle(alertName)
-	if err != nil {
-		return "", err
-	}
+// TriggerIncident creates a PagerDuty incident for testing purposes using the given alert title and cluster ID
+func (c *client) TriggerIncident(alertTitle, clusterID string) (string, error) {
 	event := sdk.V2Event{
 		RoutingKey: c.routingKey,
 		Action:     "trigger",
 		DedupKey:   generateUUID(),
 		Payload: &sdk.V2Payload{
-			Summary:   summary + "- E2E",
+			Summary:   alertTitle + " - E2E",
 			Source:    "cad-integration-testing",
 			Severity:  "critical",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Details: map[string]interface{}{
-				"alertname":  alertName,
+				"alertname":  alertTitle,
 				"cluster_id": clusterID,
 			},
 		},
