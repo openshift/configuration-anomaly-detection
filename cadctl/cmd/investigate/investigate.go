@@ -26,7 +26,9 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -64,6 +66,30 @@ func init() {
 func run(cmd *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
 	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
+
+	// Load k8s environment variables
+	backplaneURL := os.Getenv("BACKPLANE_URL")
+	if backplaneURL == "" {
+		return fmt.Errorf("missing required environment variable BACKPLANE_URL")
+	}
+
+	// Set k8s environment configuration for this session
+	k8sclient.SetBackplaneURL(backplaneURL)
+
+	// Load managedcloud environment variables
+	backplaneInitialARN := os.Getenv("BACKPLANE_INITIAL_ARN")
+	if backplaneInitialARN == "" {
+		return fmt.Errorf("missing required environment variable BACKPLANE_INITIAL_ARN")
+	}
+
+	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
+	awsProxy := os.Getenv("AWS_PROXY")
+
+	// Set managedcloud environment configuration for this session
+	managedcloud.SetBackplaneURL(backplaneURL)
+	managedcloud.SetBackplaneInitialARN(backplaneInitialARN)
+	managedcloud.SetBackplaneProxy(backplaneProxy)
+	managedcloud.SetAWSProxy(awsProxy)
 
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
