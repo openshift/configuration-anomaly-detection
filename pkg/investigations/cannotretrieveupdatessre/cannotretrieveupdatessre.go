@@ -45,7 +45,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		switch verifierResult {
 		case networkverifier.Failure:
 			result.ServiceLogPrepared = investigation.InvestigationStep{Performed: true, Labels: nil}
-			notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
+			notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post --cluster-id %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 		case networkverifier.Success:
 			notes.AppendSuccess("Network verifier passed")
 		}
