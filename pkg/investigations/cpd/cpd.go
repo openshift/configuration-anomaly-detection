@@ -2,8 +2,6 @@
 package cpd
 
 import (
-	"strings"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -128,12 +126,12 @@ func (c *Investigation) Name() string {
 	return "ClusterProvisioningDelay"
 }
 
-func (c *Investigation) Description() string {
-	return "Investigates the ClusterProvisioningDelay alert"
+func (c *Investigation) AlertTitle() string {
+	return "ClusterProvisioningDelay -"
 }
 
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "ClusterProvisioningDelay -")
+func (c *Investigation) Description() string {
+	return "Investigates the ClusterProvisioningDelay alert"
 }
 
 func (c *Investigation) IsExperimental() bool {
