@@ -54,6 +54,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(clusterID).NotTo(BeEmpty(), "CLUSTER_ID must be set")
 
 		cfg, err := ocmConfig.Load()
+		connection, err := ocmConnBuilder.NewConnection().Config(cfg).AsAgent("cad-local-e2e-tests").Build()
+
 		if err != nil {
 			// Fall back to environment variables
 			clientID := os.Getenv("OCM_CLIENT_ID")
@@ -64,9 +66,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ocme2eCli, err = ocme2e.New(ctx, "", clientID, clientSecret, ocmEnv)
 			Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
 		} else {
-			// Build connection based on local config
-			connection, err := ocmConnBuilder.NewConnection().Config(cfg).AsAgent("cad-local-e2e-tests").Build()
-			Expect(err).ShouldNot(HaveOccurred(), "Unable to build OCM connection")
+
 			ocme2eCli = &ocme2e.Client{Connection: connection}
 		}
 
