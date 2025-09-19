@@ -35,6 +35,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if user.Banned() {
 		notes.AppendWarning("User is banned: %s\nBan description: %s\nPlease open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
+		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	} else {
 		notes.AppendSuccess("User is not banned.")
 	}
