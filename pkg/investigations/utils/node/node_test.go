@@ -3,6 +3,7 @@ package node
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,8 +13,8 @@ import (
 
 func Test_FindNoScheduleTaint(t *testing.T) {
 	type result struct {
-		found bool
-		key   string
+		taints []corev1.Taint
+		key    string
 	}
 
 	tests := []struct {
@@ -29,7 +30,7 @@ func Test_FindNoScheduleTaint(t *testing.T) {
 				return node
 			},
 			want: result{
-				found: false,
+				taints: []corev1.Taint{},
 			},
 		},
 		{
@@ -45,8 +46,13 @@ func Test_FindNoScheduleTaint(t *testing.T) {
 				return node
 			},
 			want: result{
-				key:   "tainted",
-				found: true,
+				key: "tainted",
+				taints: []corev1.Taint{
+					{
+						Key:    "tainted",
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
 			},
 		},
 	}
@@ -55,16 +61,10 @@ func Test_FindNoScheduleTaint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			node := tt.node()
 
-			got, found := FindNoScheduleTaint(*node)
-			if found != tt.want.found {
-				t.Errorf("unexpected test result: expected found = %t, got = %t", tt.want.found, found)
-			}
-			if tt.want.found {
-				if got.Effect != corev1.TaintEffectNoSchedule {
-					t.Errorf("unexpected test result: expected taint effect = %q, got = %q", corev1.TaintEffectNoSchedule, got.Effect)
-				}
-				if got.Key != tt.want.key {
-					t.Errorf("unexpected test result: expected taint with key = %q, got = %q", tt.want.key, got.Key)
+			got := FindNoScheduleTaints(*node)
+			for _, g := range got {
+				if !slices.Contains(tt.want.taints, g) {
+					t.Errorf("unexpected test result: expected result to contain = %v, got = %v", g, tt.want.taints)
 				}
 			}
 		})
