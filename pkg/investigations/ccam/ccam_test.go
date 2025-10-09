@@ -60,6 +60,11 @@ func TestCustomerRemovedPermissions(t *testing.T) {
 			expectedMatch: true,
 		},
 		{
+			name:          "Matching error 6",
+			errorMessage:  "unable to assume-role chain: could not assume support role in customer's account: operation error STS: AssumeRole, https response error StatusCode: 403, RequestID: <opid>, api error AccessDenied: User: <user> is not authorized to perform: sts:AssumeRole on resource: <role>",
+			expectedMatch: true,
+		},
+		{
 			name:          "Non-matching error",
 			errorMessage:  "Some timeout error",
 			expectedMatch: false,
