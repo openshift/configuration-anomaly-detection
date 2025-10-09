@@ -35,7 +35,7 @@ type clientImpl struct {
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
 func New(clusterID string, ocmClient ocm.Client, remediationName string) (k8scli Client, err error) {
-	cfg, err := NewCfg(clusterID, ocmClient, remediationName)
+	cfg, err := newCfg(clusterID, ocmClient, remediationName)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (cleaner remediationCleaner) Clean() error {
 }
 
 // New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
-func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
+func newCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
 	if backplaneURL == "" {
 		return nil, fmt.Errorf("could not create new k8sclient: backplane URL not configured, call SetBackplaneURL first")
 	}
