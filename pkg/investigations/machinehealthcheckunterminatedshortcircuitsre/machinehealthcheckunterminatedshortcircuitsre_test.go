@@ -400,6 +400,19 @@ func Test_checkForStuckDrain(t *testing.T) {
 			},
 			stuck: true,
 		},
+		{
+			name: "handles missing TimeAdded field (SREP-1975)",
+			node: func() corev1.Node {
+				node := newWorkerNode("actually-stuck")
+				node.Spec.Taints = []corev1.Taint{
+					{
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				}
+				return *node
+			},
+			stuck: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
