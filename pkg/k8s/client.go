@@ -1,3 +1,4 @@
+// Package k8sclient handles creation and cleanup of backplane remediations meaning a kube-apiserver access to clusters with RBAC defined in an investigations metadata
 package k8sclient
 
 import (
@@ -6,9 +7,10 @@ import (
 
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
 var backplaneURL string
@@ -92,10 +94,7 @@ func newCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg
 		remediationName,
 	)
 	if err != nil {
-		if isAPIServerUnavailable(err) {
-			return nil, fmt.Errorf("%w: %w", ErrAPIServerUnavailable, err)
-		}
-		return nil, err
+		return nil, matchError(err)
 	}
 
 	return &Config{*decoratedCfg, remediationCleaner{clusterID, ocmClient, remediationInstanceId}}, nil

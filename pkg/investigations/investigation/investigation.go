@@ -5,13 +5,15 @@ import (
 	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
 type InvestigationStep struct {
@@ -45,6 +47,7 @@ type Resources struct {
 	Cluster           *cmv1.Cluster
 	ClusterDeployment *hivev1.ClusterDeployment
 	AwsClient         aws.Client
+	K8sClient         k8sclient.Client
 	OcmClient         ocm.Client
 	PdClient          pagerduty.Client
 	Notes             *notewriter.NoteWriter
@@ -54,6 +57,7 @@ type ResourceBuilder interface {
 	WithCluster(clusterId string) ResourceBuilder
 	WithClusterDeployment() ResourceBuilder
 	WithAwsClient() ResourceBuilder
+	WithK8sClient() ResourceBuilder
 	WithOcmClient(*ocm.SdkClient) ResourceBuilder
 	WithPagerDutyClient(client *pagerduty.SdkClient) ResourceBuilder
 	WithNotes() ResourceBuilder
@@ -66,6 +70,7 @@ type ResourceBuilderT struct {
 	buildCluster           bool
 	buildClusterDeployment bool
 	buildAwsClient         bool
+	buildK8sClient         bool
 	buildNotes             bool
 	buildLogger            bool
 
@@ -96,6 +101,11 @@ func (r *ResourceBuilderT) WithClusterDeployment() ResourceBuilder {
 
 func (r *ResourceBuilderT) WithAwsClient() ResourceBuilder {
 	r.buildAwsClient = true
+	return r
+}
+
+func (r *ResourceBuilderT) WithK8sClient() ResourceBuilder {
+	r.buildK8sClient = true
 	return r
 }
 
@@ -149,6 +159,10 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		r.buildErr = errors.New("cannot build AwsClient without Cluster")
 		return nil, r.buildErr
 	}
+	if r.buildK8sClient && !r.buildCluster {
+		r.buildErr = errors.New("cannot build K8sClient without Cluster")
+		return nil, r.buildErr
+	}
 
 	if r.buildCluster && r.builtResources.Cluster == nil {
 		r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
@@ -161,11 +175,21 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	}
 
 	// Dependent resources can only be built if a cluster object exists.
+	//nolint:nestif
 	if r.builtResources.Cluster != nil {
 		internalClusterId := r.builtResources.Cluster.ID()
 
 		if r.buildAwsClient && r.builtResources.AwsClient == nil {
 			r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
+			if err != nil {
+				r.buildErr = err
+				return nil, err
+			}
+		}
+
+		if r.buildK8sClient && r.builtResources.K8sClient == nil {
+			logging.Infof("creating k8s client for %s", r.name)
+			r.builtResources.K8sClient, err = k8sclient.New(r.builtResources.Cluster.ID(), r.ocmClient, r.name)
 			if err != nil {
 				r.buildErr = err
 				return nil, err
@@ -209,6 +233,10 @@ func (r *ResourceBuilderMock) WithClusterDeployment() ResourceBuilder {
 }
 
 func (r *ResourceBuilderMock) WithAwsClient() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithK8sClient() ResourceBuilder {
 	return r
 }
 
