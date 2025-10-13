@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"strings"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
@@ -21,11 +20,6 @@ import (
 
 type Investigation struct{}
 
-const (
-	alertname       = "UpgradeConfigSyncFailureOver4HrSRE"
-	remediationName = "upgradeconfigsyncfailureover4hr"
-)
-
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	r, err := rb.Build()
@@ -33,17 +27,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, err
 	}
 	notes := notewriter.New("UpgradeConfigSyncFailureOver4Hr", logging.RawLogger)
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, remediationName)
-	if err != nil {
-		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
-	}
-	defer func() {
-		deferErr := k8scli.Clean()
-		if deferErr != nil {
-			logging.Error(deferErr)
-			err = errors.Join(err, deferErr)
-		}
-	}()
+
 	logging.Infof("Checking if user is Banned.")
 	userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
 	if err != nil {
@@ -57,9 +41,25 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
 	logging.Infof("User ID is: %v", user.ID())
-	clusterSecretToken, note, err := getClusterPullSecret(k8scli)
 	if err != nil {
-		notes.AppendWarning("Failre getting ClusterSecret: %s", err)
+		notes.AppendWarning("Failed getting cluster creator from ocm: %s", err)
+		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	}
+
+	r, err = rb.WithK8sClient().Build()
+	if err != nil {
+		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+		}
+		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+		}
+		return result, err
+	}
+
+	clusterSecretToken, note, err := getClusterPullSecret(r.K8sClient)
+	if err != nil {
+		notes.AppendWarning("Failed getting ClusterSecret: %s", err)
 		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
 	}
 	if note != "" {

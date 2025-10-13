@@ -46,31 +46,16 @@ const available = "Available"
 type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
-	r, err := rb.Build()
-	if err != nil {
-		return investigation.InvestigationResult{}, err
-	}
-	// Initialize k8s client
-	// This would be better suited to be passend in with the investigation resources
-	// In turn we would need to split out ccam and k8sclient, as those are tied to a cluster
-	// Failing the cleanup call is not critical as there is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
-	// We can revisit backplane-apis remediation implementation to improve this behavior, by e.g.
-	// patching the existing RBAC etc...
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
+	r, err := rb.WithK8sClient().Build()
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
 		}
-
-		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
-	}
-	defer func() {
-		deferErr := k8scli.Clean()
-		if deferErr != nil {
-			logging.Error(deferErr)
-			err = errors.Join(err, deferErr)
+		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
 		}
-	}()
+		return result, err
+	}
 
 	// Initialize PagerDuty note writer
 	notes := notewriter.New(r.Name, logging.RawLogger)
@@ -79,7 +64,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// List the monitoring cluster operator
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
-	err = k8scli.List(context.TODO(), coList, listOptions)
+	err = r.K8sClient.List(context.TODO(), coList, listOptions)
 	if err != nil {
 		return result, fmt.Errorf("unable to list monitoring clusteroperator: %w", err)
 	}

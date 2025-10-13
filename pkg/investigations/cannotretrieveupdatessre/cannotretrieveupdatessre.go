@@ -25,17 +25,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, err
 	}
 	notes := notewriter.New("CannotRetrieveUpdatesSRE", logging.RawLogger)
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
-	if err != nil {
-		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
-	}
-	defer func() {
-		deferErr := k8scli.Clean()
-		if deferErr != nil {
-			logging.Error(deferErr)
-			err = errors.Join(err, deferErr)
-		}
-	}()
 
 	// Run network verifier
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
@@ -51,8 +40,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 
+	r, err = rb.WithK8sClient().Build()
+	if err != nil {
+		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+		}
+		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+		}
+		return result, err
+	}
+
 	// Check ClusterVersion
-	clusterVersion, err := version.GetClusterVersion(k8scli)
+	clusterVersion, err := version.GetClusterVersion(r.K8sClient)
 	if err != nil {
 		notes.AppendWarning("Failed to get ClusterVersion: %s", err.Error())
 	} else {
