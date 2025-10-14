@@ -5,10 +5,18 @@ import (
 	"strings"
 )
 
-var ErrAPIServerUnavailable = errors.New("kubernetes API server unavailable")
+var (
+	ErrAPIServerUnavailable = errors.New("kubernetes API server unavailable")
+	ErrCannotAccessInfra    = errors.New("cannot access infrastructure cluster's kube-apiserver")
+)
 
-// isAPIServerUnavailable detects common symptoms of an unreachable API server.
-func isAPIServerUnavailable(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "The cluster could be down or under heavy load")
+func matchError(err error) error {
+	switch {
+	case strings.Contains(err.Error(), "The cluster could be down or under heavy load"):
+		return ErrAPIServerUnavailable
+	case strings.Contains(err.Error(), "cannot create remediations on hive, management or service clusters"):
+		return ErrCannotAccessInfra
+	default:
+		return err
+	}
 }

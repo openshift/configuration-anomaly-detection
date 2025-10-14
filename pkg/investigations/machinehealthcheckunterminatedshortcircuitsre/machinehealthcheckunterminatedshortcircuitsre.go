@@ -37,23 +37,6 @@ type Investigation struct {
 	recommendations investigationRecommendations
 }
 
-func (i *Investigation) setup(r *investigation.Resources) error {
-	// Setup investigation
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
-	if err != nil {
-		return fmt.Errorf("failed to initialize kubernetes client: %w", err)
-	}
-	i.k8scli = k8scli
-	i.notes = notewriter.New(r.Name, logging.RawLogger)
-	i.recommendations = investigationRecommendations{}
-
-	return nil
-}
-
-func (i *Investigation) teardown() error {
-	return i.k8scli.Clean()
-}
-
 // Run investigates the MachineHealthCheckUnterminatedShortCircuitSRE alert
 //
 // The investigation seeks to provide exactly one recommended action per affected machine/node pair.
@@ -63,22 +46,20 @@ func (i *Investigation) teardown() error {
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
 	result := investigation.InvestigationResult{}
-	r, err := rb.Build()
+	r, err := rb.WithK8sClient().Build()
 	if err != nil {
+		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+		}
+		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+		}
 		return result, err
 	}
 
-	// Setup & teardown
-	err = i.setup(r)
-	if err != nil {
-		return result, fmt.Errorf("failed to setup investigation: %w", err)
-	}
-	defer func(r *investigation.Resources) {
-		err := i.teardown()
-		if err != nil {
-			logging.Errorf("failed to cleanup investigation: %w", err)
-		}
-	}(r)
+	i.k8scli = r.K8sClient
+	i.notes = notewriter.New(r.Name, logging.RawLogger)
+	i.recommendations = investigationRecommendations{}
 
 	targetMachines, err := i.getMachinesFromFailingMHC(ctx)
 	if err != nil {

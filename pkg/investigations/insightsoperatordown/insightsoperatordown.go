@@ -40,26 +40,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		notes.AppendSuccess("User is not banned.")
 	}
 
-	// We continue with the next step OCPBUG22226 even if the user is banned.
-	k8scli, err := k8sclient.New(r.Cluster.ID(), r.OcmClient, r.Name)
+	r, err = rb.WithK8sClient().Build()
 	if err != nil {
 		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
 		}
-
-		return result, fmt.Errorf("unable to initialize k8s cli: %w", err)
-	}
-	defer func() {
-		deferErr := k8scli.Clean()
-		if deferErr != nil {
-			logging.Error(deferErr)
-			err = errors.Join(err, deferErr)
+		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
 		}
-	}()
+		return result, err
+	}
 
 	coList := &configv1.ClusterOperatorList{}
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "insights"})}
-	err = k8scli.List(context.TODO(), coList, listOptions)
+	err = r.K8sClient.List(context.TODO(), coList, listOptions)
 	if err != nil {
 		return result, fmt.Errorf("unable to list insights clusteroperator: %w", err)
 	}

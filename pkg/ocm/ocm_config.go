@@ -34,33 +34,33 @@ type Config struct {
 func Load() (cfg *Config, err error) {
 	file, err := Location()
 	if err != nil {
-		return
+		return cfg, err
 	}
 	_, err = os.Stat(file)
 	if os.IsNotExist(err) {
 		cfg = &Config{}
-		return
+		return cfg, err
 	}
 	if err != nil {
 		err = fmt.Errorf("can't check if config file '%s' exists: %w", file, err)
-		return
+		return cfg, err
 	}
 	// #nosec G304
 	data, err := os.ReadFile(file)
 	if err != nil {
 		err = fmt.Errorf("can't read config file '%s': %w", file, err)
-		return
+		return cfg, err
 	}
 	cfg = &Config{}
 	if len(data) == 0 {
-		return
+		return cfg, err
 	}
 	err = json.Unmarshal(data, cfg)
 	if err != nil {
 		err = fmt.Errorf("can't parse config file '%s': %w", file, err)
-		return
+		return cfg, err
 	}
-	return
+	return cfg, err
 }
 
 // Location returns the location of the configuration file. If a configuration file
@@ -129,8 +129,8 @@ func (c *Config) Connection() (connection *sdk.Connection, err error) {
 	// Create the connection:
 	connection, err = builder.Build()
 	if err != nil {
-		return
+		return connection, err
 	}
 
-	return
+	return connection, err
 }

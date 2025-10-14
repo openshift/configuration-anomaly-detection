@@ -1,3 +1,4 @@
+// Package k8sclient handles creation and cleanup of backplane remediations meaning a kube-apiserver access to clusters with RBAC defined in an investigations metadata
 package k8sclient
 
 import (
@@ -6,9 +7,10 @@ import (
 
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
 var backplaneURL string
@@ -35,7 +37,7 @@ type clientImpl struct {
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
 func New(clusterID string, ocmClient ocm.Client, remediationName string) (k8scli Client, err error) {
-	cfg, err := NewCfg(clusterID, ocmClient, remediationName)
+	cfg, err := newCfg(clusterID, ocmClient, remediationName)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +82,7 @@ func (cleaner remediationCleaner) Clean() error {
 }
 
 // New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
-func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
+func newCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
 	if backplaneURL == "" {
 		return nil, fmt.Errorf("could not create new k8sclient: backplane URL not configured, call SetBackplaneURL first")
 	}
@@ -92,10 +94,7 @@ func NewCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg
 		remediationName,
 	)
 	if err != nil {
-		if isAPIServerUnavailable(err) {
-			return nil, fmt.Errorf("%w: %w", ErrAPIServerUnavailable, err)
-		}
-		return nil, err
+		return nil, matchError(err)
 	}
 
 	return &Config{*decoratedCfg, remediationCleaner{clusterID, ocmClient, remediationInstanceId}}, nil

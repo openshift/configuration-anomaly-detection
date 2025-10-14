@@ -150,8 +150,23 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	builder := &investigation.ResourceBuilderT{}
 	defer func() {
+		// The builder caches resources, so we can access them here even if a later step failed.
+		// We ignore the error here because we just want to get any resources that were created.
+		resources, _ := builder.Build()
+
+		// Cleanup k8s client if it exists
+		if resources != nil && resources.K8sClient != nil {
+			// Failing the k8sclient cleanup call is not critical
+			// There is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
+			// We only log the error for now but could add it to the investigation notes or handle differently
+			logging.Info("Cleaning kube-api access")
+			deferErr := resources.K8sClient.Clean()
+			if deferErr != nil {
+				logging.Error(deferErr)
+			}
+		}
 		if err != nil {
-			handleCADFailure(err, builder, pdClient)
+			handleCADFailure(err, resources, pdClient)
 		}
 	}()
 
@@ -181,17 +196,13 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
-
 	return updateIncidentTitle(pdClient)
 }
 
-func handleCADFailure(err error, rb *investigation.ResourceBuilderT, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
-	// The builder caches resources, so we can access them here even if a later step failed.
-	// We ignore the error here because we just want to get any notes that were created.
-	resources, _ := rb.Build()
 	if resources != nil && resources.Notes != nil {
 		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
 		notes = resources.Notes.String()
