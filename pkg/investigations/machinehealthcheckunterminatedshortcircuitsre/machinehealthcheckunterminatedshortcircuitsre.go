@@ -304,14 +304,14 @@ func (i *Investigation) Name() string {
 	return strings.ToLower(alertname)
 }
 
+func (i *Investigation) AlertTitle() string {
+	return alertname
+}
+
 func (i *Investigation) Description() string {
 	return fmt.Sprintf("Investigates '%s' alerts", alertname)
 }
 
 func (i *Investigation) IsExperimental() bool {
 	return false
-}
-
-func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, alertname)
 }
