@@ -16,16 +16,17 @@ const (
 	WorkerRoleSuffix = "worker"
 )
 
-// FindNoScheduleTaint searches the node's taints to find one with effect: NoSchedule, if present.
+// FindNoScheduleTaints searches the node's taints to find one with effect: NoSchedule, if present.
 //
-// If none is present, an empty taint and 'false' are returned
-func FindNoScheduleTaint(node corev1.Node) (corev1.Taint, bool) {
+// If none is present, an empty slice is returned
+func FindNoScheduleTaints(node corev1.Node) []corev1.Taint {
+	noScheduleTaints := []corev1.Taint{}
 	for _, taint := range node.Spec.Taints {
 		if taint.Effect == corev1.TaintEffectNoSchedule {
-			return taint, true
+			noScheduleTaints = append(noScheduleTaints, taint)
 		}
 	}
-	return corev1.Taint{}, false
+	return noScheduleTaints
 }
 
 // GetNodes retrieves all nodes present in the cluster

@@ -269,18 +269,19 @@ func checkForStuckDrain(node corev1.Node) (bool, *time.Duration) {
 		return false, nil
 	}
 
-	taint, found := nodeutil.FindNoScheduleTaint(node)
-	if !found {
-		return false, nil
+	// FIXME: What happens if we have multiple NoSchedule taints?
+	taints := nodeutil.FindNoScheduleTaints(node)
+	for _, taint := range taints {
+		// TODO - Once CAD can access on-cluster metrics, we can query the `pods_preventing_node_drain` metric from prometheus
+		// to more accurately gauge if a node is truly stuck deleting, and what pod is causing it
+		if taint.TimeAdded == nil {
+			continue
+		}
+		drainDuration := time.Since(taint.TimeAdded.Time)
+		if drainDuration > 10*time.Minute {
+			return true, &drainDuration
+		}
 	}
-
-	// TODO - Once CAD can access on-cluster metrics, we can query the `pods_preventing_node_drain` metric from prometheus
-	// to more accurately gauge if a node is truly stuck deleting, and what pod is causing it
-	drainDuration := time.Since(taint.TimeAdded.Time)
-	if drainDuration > 10*time.Minute {
-		return true, &drainDuration
-	}
-
 	return false, nil
 }
 
