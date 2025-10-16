@@ -79,5 +79,5 @@ The following pages may be useful if the information in this guide is insufficie
 
 - [Machine API Brief](https://github.com/openshift/machine-api-operator/blob/main/docs/user/machine-api-operator-overview.md)
 - [Machine API FAQ](https://github.com/openshift/machine-api-operator/blob/main/FAQ.md)
-- [MachineHealthCheck documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.17/html/machine_management/deploying-machine-health-checks#machine-health-checks-resource_deploying-machine-health-checks)
+- [MachineHealthCheck documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/4.19/html/machine_management/deploying-machine-health-checks#machine-health-checks-resource_deploying-machine-health-checks)
 - [Alert SOP](https://github.com/openshift/ops-sop/blob/master/v4/alerts/MachineHealthCheckUnterminatedShortCircuitSRE.md)
