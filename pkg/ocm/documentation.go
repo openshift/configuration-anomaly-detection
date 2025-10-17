@@ -12,8 +12,8 @@ type Product string
 
 const (
 	ProductUnknown Product = ""
-	ProductOSD         Product = "osd"
-	ProductROSA       Product = "rosa"
+	ProductOSD     Product = "osd"
+	ProductROSA    Product = "rosa"
 )
 
 type DocumentationTopic string
