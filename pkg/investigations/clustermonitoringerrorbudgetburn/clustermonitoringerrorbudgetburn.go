@@ -17,28 +17,46 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var uwmConfigMapMisconfiguredSL = ocm.ServiceLog{
-	Severity:     "Major",
-	Summary:      "Action required: review user-workload-monitoring configuration",
-	ServiceName:  "SREManualAction",
-	Description:  "Your cluster's user workload monitoring is misconfigured: please review the user-workload-monitoring-config ConfigMap in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
-	InternalOnly: false,
+func newUwmConfigMapMisconfiguredSL(docLink string) *ocm.ServiceLog {
+	if docLink == "" {
+		docLink = ocm.DocumentationLink(ocm.ProductROSA, ocm.DocumentationTopicMonitoringStack)
+	}
+
+	return &ocm.ServiceLog{
+		Severity:     "Major",
+		Summary:      "Action required: review user-workload-monitoring configuration",
+		ServiceName:  "SREManualAction",
+		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the user-workload-monitoring-config ConfigMap in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
+		InternalOnly: false,
+	}
 }
 
-var uwmAMMisconfiguredSL = ocm.ServiceLog{
-	Severity:     "Major",
-	Summary:      "Action required: review user-workload-monitoring configuration",
-	ServiceName:  "SREManualAction",
-	Description:  "Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
-	InternalOnly: false,
+func newUwmAMMisconfiguredSL(docLink string) *ocm.ServiceLog {
+	if docLink == "" {
+		docLink = ocm.DocumentationLink(ocm.ProductROSA, ocm.DocumentationTopicMonitoringStack)
+	}
+
+	return &ocm.ServiceLog{
+		Severity:     "Major",
+		Summary:      "Action required: review user-workload-monitoring configuration",
+		ServiceName:  "SREManualAction",
+		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
+		InternalOnly: false,
+	}
 }
 
-var uwmGenericMisconfiguredSL = ocm.ServiceLog{
-	Severity:     "Major",
-	Summary:      "Action required: review user-workload-monitoring configuration",
-	ServiceName:  "SREManualAction",
-	Description:  "Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/monitoring/configuring-the-monitoring-stack#.",
-	InternalOnly: false,
+func newUwmGenericMisconfiguredSL(docLink string) *ocm.ServiceLog {
+	if docLink == "" {
+		docLink = ocm.DocumentationLink(ocm.ProductROSA, ocm.DocumentationTopicMonitoringStack)
+	}
+
+	return &ocm.ServiceLog{
+		Severity:     "Major",
+		Summary:      "Action required: review user-workload-monitoring configuration",
+		ServiceName:  "SREManualAction",
+		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
+		InternalOnly: false,
+	}
 }
 
 const available = "Available"
@@ -75,11 +93,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	}
 	monitoringCo := coList.Items[0]
 
+	product := ocm.GetClusterProduct(r.Cluster)
+	monitoringDocLink := ocm.DocumentationLink(product, ocm.DocumentationTopicMonitoringStack)
+
 	// Check if the UWM configmap is invalid
 	// If it is, send a service log and silence the alert.
 	if isUWMConfigInvalid(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmConfigMapMisconfiguredSL)
+		configMapSL := newUwmConfigMapMisconfiguredSL(monitoringDocLink)
+		err = r.OcmClient.PostServiceLog(r.Cluster, configMapSL)
 		if err != nil {
 			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}
@@ -91,7 +113,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 
 	if isUWMAlertManagerBroken(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager), sending service log and silencing the alert")
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmAMMisconfiguredSL)
+		alertManagerSL := newUwmAMMisconfiguredSL(monitoringDocLink)
+		err = r.OcmClient.PostServiceLog(r.Cluster, alertManagerSL)
 		if err != nil {
 			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}
@@ -103,7 +126,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 
 	if isUWMPrometheusBroken(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus), sending service log and silencing the alert")
-		err = r.OcmClient.PostServiceLog(r.Cluster.ID(), &uwmGenericMisconfiguredSL)
+		genericSL := newUwmGenericMisconfiguredSL(monitoringDocLink)
+		err = r.OcmClient.PostServiceLog(r.Cluster, genericSL)
 		if err != nil {
 			return result, fmt.Errorf("failed posting servicelog: %w", err)
 		}

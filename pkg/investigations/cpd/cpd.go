@@ -2,6 +2,7 @@
 package cpd
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -15,7 +16,19 @@ import (
 type Investigation struct{}
 
 // https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/aws/InstallFailed_NoRouteToInternet.json
-var byovpcRoutingSL = &ocm.ServiceLog{Severity: "Major", Summary: "Installation blocked: Missing route to internet", Description: "Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: https://docs.openshift.com/container-platform/latest/installing/installing_aws/installing-aws-vpc.html#installation-custom-aws-vpc-requirements_installing-aws-vpc.", InternalOnly: false, ServiceName: "SREManualAction"}
+func newBYOVPCRoutingSL(docLink string) *ocm.ServiceLog {
+	if docLink == "" {
+		docLink = ocm.DocumentationLink(ocm.ProductROSA, ocm.DocumentationTopicAwsCustomVPC)
+	}
+
+	return &ocm.ServiceLog{
+		Severity:     "Major",
+		Summary:      "Installation blocked: Missing route to internet",
+		Description:  fmt.Sprintf("Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: %s.", docLink),
+		InternalOnly: false,
+		ServiceName:  "SREManualAction",
+	}
+}
 
 // Investigate runs the investigation for a triggered CPD pagerduty event
 // Currently what this investigation does is:
@@ -61,6 +74,9 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	notes.AppendSuccess("Cluster DNS is ready")
 
+	product := ocm.GetClusterProduct(r.Cluster)
+	docLink := ocm.DocumentationLink(product, ocm.DocumentationTopicAwsCustomVPC)
+
 	if r.Cluster.AWS().SubnetIDs() != nil && len(r.Cluster.AWS().SubnetIDs()) > 0 {
 		logging.Info("Checking BYOVPC to ensure subnets have valid routing...")
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
@@ -69,13 +85,14 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 				logging.Error(err)
 			}
 			if !isValid {
-				if err := r.OcmClient.PostServiceLog(r.Cluster.ID(), byovpcRoutingSL); err != nil {
+				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
+				byovpcRoutingSL := newBYOVPCRoutingSL(docLink)
+				if err := r.OcmClient.PostServiceLog(r.Cluster, byovpcRoutingSL); err != nil {
 					return result, err
 				}
 				// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 				result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
 				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
 				if err := r.PdClient.AddNote(notes.String()); err != nil {
 					logging.Error(err)
