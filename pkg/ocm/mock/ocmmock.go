@@ -133,29 +133,29 @@ func (mr *MockClientMockRecorder) IsAccessProtected(cluster any) *gomock.Call {
 }
 
 // PostLimitedSupportReason mocks base method.
-func (m *MockClient) PostLimitedSupportReason(limitedSupportReason *ocm.LimitedSupportReason, internalClusterID string) error {
+func (m *MockClient) PostLimitedSupportReason(cluster *v1.Cluster, limitedSupportReason *ocm.LimitedSupportReason) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PostLimitedSupportReason", limitedSupportReason, internalClusterID)
+	ret := m.ctrl.Call(m, "PostLimitedSupportReason", cluster, limitedSupportReason)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostLimitedSupportReason indicates an expected call of PostLimitedSupportReason.
-func (mr *MockClientMockRecorder) PostLimitedSupportReason(limitedSupportReason, internalClusterID any) *gomock.Call {
+func (mr *MockClientMockRecorder) PostLimitedSupportReason(cluster, limitedSupportReason any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), limitedSupportReason, internalClusterID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostLimitedSupportReason", reflect.TypeOf((*MockClient)(nil).PostLimitedSupportReason), cluster, limitedSupportReason)
 }
 
 // PostServiceLog mocks base method.
-func (m *MockClient) PostServiceLog(clusterID string, sl *ocm.ServiceLog) error {
+func (m *MockClient) PostServiceLog(cluster *v1.Cluster, sl *ocm.ServiceLog) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PostServiceLog", clusterID, sl)
+	ret := m.ctrl.Call(m, "PostServiceLog", cluster, sl)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PostServiceLog indicates an expected call of PostServiceLog.
-func (mr *MockClientMockRecorder) PostServiceLog(clusterID, sl any) *gomock.Call {
+func (mr *MockClientMockRecorder) PostServiceLog(cluster, sl any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostServiceLog", reflect.TypeOf((*MockClient)(nil).PostServiceLog), clusterID, sl)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PostServiceLog", reflect.TypeOf((*MockClient)(nil).PostServiceLog), cluster, sl)
 }

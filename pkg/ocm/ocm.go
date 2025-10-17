@@ -38,10 +38,10 @@ type ServiceLog struct {
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
-	PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error
+	PostLimitedSupportReason(cluster *cmv1.Cluster, limitedSupportReason *LimitedSupportReason) error
 	GetSupportRoleARN(internalClusterID string) (string, error)
 	GetServiceLog(cluster *cmv1.Cluster, filter string) (*servicelogsv1.ClusterLogsUUIDListResponse, error)
-	PostServiceLog(clusterID string, sl *ServiceLog) error
+	PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
@@ -156,7 +156,23 @@ func (c *SdkClient) getClusterResource(internalClusterID string, resourceKey str
 }
 
 // PostLimitedSupportReason allows to post a generic limited support reason to a cluster
-func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSupportReason, internalClusterID string) error {
+func (c *SdkClient) PostLimitedSupportReason(cluster *cmv1.Cluster, limitedSupportReason *LimitedSupportReason) error {
+	if cluster == nil {
+		return errors.New("cluster must not be nil")
+	}
+
+	product := GetClusterProduct(cluster)
+	if mismatch, link := findDocumentationMismatch(product, limitedSupportReason.Details); mismatch != ProductUnknown {
+		return &DocumentationMismatchError{
+			ExpectedProduct: product,
+			DetectedProduct: mismatch,
+			Link:            link,
+			Summary:         limitedSupportReason.Summary,
+			Details:         limitedSupportReason.Details,
+			Kind:            documentationMessageKindLimitedSupport,
+		}
+	}
+
 	logging.Infof("Sending limited support reason: %s", limitedSupportReason.Summary)
 
 	ls, err := newLimitedSupportReasonBuilder(limitedSupportReason).Build()
@@ -164,7 +180,7 @@ func (c *SdkClient) PostLimitedSupportReason(limitedSupportReason *LimitedSuppor
 		return fmt.Errorf("could not create post request (LS): %w", err)
 	}
 
-	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).LimitedSupportReasons().Add()
+	request := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).LimitedSupportReasons().Add()
 	request = request.Body(ls)
 	resp, err := request.Send()
 	if err != nil && !strings.Contains(err.Error(), "Operation is not allowed for a cluster in 'uninstalling' state") {
@@ -184,14 +200,30 @@ func (c *SdkClient) GetServiceLog(cluster *cmv1.Cluster, filter string) (*servic
 }
 
 // PostServiceLog allows to send a generic servicelog to a cluster.
-func (c *SdkClient) PostServiceLog(clusterID string, sl *ServiceLog) error {
+func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error {
+	if cluster == nil {
+		return errors.New("cluster must not be nil")
+	}
+
+	product := GetClusterProduct(cluster)
+	if mismatch, link := findDocumentationMismatch(product, sl.Description); mismatch != ProductUnknown {
+		return &DocumentationMismatchError{
+			ExpectedProduct: product,
+			DetectedProduct: mismatch,
+			Link:            link,
+			Summary:         sl.Summary,
+			Details:         sl.Description,
+			Kind:            documentationMessageKindServiceLog,
+		}
+	}
+
 	builder := &servicelogsv1.LogEntryBuilder{}
 	builder.Severity(servicelogsv1.Severity(sl.Severity))
 	builder.ServiceName(sl.ServiceName)
 	builder.Summary(sl.Summary)
 	builder.Description(sl.Description)
 	builder.InternalOnly(sl.InternalOnly)
-	builder.ClusterID(clusterID)
+	builder.ClusterID(cluster.ID())
 	le, err := builder.Build()
 	if err != nil {
 		return fmt.Errorf("could not create post request (SL): %w", err)

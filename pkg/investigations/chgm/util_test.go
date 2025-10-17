@@ -13,9 +13,11 @@ var blockedUrls = "example.com, test.com"
 
 // TestCreateEgressSL tests the createEgressSL function
 func TestCreateEgressSL(t *testing.T) {
+	docLink := "https://docs.example.com"
 	expectedDescription := fmt.Sprintf(
-		"Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: https://access.redhat.com/documentation/en-us/red_hat_openshift_service_on_aws/4/html/prepare_your_environment/rosa-sts-aws-prereqs#osd-aws-privatelink-firewall-prerequisites_rosa-sts-aws-prereqs#.",
+		"Your cluster requires you to take action. SRE has observed that there have been changes made to the network configuration which impacts normal working of the cluster, including lack of network egress to these internet-based resources which are required for the cluster operation and support: %s. Please revert changes, and refer to documentation regarding firewall requirements for PrivateLink clusters: %s.",
 		blockedUrls,
+		docLink,
 	)
 
 	expected := &ocm.ServiceLog{
@@ -26,6 +28,6 @@ func TestCreateEgressSL(t *testing.T) {
 		InternalOnly: false,
 	}
 
-	result := createEgressSL(blockedUrls)
+	result := createEgressSL(blockedUrls, docLink)
 	assert.Equal(t, *expected, *result)
 }
