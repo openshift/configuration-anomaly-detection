@@ -107,7 +107,7 @@ func (e *DocumentationMismatchError) Error() string {
 // EscalationMessage returns the user-facing note that should be escalated to SREs when a
 // documentation mismatch is detected.
 func (e *DocumentationMismatchError) EscalationMessage() string {
-	return fmt.Sprintf("%s: '%s' was to be sent, but detected documentation link %q for %s product while working on a %s cluster. Please send the correct ocumentation for the product manually. Details prepared:\n%s", e.Kind, e.Summary, e.Link, productDisplayName(e.DetectedProduct), productDisplayName(e.ExpectedProduct), e.Details)
+	return fmt.Sprintf("%s: '%s' was to be sent, but detected documentation link %q for %s product while working on a %s cluster. Please send the correct documentation for the product manually. Details prepared:\n%s", e.Kind, e.Summary, e.Link, productDisplayName(e.DetectedProduct), productDisplayName(e.ExpectedProduct), e.Details)
 }
 
 func productDisplayName(product Product) string {
