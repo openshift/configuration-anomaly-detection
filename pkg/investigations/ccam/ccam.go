@@ -46,7 +46,7 @@ func (c *Investigation) Run(r investigation.ResourceBuilder) (investigation.Inve
 			// Cluster is in functional sate but we can't jumprole to it: post limited support
 			result.LimitedSupportSet.Performed = true
 			result.LimitedSupportSet.Labels = []string{ccamLimitedSupport.Summary}
-			err := ocmClient.PostLimitedSupportReason(ccamLimitedSupport, cluster.ID())
+			err := ocmClient.PostLimitedSupportReason(cluster, ccamLimitedSupport)
 			if err != nil {
 				return result, fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
 			}

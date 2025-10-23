@@ -17,6 +17,7 @@ limitations under the License.
 package investigate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -200,6 +201,12 @@ func run(cmd *cobra.Command, _ []string) error {
 }
 
 func handleCADFailure(err error, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+	var docErr *ocm.DocumentationMismatchError
+	if errors.As(err, &docErr) {
+		escalateDocumentationMismatch(docErr, resources, pdClient)
+		return
+	}
+
 	logging.Errorf("CAD investigation failed: %v", err)
 
 	var notes string
@@ -220,6 +227,27 @@ func handleCADFailure(err error, resources *investigation.Resources, pdClient *p
 	} else {
 		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
 	}
+}
+
+func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+	message := docErr.EscalationMessage()
+
+	if resources != nil && resources.Notes != nil {
+		resources.Notes.AppendWarning("%s", message)
+		message = resources.Notes.String()
+	}
+
+	if pdClient == nil {
+		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate documentation mismatch to PagerDuty notes.")
+		return
+	}
+
+	if err := pdClient.EscalateIncidentWithNote(message); err != nil {
+		logging.Errorf("Failed to escalate documentation mismatch notes to PagerDuty: %v", err)
+		return
+	}
+
+	logging.Info("Escalated documentation mismatch to PagerDuty")
 }
 
 func updateMetrics(investigationName string, result *investigation.InvestigationResult) {
