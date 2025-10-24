@@ -173,7 +173,12 @@ It will run services on the following local ports:8001 8091 8443 8888
    ```bash
    BACKPLANE_URL=https://localhost:8443 HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888 BACKPLANE_PROXY=http://127.0.0.1:8888  ./bin/cadctl investigate --payload-path ./payload --log-level debug
    ```
+
 6. Close the local infrastructure when done by sending SIGINT (Ctrl+C) to the launch_local_env.sh
+
+## Run e2e test manually
+
+See [test/e2e/README.md](test/e2e/README.md)
 
 ### Logging levels
 

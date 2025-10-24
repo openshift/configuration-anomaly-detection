@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -41,6 +42,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		k8s          *openshift.Client
 		region       string
 		provider     string
+		awsCfg       aws.Config
 		clusterID    string
 		testPdClient utils.TestPagerDutyClient
 	)
@@ -66,7 +68,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			ocme2eCli, err = ocme2e.New(ctx, "", clientID, clientSecret, ocmEnv)
 			Expect(err).ShouldNot(HaveOccurred(), "Unable to setup E2E OCM Client")
 		} else {
-
 			ocme2eCli = &ocme2e.Client{Connection: connection}
 		}
 
@@ -78,6 +79,25 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		provider, err = k8s.GetProvider(ctx)
 		Expect(err).NotTo(HaveOccurred(), "Could not determine provider")
+
+		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
+		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
+		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
+		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
+
+		// This was added to allow for the tests to be executed locally/when session token is required
+		// os.Getenv will return "" if AWS_SESSION_TOKEN is not set
+		awsSessionToken := os.Getenv("AWS_SESSION_TOKEN")
+
+		awsCfg, err = config.LoadDefaultConfig(ctx,
+			config.WithRegion(region),
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+				awsAccessKey,
+				awsSecretKey,
+				awsSessionToken,
+			)),
+		)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
 
 		pdRoutingKey := os.Getenv("CAD_PAGERDUTY_ROUTING_KEY")
 		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
@@ -94,19 +114,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		if provider != "aws" {
 			Skip(fmt.Sprintf("This test only runs on AWS clusters. Cluster is: '%s'", provider))
 		}
-		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
-		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
-		awsCfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(region),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				awsAccessKey,
-				awsSecretKey,
-				"",
-			)),
-		)
-		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
+
 		ec2Client := ec2.NewFromConfig(awsCfg)
 		ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
 		awsCli, err := awsinternal.NewClient(awsCfg)
@@ -161,7 +169,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		// Verify test result: Expect new limited support reasons to be found after blocking egress
 		Expect(lsResponseAfter.Items().Len()).To(BeNumerically(">", lsReasonsBefore),
 			"No new limited support reasons found after blocking egress")
-
 	})
 
 	It("AWS CCS: cluster has gone missing (no known misconfiguration)", func(ctx context.Context) {
@@ -295,26 +302,13 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(lsReasonsAfter).To(Equal(lsReasonsBefore), "Limited support reasons changed after scale down/up")
 
 		fmt.Println("Test completed: All components restored to original replica counts.")
-
 	})
 
 	It("AWS CCS: Cluster has gone missing - Infra nodes turned off", Label("aws", "ccs", "infra-nodes", "limited-support"), func(ctx context.Context) {
 		if provider != "aws" {
 			Skip(fmt.Sprintf("This test only runs on AWS clusters. Cluster is: '%s'", provider))
 		}
-		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
-		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
-		awsCfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(region),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				awsAccessKey,
-				awsSecretKey,
-				"",
-			)),
-		)
-		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
+
 		ec2Client := ec2.NewFromConfig(awsCfg)
 
 		ginkgo.GinkgoWriter.Println("Getting limited support reasons before infra node shutdown...")
@@ -515,7 +509,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		}
 
 		ginkgo.GinkgoWriter.Println("Step 7: Test completed: Node NotReady condition simulated and checked.")
-
 	})
 
 	It("AWS CCS: clustermonitoringerrorbudgetburn", func(ctx context.Context) {
@@ -598,20 +591,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		if provider != "aws" {
 			Skip(fmt.Sprintf("This test only runs on AWS clusters. Cluster is: '%s'", provider))
 		}
-		awsAccessKey := os.Getenv("AWS_ACCESS_KEY_ID")
-		awsSecretKey := os.Getenv("AWS_SECRET_ACCESS_KEY")
-		Expect(awsAccessKey).NotTo(BeEmpty(), "AWS access key not found")
-		Expect(awsSecretKey).NotTo(BeEmpty(), "AWS secret key not found")
-
-		awsCfg, err := config.LoadDefaultConfig(ctx,
-			config.WithRegion(region),
-			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-				awsAccessKey,
-				awsSecretKey,
-				"",
-			)),
-		)
-		Expect(err).NotTo(HaveOccurred(), "Failed to create AWS config")
 
 		ec2Client := ec2.NewFromConfig(awsCfg)
 		ec2Wrapper := utils.NewEC2ClientWrapper(ec2Client)
@@ -685,7 +664,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		// Step 4: Verify no new logs were created
 		Expect(len(newLogs)).To(BeZero(), "Expected no new service logs after blocking egress and scaling down")
-
 	})
 
 	It("UpgradeConfigSyncFailureOver4Hr: corrupted pull secret investigation", Label("pull-secret", "upgrade-config-sync", "user-banned-check"), func(ctx context.Context) {
@@ -805,5 +783,4 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 
 		fmt.Println("Test completed: UpgradeConfigSyncFailureOver4Hr investigation simulated successfully")
 	})
-
 }, ginkgo.ContinueOnFailure)
