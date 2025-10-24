@@ -1,0 +1,31 @@
+Repository: openshift/multiarch-tuning-operator
+  GitHub URL: https://github.com/openshift/multiarch-tuning-operator
+  Default branch: main
+  Using ocp-doc-checker: NO
+  Files with OCP documentation links:
+    - config/manifests/bases/multiarch-tuning-operator.clusterserviceversion.yaml
+      Occurrences: 1
+      Sample URLs:
+        - https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/postinstallation_configuration/configuring-multi-architecture-compute-machines-on-an-openshift-cluster#multiarch-tuning-operator
+      GitHub: https://github.com/openshift/multiarch-tuning-operator/blob/main/config/manifests/bases/multiarch-tuning-operator.clusterserviceversion.yaml
+
+    - bundle/manifests/multiarch-tuning-operator.clusterserviceversion.yaml
+      Occurrences: 1
+      Sample URLs:
+        - https://docs.redhat.com/en/documentation/openshift_container_platform/latest/html/postinstallation_configuration/configuring-multi-architecture-compute-machines-on-an-openshift-cluster#multiarch-tuning-operator
+      GitHub: https://github.com/openshift/multiarch-tuning-operator/blob/main/bundle/manifests/multiarch-tuning-operator.clusterserviceversion.yaml
+
+
+Repository: openshift/cert-manager-operator
+  GitHub URL: https://github.com/openshift/cert-manager-operator
+  Default branch: master
+  Using ocp-doc-checker: NO
+  Files with OCP documentation links:
+    - docs/operand_metrics.md
+      Occurrences: 2
+      Sample URLs:
+        - https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/monitoring/configuring-user-workload-monitoring).
+        - https://docs.redhat.com/en/documentation/openshift_container_platform/4.20/html/monitoring/accessing-metrics).
+      GitHub: https://github.com/openshift/cert-manager-operator/blob/master/docs/operand_metrics.md
+
+
