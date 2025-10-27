@@ -113,7 +113,7 @@ func getClusterPullSecret(k8scli client.Client) (secretToken string, note string
 }
 
 func (c *Investigation) Name() string {
-	return "UpgradeConfigSyncFailureOver4hr"
+	return "upgradeconfigsyncfailureover4hr"
 }
 
 func (c *Investigation) Description() string {
