@@ -1,0 +1,42 @@
+apiVersion: config.openshift.io/v1
+kind: ClusterOperator
+metadata:
+  name: authentication
+  creationTimestamp: "2024-01-15T10:00:00Z"
+spec: {}
+status:
+  conditions:
+    - type: Available
+      status: "False"
+      lastTransitionTime: "2024-01-15T15:00:00Z"
+      reason: OAuthServerDeploymentAvailable
+      message: "deployment/oauth-openshift has 0/1 replicas available"
+    - type: Progressing
+      status: "True"
+      lastTransitionTime: "2024-01-15T15:00:00Z"
+      reason: OAuthServerDeploymentProgressing
+      message: "deployment/oauth-openshift is progressing"
+    - type: Degraded
+      status: "True"
+      lastTransitionTime: "2024-01-15T15:00:00Z"
+      reason: OAuthServerDeploymentDegraded
+      message: "deployment/oauth-openshift has 0/1 replicas available"
+    - type: Upgradeable
+      status: "True"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+  extension: null
+  relatedObjects:
+    - group: operator.openshift.io
+      name: cluster
+      resource: authentications
+    - group: ""
+      name: openshift-authentication
+      resource: namespaces
+    - group: ""
+      name: openshift-authentication-operator
+      resource: namespaces
+  versions:
+    - name: operator
+      version: 4.14.10

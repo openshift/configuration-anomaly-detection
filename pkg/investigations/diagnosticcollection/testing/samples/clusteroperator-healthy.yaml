@@ -1,0 +1,42 @@
+apiVersion: config.openshift.io/v1
+kind: ClusterOperator
+metadata:
+  name: ingress
+  creationTimestamp: "2024-01-15T10:00:00Z"
+spec: {}
+status:
+  conditions:
+    - type: Available
+      status: "True"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+    - type: Progressing
+      status: "False"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+    - type: Degraded
+      status: "False"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+    - type: Upgradeable
+      status: "True"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+  extension: null
+  relatedObjects:
+    - group: operator.openshift.io
+      name: default
+      resource: ingresscontrollers
+    - group: ""
+      name: openshift-ingress-operator
+      resource: namespaces
+    - group: ""
+      name: openshift-ingress
+      resource: namespaces
+  versions:
+    - name: operator
+      version: 4.14.10

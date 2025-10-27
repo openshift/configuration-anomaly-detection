@@ -1,0 +1,45 @@
+apiVersion: config.openshift.io/v1
+kind: ClusterVersion
+metadata:
+  name: version
+  creationTimestamp: "2024-01-15T10:00:00Z"
+spec:
+  channel: stable-4.14
+  clusterID: abcd1234-5678-90ab-cdef-1234567890ab
+  desiredUpdate:
+    version: 4.14.15
+    image: quay.io/openshift-release-dev/ocp-release@sha256:...
+status:
+  availableUpdates: []
+  conditions:
+    - type: Available
+      status: "True"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: Cluster version is available
+    - type: Progressing
+      status: "True"
+      lastTransitionTime: "2024-01-15T14:00:00Z"
+      reason: UpdatingClusterVersion
+      message: Working towards 4.14.15
+    - type: Degraded
+      status: "False"
+      lastTransitionTime: "2024-01-15T10:00:00Z"
+      reason: AsExpected
+      message: ""
+  desired:
+    version: 4.14.15
+    image: quay.io/openshift-release-dev/ocp-release@sha256:...
+  history:
+    - state: Partial
+      version: 4.14.15
+      image: quay.io/openshift-release-dev/ocp-release@sha256:...
+      startedTime: "2024-01-15T14:00:00Z"
+      completionTime: null
+    - state: Completed
+      version: 4.14.10
+      image: quay.io/openshift-release-dev/ocp-release@sha256:...
+      startedTime: "2024-01-10T10:00:00Z"
+      completionTime: "2024-01-10T12:30:00Z"
+  observedGeneration: 2
+  versionHash: "abc123"

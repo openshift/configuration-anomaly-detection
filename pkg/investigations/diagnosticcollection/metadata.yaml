@@ -1,0 +1,24 @@
+name: diagnosticcollection
+rbac:
+  roles: []
+  clusterRoleRules:
+    # Permissions for inspecting cluster version
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "config.openshift.io"
+      resources:
+        - "clusterversions"
+    # Permissions for inspecting cluster operators
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "config.openshift.io"
+      resources:
+        - "clusteroperators"
+    # Additional permissions that may be needed for oc adm inspect
+    # Can be expanded as new resource types are added to mappings
+customerDataAccess: false
+
