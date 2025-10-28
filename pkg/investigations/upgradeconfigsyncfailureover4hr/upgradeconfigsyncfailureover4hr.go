@@ -117,7 +117,7 @@ func (c *Investigation) Name() string {
 }
 
 func (c *Investigation) AlertTitle() string {
-	return alertname
+	return "UpgradeConfigSyncFailureOver4HrSRE"
 }
 
 func (c *Investigation) Description() string {
