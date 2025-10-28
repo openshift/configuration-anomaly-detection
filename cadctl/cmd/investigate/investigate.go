@@ -17,6 +17,7 @@ limitations under the License.
 package investigate
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -207,6 +208,12 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 	resources, err := rb.Build()
 	if err != nil {
 		logging.Errorf("resource builder failed with error: %v", err)
+	}
+
+	var docErr *ocm.DocumentationMismatchError
+	if errors.As(err, &docErr) {
+		escalateDocumentationMismatch(docErr, resources, pdClient)
+		return
 	}
 
 	var notes string

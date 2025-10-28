@@ -118,19 +118,6 @@ func TestInvestigation_Run(t *testing.T) {
 
 				return pdClient, ocmClient, cluster
 			},
-			{
-				"cloud provider unsupported stops investigation",
-				&ClusterStatePrecheck{},
-				args{rb: &investigation.ResourceBuilderMock{
-					Resources: &investigation.Resources{
-						Cluster:   &cmv1.Cluster{},
-						OcmClient: ocmmock.NewMockClient(mockCtrl),
-						PdClient:  pdClient,
-					},
-				}},
-				investigation.InvestigationResult{StopInvestigations: errors.New("unsupported cloud provider (non-AWS)")},
-				false,
-			},
 		},
 		{
 			name: "cloud provider unsupported stops investigation",
