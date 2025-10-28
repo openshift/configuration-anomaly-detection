@@ -128,12 +128,12 @@ func (c *Investiation) Name() string {
 	return "Cluster Has Gone Missing (CHGM)"
 }
 
-func (c *Investiation) Description() string {
-	return "Detects reason for clusters that have gone missing"
+func (c *Investiation) AlertTitle() string {
+	return "has gone missing"
 }
 
-func (c *Investiation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "has gone missing")
+func (c *Investiation) Description() string {
+	return "Detects reason for clusters that have gone missing"
 }
 
 func (c *Investiation) IsExperimental() bool {

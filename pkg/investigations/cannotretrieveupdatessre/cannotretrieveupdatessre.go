@@ -3,7 +3,6 @@ package cannotretrieveupdatessre
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -94,12 +93,12 @@ func (i *Investigation) Name() string {
 	return "cannotretrieveupdatessre"
 }
 
-func (i *Investigation) Description() string {
-	return fmt.Sprintf("Investigates '%s' alerts by running network verifier and checking ClusterVersion", i.Name())
+func (i *Investigation) AlertTitle() string {
+	return "CannotRetrieveUpdatesSRE"
 }
 
-func (i *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "CannotRetrieveUpdatesSRE")
+func (i *Investigation) Description() string {
+	return fmt.Sprintf("Investigates '%s' alerts by running network verifier and checking ClusterVersion", i.Name())
 }
 
 func (i *Investigation) IsExperimental() bool {

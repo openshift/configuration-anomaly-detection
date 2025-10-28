@@ -116,12 +116,12 @@ func (c *Investigation) Name() string {
 	return "upgradeconfigsyncfailureover4hr"
 }
 
-func (c *Investigation) Description() string {
-	return "Investigates the UpgradeConfigSyncFailureOver4hr alert"
+func (c *Investigation) AlertTitle() string {
+	return "UpgradeConfigSyncFailureOver4HrSRE"
 }
 
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "UpgradeConfigSyncFailureOver4HrSRE")
+func (c *Investigation) Description() string {
+	return "Investigates the UpgradeConfigSyncFailureOver4hr alert"
 }
 
 func (c *Investigation) IsExperimental() bool {

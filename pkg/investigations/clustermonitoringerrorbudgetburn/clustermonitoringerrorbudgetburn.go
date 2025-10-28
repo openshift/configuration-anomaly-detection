@@ -147,12 +147,12 @@ func (c *Investigation) Name() string {
 	return "clustermonitoringerrorbudgetburn"
 }
 
-func (c *Investigation) Description() string {
-	return "Investigate the cluster monitoring error budget burn alert"
+func (c *Investigation) AlertTitle() string {
+	return "ClusterMonitoringErrorBudgetBurnSRE"
 }
 
-func (c *Investigation) ShouldInvestigateAlert(alert string) bool {
-	return strings.Contains(alert, "ClusterMonitoringErrorBudgetBurnSRE")
+func (c *Investigation) Description() string {
+	return "Investigate the cluster monitoring error budget burn alert"
 }
 
 func (c *Investigation) IsExperimental() bool {

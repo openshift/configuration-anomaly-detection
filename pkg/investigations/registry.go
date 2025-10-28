@@ -1,8 +1,9 @@
 package investigations
 
 import (
+	"strings"
+
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cannotretrieveupdatessre"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
@@ -14,7 +15,6 @@ import (
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
-	&ccam.Investigation{},
 	&chgm.Investiation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&cpd.Investigation{},
@@ -30,9 +30,19 @@ var availableInvestigations = []investigation.Investigation{
 // linked to single alert type.
 func GetInvestigation(title string, experimental bool) investigation.Investigation {
 	for _, inv := range availableInvestigations {
-		if inv.ShouldInvestigateAlert(title) && (experimental || !inv.IsExperimental()) {
+		if strings.Contains(title, inv.AlertTitle()) && (experimental || !inv.IsExperimental()) {
 			return inv
 		}
 	}
 	return nil
+}
+
+// GetAvailableInvestigationsTitles returns a string array with the alert titles of all available investigations.
+func GetAvailableInvestigationsTitles() []string {
+	alertTitles := make([]string, 0, len(availableInvestigations))
+
+	for _, inv := range availableInvestigations {
+		alertTitles = append(alertTitles, inv.AlertTitle())
+	}
+	return alertTitles
 }

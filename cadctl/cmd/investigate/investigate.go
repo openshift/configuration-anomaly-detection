@@ -184,7 +184,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	ccamInvestigation := ccam.Investigation{}
+	ccamInvestigation := ccam.CloudCredentialsCheck{}
 	result, err = ccamInvestigation.Run(builder)
 	if err != nil {
 		return err
