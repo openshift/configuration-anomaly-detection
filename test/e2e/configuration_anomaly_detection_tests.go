@@ -23,6 +23,7 @@ import (
 	ocmConnBuilder "github.com/openshift-online/ocm-common/pkg/ocm/connection-builder"
 	v1beta1 "github.com/openshift/api/machine/v1beta1"
 	awsinternal "github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
 	"github.com/openshift/configuration-anomaly-detection/test/e2e/utils"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
@@ -108,6 +109,41 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		if ocme2eCli != nil && ocme2eCli.Connection != nil {
 			ocme2eCli.Connection.Close()
 		}
+	})
+
+	It("should not add limited support reasons on a healthy cluster", Label("critical"), func(ctx context.Context) {
+		// Get limited support reasons before
+		lsResponseBefore, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+		lsReasonsBefore := lsResponseBefore.Items().Len()
+		ginkgo.GinkgoWriter.Printf("Limited support reasons before blocking egress: %d\n", lsReasonsBefore)
+
+		// Trigger all investigations we have against the healthy cluster
+		alertTitles := investigations.GetAvailableInvestigationsTitles()
+		ginkgo.GinkgoWriter.Printf("Triggering %d investigations: %v\n", len(alertTitles), alertTitles)
+
+		for _, alertTitle := range alertTitles {
+			_, err = testPdClient.TriggerIncident(alertTitle, clusterID)
+			Expect(err).NotTo(HaveOccurred(), "Failed to trigger PagerDuty alert for %s", alertTitle)
+			ginkgo.GinkgoWriter.Printf("Triggered investigation for: %s\n", alertTitle)
+		}
+
+		// Wait - This needs to be long enough for the slowest investigation
+		time.Sleep(5 * time.Minute)
+		lsResponseAfter, err := utils.GetLimitedSupportReasons(ocme2eCli, clusterID)
+		Expect(err).NotTo(HaveOccurred(), "Failed to get limited support reasons")
+		fmt.Printf("Limited support reasons after running all investigations: %d\n", lsResponseAfter.Items().Len())
+
+		// Iterate through each item and print details
+		items := lsResponseAfter.Items().Slice()
+		for i, item := range items {
+			fmt.Printf("Reason #%d:\n", i+1)
+			fmt.Printf(" - Summary: %s\n", item.Summary())
+			fmt.Printf(" - Details: %s\n", item.Details())
+		}
+
+		// Expect no new limited support reasons
+		Expect(lsResponseAfter.Items().Len()).To(BeNumerically("==", lsReasonsBefore), "No new limited support reasons found after running all investigations")
 	})
 
 	It("AWS CCS: cluster has gone missing (blocked egress)", Label("aws", "ccs", "chgm", "limited-support", "blocking-egress"), func(ctx context.Context) {
