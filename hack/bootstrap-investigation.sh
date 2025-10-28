@@ -91,12 +91,10 @@ import (
 
 type Investigation struct{}
 
-func (c *Investigation) Run(r *investigation.Resources) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb *investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-
-	// Initialize PagerDuty note writer
-	notes := notewriter.New(r.Name, logging.RawLogger)
-	defer func() { r.Notes = notes }()
+	// TODO: Add additional builder configuration depending on your required resources using With...()
+	r, err := rb.WithNotes().Build()
 
 	// TODO: Implement investigation logic here
 
