@@ -182,7 +182,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 			}
 		}()
 
-		_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
+		_, err = testPdClient.TriggerIncident(cluster.Name()+" has gone missing", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 		time.Sleep(5 * time.Minute)
