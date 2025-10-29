@@ -276,7 +276,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).ToNot(HaveOccurred(), "failed to scale down alertmanager")
 		fmt.Printf("Alertmanager scaled down from %d to 0 replicas. Waiting...\n", originalAMReplicas)
 
-		_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
+		_, err = testPdClient.TriggerIncident(cluster.Name()+" has gone missing", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 		time.Sleep(1 * time.Minute)
@@ -401,7 +401,7 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Infra EC2 instances did not stop in time")
 		ginkgo.GinkgoWriter.Println("Infra nodes successfully stopped")
 
-		_, err = testPdClient.TriggerIncident("ClusterHasGoneMissing", clusterID)
+		_, err = testPdClient.TriggerIncident(clusterID+" has gone missing", clusterID)
 		Expect(err).NotTo(HaveOccurred(), "Failed to trigger silent PagerDuty alert")
 
 		ginkgo.GinkgoWriter.Println("Sleeping for 2 minutes before checking limited support reasons...")
