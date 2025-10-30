@@ -22,7 +22,7 @@ objects:
   metadata:
     name: cad-interceptor-deployment
   spec:
-    replicas: 2
+    replicas: 3
     selector:
       matchLabels:
         app: cad-interceptor
@@ -31,6 +31,15 @@ objects:
         labels:
           app: cad-interceptor
       spec:
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: cad-interceptor
+                topologyKey: kubernetes.io/hostname
         containers:
         - args:
           - interceptor
@@ -174,6 +183,7 @@ objects:
   spec:
     resources:
       kubernetesResource:
+        replicas: 3
         spec:
           template:
             spec:

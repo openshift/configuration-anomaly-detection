@@ -54,7 +54,7 @@ objects:
     selector:
       matchLabels:
         app: aggregation-pushgateway
-    replicas: 2
+    replicas: 3
     strategy:
     rollingParams:
       intervalSeconds: 1
@@ -68,11 +68,20 @@ objects:
         labels:
           app: aggregation-pushgateway
       spec:
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: aggregation-pushgateway
+                topologyKey: kubernetes.io/hostname
         serviceAccountName: pushgateway
         containers:
           - name: aggregation-pushgateway
             image: ${REGISTRY_IMG}:${IMAGE_TAG}
-            securityContext: 
+            securityContext:
               allowPrivilegeEscalation: false
               runAsNonRoot: true
               capabilities:
