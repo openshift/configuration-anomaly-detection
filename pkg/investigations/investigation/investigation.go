@@ -1,8 +1,6 @@
 package investigation
 
 import (
-	"fmt"
-
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
@@ -139,9 +137,8 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
 		if err != nil {
 			// Let the caller handle how to respond to this error.
-			err = fmt.Errorf("could not retrieve cluster info for %s: %w", r.clusterId, err)
-			r.buildErr = err
-			return nil, err
+			r.buildErr = ClusterNotFoundError{ClusterID: r.clusterId, Err: err}
+			return nil, r.buildErr
 		}
 	}
 
@@ -153,8 +150,8 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		if r.buildAwsClient && r.builtResources.AwsClient == nil {
 			r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
 			if err != nil {
-				r.buildErr = err
-				return nil, err
+				r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
+				return nil, r.buildErr
 			}
 		}
 
@@ -162,17 +159,16 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			logging.Infof("creating k8s client for %s", r.name)
 			r.builtResources.K8sClient, err = k8sclient.New(r.builtResources.Cluster.ID(), r.ocmClient, r.name)
 			if err != nil {
-				r.buildErr = err
-				return nil, err
+				r.buildErr = K8SClientError{ClusterID: r.clusterId, Err: err}
+				return nil, r.buildErr
 			}
 		}
 
 		if r.buildClusterDeployment && r.builtResources.ClusterDeployment == nil {
 			r.builtResources.ClusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
 			if err != nil {
-				err = fmt.Errorf("could not retrieve Cluster Deployment for %s: %w", internalClusterId, err)
-				r.buildErr = err
-				return nil, err
+				r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
+				return nil, r.buildErr
 			}
 		}
 

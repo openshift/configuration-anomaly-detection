@@ -2,6 +2,7 @@
 package ccam
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -26,8 +27,10 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 	// Apart from the defaults this investigation requires an AWS client which can fail to build
 	resources, err := r.WithAwsClient().Build()
 	logging.Info("Investigating possible missing cloud credentials...")
-	if err != nil {
-		if customerRemovedPermissions := customerRemovedPermissions(err.Error()); !customerRemovedPermissions {
+	// Only an AWS error indicates that the permissions are incorrect - all other mean the resource build failed for other reasons
+	awsClientErr := &investigation.AWSClientError{}
+	if errors.As(err, awsClientErr) {
+		if customerRemovedPermissions := customerRemovedPermissions(awsClientErr.Err.Error()); !customerRemovedPermissions {
 			// We aren't able to jumpRole because of an error that is different than
 			// a removed support role/policy or removed installer role/policy
 			// This would normally be a backplane failure.
@@ -61,7 +64,7 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 			return result, pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
 		}
 	}
-	return result, nil
+	return result, err
 }
 
 // userCausedErrors contains the list of backplane returned error strings that we map to
