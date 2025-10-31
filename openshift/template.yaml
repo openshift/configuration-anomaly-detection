@@ -111,7 +111,7 @@ objects:
     selector:
       app: cad-interceptor
     type: ClusterIP
-- apiVersion: triggers.tekton.dev/v1alpha1
+- apiVersion: triggers.tekton.dev/v1beta1
   kind: Interceptor
   metadata:
     name: cad-interceptor
@@ -129,7 +129,7 @@ objects:
     params:
     - name: payload
       value: $(body)
-- apiVersion: triggers.tekton.dev/v1alpha1
+- apiVersion: triggers.tekton.dev/v1beta1
   kind: TriggerTemplate
   metadata:
     annotations:
@@ -174,7 +174,7 @@ objects:
         name: cad-interceptor
     template:
       ref: cad-check-trigger-template
-- apiVersion: triggers.tekton.dev/v1alpha1
+- apiVersion: triggers.tekton.dev/v1beta1
   kind: EventListener
   metadata:
     annotations:
@@ -187,6 +187,15 @@ objects:
         spec:
           template:
             spec:
+              affinity:
+                podAntiAffinity:
+                  preferredDuringSchedulingIgnoredDuringExecution:
+                  - weight: 100
+                    podAffinityTerm:
+                      labelSelector:
+                        matchLabels:
+                          eventlistener: cad-event-listener
+                      topologyKey: kubernetes.io/hostname
               containers:
               - env:
                 - name: TLS_CERT
