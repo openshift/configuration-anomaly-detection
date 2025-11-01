@@ -24,7 +24,8 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	// Apart from the defaults this investigation requires an AWS client which can fail to build
-	resources, err := r.WithAwsClient().Build()
+	// as well as a Cluster object.
+	resources, err := r.WithAwsClient().WithCluster().Build()
 	logging.Info("Investigating possible missing cloud credentials...")
 	if err != nil {
 		if customerRemovedPermissions := customerRemovedPermissions(err.Error()); !customerRemovedPermissions {
