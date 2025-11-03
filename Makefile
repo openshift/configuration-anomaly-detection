@@ -9,6 +9,7 @@ endef
 include boilerplate/generated-includes.mk
 
 GOLANGCI_LINT_VERSION=v2.0.2
+GOLANGCI_LINT_BIN:=$(shell which golangci-lint 2>/dev/null || echo "$(GOPATH)/bin/golangci-lint")
 MOCKGEN_VERSION=v0.5.0
 
 .DEFAULT_GOAL := all
@@ -48,7 +49,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c .golangci.yml
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -71,7 +72,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
 	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOPATH)/bin/golangci-lint run -c ../.golangci.yml
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor ## Run unit tests for interceptor
@@ -120,7 +121,7 @@ check-go121-install:
 
 .PHONY: install-linter
 install-linter: check-curl-install check-go121-install
-	@ls $(GOPATH)/bin/golangci-lint 1>/dev/null || (echo && echo "Installing 'golangci-lint'..." && mkdir -p $(GOPATH)/bin && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION))
+	@test -x "$(GOLANGCI_LINT_BIN)" || (echo && echo "Installing 'golangci-lint'..." && mkdir -p $(GOPATH)/bin && curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOPATH)/bin $(GOLANGCI_LINT_VERSION))
 
 .PHONY: install-mockgen
 install-mockgen: check-go121-install
