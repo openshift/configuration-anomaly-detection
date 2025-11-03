@@ -177,8 +177,9 @@ func run(cmd *cobra.Command, _ []string) error {
 	precheck := precheck.ClusterStatePrecheck{}
 	result, err := precheck.Run(builder)
 	if err != nil {
-		if strings.Contains(err.Error(), "no cluster found") {
-			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting.", clusterID)
+		clusterNotFound := &investigation.ClusterNotFoundError{}
+		if errors.As(err, clusterNotFound) {
+			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting: %w", clusterID, clusterNotFound)
 			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
 		}
 		return err
