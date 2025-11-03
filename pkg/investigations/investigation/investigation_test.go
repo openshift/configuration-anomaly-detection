@@ -115,7 +115,7 @@ func TestResourceBuilder_ErrorCaching(t *testing.T) {
 
 	// First Build() should return the cached error without attempting any operations
 	resources1, err1 := rb.Build()
-	assert.Nil(t, resources1)
+	assert.Equal(t, &Resources{PdClient: mockPDClient}, resources1)
 	assert.Error(t, err1)
 
 	var clusterNotFoundErr ClusterNotFoundError
@@ -125,7 +125,7 @@ func TestResourceBuilder_ErrorCaching(t *testing.T) {
 
 	// Second Build() should also return the cached error
 	resources2, err2 := rb.Build()
-	assert.Nil(t, resources2)
+	assert.Equal(t, &Resources{PdClient: mockPDClient}, resources2)
 	assert.Error(t, err2)
 	assert.ErrorAs(t, err2, &clusterNotFoundErr)
 
@@ -165,7 +165,7 @@ func TestResourceBuilder_Build_ReturnsClusterNotFoundError(t *testing.T) {
 	}
 
 	resources, err := rb.Build()
-	assert.Nil(t, resources)
+	assert.Equal(t, &Resources{PdClient: mockPDClient}, resources)
 	assert.Error(t, err)
 
 	// Verify the error is of the correct type

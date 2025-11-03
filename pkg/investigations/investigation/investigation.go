@@ -125,7 +125,8 @@ func (r *ResourceBuilderT) WithNotes() ResourceBuilder {
 
 func (r *ResourceBuilderT) Build() (*Resources, error) {
 	if r.buildErr != nil {
-		return nil, r.buildErr
+		// Return whatever managed to build + an error. this might allow some subset of checks to proceed.
+		return r.builtResources, r.buildErr
 	}
 
 	// The Name is now set during construction.
