@@ -21,6 +21,8 @@ objects:
   kind: Deployment
   metadata:
     name: cad-interceptor-deployment
+    annotations:
+      ignore-check.kube-linter.io/anti-affinity: "Pod anti-affinity check disabled for interceptor deployment as it is not supported by tekton v1alpha1 (only version with interceptor support)"
   spec:
     replicas: 3
     selector:
@@ -31,15 +33,6 @@ objects:
         labels:
           app: cad-interceptor
       spec:
-        affinity:
-          podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    app: cad-interceptor
-                topologyKey: kubernetes.io/hostname
         containers:
         - args:
           - interceptor
@@ -111,7 +104,7 @@ objects:
     selector:
       app: cad-interceptor
     type: ClusterIP
-- apiVersion: triggers.tekton.dev/v1beta1
+- apiVersion: triggers.tekton.dev/v1alpha1
   kind: Interceptor
   metadata:
     name: cad-interceptor
