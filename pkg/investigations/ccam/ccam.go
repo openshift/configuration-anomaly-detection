@@ -25,8 +25,7 @@ var ccamLimitedSupport = &ocm.LimitedSupportReason{
 func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	// Apart from the defaults this investigation requires an AWS client which can fail to build
-	// as well as a Cluster object.
-	resources, err := r.WithAwsClient().WithCluster().Build()
+	resources, err := r.WithAwsClient().Build()
 	logging.Info("Investigating possible missing cloud credentials...")
 	// Only an AWS error indicates that the permissions are incorrect - all other mean the resource build failed for other reasons
 	awsClientErr := &investigation.AWSClientError{}
