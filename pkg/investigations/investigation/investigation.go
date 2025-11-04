@@ -139,7 +139,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		if err != nil {
 			// Let the caller handle how to respond to this error.
 			r.buildErr = ClusterNotFoundError{ClusterID: r.clusterId, Err: err}
-			return nil, r.buildErr
+			return r.builtResources, r.buildErr
 		}
 	}
 
@@ -152,7 +152,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
 			if err != nil {
 				r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
-				return nil, r.buildErr
+				return r.builtResources, r.buildErr
 			}
 		}
 
@@ -161,7 +161,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.builtResources.K8sClient, err = k8sclient.New(r.builtResources.Cluster.ID(), r.ocmClient, r.name)
 			if err != nil {
 				r.buildErr = K8SClientError{ClusterID: r.clusterId, Err: err}
-				return nil, r.buildErr
+				return r.builtResources, r.buildErr
 			}
 		}
 
@@ -169,7 +169,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.builtResources.ClusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
 			if err != nil {
 				r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
-				return nil, r.buildErr
+				return r.builtResources, r.buildErr
 			}
 		}
 
