@@ -22,7 +22,7 @@ objects:
   metadata:
     name: cad-interceptor-deployment
     annotations:
-      ignore-check.kube-linter.io/anti-affinity: "Pod anti-affinity check disabled for interceptor deployment as it is not supported by tekton v1alpha1 (only version with interceptor support)"
+      ignore-check.kube-linter.io/no-anti-affinity: "Pod anti-affinity check disabled for interceptor deployment as it is not supported by tekton v1alpha1 (only version with interceptor support)"
   spec:
     replicas: 3
     selector:
