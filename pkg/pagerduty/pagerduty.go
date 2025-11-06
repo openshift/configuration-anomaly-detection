@@ -424,7 +424,7 @@ type notesData struct {
 func extractClusterIDFromAlertBody(data map[string]interface{}) (string, error) {
 	details, found := data["details"].(map[string]interface{})
 	if !found {
-		return "", errors.New("could not find alert details field")
+		return "", fmt.Errorf("could not find alert details field: %s", data)
 	}
 
 	// PARSE OPTION 1 (new format): cluster_id directly contained in custom details
