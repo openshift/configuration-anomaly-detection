@@ -65,13 +65,16 @@ type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
 	r, err := rb.WithK8sClient().Build()
-	if err != nil {
-		if errors.Is(err, k8sclient.ErrAPIServerUnavailable) {
+	k8sErr := &investigation.K8SClientError{}
+	if errors.As(err, k8sErr) {
+		if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
 		}
-		if errors.Is(err, k8sclient.ErrCannotAccessInfra) {
+		if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
 			return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
 		}
+		return result, err
+	} else if err != nil {
 		return result, err
 	}
 
