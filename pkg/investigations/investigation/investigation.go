@@ -6,6 +6,7 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
@@ -20,6 +21,10 @@ type InvestigationStep struct {
 }
 
 type InvestigationResult struct {
+	// NEW: Actions to execute via reporter (modern approach)
+	Actions []types.Action
+
+	// EXISTING: Legacy fields (deprecated, maintained for backwards compatibility)
 	LimitedSupportSet  InvestigationStep
 	ServiceLogPrepared InvestigationStep
 	ServiceLogSent     InvestigationStep
