@@ -17,7 +17,7 @@ limitations under the License.
 package cmd
 
 import (
-	investigate "github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
+	"github.com/openshift/configuration-anomaly-detection/cadctl/cmd/investigate"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/spf13/cobra"
@@ -32,13 +32,11 @@ var rootCmd = &cobra.Command{
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	rootCmd.AddCommand(investigate.InvestigateCmd)
+
 	err := rootCmd.Execute()
 	metrics.Push()
 	if err != nil {
 		logging.Fatal(err)
 	}
-}
-
-func init() {
-	rootCmd.AddCommand(investigate.InvestigateCmd)
 }

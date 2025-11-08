@@ -13,6 +13,7 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.473
 	github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c
 	github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583
+	github.com/openshift/backplane-api v0.0.0-20251104022300-74674d3b6921
 	github.com/openshift/backplane-cli v0.2.0
 	github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060
 	github.com/openshift/osd-network-verifier v1.3.0
@@ -66,7 +67,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/danieljoos/wincred v1.2.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/deepmap/oapi-codegen v1.12.4 // indirect
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
@@ -120,13 +120,13 @@ require (
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/oapi-codegen/runtime v1.1.2 // indirect
 	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
 	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.426 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.426 // indirect
 	github.com/openshift-online/ocm-cli v1.0.6 // indirect
-	github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
