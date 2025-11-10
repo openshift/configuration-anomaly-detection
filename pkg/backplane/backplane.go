@@ -55,7 +55,7 @@ func NewClient(config Config) (Client, error) {
 				return fmt.Errorf("failed to get OCM token: %w", err)
 			}
 			req.Header.Set("Authorization", "Bearer "+accessToken)
-			req.Header.Set("User-Agent", "configuration-anomaly-detector")
+			req.Header.Set("User-Agent", "configuration-anomaly-detection")
 			return nil
 		}),
 		bpapi.WithHTTPClient(httpClient),
