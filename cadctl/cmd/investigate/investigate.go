@@ -23,9 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -64,7 +65,7 @@ func init() {
 	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
 }
 
-func run(cmd *cobra.Command, _ []string) error {
+func run(_ *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
 	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
 
@@ -148,7 +149,12 @@ func run(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	builder, err := investigation.NewResourceBuilder(pdClient, ocmClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv)
+	bpClient, err := backplane.NewClient(backplane.Config{OcmClient: ocmClient, BaseURL: backplaneURL, ProxyURL: backplaneProxy})
+	if err != nil {
+		return fmt.Errorf("could not initialize backplane client: %w", err)
+	}
+
+	builder, err := investigation.NewResourceBuilder(pdClient, ocmClient, bpClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv)
 	if err != nil {
 		return fmt.Errorf("failed to create resource builder: %w", err)
 	}
@@ -174,8 +180,8 @@ func run(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	precheck := precheck.ClusterStatePrecheck{}
-	result, err := precheck.Run(builder)
+	preCheck := precheck.ClusterStatePrecheck{}
+	result, err := preCheck.Run(builder)
 	if err != nil {
 		clusterNotFound := &investigation.ClusterNotFoundError{}
 		if errors.As(err, clusterNotFound) {
@@ -223,7 +229,7 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 		resources.Notes.AppendWarning("🚨 CAD investigation failed, CAD team has been notified. Please investigate manually. 🚨")
 		notes = resources.Notes.String()
 	} else {
-		notes = "🚨 CAD investigation failed prior to resource initilization, CAD team has been notified. Please investigate manually. 🚨"
+		notes = "🚨 CAD investigation failed prior to resource initialization, CAD team has been notified. Please investigate manually. 🚨"
 	}
 
 	if pdClient != nil {

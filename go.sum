@@ -136,8 +136,6 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/deepmap/oapi-codegen v1.12.4 h1:pPmn6qI9MuOtCz82WY2Xaw46EQjgvxednXXrP7g5Q2s=
-github.com/deepmap/oapi-codegen v1.12.4/go.mod h1:3lgHGMu6myQ2vqbbTXH2H1o4eXFTGnFiDaOaKKl5yas=
 github.com/dvsekhvalnov/jose2go v1.6.0 h1:Y9gnSnP4qEI0+/uQkHvFXeD2PLPJeXEL+ySMEA2EjTY=
 github.com/dvsekhvalnov/jose2go v1.6.0/go.mod h1:QsHjhyTlD/lAVqn/NSbVZmSCGeDehTB/mPZadG+mhXU=
 github.com/emicklei/go-restful/v3 v3.12.1 h1:PJMDIM/ak7btuL8Ex0iYET9hxM3CI2sjZtzpL63nKAU=
@@ -414,6 +412,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8m
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e/go.mod h1:zD1mROLANZcx1PVRCS0qkT7pwLkGfwJo4zjcN/Tysno=
+github.com/oapi-codegen/runtime v1.1.2 h1:P2+CubHq8fO4Q6fV1tqDBZHCwpVpvPg7oKiYzQgXIyI=
+github.com/oapi-codegen/runtime v1.1.2/go.mod h1:SK9X900oXmPWilYR5/WKPzt3Kqxn/uS/+lbpREv+eCg=
 github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 h1:G7ERwszslrBzRxj//JalHPu/3yz+De2J+4aLtSRlHiY=
 github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037/go.mod h1:2bpvgLBZEtENV5scfDFEtB/5+1M4hkQhDQrccEJ/qGw=
 github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 h1:bQx3WeLcUWy+RletIKwUIt4x3t8n2SxavmoclizMb8c=
@@ -440,8 +440,8 @@ github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c h1:mY2wQ+0z9CzOn4vdQ
 github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c/go.mod h1:SPLf21TYPipzCO67BURkCfK6dcIIxx0oNRVWaOyRcXM=
 github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583 h1:NkG2jLsY5FgHZpwG3gFR09wHIip2R/k+mqXB3BMfeRM=
 github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583/go.mod h1:waCpMAXXP/nBLR5H9ALJKJHYcXdzmAww9+3wGfG5YBE=
-github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70 h1:rUcdH93mEXHMviKxy1no2vFuQm0TiqA2vuCKnczeQ1k=
-github.com/openshift/backplane-api v0.0.0-20250514095514-2aa57551ec70/go.mod h1:RuJZpJy45AJnkp7A0ZPTZhLOVkCGDLI6cGknKvp65LE=
+github.com/openshift/backplane-api v0.0.0-20251104022300-74674d3b6921 h1:YeKHtikw9xrsmneWANnPEF5EDe5rUFUbBhMyY14N3ps=
+github.com/openshift/backplane-api v0.0.0-20251104022300-74674d3b6921/go.mod h1:0+HQ/Ujo/hRKpBFePq2Zitrk6sc5viJNrDtbBTx1uh0=
 github.com/openshift/backplane-cli v0.2.0 h1:DsSL4ARSQPXcNRBf0Nsmq32EghZB3nrHJSeQqtMJbz8=
 github.com/openshift/backplane-cli v0.2.0/go.mod h1:UEG1szSfOka4G1a90OmWjls54mmwFLUAz52JDF+Djxc=
 github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060 h1:MIseGDYL78FNVjzoek+UcA94pbzEAnlpytdN6aaB8zc=

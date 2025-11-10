@@ -2,6 +2,7 @@ package investigation
 
 import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -28,7 +29,15 @@ type InvestigationResult struct {
 	StopInvestigations error
 }
 
-func NewResourceBuilder(pdClient pagerduty.Client, ocmClient *ocm.SdkClient, clusterId string, name string, logLevel string, pipelineName string) (ResourceBuilder, error) {
+func NewResourceBuilder(
+	pdClient pagerduty.Client,
+	ocmClient *ocm.SdkClient,
+	bpClient backplane.Client,
+	clusterId string,
+	name string,
+	logLevel string,
+	pipelineName string,
+) (ResourceBuilder, error) {
 	rb := &ResourceBuilderT{
 		buildLogger:  true,
 		clusterId:    clusterId,
@@ -37,6 +46,7 @@ func NewResourceBuilder(pdClient pagerduty.Client, ocmClient *ocm.SdkClient, clu
 		pipelineName: pipelineName,
 		ocmClient:    ocmClient,
 		builtResources: &Resources{
+			BpClient:  bpClient,
 			PdClient:  pdClient,
 			OcmClient: ocmClient,
 		},
@@ -61,6 +71,7 @@ type Resources struct {
 	Cluster           *cmv1.Cluster
 	ClusterDeployment *hivev1.ClusterDeployment
 	AwsClient         aws.Client
+	BpClient          backplane.Client
 	K8sClient         k8sclient.Client
 	OcmClient         ocm.Client
 	PdClient          pagerduty.Client
