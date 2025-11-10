@@ -82,23 +82,21 @@ cat <<EOF > "${INVESTIGATION_DIR}/${INVESTIGATION_NAME}.go"
 package ${INVESTIGATION_NAME}
 
 import (
-	"strings"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 )
 
 type Investigation struct{}
 
-func (c *Investigation) Run(rb *investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	// TODO: Add additional builder configuration depending on your required resources using With...()
 	r, err := rb.WithNotes().Build()
-
+	if err != nil {
+		return result, err
+	}
 	// TODO: Implement investigation logic here
 
-	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 }
 
 func (c *Investigation) Name() string {
