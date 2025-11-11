@@ -20,6 +20,7 @@ require (
 	github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/common v0.65.0
+	github.com/segmentio/ksuid v1.0.4
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/tektoncd/triggers v0.32.0

@@ -11,7 +11,8 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	backplanemock "github.com/openshift/configuration-anomaly-detection/pkg/backplane/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
@@ -83,6 +84,7 @@ var _ = Describe("chgm", func() {
 				Cluster:           cluster,
 				ClusterDeployment: clusterDeployment,
 				AwsClient:         awsmock.NewMockClient(mockCtrl),
+				BpClient:          &backplanemock.MockClient{},
 				OcmClient:         ocmmock.NewMockClient(mockCtrl),
 				PdClient:          pdmock.NewMockClient(mockCtrl),
 				Notes:             nil,
@@ -95,7 +97,7 @@ var _ = Describe("chgm", func() {
 		mockCtrl.Finish()
 	})
 
-	inv := Investiation{}
+	inv := Investigation{}
 
 	Describe("Triggered", func() {
 		When("Triggered finds instances stopped by the customer", func() {

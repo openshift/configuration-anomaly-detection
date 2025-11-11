@@ -15,7 +15,7 @@ import (
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
-	&chgm.Investiation{},
+	&chgm.Investigation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&cpd.Investigation{},
 	&insightsoperatordown.Investigation{},

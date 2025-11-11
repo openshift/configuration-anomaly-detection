@@ -27,20 +27,6 @@ const (
 	pagerDutyTimeout = time.Second * 30
 	// CADEmailAddress is the email address for the 'Configuration-Anomaly-Detection' PagerDuty User
 	CADEmailAddress = "sd-sre-platform+pagerduty-configuration-anomaly-detection-agent@redhat.com"
-	// CADIntegrationName is the name of the PD integration used to escalate alerts to Primary.
-	CADIntegrationName = "Dead Man's Snitch"
-	// possible event types of the incident
-	// https://support.pagerduty.com/docs/webhooks#supported-resources-and-event-types
-	// add others when needed
-
-	// IncidentResolved is an incident event type
-	IncidentResolved = "incident.resolved"
-	// IncidentTriggered is an incident event type
-	IncidentTriggered = "incident.triggered"
-	// IncidentEscalated is an incident event type
-	IncidentEscalated = "incident.escalated"
-	// IncidentReopened is an incident event type
-	IncidentReopened = "incident.reopened"
 )
 
 // Client is the interface exposing pagerduty functions
