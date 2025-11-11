@@ -69,6 +69,9 @@ func isInfrastructureError(err error) bool {
 		"stopped instances but no stoppedInstancesEvents", // CloudTrail data too old
 		"clusterdeployment is empty",                      // Data missing but not retriable
 		"no non running instances found",                  // Investigation finding
+		"could not extractUserDetails",                    // Invalid CloudTrail event data
+		"failed to parse CloudTrail event version",        // Invalid CloudTrail event data
+		"cannot parse a nil input",                        // Invalid CloudTrail event data
 	}
 
 	for _, pattern := range findingPatterns {
