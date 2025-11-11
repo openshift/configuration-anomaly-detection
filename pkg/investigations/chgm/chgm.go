@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -105,9 +106,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 		// Otherwise, it's an investigation finding (e.g., CloudTrail data too old)
 		// Report this as a finding that needs manual investigation
-		notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
+		r.Notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
 		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+			executor.NoteFrom(r.Notes),
 			executor.Escalate("Investigation incomplete - manual review required"),
 		}
 		return result, nil
@@ -116,12 +117,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
-		notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
+		r.Notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
 
 		result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
 		result.Actions = []types.Action{
 			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details).Build(),
-			executor.NoteFrom(notes),
+			executor.NoteFrom(r.Notes),
 			executor.Silence("Customer stopped instances - cluster in limited support"),
 		}
 		return result, nil
@@ -156,14 +157,14 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
+			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
 
 			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"EgressBlocked"}}
 			result.Actions = []types.Action{
 				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details).
 					WithContext("EgressBlocked").
 					Build(),
-				executor.NoteFrom(notes),
+				executor.NoteFrom(r.Notes),
 				executor.Silence("Deadman's snitch blocked - cluster in limited support"),
 			}
 			return result, nil
@@ -172,7 +173,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		docLink := ocm.DocumentationLink(product, ocm.DocumentationTopicPrivatelinkFirewall)
 		egressSL := createEgressSL(failureReason, docLink)
 
-		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
+		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 
 		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 		result.Actions = []types.Action{
@@ -180,7 +181,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 				WithDescription(egressSL.Description).
 				WithServiceName(egressSL.ServiceName).
 				Build(),
-			executor.NoteFrom(notes),
+			executor.NoteFrom(r.Notes),
 			executor.Escalate("Egress blocked but not deadman's snitch - manual investigation required"),
 		}
 		return result, nil
@@ -204,7 +205,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+		executor.NoteFrom(r.Notes),
 		executor.Escalate("No automated remediation available - manual investigation required"),
 	}
 	return result, nil
