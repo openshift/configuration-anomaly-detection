@@ -17,6 +17,13 @@ ARG VERSION
 ARG VCS_REF
 ARG DOCKERFILE_PATH
 
+RUN microdnf update -y && \
+    microdnf install wget tar gzip -y
+RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz -O /tmp/oc.tar.gz && \
+    tar -zxvf /tmp/oc.tar.gz -C /tmp && \
+    mv /tmp/oc /bin/oc && \
+    rm -f /tmp/oc.tar.gz
+
 LABEL vendor="RedHat" \
   name="openshift/configuration-anomaly-detection" \
   description="a CLI tool to detect and mitigate configuration mishaps" \
