@@ -21,17 +21,15 @@ type Input struct {
 // New creates a new ClusterReport via the backplane-api, and returns a serialized instance that can be used from
 // within an investigation.
 func New(ctx context.Context, bpClient backplane.Client, input *Input) (*ClusterReport, error) {
-	report := &ClusterReport{
-		ClusterID: input.ClusterID,
-	}
-
 	reportResp, err := bpClient.CreateReport(ctx, input.ClusterID, input.Summary, input.Data)
 	if err != nil {
 		return nil, fmt.Errorf("error creating report: %w", err)
 	}
-	report.ReportID = reportResp.ReportId
 
-	return report, nil
+	return &ClusterReport{
+		ClusterID: input.ClusterID,
+		ReportID:  reportResp.ReportId,
+	}, nil
 }
 
 // GenerateStringForNoteWriter returns a formatted string to be used with the notewriter package for
