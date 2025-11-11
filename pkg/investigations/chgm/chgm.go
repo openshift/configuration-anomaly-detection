@@ -124,7 +124,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Write investigations to a cluster report
 	report, err := reports.New(ctx, r.BpClient, &reports.Input{
 		ClusterID: r.Cluster.ExternalID(),
-		Summary:   "CAD Investigation: MachineHealthCheckUnterminatedShortCircuitSRE",
+		Summary:   "CAD Investigation: Cluster Has Gone Missing",
 		Data:      fmt.Sprintf("# Investigation Notes:\n %s \n", r.Notes.String()),
 	})
 	if err != nil {
