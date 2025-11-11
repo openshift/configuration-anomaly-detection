@@ -11,14 +11,13 @@ import (
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
+	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
-	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -36,6 +35,52 @@ var (
 
 type Investigation struct{}
 
+// isInfrastructureError determines if an error is a transient infrastructure
+// failure that should cause the investigation to be retried (return error),
+// vs an investigation finding that should be reported (return actions).
+func isInfrastructureError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	// Transient API failures that should trigger retry
+	infraPatterns := []string{
+		"could not retrieve non running instances",
+		"could not retrieve running cluster nodes",
+		"could not retrieve expected cluster nodes",
+		"could not PollStopEventsFor",
+		"failed to retrieve",
+		"timeout",
+		"rate limit",
+		"connection refused",
+		"service unavailable",
+	}
+
+	for _, pattern := range infraPatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+
+	// Investigation findings that should be reported (NOT retried)
+	findingPatterns := []string{
+		"stopped instances but no stoppedInstancesEvents", // CloudTrail data too old
+		"clusterdeployment is empty",                      // Data missing but not retriable
+		"no non running instances found",                  // Investigation finding
+	}
+
+	for _, pattern := range findingPatterns {
+		if strings.Contains(errStr, pattern) {
+			return false
+		}
+	}
+
+	// Default: assume infrastructure error to be safe (retry)
+	return true
+}
+
 // Run runs the investigation for a triggered chgm pagerduty event
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
@@ -49,19 +94,34 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Sprintf("InvestigateInstances failed: %s\n", err.Error()))
+		// Check if this is a transient infrastructure error (AWS/OCM API failures)
+		// These should trigger a retry of the entire investigation
+		if isInfrastructureError(err) {
+			return result, fmt.Errorf("investigation infrastructure failure: %w", err)
+		}
+
+		// Otherwise, it's an investigation finding (e.g., CloudTrail data too old)
+		// Report this as a finding that needs manual investigation
+		notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Investigation incomplete - manual review required"),
+		}
+		return result, nil
 	}
 	logging.Debugf("the investigation returned: [infras running: %d] - [masters running: %d]", res.RunningInstances.Infra, res.RunningInstances.Master)
 
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
-		return result, utils.WithRetries(func() error {
-			err := postStoppedInfraLimitedSupport(r.Cluster, r.OcmClient, r.PdClient)
-			// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
-			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
+		notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
 
-			return err
-		})
+		result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
+		result.Actions = []types.Action{
+			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details).Build(),
+			executor.NoteFrom(notes),
+			executor.Silence("Customer stopped instances - cluster in limited support"),
+		}
+		return result, nil
 	}
 	r.Notes.AppendSuccess("Customer did not stop nodes.")
 	logging.Info("The customer has not stopped/terminated any nodes.")
@@ -93,29 +153,34 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			err := r.OcmClient.PostLimitedSupportReason(r.Cluster, &egressLS)
-			if err != nil {
-				return result, err
-			}
+			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
 
-			// XXX: metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
 			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"EgressBlocked"}}
-
-			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
-			return result, r.PdClient.SilenceIncidentWithNote(r.Notes.String())
+			result.Actions = []types.Action{
+				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details).
+					WithContext("EgressBlocked").
+					Build(),
+				executor.NoteFrom(notes),
+				executor.Silence("Deadman's snitch blocked - cluster in limited support"),
+			}
+			return result, nil
 		}
 
 		docLink := ocm.DocumentationLink(product, ocm.DocumentationTopicPrivatelinkFirewall)
 		egressSL := createEgressSL(failureReason, docLink)
-		err := r.OcmClient.PostServiceLog(r.Cluster, egressSL)
-		if err != nil {
-			return result, err
-		}
 
-		// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
+		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
+
 		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
-
-		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
+		result.Actions = []types.Action{
+			executor.NewServiceLogAction(egressSL.Severity, egressSL.Summary).
+				WithDescription(egressSL.Description).
+				WithServiceName(egressSL.ServiceName).
+				Build(),
+			executor.NoteFrom(notes),
+			executor.Escalate("Egress blocked but not deadman's snitch - manual investigation required"),
+		}
+		return result, nil
 	case networkverifier.Success:
 		r.Notes.AppendSuccess("Network verifier passed")
 		logging.Info("Network verifier passed.")
@@ -135,7 +200,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
-	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(notes),
+		executor.Escalate("No automated remediation available - manual investigation required"),
+	}
+	return result, nil
 }
 
 func (i *Investigation) Name() string {
@@ -465,14 +534,4 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	}
 
 	return res, nil
-}
-
-// postStoppedInfraLimitedSupport will put the cluster on limited support because the user has stopped instances
-func postStoppedInfraLimitedSupport(cluster *cmv1.Cluster, ocmCli ocm.Client, pdCli pagerduty.Client) error {
-	err := ocmCli.PostLimitedSupportReason(cluster, &stoppedInfraLS)
-	if err != nil {
-		return fmt.Errorf("failed sending limited support reason: %w", err)
-	}
-
-	return pdCli.SilenceIncidentWithNote("Customer stopped instances. Sent SL and silencing alert.")
 }
