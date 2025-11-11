@@ -1,6 +1,9 @@
 package executor
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ActionValidationError indicates an action failed validation
 type ActionValidationError struct {
@@ -37,7 +40,13 @@ type MultipleActionsError struct {
 }
 
 func (e MultipleActionsError) Error() string {
-	return fmt.Sprintf("%d actions failed: %v", len(e.Errors), e.Errors[0])
+	errStrings := make([]string, 0, len(e.Errors))
+	for _, subErr := range e.Errors {
+		errString := fmt.Sprintf("- %s", subErr.Error())
+		errStrings = append(errStrings, errString)
+	}
+	errString := strings.Join(errStrings, "\n")
+	return fmt.Sprintf("%d actions failed: %v", len(e.Errors), errString)
 }
 
 func (e MultipleActionsError) Unwrap() error {

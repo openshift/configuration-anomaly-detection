@@ -11,6 +11,7 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
+	backplanemock "github.com/openshift/configuration-anomaly-detection/pkg/backplane/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
@@ -41,10 +42,6 @@ func hasSilenceAction(actions []types.Action) bool {
 
 func hasEscalateAction(actions []types.Action) bool {
 	return hasActionType(actions, string(executor.ActionTypeEscalateIncident))
-}
-
-func hasServiceLogAction(actions []types.Action) bool {
-	return hasActionType(actions, string(executor.ActionTypeServiceLog))
 }
 
 func hasNoteAction(actions []types.Action) bool {
