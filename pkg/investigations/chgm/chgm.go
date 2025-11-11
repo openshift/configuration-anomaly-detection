@@ -2,23 +2,24 @@
 package chgm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-
-	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 )
 
 var (
@@ -33,17 +34,17 @@ var (
 	}
 )
 
-type Investiation struct{}
+type Investigation struct{}
 
 // Run runs the investigation for a triggered chgm pagerduty event
-func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+	ctx := context.Background()
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithClusterDeployment().Build()
 	if err != nil {
 		return result, err
 	}
-	notes := notewriter.New("CHGM", logging.RawLogger)
-	defer func() { r.Notes = notes }()
+	r.Notes = notewriter.New("CHGM", logging.RawLogger)
 
 	// 1. Check if the user stopped instances
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
@@ -62,7 +63,7 @@ func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.Inve
 			return err
 		})
 	}
-	notes.AppendSuccess("Customer did not stop nodes.")
+	r.Notes.AppendSuccess("Customer did not stop nodes.")
 	logging.Info("The customer has not stopped/terminated any nodes.")
 
 	// 2. Check if the cluster was hibernated and has recently resumed.
@@ -73,7 +74,7 @@ func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.Inve
 
 	if hasRecentlyResumed(hibernationPeriods, time.Now()) {
 		logging.Info("The cluster has recently resumed from hibernation.")
-		notes.AppendWarning("Cluster has resumed from hibernation within the last %.0f hours - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", recentWakeupTime.Hours())
+		r.Notes.AppendWarning("Cluster has resumed from hibernation within the last %.0f hours - investigate CSRs and kubelet certificates: see https://github.com/openshift/ops-sop/blob/master/v4/alerts/cluster_has_gone_missing.md#24-hibernation", recentWakeupTime.Hours())
 	} else {
 		logging.Info("The cluster was not hibernated for too long.")
 	}
@@ -82,7 +83,7 @@ func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.Inve
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
-		notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())
+		r.Notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())
 	}
 
 	product := ocm.GetClusterProduct(r.Cluster)
@@ -100,8 +101,8 @@ func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.Inve
 			// XXX: metrics.Inc(metrics.LimitedSupportSet, investigationName, "EgressBlocked")
 			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"EgressBlocked"}}
 
-			notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
-			return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
+			return result, r.PdClient.SilenceIncidentWithNote(r.Notes.String())
 		}
 
 		docLink := ocm.DocumentationLink(product, ocm.DocumentationTopicPrivatelinkFirewall)
@@ -114,29 +115,41 @@ func (c *Investiation) Run(rb investigation.ResourceBuilder) (investigation.Inve
 		// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-		notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
+		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 	case networkverifier.Success:
-		notes.AppendSuccess("Network verifier passed")
+		r.Notes.AppendSuccess("Network verifier passed")
 		logging.Info("Network verifier passed.")
 	}
 
+	// Write investigations to a cluster report
+	report, err := reports.New(ctx, r.BpClient, &reports.Input{
+		ClusterID: r.Cluster.ExternalID(),
+		Summary:   "CAD Investigation: MachineHealthCheckUnterminatedShortCircuitSRE",
+		Data:      fmt.Sprintf("# Investigation Notes:\n %s \n", r.Notes.String()),
+	})
+	if err != nil {
+		r.Notes.AppendWarning("failed to create cluster report: %v", err)
+	}
+
+	r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
+
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
-	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 }
 
-func (c *Investiation) Name() string {
+func (i *Investigation) Name() string {
 	return "Cluster Has Gone Missing (CHGM)"
 }
 
-func (c *Investiation) AlertTitle() string {
+func (i *Investigation) AlertTitle() string {
 	return "has gone missing"
 }
 
-func (c *Investiation) Description() string {
+func (i *Investigation) Description() string {
 	return "Detects reason for clusters that have gone missing"
 }
 
-func (c *Investiation) IsExperimental() bool {
+func (i *Investigation) IsExperimental() bool {
 	return false
 }
 

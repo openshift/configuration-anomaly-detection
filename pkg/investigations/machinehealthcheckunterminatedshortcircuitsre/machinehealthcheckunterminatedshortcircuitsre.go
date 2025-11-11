@@ -12,7 +12,6 @@ import (
 	"time"
 
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
-
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
 	nodeutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"

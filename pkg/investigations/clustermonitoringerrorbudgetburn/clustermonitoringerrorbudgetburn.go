@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
@@ -156,7 +156,7 @@ func (c *Investigation) AlertTitle() string {
 }
 
 func (c *Investigation) Description() string {
-	return "Investigate the cluster monitoring error budget burn alert"
+	return "Investigation to analyze a ClusterMonitoringErrorBudgetBurnSRE alert"
 }
 
 func (c *Investigation) IsExperimental() bool {
