@@ -12,6 +12,11 @@ GOLANGCI_LINT_VERSION=v2.0.2
 GOLANGCI_LINT_BIN:=$(shell which golangci-lint 2>/dev/null || echo "$(GOPATH)/bin/golangci-lint")
 MOCKGEN_VERSION=v0.5.0
 
+# Default build flags
+BUILD_FLAGS_release = -ldflags="-s -w"
+BUILD_FLAGS_debug = -gcflags="all=-N -l"
+
+
 .DEFAULT_GOAL := all
 
 help:  # Display this help
@@ -22,7 +27,10 @@ help:  # Display this help
 all: interceptor cadctl ## Generate, build, lint, test all subprojects
 
 .PHONY: build
-build: build-interceptor build-cadctl ## Build all subprojects in this repository
+build: build-interceptor-release build-cadctl-release ## Build all subprojects in this repository
+
+.PHONY: debug
+debug: build-interceptor-debug build-cadctl-debug ## Build all subprojects in this repository
 
 .PHONY: lint
 lint: lint-cadctl lint-interceptor ## Lint all subprojects
@@ -32,17 +40,17 @@ test: test-cadctl test-interceptor
 
 ##@ cadctl:
 .PHONY: cadctl
-cadctl: generate-cadctl build-cadctl test-cadctl lint-cadctl ## Run all targets for cadctl (generate, build, test, lint, generation)
+cadctl: generate-cadctl build-cadctl-release test-cadctl lint-cadctl ## Run all targets for cadctl (generate, build, test, lint, generation)
 
 .PHONY: generate-cadctl
 generate-cadctl: check-go121-install install-mockgen ## Generate mocks for cadctl
 	go generate -mod=readonly ./...
 
-.PHONY: build-cadctl
-build-cadctl: check-go121-install ## Build the cadctl binary
+.PHONY: build-%-release build-%-debug
+build-%-release build-%-debug: check-go121-install
 	@echo
-	@echo "Building cadctl..."
-	cd cadctl && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/cadctl .
+	@echo "Building $* ($(lastword $(subst -, ,$@)))..."
+	cd $* && go build $(BUILD_FLAGS_$(lastword $(subst -, ,$@))) -mod=readonly -trimpath -o ../bin/$* .
 
 .PHONY: lint-cadctl
 lint-cadctl: install-linter ## Lint cadctl subproject
@@ -59,13 +67,7 @@ test-cadctl: check-go121-install ## Run automated tests for cadctl
 
 ##@ Interceptor:
 .PHONY: interceptor
-interceptor: build-interceptor test-interceptor test-interceptor-e2e lint-interceptor ## Run all targets for interceptor (build, test, lint)
-
-.PHONY: build-interceptor
-build-interceptor: check-go121-install ## Build the interceptor binary
-	@echo
-	@echo "Building interceptor..."
-	cd interceptor && go build -ldflags="-s -w" -mod=readonly -trimpath -o ../bin/interceptor .
+interceptor: build-interceptor-release test-interceptor test-interceptor-e2e lint-interceptor ## Run all targets for interceptor (build, test, lint)
 
 .PHONY: lint-interceptor
 lint-interceptor: install-linter ## Lint interceptor subproject
@@ -75,13 +77,13 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
 
 .PHONY: test-interceptor
-test-interceptor: check-go121-install check-jq-install build-interceptor ## Run unit tests for interceptor
+test-interceptor: check-go121-install check-jq-install build-interceptor-release ## Run unit tests for interceptor
 	@echo
 	@echo "Running unit tests for interceptor..."
 	cd interceptor && go test -race -mod=readonly ./...
 
 .PHONY: test-interceptor-e2e
-test-interceptor-e2e: check-go121-install check-jq-install check-vault-install build-interceptor ## Run e2e tests for interceptor
+test-interceptor-e2e: check-go121-install check-jq-install check-vault-install build-interceptor-release ## Run e2e tests for interceptor
 	@echo
 	@echo "Running e2e tests for interceptor..."
 	cd interceptor && ./test/e2e.sh
