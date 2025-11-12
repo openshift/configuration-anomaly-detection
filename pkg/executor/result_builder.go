@@ -2,8 +2,8 @@ package executor
 
 import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 // ResultWithActionsBuilder helps build InvestigationResults with actions
