@@ -11,7 +11,6 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
@@ -19,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/oc"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type InvestigationStep struct {

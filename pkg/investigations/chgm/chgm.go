@@ -13,12 +13,12 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 

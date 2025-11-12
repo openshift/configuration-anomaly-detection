@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 // Action is the types.Action interface - all reporter actions implement it
