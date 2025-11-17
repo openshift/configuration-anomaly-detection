@@ -2,114 +2,29 @@
 package k8sclient
 
 import (
-	"errors"
-	"fmt"
-
-	"github.com/openshift/backplane-cli/pkg/cli/config"
-	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
-
-var backplaneURL string
-
-// SetBackplaneURL sets the backplane URL to use for k8s client connections
-// FIXME: Replace with proper config mechanism when implemented service
-func SetBackplaneURL(url string) {
-	backplaneURL = url
-}
-
-type Cleaner interface {
-	Clean() error
-}
 
 type Client interface {
 	client.Client
-	Cleaner
 }
 
 type clientImpl struct {
 	client.Client
-	Cleaner
 }
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
-func New(clusterID string, ocmClient ocm.Client, remediationName string) (k8scli Client, err error) {
-	cfg, err := newCfg(clusterID, ocmClient, remediationName)
-	if err != nil {
-		return nil, err
-	}
-
-	cfgToClean := cfg
-	defer func() {
-		if cfgToClean != nil {
-			deferErr := cfgToClean.Clean()
-			if deferErr != nil {
-				err = errors.Join(err, deferErr)
-			}
-		}
-	}()
-
+func New(cfg *rest.Config) (k8scli Client, err error) {
 	scheme, err := initScheme()
 	if err != nil {
 		return nil, err
 	}
 
-	decoratedClient, err := client.New(&cfg.Config, client.Options{Scheme: scheme})
+	decoratedClient, err := client.New(cfg, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, err
 	}
 
-	cfgToClean = nil
-	return clientImpl{decoratedClient, cfg}, nil
-}
-
-type Config struct {
-	rest.Config
-	Cleaner
-}
-
-type remediationCleaner struct {
-	clusterID             string
-	ocmClient             ocm.Client
-	remediationInstanceId string
-}
-
-func (cleaner remediationCleaner) Clean() error {
-	return deleteRemediation(cleaner.clusterID, cleaner.ocmClient, cleaner.remediationInstanceId)
-}
-
-// New returns a the k8s rest config for the given cluster scoped to a given remediation's permissions.
-func newCfg(clusterID string, ocmClient ocm.Client, remediationName string) (cfg *Config, err error) {
-	if backplaneURL == "" {
-		return nil, fmt.Errorf("could not create new k8sclient: backplane URL not configured, call SetBackplaneURL first")
-	}
-
-	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
-		config.BackplaneConfiguration{URL: backplaneURL},
-		ocmClient.GetConnection(),
-		clusterID,
-		remediationName,
-	)
-	if err != nil {
-		return nil, matchError(err)
-	}
-
-	return &Config{*decoratedCfg, remediationCleaner{clusterID, ocmClient, remediationInstanceId}}, nil
-}
-
-// Cleanup removes the remediation created for the cluster.
-func deleteRemediation(clusterID string, ocmClient ocm.Client, remediationInstanceId string) error {
-	if backplaneURL == "" {
-		return fmt.Errorf("could not clean up k8sclient: backplane URL not configured, call SetBackplaneURL first")
-	}
-
-	return bpremediation.DeleteRemediationWithConn(
-		config.BackplaneConfiguration{URL: backplaneURL},
-		ocmClient.GetConnection(),
-		clusterID,
-		remediationInstanceId,
-	)
+	return clientImpl{decoratedClient}, nil
 }

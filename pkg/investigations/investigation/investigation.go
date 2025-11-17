@@ -1,15 +1,22 @@
 package investigation
 
 import (
+	"context"
+
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
+	"github.com/openshift/backplane-cli/pkg/cli/config"
+	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
+
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"k8s.io/client-go/rest"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/oc"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
@@ -37,6 +44,7 @@ func NewResourceBuilder(
 	name string,
 	logLevel string,
 	pipelineName string,
+	backplaneUrl string,
 ) (ResourceBuilder, error) {
 	rb := &ResourceBuilderT{
 		buildLogger:  true,
@@ -45,6 +53,7 @@ func NewResourceBuilder(
 		logLevel:     logLevel,
 		pipelineName: pipelineName,
 		ocmClient:    ocmClient,
+		backplaneUrl: backplaneUrl,
 		builtResources: &Resources{
 			BpClient:  bpClient,
 			PdClient:  pdClient,
@@ -72,17 +81,21 @@ type Resources struct {
 	ClusterDeployment *hivev1.ClusterDeployment
 	AwsClient         aws.Client
 	BpClient          backplane.Client
+	RestConfig        *RestConfig
 	K8sClient         k8sclient.Client
 	OcmClient         ocm.Client
 	PdClient          pagerduty.Client
 	Notes             *notewriter.NoteWriter
+	OCClient          oc.Client
 }
 
 type ResourceBuilder interface {
 	WithCluster() ResourceBuilder
 	WithClusterDeployment() ResourceBuilder
 	WithAwsClient() ResourceBuilder
+	WithRestConfig() ResourceBuilder
 	WithK8sClient() ResourceBuilder
+	WithOC() ResourceBuilder
 	WithNotes() ResourceBuilder
 	Build() (*Resources, error)
 }
@@ -91,7 +104,9 @@ type ResourceBuilderT struct {
 	buildCluster           bool
 	buildClusterDeployment bool
 	buildAwsClient         bool
+	buildRestConfig        bool
 	buildK8sClient         bool
+	buildOC                bool
 	buildNotes             bool
 	buildLogger            bool
 
@@ -99,6 +114,7 @@ type ResourceBuilderT struct {
 	name         string
 	logLevel     string
 	pipelineName string
+	backplaneUrl string
 
 	ocmClient *ocm.SdkClient
 
@@ -118,13 +134,26 @@ func (r *ResourceBuilderT) WithClusterDeployment() ResourceBuilder {
 	return r
 }
 
+func (r *ResourceBuilderT) WithRestConfig() ResourceBuilder {
+	r.WithCluster()
+	r.buildRestConfig = true
+	return r
+}
+
 func (r *ResourceBuilderT) WithAwsClient() ResourceBuilder {
 	r.WithCluster()
 	r.buildAwsClient = true
 	return r
 }
 
+func (r *ResourceBuilderT) WithOC() ResourceBuilder {
+	r.WithRestConfig()
+	r.buildOC = true
+	return r
+}
+
 func (r *ResourceBuilderT) WithK8sClient() ResourceBuilder {
+	r.WithRestConfig()
 	r.buildK8sClient = true
 	return r
 }
@@ -154,47 +183,105 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		}
 	}
 
-	// Dependent resources can only be built if a cluster object exists.
-	//nolint:nestif
-	if r.builtResources.Cluster != nil {
-		internalClusterId := r.builtResources.Cluster.ID()
-
-		if r.buildAwsClient && r.builtResources.AwsClient == nil {
-			r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
-			if err != nil {
-				r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
-				return r.builtResources, r.buildErr
-			}
-		}
-
-		if r.buildK8sClient && r.builtResources.K8sClient == nil {
-			logging.Infof("creating k8s client for %s", r.name)
-			r.builtResources.K8sClient, err = k8sclient.New(r.builtResources.Cluster.ID(), r.ocmClient, r.name)
-			if err != nil {
-				r.buildErr = K8SClientError{ClusterID: r.clusterId, Err: err}
-				return r.builtResources, r.buildErr
-			}
-		}
-
-		if r.buildClusterDeployment && r.builtResources.ClusterDeployment == nil {
-			r.builtResources.ClusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
-			if err != nil {
-				r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
-				return r.builtResources, r.buildErr
-			}
-		}
-
-		if r.buildLogger {
-			// Re-initialize the logger with the cluster ID.
-			logging.RawLogger = logging.InitLogger(r.logLevel, r.pipelineName, internalClusterId)
-		}
-	}
-
 	if r.buildNotes && r.builtResources.Notes == nil {
 		r.builtResources.Notes = notewriter.New(r.name, logging.RawLogger)
 	}
 
+	internalClusterId := r.builtResources.Cluster.ID()
+
+	if r.buildAwsClient && r.builtResources.AwsClient == nil {
+		r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
+		if err != nil {
+			r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	if r.buildRestConfig && r.builtResources.RestConfig == nil {
+		r.builtResources.RestConfig, err = newRestConfig(r.builtResources.Cluster.ID(), r.backplaneUrl, r.ocmClient, r.name)
+		if err != nil {
+			r.buildErr = RestConfigError{ClusterID: r.clusterId, Err: err}
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	if r.buildK8sClient && r.builtResources.K8sClient == nil {
+		logging.Infof("creating k8s client for %s", r.name)
+		r.builtResources.K8sClient, err = k8sclient.New(&r.builtResources.RestConfig.Config)
+		if err != nil {
+			r.buildErr = K8SClientError{ClusterID: r.clusterId, Err: err}
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	if r.buildOC && r.builtResources.OCClient == nil {
+		r.builtResources.OCClient, err = oc.New(context.Background(), &r.builtResources.RestConfig.Config)
+		if err != nil {
+			r.buildErr = OCClientError{ClusterID: r.clusterId, Err: err}
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	if r.buildClusterDeployment && r.builtResources.ClusterDeployment == nil {
+		r.builtResources.ClusterDeployment, err = r.ocmClient.GetClusterDeployment(internalClusterId)
+		if err != nil {
+			r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	if r.buildLogger {
+		// Re-initialize the logger with the cluster ID.
+		logging.RawLogger = logging.InitLogger(r.logLevel, r.pipelineName, internalClusterId)
+	}
+
 	return r.builtResources, nil
+}
+
+type remediationCleaner struct {
+	clusterID             string
+	ocmClient             ocm.Client
+	remediationInstanceId string
+	backplaneUrl          string
+}
+
+type Cleaner interface {
+	Clean() error
+}
+
+type RestConfig struct {
+	rest.Config
+	backplaneUrl string
+	Cleaner
+}
+
+func (cleaner remediationCleaner) Clean() error {
+	return deleteRemediation(cleaner.clusterID, cleaner.backplaneUrl, cleaner.ocmClient, cleaner.remediationInstanceId)
+}
+
+// New returns a k8s rest config for the given cluster scoped to a given remediation's permissions.
+func newRestConfig(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationName string) (*RestConfig, error) {
+	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
+		config.BackplaneConfiguration{URL: backplaneUrl},
+		ocmClient.GetConnection(),
+		clusterID,
+		remediationName,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &RestConfig{*decoratedCfg, backplaneUrl, remediationCleaner{clusterID, ocmClient, remediationInstanceId, backplaneUrl}}, nil
+}
+
+// Cleanup removes the remediation created for the cluster.
+func deleteRemediation(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationInstanceId string) error {
+	return bpremediation.DeleteRemediationWithConn(
+		config.BackplaneConfiguration{URL: backplaneUrl},
+		ocmClient.GetConnection(),
+		clusterID,
+		remediationInstanceId,
+	)
 }
 
 // This is an implementation to be used in tests, but putting it into a _test.go file will make it not resolvable.
@@ -212,6 +299,14 @@ func (r *ResourceBuilderMock) WithClusterDeployment() ResourceBuilder {
 }
 
 func (r *ResourceBuilderMock) WithAwsClient() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithRestConfig() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithOC() ResourceBuilder {
 	return r
 }
 
