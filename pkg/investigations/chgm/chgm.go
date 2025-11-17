@@ -130,8 +130,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("failed to create cluster report: %v", err)
 	}
-
-	r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
+	if report != nil {
+		r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
+	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
