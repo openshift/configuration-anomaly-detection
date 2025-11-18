@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
-	"go.uber.org/mock/gomock"
 )
 
 // TestClusterNotFoundError_Error tests the error message formatting
@@ -19,6 +19,28 @@ func TestClusterNotFoundError_Error(t *testing.T) {
 	}
 
 	expected := "could not retrieve cluster info for my-cluster: OCM API returned 404"
+	assert.Equal(t, expected, err.Error())
+}
+
+func TestRestConfigError_Error(t *testing.T) {
+	wrappedErr := errors.New("backplane remediation failed")
+	err := RestConfigError{
+		ClusterID: "my-cluster",
+		Err:       wrappedErr,
+	}
+
+	expected := "could not create rest config for my-cluster: backplane remediation failed"
+	assert.Equal(t, expected, err.Error())
+}
+
+func TestOCClientError_Error(t *testing.T) {
+	wrappedErr := errors.New("kubeconfig write failed")
+	err := OCClientError{
+		ClusterID: "my-cluster",
+		Err:       wrappedErr,
+	}
+
+	expected := "could not create oc client for my-cluster: kubeconfig write failed"
 	assert.Equal(t, expected, err.Error())
 }
 

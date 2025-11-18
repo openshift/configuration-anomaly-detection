@@ -28,7 +28,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
-	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -74,9 +73,6 @@ func run(_ *cobra.Command, _ []string) error {
 	if backplaneURL == "" {
 		return fmt.Errorf("missing required environment variable BACKPLANE_URL")
 	}
-
-	// Set k8s environment configuration for this session
-	k8sclient.SetBackplaneURL(backplaneURL)
 
 	// Load managedcloud environment variables
 	backplaneInitialARN := os.Getenv("BACKPLANE_INITIAL_ARN")
@@ -154,7 +150,7 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize backplane client: %w", err)
 	}
 
-	builder, err := investigation.NewResourceBuilder(pdClient, ocmClient, bpClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv)
+	builder, err := investigation.NewResourceBuilder(pdClient, ocmClient, bpClient, clusterID, alertInvestigation.Name(), logLevelFlag, pipelineNameEnv, backplaneURL)
 	if err != nil {
 		return fmt.Errorf("failed to create resource builder: %w", err)
 	}
@@ -164,13 +160,21 @@ func run(_ *cobra.Command, _ []string) error {
 		// We ignore the error here because we just want to get any resources that were created.
 		resources, _ := builder.Build()
 
-		// Cleanup k8s client if it exists
-		if resources != nil && resources.K8sClient != nil {
-			// Failing the k8sclient cleanup call is not critical
+		// Cleanup rest config if it exists
+		if resources != nil && resources.RestConfig != nil {
+			// Failing the rest config cleanup call is not critical
 			// There is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
 			// We only log the error for now but could add it to the investigation notes or handle differently
-			logging.Info("Cleaning kube-api access")
-			deferErr := resources.K8sClient.Clean()
+			logging.Info("Cleaning cluster api access")
+			deferErr := resources.RestConfig.Clean()
+			if deferErr != nil {
+				logging.Error(deferErr)
+			}
+		}
+
+		if resources != nil && resources.OCClient != nil {
+			logging.Info("Cleaning oc kubeconfig file access")
+			deferErr := resources.OCClient.Clean()
 			if deferErr != nil {
 				logging.Error(deferErr)
 			}

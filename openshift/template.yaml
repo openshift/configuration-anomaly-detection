@@ -339,8 +339,8 @@ objects:
           cpu: 100m
           memory: 256Mi
         requests:
-          cpu: 10m
-          memory: 64Mi
+          cpu: 20m
+          memory: 128Mi
 - apiVersion: batch/v1
   kind: CronJob
   metadata:
