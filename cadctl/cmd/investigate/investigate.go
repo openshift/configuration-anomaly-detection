@@ -205,6 +205,10 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
+	// FIXME: This is a quick fix - we might want to put CCAM as a composable check per investigation so each investigation can decide to proceed or not.
+	if result.StopInvestigations != nil && alertInvestigation.AlertTitle() == "Cluster Has Gone Missing (CHGM)" {
+		return result.StopInvestigations
+	}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
 	result, err = alertInvestigation.Run(builder)

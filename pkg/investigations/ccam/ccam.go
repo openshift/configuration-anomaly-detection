@@ -36,6 +36,7 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 			// This would normally be a backplane failure.
 			return result, err
 		}
+		result.StopInvestigations = err
 		cluster := resources.Cluster
 		ocmClient := resources.OcmClient
 		pdClient := resources.PdClient
