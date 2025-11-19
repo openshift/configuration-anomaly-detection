@@ -52,17 +52,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
         WithAwsClient().
         WithNotes().
         Build()
-    
+
     if err != nil {
         // Handle errors - r may contain partial results
         return investigation.InvestigationResult{}, err
     }
-    
+
     // Use resources
     cluster := r.Cluster
     awsClient := r.AwsClient
     notes := r.Notes
-    
+
     // ... investigation logic ...
 }
 ```
@@ -78,14 +78,14 @@ type ResourceBuilderT struct {
     buildK8sClient         bool
     buildNotes             bool
     buildLogger            bool
-    
+
     // Input parameters
     clusterId    string
     name         string
     logLevel     string
     pipelineName string
     ocmClient    *ocm.SdkClient
-    
+
     // Cached results
     builtResources *Resources
     buildErr       error
@@ -178,12 +178,12 @@ func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error 
     builder.Description(sl.Description)
     builder.InternalOnly(sl.InternalOnly)
     builder.ClusterID(cluster.ID())
-    
+
     le, err := builder.Build()
     if err != nil {
         return fmt.Errorf("could not create post request (SL): %w", err)
     }
-    
+
     // Send the built object
     request := c.conn.ServiceLogs().V1().ClusterLogs().Add()
     request = request.Body(le)
@@ -199,7 +199,7 @@ func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error 
 ### Naming Conventions
 
 1. **Builder Types**: Suffix with `Builder` (e.g., `ResourceBuilder`, `ActionBuilder`)
-2. **Builder Methods**: 
+2. **Builder Methods**:
    - Prefix with `With` for adding optional components: `WithCluster()`, `WithAwsClient()`
    - Prefix with `Add` for adding items to collections: `AddAction()`, `AddDetail()`
    - Prefix with `Set` for required fields (rare, prefer constructor args)
@@ -238,7 +238,7 @@ func (b *Builder) Build() (Result, error) {
     if err := b.validate(); err != nil {
         return Result{}, err
     }
-    
+
     // Construct
     return b.construct(), nil
 }
@@ -280,7 +280,7 @@ type Resources struct {
     OcmClient         ocm.Client
     PdClient          pagerduty.Client
     Notes             *notewriter.NoteWriter
-    
+
     // NEW: Add your resource
     BackplaneReportsClient reports.Client
 }
@@ -296,10 +296,10 @@ type ResourceBuilderT struct {
     buildK8sClient         bool
     buildNotes             bool
     buildLogger            bool
-    
+
     // NEW: Add your flag
     buildBackplaneReportsClient bool
-    
+
     // ... other fields ...
 }
 ```
@@ -309,10 +309,10 @@ type ResourceBuilderT struct {
 ```go
 func (r *ResourceBuilderT) WithBackplaneReportsClient() ResourceBuilder {
     r.buildBackplaneReportsClient = true
-    
+
     // If your resource depends on others, call them:
     // r.WithCluster()
-    
+
     return r
 }
 ```
@@ -324,9 +324,9 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
     if r.buildErr != nil {
         return r.builtResources, r.buildErr
     }
-    
+
     // ... existing build logic ...
-    
+
     // NEW: Add your build logic
     if r.buildBackplaneReportsClient && r.builtResources.BackplaneReportsClient == nil {
         r.builtResources.BackplaneReportsClient, err = reports.NewClient(r.builtResources.Cluster.ID())
@@ -335,7 +335,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
             return r.builtResources, r.buildErr
         }
     }
-    
+
     return r.builtResources, nil
 }
 ```
@@ -427,7 +427,7 @@ func (b *InvestigationResultBuilder) Build() InvestigationResult {
     // if b.result.Findings.Summary == "" {
     //     panic("Summary is required") // or return error
     // }
-    
+
     // Return value (not pointer) to prevent mutation after build
     return *b.result
 }
@@ -523,14 +523,14 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
     if r.builtResources.Cluster != nil {
         return r.builtResources, r.buildErr
     }
-    
+
     // Build and cache
     r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
     if err != nil {
         r.buildErr = err
         return r.builtResources, r.buildErr
     }
-    
+
     return r.builtResources, nil
 }
 ```
@@ -562,7 +562,7 @@ func TestResourceBuilder(t *testing.T) {
     // Test successful build
     t.Run("successful cluster build", func(t *testing.T) {
         mockOcmClient := // ... create mock
-        
+
         rb, _ := investigation.NewResourceBuilder(
             mockPdClient,
             mockOcmClient,
@@ -571,20 +571,20 @@ func TestResourceBuilder(t *testing.T) {
             "info",
             "test-pipeline",
         )
-        
+
         resources, err := rb.WithCluster().Build()
-        
+
         assert.NoError(t, err)
         assert.NotNil(t, resources.Cluster)
     })
-    
+
     // Test error handling
     t.Run("cluster not found error", func(t *testing.T) {
         mockOcmClient := // ... mock to return error
-        
+
         rb, _ := investigation.NewResourceBuilder(...)
         resources, err := rb.WithCluster().Build()
-        
+
         var clusterErr *investigation.ClusterNotFoundError
         assert.True(t, errors.As(err, &clusterErr))
         assert.Equal(t, "cluster-123", clusterErr.ClusterID)
@@ -603,14 +603,14 @@ func TestInvestigation(t *testing.T) {
         AwsClient: mockAwsClient,
         Notes: notewriter.New("test", logger),
     }
-    
+
     mockBuilder := &investigation.ResourceBuilderMock{
         Resources: mockResources,
         BuildError: nil,
     }
-    
+
     result, err := investigation.Run(mockBuilder)
-    
+
     // Assert on result
 }
 ```
@@ -689,12 +689,6 @@ func (r *ResourceBuilderT) WithCluster() ResourceBuilder {
 
 ## Future Directions
 
-### Planned Builder Additions
-
-1. **ActionBuilder**: For constructing actions in the new executor module
-2. **ReportInputBuilder**: For building executor input with all context
-3. **FindingsBuilder**: Potentially split from InvestigationResultBuilder for complex findings
-
 ### Builder Variants Being Considered
 
 1. **Validated Builders**: Builders that enforce constraints at compile time using type states
@@ -704,7 +698,7 @@ func (r *ResourceBuilderT) WithCluster() ResourceBuilder {
 ## References
 
 - ResourceBuilder implementation: `pkg/investigations/investigation/investigation.go`
-- Example usages: All files in `pkg/investigations/*/` 
+- Example usages: All files in `pkg/investigations/*/`
 - OCM builders: `pkg/ocm/ocm.go`
 - Builder pattern discussion: https://golang.cafe/blog/golang-builder-pattern.html
 
