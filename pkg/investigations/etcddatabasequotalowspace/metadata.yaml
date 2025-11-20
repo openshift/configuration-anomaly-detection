@@ -1,0 +1,19 @@
+name: etcddatabasequotalowspace
+rbac:
+  roles:
+    - namespace: openshift-etcd
+      rules:
+        - verbs:
+            - "get"
+            - "list"
+          apiGroups:
+            - ""
+          resources:
+            - pods
+        - verbs:
+            - "create"
+          apiGroups:
+            - ""
+          resources:
+            - pods/exec
+customerDataAccess: false
