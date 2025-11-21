@@ -19,6 +19,7 @@ func Push() {
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
+		promPusher.Collector(MustGatherPerformed)
 		err := promPusher.Add()
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
@@ -72,5 +73,11 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_sent_total",
 			Help: "counts investigations resulting in a sent servicelog",
+		}, []string{alertTypeLabel})
+	MustGatherPerformed = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "must_gather_performed_total",
+			Help: "counts the total number of must-gathers performed",
 		}, []string{alertTypeLabel})
 )
