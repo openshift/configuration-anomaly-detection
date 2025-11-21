@@ -119,7 +119,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		r.Notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
 
-		result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"StoppedInstances"}}
 		result.Actions = []types.Action{
 			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details).Build(),
 			executor.NoteFrom(r.Notes),
@@ -159,7 +158,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		if strings.Contains(failureReason, "nosnch.in") {
 			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
 
-			result.LimitedSupportSet = investigation.InvestigationStep{Performed: true, Labels: []string{"EgressBlocked"}}
 			result.Actions = []types.Action{
 				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details).
 					WithContext("EgressBlocked").
@@ -175,7 +173,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 
-		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 		result.Actions = []types.Action{
 			executor.NewServiceLogAction(egressSL.Severity, egressSL.Summary).
 				WithDescription(egressSL.Description).

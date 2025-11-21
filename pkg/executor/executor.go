@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 )
 
 func (e *DefaultExecutor) executeSequential(
@@ -191,6 +193,8 @@ func (e *DefaultExecutor) executeWithRetry(
 			if attempt > 0 {
 				execCtx.Logger.Infof("Action %s succeeded on retry %d", action.Type(), attempt)
 			}
+			// Emit metrics on successful action execution
+			emitMetricsForAction(action, execCtx)
 			return nil
 		}
 
@@ -233,4 +237,31 @@ func isRetryable(err error) bool {
 	}
 
 	return false
+}
+
+// emitMetricsForAction emits metrics after successful action execution
+func emitMetricsForAction(action Action, execCtx *ExecutionContext) {
+	investigationName := execCtx.InvestigationName
+
+	switch a := action.(type) {
+	case *ServiceLogAction:
+		// Emit ServicelogSent metric
+		metrics.Inc(metrics.ServicelogSent, investigationName)
+		execCtx.Logger.Debugf("Emitted servicelog_sent metric for %s", investigationName)
+
+	case *LimitedSupportAction:
+		// Emit LimitedSupportSet metric with context as label
+		labels := []string{investigationName}
+		if a.Context != "" {
+			labels = append(labels, a.Context)
+		}
+		metrics.Inc(metrics.LimitedSupportSet, labels...)
+		execCtx.Logger.Debugf("Emitted limitedsupport_set metric for %s", investigationName)
+
+	// Note: PagerDuty actions (Note, Silence, Escalate) don't have dedicated metrics
+	// Note: BackplaneReport doesn't have metrics yet
+	default:
+		// No metrics for other action types
+		execCtx.Logger.Debugf("No metrics defined for action type %s", action.Type())
+	}
 }

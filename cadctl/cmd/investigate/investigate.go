@@ -202,6 +202,7 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// FIXME: Once all migrations are converted this can be removed.
 	updateMetrics(alertInvestigation.Name(), &result)
 
 	// Execute ccam actions if any
