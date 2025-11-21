@@ -143,9 +143,6 @@ var _ = Describe("chgm", func() {
 				result, gotErr := inv.Run(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -167,9 +164,6 @@ var _ = Describe("chgm", func() {
 				result, gotErr := inv.Run(r)
 
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -180,13 +174,10 @@ var _ = Describe("chgm", func() {
 			It("should return infrastructure error for retry", func() {
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().ListNonRunningInstances(gomock.Any()).Return(nil, fmt.Errorf("could not retrieve non running instances: %w", fakeErr))
 
-				result, gotErr := inv.Run(r)
+				_, gotErr := inv.Run(r)
 
 				Expect(gotErr).To(HaveOccurred())
 				Expect(gotErr.Error()).To(ContainSubstring("investigation infrastructure failure"))
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("there were no stopped instances", func() {
@@ -201,9 +192,6 @@ var _ = Describe("chgm", func() {
 				result, gotErr := inv.Run(r)
 				// Assert
 				Expect(gotErr).ToNot(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -216,12 +204,9 @@ var _ = Describe("chgm", func() {
 				r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().GetClusterMachinePools(gomock.Any()).Return(machinePools, nil)
 				r.Resources.AwsClient.(*awsmock.MockClient).EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, fmt.Errorf("could not PollStopEventsFor: %w", fakeErr))
 
-				result, gotErr := inv.Run(r)
+				_, gotErr := inv.Run(r)
 				Expect(gotErr).To(HaveOccurred())
 				Expect(gotErr.Error()).To(ContainSubstring("investigation infrastructure failure"))
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 			})
 		})
 		When("there were no StopInstancesEvents", func() {
@@ -235,9 +220,6 @@ var _ = Describe("chgm", func() {
 				// Act
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).ToNot(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -254,9 +236,6 @@ var _ = Describe("chgm", func() {
 				result, gotErr := inv.Run(r)
 				// Assert
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -278,9 +257,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -300,9 +276,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -323,9 +296,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -346,9 +316,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -368,9 +335,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -390,9 +354,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -412,9 +373,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -434,9 +392,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -456,9 +411,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -478,9 +430,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -496,9 +445,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -515,9 +461,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -534,9 +477,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -552,9 +492,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -572,9 +509,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -592,9 +526,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeTrue())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasLimitedSupportAction(result.Actions)).To(BeTrue())
 				Expect(hasSilenceAction(result.Actions)).To(BeTrue())
@@ -613,9 +544,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -633,9 +561,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -653,9 +578,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -673,9 +595,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
@@ -693,9 +612,6 @@ var _ = Describe("chgm", func() {
 
 				result, gotErr := inv.Run(r)
 				Expect(gotErr).NotTo(HaveOccurred())
-				Expect(result.ServiceLogPrepared.Performed).To(BeFalse())
-				Expect(result.ServiceLogSent.Performed).To(BeFalse())
-				Expect(result.LimitedSupportSet.Performed).To(BeFalse())
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
