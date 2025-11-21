@@ -38,8 +38,10 @@ func TestCreateKubeconfigFileForRestConfig_Success(t *testing.T) {
 	kubeConfigFile, cleanup, err := createKubeconfigFileForRestConfig(context.Background(), mockConfig)
 	assert.NoError(t, err)
 	defer func() {
-		// explicitly ignore error to make linter happy
-		_ = cleanup()
+		err := cleanup()
+		if err != nil {
+			t.Logf("error cleaning up kubeconfig file: %v", err)
+		}
 	}()
 	defer func() {
 		err = os.Remove(kubeConfigFile)

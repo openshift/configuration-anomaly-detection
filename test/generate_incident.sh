@@ -9,6 +9,7 @@ declare -A alert_mapping=(
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
     ["InsightsOperatorDown"]="InsightsOperatorDown"
     ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
+    ["CreateMustGather"]="CreateMustGather"
     ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
     ["UpgradeConfigSyncFailureOver4HrSRE"]="UpgradeConfigSyncFailureOver4HrSRE Critical (1)"
 )
