@@ -7,7 +7,7 @@ RUN make CGO_ENABLED=0 build-cadctl
 RUN make CGO_ENABLED=0 build-interceptor
 
 
-FROM registry.access.redhat.com/ubi9-minimal:9.6 as runner
+FROM registry.access.redhat.com/ubi9-minimal:9.7 as runner
 
 COPY --from=builder /opt/bin/cadctl /bin/cadctl
 COPY --from=builder /opt/bin/interceptor /bin/interceptor
