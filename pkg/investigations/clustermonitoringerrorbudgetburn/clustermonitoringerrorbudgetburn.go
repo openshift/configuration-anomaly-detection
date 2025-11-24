@@ -8,11 +8,13 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -69,10 +71,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		k8sErr := &investigation.K8SClientError{}
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Escalate("CAD was unable to access cluster's kube-api. Please investigate manually."),
+				}
+				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Escalate("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually."),
+				}
+				return result, nil
 			}
 			return result, err
 		}
@@ -105,46 +113,56 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	if isUWMConfigInvalid(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
 		configMapSL := newUwmConfigMapMisconfiguredSL(monitoringDocLink)
-		err = r.OcmClient.PostServiceLog(r.Cluster, configMapSL)
-		if err != nil {
-			return result, fmt.Errorf("failed posting servicelog: %w", err)
-		}
-		// XXX: No metric before
-		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NewServiceLogAction(configMapSL.Severity, configMapSL.Summary).
+				WithDescription(configMapSL.Description).
+				WithServiceName(configMapSL.ServiceName).
+				Build(),
+			executor.NoteFrom(notes),
+			executor.Silence("Customer misconfigured UWM configmap"),
+		}
+		return result, nil
 	}
 
 	if isUWMAlertManagerBroken(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager), sending service log and silencing the alert")
 		alertManagerSL := newUwmAMMisconfiguredSL(monitoringDocLink)
-		err = r.OcmClient.PostServiceLog(r.Cluster, alertManagerSL)
-		if err != nil {
-			return result, fmt.Errorf("failed posting servicelog: %w", err)
-		}
-		// XXX: No metric before
-		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NewServiceLogAction(alertManagerSL.Severity, alertManagerSL.Summary).
+				WithDescription(alertManagerSL.Description).
+				WithServiceName(alertManagerSL.ServiceName).
+				Build(),
+			executor.NoteFrom(notes),
+			executor.Silence("Customer misconfigured UWM AlertManager"),
+		}
+		return result, nil
 	}
 
 	if isUWMPrometheusBroken(&monitoringCo) {
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus), sending service log and silencing the alert")
 		genericSL := newUwmGenericMisconfiguredSL(monitoringDocLink)
-		err = r.OcmClient.PostServiceLog(r.Cluster, genericSL)
-		if err != nil {
-			return result, fmt.Errorf("failed posting servicelog: %w", err)
-		}
-		// XXX: No metric before
-		result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
-		return result, r.PdClient.SilenceIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NewServiceLogAction(genericSL.Severity, genericSL.Summary).
+				WithDescription(genericSL.Description).
+				WithServiceName(genericSL.ServiceName).
+				Build(),
+			executor.NoteFrom(notes),
+			executor.Silence("Customer misconfigured UWM Prometheus"),
+		}
+		return result, nil
 	}
 
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to UWM misconfiguration")
-	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(notes),
+		executor.Escalate("Monitoring CO not degraded due to UWM misconfiguration - manual investigation required"),
+	}
+	return result, nil
 }
 
 func (c *Investigation) Name() string {
