@@ -11,6 +11,7 @@ declare -A alert_mapping=(
     ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
     ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
     ["UpgradeConfigSyncFailureOver4HrSRE"]="UpgradeConfigSyncFailureOver4HrSRE Critical (1)"
+    ["etcdDatabaseQuotaLowSpace"]="etcdDatabaseQuotaLowSpace CRITICAL (1)"
 )
 
 # Function to print help message
