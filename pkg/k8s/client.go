@@ -12,6 +12,7 @@ type Client interface {
 
 type clientImpl struct {
 	client.Client
+	restConfig *rest.Config
 }
 
 // New returns a Kubernetes client for the given cluster scoped to a given remediation's permissions.
@@ -26,5 +27,8 @@ func New(cfg *rest.Config) (k8scli Client, err error) {
 		return nil, err
 	}
 
-	return clientImpl{decoratedClient}, nil
+	return clientImpl{
+		Client:     decoratedClient,
+		restConfig: cfg,
+	}, nil
 }
