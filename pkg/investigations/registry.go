@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgather"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradeconfigsyncfailureover4hr"
 )
 
@@ -22,6 +23,7 @@ var availableInvestigations = []investigation.Investigation{
 	&upgradeconfigsyncfailureover4hr.Investigation{},
 	&machinehealthcheckunterminatedshortcircuitsre.Investigation{},
 	&cannotretrieveupdatessre.Investigation{},
+	&mustgather.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.
