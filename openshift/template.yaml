@@ -47,6 +47,11 @@ objects:
           envFrom:
           - secretRef:
               name: cad-pd-token
+          - secretRef:
+              name: cad-ocm-client-secret
+          - secretRef:
+              name: cad-org-policy-mapping-secret
+              optional: true
           image: ${REGISTRY_IMG}:${IMAGE_TAG}
           livenessProbe:
             failureThreshold: 3

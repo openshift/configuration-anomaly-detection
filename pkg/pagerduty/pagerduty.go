@@ -38,6 +38,8 @@ type Client interface {
 	EscalateIncidentWithNote(notes string) error
 	EscalateIncident() error
 	UpdateIncidentTitle(title string) error
+	MoveToEscalationPolicy(escalationPolicyID string) error
+	RetrieveClusterID() (string, error)
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation
@@ -283,8 +285,8 @@ func (c *SdkClient) RetrieveClusterID() (string, error) {
 	return "", fmt.Errorf("could not find a clusterID in the given alerts")
 }
 
-// moveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
-func (c *SdkClient) moveToEscalationPolicy(escalationPolicyID string) error {
+// MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
+func (c *SdkClient) MoveToEscalationPolicy(escalationPolicyID string) error {
 	logging.Infof("Moving to escalation policy: %s", escalationPolicyID)
 
 	o := []sdk.ManageIncidentsOptions{
@@ -480,7 +482,7 @@ func commonErrorHandling(err error, sdkErr sdk.APIError) error {
 
 // SilenceIncident silences the alert by assigning the "Silent Test" escalation policy
 func (c *SdkClient) SilenceIncident() error {
-	return c.moveToEscalationPolicy(c.GetSilentEscalationPolicy())
+	return c.MoveToEscalationPolicy(c.GetSilentEscalationPolicy())
 }
 
 // SilenceIncidentWithNote annotates the PagerDuty alert with the given notes and silences it by

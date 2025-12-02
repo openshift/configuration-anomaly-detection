@@ -23,7 +23,6 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -85,6 +84,21 @@ func (m *MockClient) GetConnection() *sdk.Connection {
 func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
+}
+
+// GetOrganizationID mocks base method.
+func (m *MockClient) GetOrganizationID(clusterID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOrganizationID", clusterID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOrganizationID indicates an expected call of GetOrganizationID.
+func (mr *MockClientMockRecorder) GetOrganizationID(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrganizationID", reflect.TypeOf((*MockClient)(nil).GetOrganizationID), clusterID)
 }
 
 // GetServiceLog mocks base method.

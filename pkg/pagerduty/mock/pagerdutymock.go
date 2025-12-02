@@ -19,7 +19,6 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -93,6 +92,35 @@ func (m *MockClient) GetServiceID() string {
 func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
+}
+
+// MoveToEscalationPolicy mocks base method.
+func (m *MockClient) MoveToEscalationPolicy(escalationPolicyID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MoveToEscalationPolicy", escalationPolicyID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MoveToEscalationPolicy indicates an expected call of MoveToEscalationPolicy.
+func (mr *MockClientMockRecorder) MoveToEscalationPolicy(escalationPolicyID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveToEscalationPolicy", reflect.TypeOf((*MockClient)(nil).MoveToEscalationPolicy), escalationPolicyID)
+}
+
+// RetrieveClusterID mocks base method.
+func (m *MockClient) RetrieveClusterID() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetrieveClusterID")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RetrieveClusterID indicates an expected call of RetrieveClusterID.
+func (mr *MockClientMockRecorder) RetrieveClusterID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveClusterID", reflect.TypeOf((*MockClient)(nil).RetrieveClusterID))
 }
 
 // SilenceIncident mocks base method.

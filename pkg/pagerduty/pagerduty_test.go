@@ -53,7 +53,7 @@ var _ = Describe("Pagerduty", func() {
 					w.WriteHeader(http.StatusUnauthorized)
 				})
 				// Act
-				err := p.moveToEscalationPolicy(escalationPolicyID)
+				err := p.MoveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 				Expect(err).Should(MatchError(InvalidTokenError{}))
@@ -70,7 +70,7 @@ var _ = Describe("Pagerduty", func() {
 					_, _ = fmt.Fprintf(w, `{"error":{"code":%d}}`, InvalidInputParamsErrorCode)
 				})
 				// Act
-				err := p.moveToEscalationPolicy(escalationPolicyID)
+				err := p.MoveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).Should(HaveOccurred())
 
@@ -86,7 +86,7 @@ var _ = Describe("Pagerduty", func() {
 					_, _ = fmt.Fprint(w, `{}`)
 				})
 				// Act
-				err := p.moveToEscalationPolicy(escalationPolicyID)
+				err := p.MoveToEscalationPolicy(escalationPolicyID)
 				// Assert
 				Expect(err).ShouldNot(HaveOccurred())
 			})
