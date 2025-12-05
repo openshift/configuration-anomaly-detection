@@ -137,7 +137,7 @@ func (c *SdkClient) GetClusterDeployment(internalClusterID string) (*hivev1.Clus
 	return cd, nil
 }
 
-// GetClusterMachinePools get the machine pools for a given cluster
+// GetClusterMachinePools gets the machine pools for a given cluster
 func (c *SdkClient) GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error) {
 	response, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(internalClusterID).MachinePools().List().Page(1).Size(-1).Send()
 	if err != nil {

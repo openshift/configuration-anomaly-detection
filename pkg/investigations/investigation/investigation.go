@@ -27,9 +27,10 @@ type InvestigationStep struct {
 }
 
 type InvestigationResult struct {
-	LimitedSupportSet  InvestigationStep
-	ServiceLogPrepared InvestigationStep
-	ServiceLogSent     InvestigationStep
+	LimitedSupportSet   InvestigationStep
+	ServiceLogPrepared  InvestigationStep
+	ServiceLogSent      InvestigationStep
+	MustGatherPerformed InvestigationStep
 
 	// If multiple investigations might be run this can indicate a fatal error that makes running additional investigations useless.
 	// If nil, investigations should continue. If not nil, should contain a meaningful error message explaining why investigations must stop.

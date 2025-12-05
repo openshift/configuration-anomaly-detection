@@ -1,0 +1,89 @@
+name: mustgather
+rbac:
+  clusterRoleRules:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "pods/log"
+    - verbs:
+        - "create"
+      apiGroups:
+        - ""
+      resources:
+        - "pods/exec"
+    - verbs:
+        - "create"
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "pods"
+    - verbs:
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "services"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "nodes"
+    - verbs:
+        - "get"
+      apiGroups:
+        - ""
+      resources:
+        - "secrets"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "config.openshift.io"
+      resources:
+        - "clusteroperators"
+        - "clusterversions"
+    - verbs:
+        - "create"
+        - "delete"
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "namespaces"
+    - verbs:
+        - "create"
+        - "delete"
+        - "list"
+        - "get"
+      apiGroups:
+        - "rbac.authorization.k8s.io"
+      resources:
+        - "clusterrolebindings"
+    - verbs:
+        - "bind"
+      apiGroups:
+        - "rbac.authorization.k8s.io"
+      resources:
+        - "clusterroles"
+      resourceNames:
+        - "cluster-admin"
+    - verbs:
+        - "create"
+        - "delete"
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "serviceaccounts"
+customerDataAccess: true
+
+
