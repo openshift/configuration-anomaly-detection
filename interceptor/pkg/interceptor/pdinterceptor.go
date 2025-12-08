@@ -15,6 +15,7 @@ import (
 	"github.com/PagerDuty/go-pagerduty/webhookv3"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	triggersv1 "github.com/tektoncd/triggers/pkg/apis/triggers/v1beta1"
 	"github.com/tektoncd/triggers/pkg/interceptors"
@@ -36,6 +37,18 @@ type InterceptorStats struct {
 
 func CreateInterceptorStats() *InterceptorStats {
 	return &InterceptorStats{CodeWithReasonToErrorsCount: make(map[ErrorCodeWithReason]int)}
+}
+
+// OrgEscalationMapping represents the structure of the org-to-policy mapping
+type OrgEscalationMapping struct {
+	Organizations []Organization `json:"organizations"`
+}
+
+// Organization represents a customer organization with its escalation policy
+type Organization struct {
+	Name             string   `json:"name"`
+	OrgIDs           []string `json:"org_ids"`
+	EscalationPolicy string   `json:"escalation_policy"`
 }
 
 type interceptorHandler struct {
@@ -147,6 +160,33 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 		return interceptors.Failf(codes.InvalidArgument, "could not initialize pagerduty client: %v", err)
 	}
 
+	// Load org mapping
+	orgMap, err := loadOrgEscalationMapping()
+	if err != nil {
+		logging.Warnf("Failed to load org mapping: %v", err)
+		orgMap = make(map[string]string)
+	}
+
+	// Create OCM client if credentials are available
+	var ocmClient ocm.Client
+	if len(orgMap) > 0 {
+		ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
+		ocmClientSecret := os.Getenv("CAD_OCM_CLIENT_SECRET")
+		ocmURL := os.Getenv("CAD_OCM_URL")
+
+		if ocmClientID != "" && ocmClientSecret != "" && ocmURL != "" {
+			ocmClient, err = ocm.New(ocmClientID, ocmClientSecret, ocmURL)
+			if err != nil {
+				logging.Warnf("Failed to create OCM client: %v", err)
+			}
+		}
+	}
+
+	// Perform org-based routing if we have both clients
+	if ocmClient != nil {
+		reassignToOrgEscalationPolicy(pdClient, ocmClient, orgMap)
+	}
+
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
@@ -168,5 +208,62 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name())
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
+	}
+}
+
+func loadOrgEscalationMapping() (map[string]string, error) {
+	mappingJSON, hasMappingJSON := os.LookupEnv("CAD_ORG_POLICY_MAPPING")
+	if !hasMappingJSON || mappingJSON == "" {
+		return make(map[string]string), nil
+	}
+
+	var mapping OrgEscalationMapping
+	if err := json.Unmarshal([]byte(mappingJSON), &mapping); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal org policy mapping: %w", err)
+	}
+
+	result := make(map[string]string)
+	for _, org := range mapping.Organizations {
+		for _, orgID := range org.OrgIDs {
+			result[orgID] = org.EscalationPolicy
+		}
+	}
+	return result, nil
+}
+
+func reassignToOrgEscalationPolicy(pdClient pagerduty.Client, ocmClient ocm.Client, orgMap map[string]string) {
+	if len(orgMap) == 0 {
+		return
+	}
+
+	clusterID, err := pdClient.RetrieveClusterID()
+	if err != nil {
+		return
+	}
+
+	orgID, err := ocmClient.GetOrganizationID(clusterID)
+	if err != nil {
+		logging.Warnf("Failed to get org ID for cluster %s: %v", clusterID, err)
+		return
+	}
+	if orgID == "" {
+		return
+	}
+
+	policy, found := orgMap[orgID]
+	if !found {
+		return
+	}
+
+	if err := pdClient.MoveToEscalationPolicy(policy); err != nil {
+		if noteErr := pdClient.AddNote(fmt.Sprintf("This cluster belongs to organization %s and should be escalated to policy %s, but CAD failed to reassign: %v. Please manually route to the appropriate team.", orgID, policy, err)); noteErr != nil {
+			logging.Warnf("Failed to add note about reassignment failure: %v", noteErr)
+		}
+		logging.Errorf("Failed to reassign to org policy %s: %v", policy, err)
+		return
+	}
+
+	if err := pdClient.AddNote(fmt.Sprintf("Reassigned to organization %s escalation policy.", orgID)); err != nil {
+		logging.Warnf("Failed to add note about successful reassignment: %v", err)
 	}
 }

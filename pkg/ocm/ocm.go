@@ -45,6 +45,7 @@ type Client interface {
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
+	GetOrganizationID(clusterID string) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -121,6 +122,31 @@ func (c *SdkClient) GetClusterInfo(identifier string) (*cmv1.Cluster, error) {
 	}
 
 	return resp.Items().Get(0), nil
+}
+
+// GetOrganizationID returns the organization ID for a cluster, or empty string if not part of an organization.
+func (c *SdkClient) GetOrganizationID(clusterID string) (string, error) {
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return "", err
+	}
+
+	cmv1Subscription, ok := cluster.GetSubscription()
+	if !ok {
+		return "", nil
+	}
+
+	subscriptionResponse, err := c.conn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
+	if err != nil {
+		return "", err
+	}
+
+	subscription, ok := subscriptionResponse.GetBody()
+	if !ok {
+		return "", nil
+	}
+
+	return subscription.OrganizationID(), nil
 }
 
 // GetClusterDeployment gets the ClusterDeployment object for a given cluster

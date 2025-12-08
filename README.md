@@ -254,6 +254,38 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 - `CAD_EXPERIMENTAL_ENABLED`: enables experimental investigations when set to `true`, see mapping.go
 
+- `CAD_ORG_POLICY_MAPPING`: JSON configuration for organization-based escalation policy routing. When configured, the interceptor automatically reassigns PagerDuty incidents for clusters belonging to specific organizations to dedicated escalation policies. This enables organization-specific on-call rotations.
+
+  Example configuration:
+  ```json
+  {
+    "organizations": [
+      {
+        "name": "Customer Alpha",
+        "org_ids": ["org-id-1", "org-id-2"],
+        "escalation_policy": "P123ABC"
+      },
+      {
+        "name": "Customer Beta",
+        "org_ids": ["org-id-3"],
+        "escalation_policy": "P456DEF"
+      }
+    ]
+  }
+  ```
+
+  **Behavior:**
+  - When an incident is triggered, the interceptor queries OCM to get the cluster's organization ID
+  - If the organization ID matches an entry in the mapping, the incident is reassigned to the specified escalation policy
+  - A note is added to the PagerDuty incident documenting the reassignment
+  - If reassignment fails, a note with error details is added for manual routing
+  - The investigation continues normally after reassignment (or skips reassignment if not configured)
+
+  **Requirements:**
+  - `CAD_OCM_CLIENT_ID`, `CAD_OCM_CLIENT_SECRET`, `CAD_OCM_URL` must be configured
+  - Escalation policy IDs must be valid in the PagerDuty account
+  - This configuration should be stored in a Kubernetes Secret named `cad-org-policy-mapping-secret`
+
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
 - `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See
