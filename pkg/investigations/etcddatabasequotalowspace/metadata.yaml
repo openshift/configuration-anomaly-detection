@@ -16,4 +16,17 @@ rbac:
             - ""
           resources:
             - pods/exec
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - pods/log
+        - verbs:
+            - "create"
+            - "get"
+          apiGroups:
+            - "batch"
+          resources:
+            - jobs
 customerDataAccess: false
