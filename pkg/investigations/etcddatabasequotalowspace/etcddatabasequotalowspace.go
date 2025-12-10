@@ -14,6 +14,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
 )
 
 type Investigation struct{}
@@ -68,11 +70,61 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		snapshotResult.Namespace,
 		float64(snapshotResult.SnapshotSize)/(1024*1024),
 		snapshotResult.SnapshotPath)
-	r.Notes.AppendAutomation("Snapshot saved to node filesystem at: %s", snapshotResult.SnapshotPath)
-	r.Notes.AppendAutomation("Node name saved for Phase 2 job scheduling: %s", snapshotResult.NodeName)
-	r.Notes.AppendAutomation("Phase 2 will analyze this snapshot using Kubernetes Job with octosql-etcd image and hostPath mount")
 
 	logging.Infof("etcd snapshot taken successfully from pod %s on node %s", snapshotResult.PodName, snapshotResult.NodeName)
+
+	defer handleSnapshotCleanup(ctx, r.K8sClient, r.Notes, snapshotResult)
+
+	timestamp := extractTimestampFromPath(snapshotResult.SnapshotPath)
+
+	job, err := createAnalysisJob(ctx, r.K8sClient, snapshotResult.NodeName, snapshotResult.SnapshotPath, timestamp)
+	if err != nil {
+		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
+		logging.Errorf("failed to create analysis job: %v", err)
+		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	}
+
+	r.Notes.AppendAutomation("Created analysis job: %s (will auto-delete after 10 minutes)", job.Name)
+
+	err = waitForJobCompletion(ctx, r.K8sClient, job.Name, analysisJobTimeout)
+	if err != nil {
+		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
+		logging.Errorf("analysis job failed: %v", err)
+		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	}
+
+	r.Notes.AppendSuccess("Analysis job completed successfully")
+
+	logs, err := getJobLogs(ctx, r.K8sClient, job.Name)
+	if err != nil {
+		r.Notes.AppendWarning("Failed to retrieve analysis results: %v", err)
+		logging.Errorf("failed to get job logs: %v", err)
+		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	}
+
+	analysisResult, err := parseAnalysisOutput(logs)
+	if err != nil {
+		r.Notes.AppendWarning("Failed to parse analysis results: %v", err)
+		logging.Errorf("failed to parse analysis output: %v", err)
+		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	}
+
+	formattedResults := formatAnalysisResults(analysisResult)
+
+	logging.Info("etcd snapshot analysis completed successfully")
+
+	report, err := reports.New(ctx, r.BpClient, &reports.Input{
+		ClusterID: r.Cluster.ExternalID(),
+		Summary:   "CAD Investigation: Analysis of etcd storage utilization",
+		Data:      formattedResults,
+	})
+	if err != nil {
+		r.Notes.AppendWarning("Failed to create cluster report: %v", err)
+		logging.Warnf("failed to create cluster report: %v", err)
+	}
+	if report != nil {
+		r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
+	}
 
 	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 }
@@ -161,8 +213,8 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 		return "", 0, fmt.Errorf("failed to get REST config: %w", err)
 	}
 
-	timestamp := time.Now().Format("20060102-150405")
-	snapshotPath := fmt.Sprintf("/var/lib/etcd/etcd-%s.snapshot", timestamp)
+	timestamp := time.Now().Format("20060102_150405")
+	snapshotPath := fmt.Sprintf("/var/lib/etcd/etcd_%s.snapshot", timestamp)
 
 	logging.Info("taking etcd snapshot and saving to node...")
 	takeSnapshotCmd := []string{
@@ -173,6 +225,15 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", takeSnapshotCmd)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to take snapshot: %w", err)
+	}
+
+	logging.Info("setting snapshot file permissions...")
+	chmodCmd := []string{
+		"/bin/chmod", "644", snapshotPath,
+	}
+	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", chmodCmd)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to set snapshot permissions: %w", err)
 	}
 
 	logging.Info("checking snapshot size...")
@@ -194,16 +255,54 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 
 	logging.Infof("snapshot saved to %s on node (%.2f MB)", snapshotPath, float64(snapshotSize)/(1024*1024))
 
-	// TODO: Delete this cleanup step when work is started for Phase 2
-	// Phase 2 will need the snapshot to remain on the node for Job analysis
-	logging.Info("cleaning up snapshot from node...")
-	cleanupCmd := []string{
-		"/bin/rm", "-f", snapshotPath,
+	return snapshotPath, snapshotSize, nil
+}
+
+// extractTimestampFromPath extracts the timestamp from a snapshot path
+func extractTimestampFromPath(path string) string {
+	filename := path[strings.LastIndex(path, "/")+1:]
+	filename = strings.TrimPrefix(filename, "etcd_")
+	filename = strings.TrimSuffix(filename, ".snapshot")
+
+	return filename
+}
+
+// handleSnapshotCleanup attempts to clean up the snapshot and adds appropriate notes
+func handleSnapshotCleanup(ctx context.Context, k8sClient k8sclient.Client, notes *notewriter.NoteWriter, snapshotResult *SnapshotResult) {
+	cleanupErr := cleanupSnapshot(ctx, k8sClient, snapshotResult.PodName, snapshotResult.SnapshotPath, snapshotResult.Namespace)
+	if cleanupErr != nil {
+		notes.AppendWarning("Failed to cleanup snapshot: %v", cleanupErr)
+		notes.AppendWarning("Manual cleanup required: delete snapshot file %s from pod %s", snapshotResult.SnapshotPath, snapshotResult.PodName)
+		logging.Warnf("failed to cleanup snapshot: %v", cleanupErr)
 	}
-	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", cleanupCmd)
+}
+
+// cleanupSnapshot attempts to delete the etcd snapshot file from the node
+func cleanupSnapshot(ctx context.Context, k8sClient k8sclient.Client, podName, snapshotPath, namespace string) error {
+	pod := &corev1.Pod{}
+	err := k8sClient.Get(ctx, client.ObjectKey{
+		Name:      podName,
+		Namespace: namespace,
+	}, pod)
 	if err != nil {
-		logging.Warnf("failed to clean up snapshot from node (non-fatal): %v", err)
+		return fmt.Errorf("failed to get etcd pod for cleanup: %w", err)
 	}
 
-	return snapshotPath, snapshotSize, nil
+	restConfig, err := k8sclient.GetRestConfig(k8sClient)
+	if err != nil {
+		return fmt.Errorf("failed to get REST config for cleanup: %w", err)
+	}
+
+	logging.Infof("cleaning up snapshot file: %s", snapshotPath)
+	rmCmd := []string{
+		"/bin/rm", "-f", snapshotPath,
+	}
+
+	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", rmCmd)
+	if err != nil {
+		return fmt.Errorf("failed to delete snapshot file: %w", err)
+	}
+
+	logging.Infof("snapshot file deleted successfully: %s", snapshotPath)
+	return nil
 }
