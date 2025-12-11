@@ -15,6 +15,8 @@ parameters:
   value: info
 - name: CAD_ORG_POLICY_MAPPING
   value: ""
+- name: CAD_OCTOSQL_IMAGE
+  value: quay.io/redhat_emp1/octosql-etcd:latest
 - name: TEKTON_RESOURCE_PRUNER_IMAGE
   value: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8
 - name: TEKTON_RESOURCE_PRUNER_SHA
@@ -48,6 +50,8 @@ objects:
             value: ${LOG_LEVEL}
           - name: CAD_ORG_POLICY_MAPPING
             value: ${CAD_ORG_POLICY_MAPPING}
+          - name: CAD_OCTOSQL_IMAGE
+            value: ${CAD_OCTOSQL_IMAGE}
           envFrom:
           - secretRef:
               name: cad-pd-token
@@ -326,6 +330,8 @@ objects:
         value: ${CAD_EXPERIMENTAL_ENABLED}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
+      - name: CAD_OCTOSQL_IMAGE
+        value: ${CAD_OCTOSQL_IMAGE}
       - name: CAD_HCM_AI_TOKEN
         valueFrom:
           secretKeyRef:

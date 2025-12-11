@@ -12,6 +12,7 @@ unset VAULT_ADDR VAULT_TOKEN
 PROXY_URL="http://squid.corp.redhat.com:3128"
 
 export CAD_EXPERIMENTAL_ENABLED=true
+export CAD_OCTOSQL_IMAGE=quay.io/redhat_emp1/octosql-etcd:latest
 export BACKPLANE_PROXY=${PROXY_URL}
 export AWS_PROXY=${PROXY_URL}
 

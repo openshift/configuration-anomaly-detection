@@ -5,6 +5,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -15,6 +16,10 @@ func initScheme() (*runtime.Scheme, error) {
 
 	if err := corev1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("unable to add corev1 scheme: %w", err)
+	}
+
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("unable to add batchv1 scheme: %w", err)
 	}
 
 	if err := configv1.Install(scheme); err != nil {

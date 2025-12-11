@@ -104,3 +104,34 @@ func TestSnapshotResult(t *testing.T) {
 	assert.Equal(t, int64(100000000), result.SnapshotSize)
 	assert.Equal(t, "openshift-etcd", result.Namespace)
 }
+
+func TestExtractTimestampFromPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "standard snapshot path",
+			path:     "/var/lib/etcd/etcd_20231224_143012.snapshot",
+			expected: "20231224_143012",
+		},
+		{
+			name:     "different timestamp format",
+			path:     "/var/lib/etcd/etcd_20250101_000000.snapshot",
+			expected: "20250101_000000",
+		},
+		{
+			name:     "path without directory",
+			path:     "etcd_20231224_143012.snapshot",
+			expected: "20231224_143012",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractTimestampFromPath(tt.path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
