@@ -13,6 +13,8 @@ parameters:
   value: "FALSE"
 - name: LOG_LEVEL
   value: info
+- name: CAD_ORG_POLICY_MAPPING
+  value: ""
 - name: TEKTON_RESOURCE_PRUNER_IMAGE
   value: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8
 - name: TEKTON_RESOURCE_PRUNER_SHA
@@ -44,14 +46,13 @@ objects:
             value: ${CAD_EXPERIMENTAL_ENABLED}
           - name: LOG_LEVEL
             value: ${LOG_LEVEL}
+          - name: CAD_ORG_POLICY_MAPPING
+            value: ${CAD_ORG_POLICY_MAPPING}
           envFrom:
           - secretRef:
               name: cad-pd-token
           - secretRef:
               name: cad-ocm-client-secret
-          - secretRef:
-              name: cad-org-policy-mapping-secret
-              optional: true
           image: ${REGISTRY_IMG}:${IMAGE_TAG}
           livenessProbe:
             failureThreshold: 3
