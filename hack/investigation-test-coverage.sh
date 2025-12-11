@@ -13,6 +13,9 @@ PR_SHA=$(git rev-parse HEAD)
 # Obtaining instances of files added in the PR
 diff_files=$(git diff --name-status "$BASE_SHA" "$PR_SHA" | (grep '^A' || true;) | awk '{print $2}')
 
+# Get all changed files (Added or Modified) for test file validation
+all_changed_files=$(git diff --name-status "$BASE_SHA" "$PR_SHA" | (grep '^[AM]' || true;) | awk '{print $2}')
+
 # Filter to relevant directory (investigations folder)
 investigations=$(echo "$diff_files" | grep '^pkg/investigations/' || true)
 if [ -z "$investigations" ]; then
@@ -28,13 +31,22 @@ for file in $investigations; do
 		fi
 
 		inv_name="${BASH_REMATCH[1]}"
+		file_name="${BASH_REMATCH[2]}"
 		inv_dir=$(dirname "$file")
 		expected_test_file="${inv_dir}/${inv_name}_test.go"
+		specific_test_file="${inv_dir}/${file_name}_test.go"
 
 		echo "Found new investigation file: $file, expecting unit test: $expected_test_file"
 
+		# Check if test file was added (new investigations)
 		if echo "$diff_files" | grep -xq "$expected_test_file"; then
-			echo "Successfully found test file."
+			echo "Successfully found test file (newly added)."
+		# Check if test file was modified (existing investigations with new files)
+		elif echo "$all_changed_files" | grep -xq "$expected_test_file"; then
+			echo "Successfully found test file (modified)."
+		# Check if a specific test file exists for this new file (added or modified)
+		elif echo "$all_changed_files" | grep -xq "$specific_test_file"; then
+			echo "Successfully found specific test file: $specific_test_file"
 		else
 			echo "Failed to locate test file"
 			echo -e "${RED}[FAIL] Added investigation '$inv_name' is missing a \`${inv_name}_test.go\` file.${NC}"
