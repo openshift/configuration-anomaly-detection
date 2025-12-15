@@ -97,12 +97,19 @@ func (c *ClientImpl) CreateReport(ctx context.Context, clusterId string, summary
 }
 
 func httpDoerWithProxy(proxyURL string) (*http.Client, error) {
+	client := &http.Client{}
+
+	// If the caller passed an empty proxyURL, return a bare client without it
+	if proxyURL == "" {
+		return client, nil
+	}
+
 	proxy, err := url.Parse(proxyURL)
 	if err != nil {
 		return nil, err
 	}
 
-	return &http.Client{
-		Transport: &http.Transport{Proxy: http.ProxyURL(proxy)},
-	}, nil
+	client.Transport = &http.Transport{Proxy: http.ProxyURL(proxy)}
+
+	return client, nil
 }
