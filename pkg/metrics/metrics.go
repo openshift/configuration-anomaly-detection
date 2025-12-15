@@ -20,6 +20,8 @@ func Push() {
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
 		promPusher.Collector(MustGatherPerformed)
+		promPusher.Collector(EtcdDatabaseAnalysis)
+		promPusher.Collector(EtcdSnapshotCleanup)
 		err := promPusher.Add()
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
@@ -81,4 +83,18 @@ var (
 			Name: "must_gather_performed_total",
 			Help: "counts the total number of must-gathers performed",
 		}, []string{alertTypeLabel, mustgatherLabel})
+	// EtcdDatabaseAnalysis tracks etcddatabasequotalowspace investigation outcomes
+	EtcdDatabaseAnalysis = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "etcd_database_analysis_total",
+			Help: "counts etcddatabasequotalowspace investigation outcomes by status and reason",
+		}, []string{alertTypeLabel, "status", "reason"})
+	// EtcdSnapshotCleanup tracks etcd snapshot cleanup success/failure
+	EtcdSnapshotCleanup = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "etcd_snapshot_cleanup_total",
+			Help: "counts etcd snapshot cleanup attempts by alert type and status",
+		}, []string{alertTypeLabel, "status"})
 )

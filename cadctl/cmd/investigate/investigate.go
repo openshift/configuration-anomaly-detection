@@ -286,6 +286,9 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 	if result.MustGatherPerformed.Performed {
 		metrics.Inc(metrics.MustGatherPerformed, append([]string{investigationName}, result.MustGatherPerformed.Labels...)...)
 	}
+	if result.EtcdDatabaseAnalysis.Performed {
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, append([]string{investigationName}, result.EtcdDatabaseAnalysis.Labels...)...)
+	}
 }
 
 func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {
