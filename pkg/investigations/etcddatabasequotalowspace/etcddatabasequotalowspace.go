@@ -14,6 +14,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
 )
@@ -46,6 +47,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to determine if cluster is HCP: %v", err)
 		logging.Warnf("failed to check if cluster is HCP: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "hcp_check_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 	if isHCP {
@@ -60,6 +65,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to take etcd snapshot: %v", err)
 		logging.Errorf("failed to take etcd snapshot: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "snapshot_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 
@@ -81,6 +90,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
 		logging.Errorf("failed to create analysis job: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "analysis_job_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 
@@ -90,6 +103,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
 		logging.Errorf("analysis job failed: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "analysis_job_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 
@@ -99,6 +116,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to retrieve analysis results: %v", err)
 		logging.Errorf("failed to get job logs: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "parse_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 
@@ -106,6 +127,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to parse analysis results: %v", err)
 		logging.Errorf("failed to parse analysis output: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "parse_failed"},
+		}
 		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
 	}
 
@@ -124,6 +149,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	if report != nil {
 		r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
+	}
+
+	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+		Performed: true,
+		Labels:    []string{"success", "completed"},
 	}
 
 	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
@@ -273,7 +303,11 @@ func handleSnapshotCleanup(ctx context.Context, k8sClient k8sclient.Client, note
 	if cleanupErr != nil {
 		notes.AppendWarning("Failed to cleanup snapshot: %v", cleanupErr)
 		notes.AppendWarning("Manual cleanup required: delete snapshot file %s from pod %s", snapshotResult.SnapshotPath, snapshotResult.PodName)
-		logging.Warnf("failed to cleanup snapshot: %v", cleanupErr)
+		logging.Errorf("failed to cleanup snapshot: %v", cleanupErr)
+		metrics.Inc(metrics.EtcdSnapshotCleanup, "etcddatabasequotalowspace", "failure")
+	} else {
+		logging.Infof("snapshot cleanup completed successfully")
+		metrics.Inc(metrics.EtcdSnapshotCleanup, "etcddatabasequotalowspace", "success")
 	}
 }
 
