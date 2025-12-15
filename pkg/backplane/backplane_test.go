@@ -155,9 +155,10 @@ func TestCreateReport_DataEncoding(t *testing.T) {
 
 func TestHttpDoerWithProxy(t *testing.T) {
 	tests := []struct {
-		name        string
-		proxyURL    string
-		expectError bool
+		name                 string
+		proxyURL             string
+		expectError          bool
+		expectEmptyTransport bool
 	}{
 		{
 			name:        "Valid proxy URL",
@@ -170,9 +171,10 @@ func TestHttpDoerWithProxy(t *testing.T) {
 			expectError: false,
 		},
 		{
-			name:        "Empty proxy URL",
-			proxyURL:    "",
-			expectError: false,
+			name:                 "Empty proxy URL",
+			proxyURL:             "",
+			expectError:          false,
+			expectEmptyTransport: true,
 		},
 		{
 			name:        "Invalid proxy URL",
@@ -192,7 +194,13 @@ func TestHttpDoerWithProxy(t *testing.T) {
 				assert.NoError(t, err)
 				require.NotNil(t, client)
 				assert.IsType(t, &http.Client{}, client)
-				assert.NotNil(t, client.Transport)
+
+				// If the user passes an empty proxyURL in config, we omit the custom transport
+				if tt.expectEmptyTransport {
+					assert.Nil(t, client.Transport)
+				} else {
+					assert.NotNil(t, client.Transport)
+				}
 			}
 		})
 	}

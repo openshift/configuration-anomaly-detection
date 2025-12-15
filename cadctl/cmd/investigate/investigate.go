@@ -145,7 +145,13 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
-	bpClient, err := backplane.NewClient(backplane.Config{OcmClient: ocmClient, BaseURL: backplaneURL, ProxyURL: backplaneProxy})
+	bpClient, err := backplane.NewClient(
+		backplane.Config{
+			OcmClient: ocmClient,
+			BaseURL:   backplaneURL,
+			ProxyURL:  backplaneProxy,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("could not initialize backplane client: %w", err)
 	}
