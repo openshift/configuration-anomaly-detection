@@ -83,10 +83,6 @@ func TestInvestigationMethods(t *testing.T) {
 		got := inv.Description()
 		assert.Equal(t, expected, got)
 	})
-
-	t.Run("IsExperimental", func(t *testing.T) {
-		assert.True(t, inv.IsExperimental())
-	})
 }
 
 func TestSnapshotResult(t *testing.T) {

@@ -172,7 +172,7 @@ func (i *Investigation) Description() string {
 }
 
 func (i *Investigation) IsExperimental() bool {
-	return true
+	return false
 }
 
 // isHCPCluster checks if the cluster is a Hosted Control Plane (HCP) cluster
