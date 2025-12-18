@@ -284,7 +284,8 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
   **Requirements:**
   - `CAD_OCM_CLIENT_ID`, `CAD_OCM_CLIENT_SECRET`, `CAD_OCM_URL` must be configured
   - Escalation policy IDs must be valid in the PagerDuty account
-  - This configuration should be stored in a Kubernetes Secret named `cad-org-policy-mapping-secret`
+  - **Escalation policies must have at least 2 levels** (CAD's `EscalateIncident()` method escalates to level 2)
+  - This configuration is set as an environment variable in the deployment via app-interface saas file
 
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
