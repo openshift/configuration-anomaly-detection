@@ -135,7 +135,7 @@ func TestInvestigation_investigateFailingMachine(t *testing.T) {
 			want: result{
 				err:    false,
 				action: recommendationInvestigateMachine,
-				notes:  "Red Hat-owned machine in state",
+				notes:  "Red Hat-owned machine in terminal error state",
 			},
 		},
 		{
