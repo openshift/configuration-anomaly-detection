@@ -181,16 +181,16 @@ func (i *Investigation) investigateFailingMachine(machine machinev1beta1.Machine
 		errorMsg = *machine.Status.ErrorMessage
 	}
 
+	if role != machineutil.WorkerRoleLabelValue {
+		// If machine is Red-Hat owned, always require manual investigation
+		notes := fmt.Sprintf("Red Hat-owned machine in terminal error state with message: %s", errorMsg)
+		i.recommendations.addRecommendation(recommendationInvestigateMachine, machine.Name, notes)
+		return nil
+	}
+
 	var errorReason machinev1beta1.MachineStatusError
 	if machine.Status.ErrorReason != nil {
 		errorReason = *machine.Status.ErrorReason
-	}
-
-	if role != machineutil.WorkerRoleLabelValue {
-		// If machine is Red-Hat owned, always require manual investigation
-		notes := fmt.Sprintf("Red Hat-owned machine in state %q due to %q", errorReason, errorMsg)
-		i.recommendations.addRecommendation(recommendationInvestigateMachine, machine.Name, notes)
-		return nil
 	}
 
 	switch errorReason {
@@ -298,7 +298,11 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 
 	if ready.Status != corev1.ConditionTrue {
 		lastCheckinElapsed := time.Since(ready.LastHeartbeatTime.Time).Truncate(time.Second)
-		notes := fmt.Sprintf("node has been %q for %s", ready.Status, lastCheckinElapsed)
+		statusDesc := "Unknown"
+		if ready.Status == corev1.ConditionFalse {
+			statusDesc = "NotReady"
+		}
+		notes := fmt.Sprintf("node has been in %s state for %s", statusDesc, lastCheckinElapsed)
 		i.recommendations.addRecommendation(recommendationInvestigateNode, node.Name, notes)
 	}
 }
