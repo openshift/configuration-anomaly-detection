@@ -25,6 +25,10 @@ const (
 	mustGatherDirectoryPattern = "must-gather.cad.*"   // the directory name of the local temporary storage used to store the must-gather
 	archiveTimestampLayout     = "2006-01-02_15-04-05" // the layout of the timestamp used to create the must-gather archive name to be stored on the SFTP server
 
+	// constants for the HCP must-gather
+	AcmHcpMustGatherImage           = "registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8" // the image used for collecting a must-gather on the management cluster
+	AcmHcpMustGatherCommandTemplate = "/usr/bin/gather hosted-cluster-namespace=%s hosted-cluster-name=%s"
+
 	// label for metrics
 	productName = "ROSA classic"
 )
@@ -54,7 +58,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}()
 
-	err = r.OCClient.CreateMustGather([]string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)})
+	mustGatherCommandFlags := []string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)}
+
+	if r.IsHCP {
+		mustGatherCommandFlags = append(mustGatherCommandFlags,
+			fmt.Sprintf("--image=%s", AcmHcpMustGatherImage),
+			fmt.Sprintf(AcmHcpMustGatherCommandTemplate, r.HCPNamespace, r.Cluster.Name()),
+		)
+		err = r.ManagementOCClient.CreateMustGather(mustGatherCommandFlags)
+	} else {
+		err = r.OCClient.CreateMustGather(mustGatherCommandFlags)
+	}
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("failed to create must-gather: %w", err),

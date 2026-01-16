@@ -12,7 +12,7 @@ package ocmmock
 import (
 	reflect "reflect"
 
-	sdk "github.com/openshift-online/ocm-sdk-go"
+	ocm_sdk_go "github.com/openshift-online/ocm-sdk-go"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -58,6 +58,21 @@ func (mr *MockClientMockRecorder) AwsClassicJumpRoleCompatible(cluster any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AwsClassicJumpRoleCompatible", reflect.TypeOf((*MockClient)(nil).AwsClassicJumpRoleCompatible), cluster)
 }
 
+// GetClusterHypershiftConfig mocks base method.
+func (m *MockClient) GetClusterHypershiftConfig(cluster *v1.Cluster) (*v1.HypershiftConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterHypershiftConfig", cluster)
+	ret0, _ := ret[0].(*v1.HypershiftConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterHypershiftConfig indicates an expected call of GetClusterHypershiftConfig.
+func (mr *MockClientMockRecorder) GetClusterHypershiftConfig(cluster any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterHypershiftConfig", reflect.TypeOf((*MockClient)(nil).GetClusterHypershiftConfig), cluster)
+}
+
 // GetClusterMachinePools mocks base method.
 func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
 	m.ctrl.T.Helper()
@@ -74,10 +89,10 @@ func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID any) 
 }
 
 // GetConnection mocks base method.
-func (m *MockClient) GetConnection() *sdk.Connection {
+func (m *MockClient) GetConnection() *ocm_sdk_go.Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConnection")
-	ret0, _ := ret[0].(*sdk.Connection)
+	ret0, _ := ret[0].(*ocm_sdk_go.Connection)
 	return ret0
 }
 

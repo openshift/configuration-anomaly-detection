@@ -45,6 +45,7 @@ type Client interface {
 	AwsClassicJumpRoleCompatible(cluster *cmv1.Cluster) (bool, error)
 	GetConnection() *sdk.Connection
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
+	GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.HypershiftConfig, error)
 	GetOrganizationID(clusterID string) (string, error)
 }
 
@@ -316,6 +317,15 @@ func (c *SdkClient) IsAccessProtected(cluster *cmv1.Cluster) (bool, error) {
 		return false, fmt.Errorf("unable to get AccessProtection status for cluster")
 	}
 	return enabled, nil
+}
+
+func (c *SdkClient) GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.HypershiftConfig, error) {
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(cluster.ID()).Hypershift().Get().Send()
+	if err != nil {
+		return nil, fmt.Errorf("could not query hypershift status from ocm: %w", err)
+	}
+
+	return resp.Body(), nil
 }
 
 func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, error) {

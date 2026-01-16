@@ -32,9 +32,50 @@ rbac:
         - "get"
         - "list"
       apiGroups:
+        - "hypershift.openshift.io"
+      resources:
+        - "awsendpointservices"
+        - "hostedclusters"
+        - "nodepools"
+        - "hostedcontrolplanes"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
         - ""
       resources:
         - "nodes"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "infrastructure.cluster.x-k8s.io"
+      resources:
+        - "awsclusters"
+        - "awsmachines"
+        - "awsmachinetemplates"
+        - "kubevirtclusters"
+        - "kubevirtmachinetemplates"
+        - "kubevirtmachines"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "capi-provider.agent-install.openshift.io"
+      resources:
+        - "agentclusters"
+        - "agentmachinetemplates"
+        - "agentmachines"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "cluster.x-k8s.io"
+      resources:
+        - "clusters"
+        - "machinedeployments"
+        - "machines"
+        - "machinesets"
     - verbs:
         - "get"
       apiGroups:
