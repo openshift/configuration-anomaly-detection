@@ -17,6 +17,7 @@ limitations under the License.
 package investigate
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -24,7 +25,8 @@ import (
 	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
+	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
@@ -210,10 +212,16 @@ func run(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	// FIXME: Once all migrations are converted this can be removed.
 	updateMetrics(alertInvestigation.Name(), &result)
 	// FIXME: This is a quick fix - we might want to put CCAM as a composable check per investigation so each investigation can decide to proceed or not.
 	if result.StopInvestigations != nil && alertInvestigation.AlertTitle() == "Cluster Has Gone Missing (CHGM)" {
 		return result.StopInvestigations
+	}
+
+	// Execute ccam actions if any
+	if err := executeActions(builder, &result, ocmClient, pdClient, "ccam"); err != nil {
+		return fmt.Errorf("failed to execute ccam actions: %w", err)
 	}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
@@ -222,6 +230,12 @@ func run(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
+
+	// Execute investigation actions if any
+	if err := executeActions(builder, &result, ocmClient, pdClient, alertInvestigation.Name()); err != nil {
+		return fmt.Errorf("failed to execute %s actions: %w", alertInvestigation.Name(), err)
+	}
+
 	return updateIncidentTitle(pdClient)
 }
 
@@ -307,5 +321,54 @@ func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {
 	if err != nil {
 		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
 	}
+	return nil
+}
+
+// executeActions executes any actions returned by an investigation
+func executeActions(
+	builder investigation.ResourceBuilder,
+	result *investigation.InvestigationResult,
+	ocmClient *ocm.SdkClient,
+	pdClient *pagerduty.SdkClient,
+	investigationName string,
+) error {
+	// If no actions, return early
+	if len(result.Actions) == 0 {
+		logging.Debug("No actions to execute")
+		return nil
+	}
+
+	// Build resources to get cluster and notes
+	resources, err := builder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build resources for action execution: %w", err)
+	}
+
+	// Create executor
+	exec := executor.NewExecutor(ocmClient, pdClient, logging.RawLogger)
+
+	// Execute actions with default options
+	input := &executor.ExecutorInput{
+		InvestigationName: investigationName,
+		Actions:           result.Actions,
+		Cluster:           resources.Cluster,
+		Notes:             resources.Notes,
+		Options: executor.ExecutionOptions{
+			DryRun:            false,
+			StopOnError:       false, // Continue executing actions even if one fails
+			MaxRetries:        3,
+			ConcurrentActions: true, // Use concurrent execution for better performance
+		},
+	}
+
+	logging.Infof("Executing %d actions for %s", len(result.Actions), investigationName)
+	if err := exec.Execute(context.Background(), input); err != nil {
+		// Log the error but don't fail the investigation
+		// This matches the current behavior where we log failures but continue
+		logging.Errorf("Action execution failed for %s: %v", investigationName, err)
+		return err
+	}
+
+	logging.Infof("Successfully executed all actions for %s", investigationName)
 	return nil
 }

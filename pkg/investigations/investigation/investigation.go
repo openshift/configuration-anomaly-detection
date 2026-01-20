@@ -19,6 +19,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/oc"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type InvestigationStep struct {
@@ -27,6 +28,10 @@ type InvestigationStep struct {
 }
 
 type InvestigationResult struct {
+	// NEW: Actions to execute via reporter (modern approach)
+	Actions []types.Action
+
+	// EXISTING: Legacy fields (deprecated, maintained for backwards compatibility)
 	LimitedSupportSet    InvestigationStep
 	ServiceLogPrepared   InvestigationStep
 	ServiceLogSent       InvestigationStep
