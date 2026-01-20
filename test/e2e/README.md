@@ -1,35 +1,14 @@
 ## Locally running e2e test suite
+When updating your operator it's beneficial to add e2e tests for new functionality AND ensure existing functionality is not breaking using e2e tests. 
+To do this, following steps are recommended
 
-### Setup
+1. Run "make e2e-binary-build"  to make sure e2e tests build 
+2. Deploy your new version of operator in a test cluster
+3. Run "go install github.com/onsi/ginkgo/ginkgo@latest"
+4. Get kubeadmin credentials from your cluster using 
 
-```
-go install github.com/onsi/ginkgo/ginkgo@latest
-```
+ocm get /api/clusters_mgmt/v1/clusters/(cluster-id)/credentials | jq -r .kubeconfig > /(path-to)/kubeconfig
 
-Needs a stage cluster to run against
-
-```
-export OCM_CLUSTER_ID=...
-ocm get /api/clusters_mgmt/v1/clusters/$OCM_CLUSTER_ID/credentials | jq -r .kubeconfig > /tmp/kubeconfig-cad-e2e
-$(ocm backplane cloud credentials -oenv $OCM_CLUSTER_ID)
-```
-
-Or
-
-```
-export $(osdctl account cli -i <yourdevaccount> -p osd-staging-2 -oenv)
-```
-
-Run test suite using
-You will also need the cad pagerduty routing key for the test environment from vault, at configuration-anomaly-detection/cad-testing as well as set the HTTP_PROXIES so your AWS calls will work:
-
-```
-export HTTP_PROXY="squid.corp.redhat.com:3128"
-export HTTPS_PROXY="squid.corp.redhat.com:3128"
-export NO_PROXY="$(ocm describe cluster $OCM_CLUSTER_ID --json | jq -r '.api.url')"
-export VAULT_ADDR="https://vault.devshift.net"
-export VAULT_TOKEN="$(vault login -method=oidc -token-only)"
-export CAD_PD_ROUTING_KEY=$(vault kv get  -format=json osd-sre/configuration-anomaly-detection/cad-testing | jq -r ".data.data[\"pd_test_routing_key\"]")
-make e2e-binary-build
-DISABLE_JUNIT_REPORT=true KUBECONFIG=/tmp/kubeconfig-cad-e2e $GOPATH/bin/ginkgo --tags=osde2e -v test/e2e
-```
+5. Run test suite using 
+ 
+DISABLE_JUNIT_REPORT=true KUBECONFIG=/(path-to)/kubeconfig  ./(path-to)/bin/ginkgo  --tags=osde2e -v test/e2e
