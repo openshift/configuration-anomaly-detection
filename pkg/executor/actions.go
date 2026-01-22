@@ -199,22 +199,31 @@ func (a *EscalateIncidentAction) Execute(ctx context.Context, execCtx *Execution
 	return execCtx.PDClient.EscalateIncident()
 }
 
-// BackplaneReport is the minimal interface for report payloads
+// BackplaneReport is the interface for cluster report payloads
 type BackplaneReport interface {
-	// ToJSON serializes the report
-	ToJSON() ([]byte, error)
-
-	// Validate checks if report is valid
-	Validate() error
+	// GenerateStringForNoteWriter returns a formatted string for the notewriter package
+	GenerateStringForNoteWriter() string
 }
 
 // BackplaneReportAction uploads a report to backplane reports API
 type BackplaneReportAction struct {
-	// Report contains the structured report data
-	Report BackplaneReport
+	// ClusterID is the external cluster ID
+	ClusterID string
 
-	// ReportType identifies the kind of report
-	ReportType string
+	// Summary is a brief description of the report
+	Summary string
+
+	// Data is the report content/data
+	Data string
+
+	// createdReport stores the report after successful execution
+	createdReport *BackplaneReportResponse
+}
+
+// BackplaneReportResponse represents the response from creating a report
+type BackplaneReportResponse struct {
+	ReportID  string
+	ClusterID string
 }
 
 func (a *BackplaneReportAction) Type() string {
@@ -226,17 +235,51 @@ func (a *BackplaneReportAction) ActionType() ActionType {
 }
 
 func (a *BackplaneReportAction) Validate() error {
-	if a.Report == nil {
-		return fmt.Errorf("report cannot be nil")
+	if a.ClusterID == "" {
+		return fmt.Errorf("clusterID is required")
 	}
-	return a.Report.Validate()
+	if a.Summary == "" {
+		return fmt.Errorf("summary is required")
+	}
+	if a.Data == "" {
+		return fmt.Errorf("data is required")
+	}
+	return nil
 }
 
 func (a *BackplaneReportAction) Execute(ctx context.Context, execCtx *ExecutionContext) error {
-	execCtx.Logger.Infof("Uploading backplane report (type: %s)", a.ReportType)
+	if execCtx.BackplaneClient == nil {
+		return fmt.Errorf("backplane client not available in execution context")
+	}
 
-	// Future implementation:
-	// return exec.BackplaneClient.UploadReport(ctx, exec.Cluster.ID(), a.Report)
+	execCtx.Logger.Infof("Creating backplane report for cluster %s", a.ClusterID)
 
-	return fmt.Errorf("backplane reports not yet implemented")
+	report, err := execCtx.BackplaneClient.CreateReport(ctx, a.ClusterID, a.Summary, a.Data)
+	if err != nil {
+		return fmt.Errorf("failed to create backplane report: %w", err)
+	}
+
+	// Store the created report for later use
+	a.createdReport = &BackplaneReportResponse{
+		ReportID:  report.ReportId,
+		ClusterID: a.ClusterID,
+	}
+
+	// Append the report string to notes if notewriter is available
+	if execCtx.Notes != nil {
+		execCtx.Notes.AppendAutomation("%s", a.GenerateStringForNoteWriter())
+	}
+
+	execCtx.Logger.Infof("Successfully created backplane report: %s", report.ReportId)
+	return nil
+}
+
+// GenerateStringForNoteWriter returns a formatted string for the notewriter package
+// This can only be called after Execute has successfully created the report
+func (a *BackplaneReportAction) GenerateStringForNoteWriter() string {
+	if a.createdReport == nil {
+		return "Backplane report created (report details not available)"
+	}
+	return fmt.Sprintf("CAD created a cluster report, access it with the following command:\n"+
+		"osdctl cluster reports get --cluster-id %s --report-id %s", a.createdReport.ClusterID, a.createdReport.ReportID)
 }
