@@ -88,18 +88,14 @@ type LimitedSupportActionBuilder struct {
 // NewLimitedSupportAction creates a builder with required fields
 // summary: Brief reason for limited support
 // details: Detailed explanation including remediation steps
-func NewLimitedSupportAction(summary, details string) *LimitedSupportActionBuilder {
+// context: Context string for metrics labeling (e.g., "StoppedInstances", "EgressBlocked")
+func NewLimitedSupportAction(summary, details, context string) *LimitedSupportActionBuilder {
 	return &LimitedSupportActionBuilder{
 		summary:         summary,
 		details:         details,
+		context:         context,
 		allowDuplicates: false, // Default to skip duplicates
 	}
-}
-
-// WithContext adds context for logging/metrics
-func (b *LimitedSupportActionBuilder) WithContext(context string) *LimitedSupportActionBuilder {
-	b.context = context
-	return b
 }
 
 // AllowDuplicates permits setting even if identical LS exists
@@ -262,8 +258,9 @@ func ServiceLog(severity, summary, description string) Action {
 }
 
 // LimitedSupport creates a basic limited support action
-func LimitedSupport(summary, details string) Action {
-	return NewLimitedSupportAction(summary, details).Build()
+// context is required for metrics labeling (e.g., "StoppedInstances", "EgressBlocked")
+func LimitedSupport(summary, details, context string) Action {
+	return NewLimitedSupportAction(summary, details, context).Build()
 }
 
 // Note creates a PagerDuty note action

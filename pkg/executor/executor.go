@@ -251,11 +251,8 @@ func emitMetricsForAction(action Action, execCtx *ExecutionContext) {
 
 	case *LimitedSupportAction:
 		// Emit LimitedSupportSet metric with context as label
-		labels := []string{investigationName}
-		if a.Context != "" {
-			labels = append(labels, a.Context)
-		}
-		metrics.Inc(metrics.LimitedSupportSet, labels...)
+		// LimitedSupportSet requires exactly 2 labels (alertTypeLabel, lsSummaryLabel)
+		metrics.Inc(metrics.LimitedSupportSet, investigationName, a.Context)
 		execCtx.Logger.Debugf("Emitted limitedsupport_set metric for %s", investigationName)
 
 	// Note: PagerDuty actions (Note, Silence, Escalate) don't have dedicated metrics

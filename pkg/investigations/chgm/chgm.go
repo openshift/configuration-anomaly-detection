@@ -120,7 +120,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		r.Notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
 
 		result.Actions = []types.Action{
-			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details).Build(),
+			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details, "StoppedInstances").
+				Build(),
 			executor.NoteFrom(r.Notes),
 			executor.Silence("Customer stopped instances - cluster in limited support"),
 		}
@@ -159,8 +160,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
 
 			result.Actions = []types.Action{
-				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details).
-					WithContext("EgressBlocked").
+				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details, "EgressBlocked").
 					Build(),
 				executor.NoteFrom(r.Notes),
 				executor.Silence("Deadman's snitch blocked - cluster in limited support"),

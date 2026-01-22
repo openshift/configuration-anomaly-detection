@@ -38,11 +38,12 @@ func (b *ResultWithActionsBuilder) AddServiceLog(
 }
 
 // AddLimitedSupport adds a limited support action with a builder function
+// context is required for metrics labeling (e.g., "StoppedInstances", "EgressBlocked")
 func (b *ResultWithActionsBuilder) AddLimitedSupport(
-	summary, details string,
+	summary, details, context string,
 	configure func(*LimitedSupportActionBuilder),
 ) *ResultWithActionsBuilder {
-	builder := NewLimitedSupportAction(summary, details)
+	builder := NewLimitedSupportAction(summary, details, context)
 	if configure != nil {
 		configure(builder)
 	}
