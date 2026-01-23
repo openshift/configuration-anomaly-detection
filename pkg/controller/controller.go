@@ -58,6 +58,7 @@ type Controller interface {
 type investigationRunner struct {
 	ocmClient    *ocm.SdkClient
 	bpClient     backplane.Client
+	executor     executor.Executor
 	logger       *zap.SugaredLogger
 	dependencies *Dependencies
 }
@@ -181,12 +182,30 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 		if err := opts.Pd.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid webhook config: %w", err)
 		}
+
+		// Load and parse PagerDuty payload
+		payload, err := os.ReadFile(opts.Pd.PayloadPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read webhook payload: %w", err)
+		}
+
+		pdClient, err := pagerduty.GetPDClient(payload)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize pagerduty client: %w", err)
+		}
+
+		// Initialize logger early (we'll update with cluster ID later)
+		logger := logging.InitLogger(opts.Common.LogLevel, opts.Common.Identifier, "")
+
 		return &PagerDutyController{
-			config: opts.Common,
-			pd:     *opts.Pd,
+			config:   opts.Common,
+			pd:       *opts.Pd,
+			pdClient: pdClient,
 			investigationRunner: investigationRunner{
 				ocmClient:    deps.OCMClient,
 				bpClient:     deps.BackplaneClient,
+				executor:     executor.NewWebhookExecutor(deps.OCMClient, pdClient, logger),
+				logger:       logger,
 				dependencies: deps,
 			},
 		}, nil
@@ -196,12 +215,18 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 		if err := opts.Manual.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid manual config: %w", err)
 		}
+
+		// Initialize logger for manual runs
+		logger := logging.InitLogger(opts.Common.LogLevel, opts.Common.Identifier, opts.Manual.ClusterId)
+
 		return &ManualController{
 			config: opts.Common,
 			manual: *opts.Manual,
 			investigationRunner: investigationRunner{
 				ocmClient:    deps.OCMClient,
 				bpClient:     deps.BackplaneClient,
+				executor:     executor.NewManualExecutor(deps.OCMClient, logger),
+				logger:       logger,
 				dependencies: deps,
 			},
 		}, nil
@@ -278,7 +303,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	}
 
 	// Execute ccam actions if any
-	if err := executeActions(builder, &result, c.ocmClient, pdClient, "ccam"); err != nil {
+	if err := c.executeActions(builder, &result, "ccam"); err != nil {
 		return fmt.Errorf("failed to execute ccam actions: %w", err)
 	}
 
@@ -290,7 +315,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	updateMetrics(inv.Name(), &result)
 
 	// Execute investigation actions if any
-	if err := executeActions(builder, &result, c.ocmClient, pdClient, inv.Name()); err != nil {
+	if err := c.executeActions(builder, &result, inv.Name()); err != nil {
 		return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), err)
 	}
 
@@ -348,12 +373,10 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 	}
 }
 
-// executeActions executes any actions returned by an investigation
-func executeActions(
+// executeActions executes actions from an investigation result using the controller's executor
+func (c *investigationRunner) executeActions(
 	builder investigation.ResourceBuilder,
 	result *investigation.InvestigationResult,
-	ocmClient *ocm.SdkClient,
-	pdClient *pagerduty.SdkClient,
 	investigationName string,
 ) error {
 	// If no actions, return early
@@ -368,10 +391,7 @@ func executeActions(
 		return fmt.Errorf("failed to build resources for action execution: %w", err)
 	}
 
-	// Create executor
-	exec := executor.NewExecutor(ocmClient, pdClient, logging.RawLogger)
-
-	// Execute actions with default options
+	// Execute actions with default options using controller's executor
 	input := &executor.ExecutorInput{
 		InvestigationName: investigationName,
 		Actions:           result.Actions,
@@ -386,7 +406,7 @@ func executeActions(
 	}
 
 	logging.Infof("Executing %d actions for %s", len(result.Actions), investigationName)
-	if err := exec.Execute(context.Background(), input); err != nil {
+	if err := c.executor.Execute(context.Background(), input); err != nil {
 		// Log the error but don't fail the investigation
 		// This matches the current behavior where we log failures but continue
 		logging.Errorf("Action execution failed for %s: %v", investigationName, err)

@@ -15,35 +15,28 @@ import (
 )
 
 type PagerDutyController struct {
-	config CommonConfig
-	pd     PagerDutyConfig
+	config   CommonConfig
+	pd       PagerDutyConfig
+	pdClient *pagerduty.SdkClient
 	investigationRunner
 }
 
 func (c *PagerDutyController) Investigate(ctx context.Context) error {
-	// Load payload, extract cluster ID and investigation from PD
-	payload, err := os.ReadFile(c.pd.PayloadPath)
-	if err != nil {
-		return fmt.Errorf("failed to read webhook payload: %w", err)
-	}
-
-	pdClient, err := pagerduty.GetPDClient(payload)
-	if err != nil {
-		return fmt.Errorf("could not initialize pagerduty client: %w", err)
-	}
-
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
-	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), experimentalEnabled)
-	clusterID, err := pdClient.RetrieveClusterID()
+	alertInvestigation := investigations.GetInvestigation(c.pdClient.GetTitle(), experimentalEnabled)
+
+	clusterID, err := c.pdClient.RetrieveClusterID()
 	if err != nil {
 		return err
 	}
+
+	// Update logger with cluster ID now that we have it
 	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, clusterID)
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
-		err := pdClient.EscalateIncident()
+		err := c.pdClient.EscalateIncident()
 		if err != nil {
 			return fmt.Errorf("could not escalate unsupported alert: %w", err)
 		}
@@ -51,7 +44,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	}
 
 	// Continue with investigation...
-	return c.runInvestigation(ctx, clusterID, alertInvestigation, pdClient)
+	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient)
 }
 
 func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {

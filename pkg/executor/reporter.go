@@ -60,13 +60,92 @@ type DefaultExecutor struct {
 	logger *zap.SugaredLogger
 }
 
-// NewExecutor creates a new DefaultExecutor
-func NewExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, backplaneClient backplane.Client, logger *zap.SugaredLogger) Executor {
-	return &DefaultExecutor{
-		ocmClient:       ocmClient,
-		pdClient:        pdClient,
-		backplaneClient: backplaneClient,
-		logger:          logger,
+// WebhookExecutor executes all actions including PagerDuty actions
+// Used for webhook-triggered investigations
+type WebhookExecutor struct {
+	*DefaultExecutor
+}
+
+// NewWebhookExecutor creates an executor for webhook-triggered investigations
+// Executes all action types including PagerDuty actions
+func NewWebhookExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, logger *zap.SugaredLogger) Executor {
+	return &WebhookExecutor{
+		DefaultExecutor: &DefaultExecutor{
+			ocmClient: ocmClient,
+			pdClient:  pdClient,
+			logger:    logger,
+		},
+	}
+}
+
+// ManualExecutor executes actions but skips PagerDuty-specific actions
+// Used for manual CLI-triggered investigations
+type ManualExecutor struct {
+	*DefaultExecutor
+}
+
+// NewManualExecutor creates an executor for manual investigations
+// Filters out PagerDuty actions (notes, silence, escalate) since there's no incident
+func NewManualExecutor(ocmClient ocm.Client, logger *zap.SugaredLogger) Executor {
+	return &ManualExecutor{
+		DefaultExecutor: &DefaultExecutor{
+			ocmClient: ocmClient,
+			pdClient:  nil, // No PD client for manual runs
+			logger:    logger,
+		},
+	}
+}
+
+// Execute filters PagerDuty actions before executing
+func (e *ManualExecutor) Execute(ctx context.Context, input *ExecutorInput) error {
+	if input == nil {
+		return fmt.Errorf("ExecutorInput cannot be nil")
+	}
+
+	if len(input.Actions) == 0 {
+		e.logger.Debug("No actions to execute")
+		return nil
+	}
+
+	// Filter out PagerDuty actions
+	filteredActions := make([]Action, 0, len(input.Actions))
+	skippedCount := 0
+
+	for _, action := range input.Actions {
+		if isPagerDutyAction(action) {
+			e.logger.Infof("Skipping PagerDuty action in manual mode: %s", action.Type())
+			skippedCount++
+			continue
+		}
+		filteredActions = append(filteredActions, action)
+	}
+
+	if skippedCount > 0 {
+		e.logger.Infof("Skipped %d PagerDuty action(s) in manual execution mode", skippedCount)
+	}
+
+	if len(filteredActions) == 0 {
+		e.logger.Debug("No actions to execute after filtering")
+		return nil
+	}
+
+	// Create filtered input
+	filteredInput := *input
+	filteredInput.Actions = filteredActions
+
+	// Delegate to parent executor
+	return e.DefaultExecutor.Execute(ctx, &filteredInput)
+}
+
+// isPagerDutyAction checks if an action is PagerDuty-specific
+func isPagerDutyAction(action Action) bool {
+	switch action.Type() {
+	case string(ActionTypePagerDutyNote),
+		string(ActionTypeSilenceIncident),
+		string(ActionTypeEscalateIncident):
+		return true
+	default:
+		return false
 	}
 }
 

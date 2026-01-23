@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
-	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
 
 type ManualController struct {
@@ -21,14 +20,13 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigationByName(c.manual.InvestigationName, experimentalEnabled)
 	if alertInvestigation == nil {
-		availableInvestigations := make([]string, 0, 0)
+		availableInvestigations := make([]string, 0)
 		for _, title := range investigations.GetAvailableInvestigationsNames() {
 			availableInvestigations = append(availableInvestigations, fmt.Sprintf("%s, ", title))
 		}
 		investigations.GetAvailableInvestigationsNames()
 		return fmt.Errorf("unknown investigation: %s - must be one of: %v", c.manual.InvestigationName, availableInvestigations)
 	}
-	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, c.manual.ClusterId)
 
 	// No PD client for manual runs
 	return c.runInvestigation(ctx, c.manual.ClusterId, alertInvestigation, nil)
