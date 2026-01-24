@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty/webhookv3"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -191,18 +192,33 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
 	investigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
-	// If the alert is not in the whitelist, return `Continue: false` as interceptor response
-	// and escalate the alert to SRE
+
+	// If no formal investigation found, check if AI investigation should run
 	if investigation == nil {
+		aiConfig, err := aiconfig.ParseAIAgentConfig()
+		if err != nil {
+			logging.Warnf("Failed to parse AI config for incident %s: %v", pdClient.GetIncidentID(), err)
+		}
+
+		// Check if AI investigation should run
+		if aiConfig != nil && aiConfig.Enabled && ocmClient != nil {
+			clusterID, err := pdClient.RetrieveClusterID()
+			if err == nil {
+				orgID, _ := ocmClient.GetOrganizationID(clusterID)
+				if aiConfig.IsAllowedForAI(clusterID, orgID) {
+					logging.Infof("No formal investigation for incident %s, launching AI investigation for cluster %s", pdClient.GetIncidentID(), clusterID)
+					return &triggersv1.InterceptorResponse{Continue: true}
+				}
+			}
+		}
+
+		// No formal investigation and AI not enabled/allowed - escalate to SRE
 		logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
 		err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖")
 		if err != nil {
 			logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
 		}
-
-		return &triggersv1.InterceptorResponse{
-			Continue: false,
-		}
+		return &triggersv1.InterceptorResponse{Continue: false}
 	}
 
 	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name())

@@ -24,9 +24,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
@@ -107,6 +109,12 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("missing required environment variable CAD_OCM_URL")
 	}
 
+	aiConfig, err := aiconfig.ParseAIAgentConfig()
+	if err != nil {
+		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
+		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
+	}
+
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -126,11 +134,14 @@ func run(_ *cobra.Command, _ []string) error {
 
 	// Escalate all unsupported alerts
 	if alertInvestigation == nil {
-		err = pdClient.EscalateIncident()
-		if err != nil {
-			return fmt.Errorf("could not escalate unsupported alert: %w", err)
+		if !aiConfig.Enabled {
+			err = pdClient.EscalateIncident()
+			if err != nil {
+				return fmt.Errorf("could not escalate unsupported alert: %w", err)
+			}
+			return nil
 		}
-		return nil
+		alertInvestigation = &aiassisted.Investigation{}
 	}
 
 	metrics.Inc(metrics.Alerts, alertInvestigation.Name())
