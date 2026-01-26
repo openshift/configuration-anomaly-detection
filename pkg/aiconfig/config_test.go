@@ -102,11 +102,11 @@ func TestParseAIAgentConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set env var for test
 			if tt.envValue != "" {
-				os.Setenv("CAD_AI_AGENT_CONFIG", tt.envValue)
+				_ = os.Setenv("CAD_AI_AGENT_CONFIG", tt.envValue)
 			} else {
-				os.Unsetenv("CAD_AI_AGENT_CONFIG")
+				_ = os.Unsetenv("CAD_AI_AGENT_CONFIG")
 			}
-			defer os.Unsetenv("CAD_AI_AGENT_CONFIG")
+			defer func() { _ = os.Unsetenv("CAD_AI_AGENT_CONFIG") }()
 
 			got, err := ParseAIAgentConfig()
 			if (err != nil) != tt.wantErr {

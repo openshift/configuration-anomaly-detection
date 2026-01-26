@@ -29,7 +29,7 @@ type Investigation struct{}
 func generateSessionID(incidentID string) string {
 	timestamp := time.Now().Unix()
 	randomBytes := make([]byte, 8)
-	rand.Read(randomBytes) //nolint:errcheck
+	rand.Read(randomBytes) //nolint:errcheck,gosec
 	randomHex := hex.EncodeToString(randomBytes)
 	return fmt.Sprintf("cad-%s-%d-%s", incidentID, timestamp, randomHex)
 }
@@ -97,12 +97,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// Gather all available PagerDuty incident data
 	incidentID := pdClient.GetIncidentID()
-	incidentRef := pdClient.GetIncidentRef()
-	alertTitle := pdClient.GetTitle()
-	serviceID := pdClient.GetServiceID()
-	serviceName := pdClient.GetServiceName()
+	alertName := pdClient.GetTitle()
 
 	// Fetch alerts for this incident
 	alerts, err := pdClient.GetAlertsForIncident(incidentID)
@@ -118,40 +114,37 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			logging.Warnf("Failed to get alert details: %v", err)
 			alertDetails = "Alert details unavailable"
 		} else {
-			detailsJSON, _ := json.MarshalIndent(details, "", "  ")
-			alertDetails = string(detailsJSON)
+			detailsJSON, err := json.MarshalIndent(details, "", "  ")
+			if err != nil {
+				logging.Warnf("Failed to marshal alert details: %v", err)
+				alertDetails = "Alert details unavailable"
+			} else {
+				alertDetails = string(detailsJSON)
+			}
 		}
 	} else {
 		alertDetails = "No alerts found for incident"
 	}
 
-	// Build investigation prompt with all PagerDuty data
-	prompt := fmt.Sprintf(`Investigate PagerDuty incident for OpenShift cluster %s (org: %s).
+	// Build the prompt structure
+	promptData := map[string]interface{}{
+		"investigation_id":      incidentID,
+		"investigation_payload": alertDetails,
+		"alert_name":            alertName,
+		"cluster_id":            clusterID,
+	}
 
-Incident Information:
-- Incident ID: %s
-- Incident URL: %s
-- Alert Title: %s
-- Service ID: %s
-- Service Name: %s
-- Cluster ID: %s
-- Organization: %s
+	promptJSON, err := json.MarshalIndent(promptData, "", "  ")
+	if err != nil {
+		notes.AppendWarning("Failed to marshal investigation prompt: %v", err)
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Failed to create investigation prompt"),
+		}
+		return result, nil
+	}
 
-Alert Details:
-%s
-
-Please investigate this alert, determine the root cause, and provide remediation steps.`,
-		clusterID,
-		orgID,
-		incidentID,
-		incidentRef,
-		alertTitle,
-		serviceID,
-		serviceName,
-		clusterID,
-		orgID,
-		alertDetails,
-	)
+	prompt := string(promptJSON)
 
 	// Load AWS config for AgentCore (uses CAD's AWS account credentials, not customer's)
 	// Credentials are explicitly loaded from the mounted secret at:
@@ -160,7 +153,7 @@ Please investigate this alert, determine the root cause, and provide remediation
 	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
 	defer cancel()
 
-	const aiAgentCredsFile = "/var/secrets/cad-ai-agent-credentials/credentials"
+	const aiAgentCredsFile = "/var/secrets/cad-ai-agent-credentials/credentials" // #nosec G101 -- This is a file path, not a credential
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithSharedCredentialsFiles([]string{aiAgentCredsFile}),
 	)
@@ -179,19 +172,8 @@ Please investigate this alert, determine the root cause, and provide remediation
 	// Generate unique session ID for this investigation
 	sessionID := generateSessionID(incidentID)
 
-	// Build payload
-	payloadData := map[string]string{
-		"prompt": prompt,
-	}
-	payloadJSON, err := json.Marshal(payloadData)
-	if err != nil {
-		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
-			executor.Escalate("Failed to marshal payload"),
-		}
-		return result, nil
-	}
+	// Use the prompt JSON directly as the payload (already marshaled above)
+	payloadJSON := []byte(prompt)
 
 	// Invoke AgentCore runtime
 	logging.Infof("Invoking AgentCore runtime %s for incident %s (session: %s)", config.RuntimeARN, incidentID, sessionID)
@@ -215,7 +197,11 @@ Please investigate this alert, determine the root cause, and provide remediation
 		}
 		return result, nil
 	}
-	defer output.Response.Close()
+	defer func() {
+		if closeErr := output.Response.Close(); closeErr != nil {
+			logging.Warnf("Failed to close AgentCore response stream: %v", closeErr)
+		}
+	}()
 
 	// Verify we got the expected streaming response
 	contentType := ""
@@ -260,7 +246,7 @@ Please investigate this alert, determine the root cause, and provide remediation
 	aiResponse.WriteString("\n🤖 AI investigation completed - escalating to SRE for review 🤖")
 
 	// Append the complete AI investigation output as automation
-	notes.AppendAutomation(aiResponse.String())
+	notes.AppendAutomation("%s", aiResponse.String())
 
 	// Return actions for executor to handle
 	result.Actions = []types.Action{
