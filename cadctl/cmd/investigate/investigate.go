@@ -220,7 +220,7 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	// Execute ccam actions if any
-	if err := executeActions(builder, &result, ocmClient, pdClient, "ccam"); err != nil {
+	if err := executeActions(builder, &result, ocmClient, pdClient, bpClient, "ccam"); err != nil {
 		return fmt.Errorf("failed to execute ccam actions: %w", err)
 	}
 
@@ -232,7 +232,7 @@ func run(_ *cobra.Command, _ []string) error {
 	updateMetrics(alertInvestigation.Name(), &result)
 
 	// Execute investigation actions if any
-	if err := executeActions(builder, &result, ocmClient, pdClient, alertInvestigation.Name()); err != nil {
+	if err := executeActions(builder, &result, ocmClient, pdClient, bpClient, alertInvestigation.Name()); err != nil {
 		return fmt.Errorf("failed to execute %s actions: %w", alertInvestigation.Name(), err)
 	}
 
@@ -330,6 +330,7 @@ func executeActions(
 	result *investigation.InvestigationResult,
 	ocmClient *ocm.SdkClient,
 	pdClient *pagerduty.SdkClient,
+	backplaneClient backplane.Client,
 	investigationName string,
 ) error {
 	// If no actions, return early
@@ -345,7 +346,7 @@ func executeActions(
 	}
 
 	// Create executor
-	exec := executor.NewExecutor(ocmClient, pdClient, logging.RawLogger)
+	exec := executor.NewExecutor(ocmClient, pdClient, backplaneClient, logging.RawLogger)
 
 	// Execute actions with default options
 	input := &executor.ExecutorInput{
