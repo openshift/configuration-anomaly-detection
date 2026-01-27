@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.3.1 as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.3.2 as builder
 
 ADD . /opt
 WORKDIR /opt
@@ -19,7 +19,7 @@ ARG DOCKERFILE_PATH
 
 RUN microdnf update -y && \
     microdnf install wget tar gzip -y
-RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz -O /tmp/oc.tar.gz && \
+RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/openshift-client-linux.tar.gz -O /tmp/oc.tar.gz && \
     tar -zxvf /tmp/oc.tar.gz -C /tmp && \
     mv /tmp/oc /bin/oc && \
     rm -f /tmp/oc.tar.gz
