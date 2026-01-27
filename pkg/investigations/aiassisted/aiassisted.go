@@ -8,10 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -24,6 +26,30 @@ import (
 )
 
 type Investigation struct{}
+
+// InvestigationPayload represents the payload sent to the AgentCore agent
+type InvestigationPayload struct {
+	InvestigationID      string `json:"investigation_id"`
+	InvestigationPayload string `json:"investigation_payload"` // TODO: Implement - should contain alert details/context
+	AlertName            string `json:"alert_name"`
+	ClusterID            string `json:"cluster_id"`
+}
+
+// ToAgentCorePayload wraps the investigation data in the "prompt" field
+func (p InvestigationPayload) ToAgentCorePayload() ([]byte, error) {
+	// Marshal the investigation payload to JSON string
+	innerJSON, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal investigation payload: %w", err)
+	}
+
+	// Wrap in "prompt" field for AgentCore as a string
+	wrapper := map[string]string{
+		"prompt": string(innerJSON),
+	}
+
+	return json.Marshal(wrapper)
+}
 
 // generateSessionID generates a unique session ID for this investigation
 func generateSessionID(incidentID string) string {
@@ -86,6 +112,36 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	notes.AppendSuccess("AI investigation allowlist check passed for cluster %s (org: %s)", clusterID, orgID)
 
+	awsAccessKeyID := os.Getenv("AGENTCORE_AWS_ACCESS_KEY_ID")
+	if awsAccessKeyID == "" {
+		notes.AppendWarning("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID")
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID"),
+		}
+		return result, nil
+	}
+	awsSecretAccessKey := os.Getenv("AGENTCORE_AWS_SECRET_ACCESS_KEY")
+	if awsSecretAccessKey == "" {
+		notes.AppendWarning("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY")
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY"),
+		}
+		return result, nil
+	}
+
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
+	defer cancel()
+
+	// Create AWS config directly without LoadDefaultConfig
+	// This bypasses all default credential chain logic
+	awsCfg := awsconfig.Config{
+		Region:      config.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, ""),
+	}
+
 	// Get PagerDuty incident details
 	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
 	if !ok {
@@ -100,68 +156,21 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
 
-	// Fetch alerts for this incident
-	alerts, err := pdClient.GetAlertsForIncident(incidentID)
+	// Build investigation payload using typed structure
+	investigationData := &InvestigationPayload{
+		InvestigationID:      incidentID,
+		InvestigationPayload: "", // TODO: Populate with alert details when implemented
+		AlertName:            alertName,
+		ClusterID:            clusterID,
+	}
+
+	// Convert to AgentCore payload format
+	payloadJSON, err := investigationData.ToAgentCorePayload()
 	if err != nil {
-		logging.Warnf("Failed to fetch alerts for incident %s: %v", incidentID, err)
-	}
-
-	// Get detailed alert information
-	var alertDetails string
-	if alerts != nil && len(*alerts) > 0 {
-		details, err := pdClient.GetAlertListDetails(alerts)
-		if err != nil {
-			logging.Warnf("Failed to get alert details: %v", err)
-			alertDetails = "Alert details unavailable"
-		} else {
-			detailsJSON, err := json.MarshalIndent(details, "", "  ")
-			if err != nil {
-				logging.Warnf("Failed to marshal alert details: %v", err)
-				alertDetails = "Alert details unavailable"
-			} else {
-				alertDetails = string(detailsJSON)
-			}
-		}
-	} else {
-		alertDetails = "No alerts found for incident"
-	}
-
-	// Build the prompt structure
-	promptData := map[string]interface{}{
-		"investigation_id":      incidentID,
-		"investigation_payload": alertDetails,
-		"alert_name":            alertName,
-		"cluster_id":            clusterID,
-	}
-
-	promptJSON, err := json.MarshalIndent(promptData, "", "  ")
-	if err != nil {
-		notes.AppendWarning("Failed to marshal investigation prompt: %v", err)
+		notes.AppendWarning("Failed to build investigation payload: %v", err)
 		result.Actions = []types.Action{
 			executor.NoteFrom(notes),
 			executor.Escalate("Failed to create investigation prompt"),
-		}
-		return result, nil
-	}
-
-	prompt := string(promptJSON)
-
-	// Load AWS config for AgentCore (uses CAD's AWS account credentials, not customer's)
-	// Credentials are explicitly loaded from the mounted secret at:
-	// /var/secrets/cad-ai-agent-credentials/credentials (INI format)
-	// This ensures we use dedicated AI agent credentials, separate from any customer AWS access
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
-	defer cancel()
-
-	const aiAgentCredsFile = "/var/secrets/cad-ai-agent-credentials/credentials" // #nosec G101 -- This is a file path, not a credential
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithSharedCredentialsFiles([]string{aiAgentCredsFile}),
-	)
-	if err != nil {
-		notes.AppendWarning("Failed to load AWS configuration from %s: %v", aiAgentCredsFile, err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
-			executor.Escalate("Failed to load AI agent AWS credentials"),
 		}
 		return result, nil
 	}
@@ -172,11 +181,9 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Generate unique session ID for this investigation
 	sessionID := generateSessionID(incidentID)
 
-	// Use the prompt JSON directly as the payload (already marshaled above)
-	payloadJSON := []byte(prompt)
-
-	// Invoke AgentCore runtime
-	logging.Infof("Invoking AgentCore runtime %s for incident %s (session: %s)", config.RuntimeARN, incidentID, sessionID)
+	// Log AI invocation
+	logging.Infof("🤖 Invoking AI agent for incident %s", incidentID)
+	logging.Infof("Payload: %s", string(payloadJSON))
 
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
@@ -203,18 +210,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}()
 
-	// Verify we got the expected streaming response
-	contentType := ""
-	if output.ContentType != nil {
-		contentType = *output.ContentType
-	}
-	if !strings.Contains(contentType, "text/event-stream") {
-		logging.Warnf("Expected text/event-stream but got: %s", contentType)
-		notes.AppendWarning("Unexpected response format from AgentCore: %s", contentType)
-	}
-
 	// Read and collect streaming response
-	logging.Info("Processing streaming AI response")
+	logging.Info("🤖 Receiving AI response...")
 	var aiResponse strings.Builder
 	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
 	aiResponse.WriteString(fmt.Sprintf("Session ID: %s\n", sessionID))
@@ -234,19 +231,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	for scanner.Scan() {
 		line := scanner.Text()
 		// Streaming responses have lines prefixed with "data: "
-		if strings.HasPrefix(line, "data: ") {
-			data := strings.TrimPrefix(line, "data: ")
-			aiResponse.WriteString(data + "\n")
-		}
+		line = strings.TrimPrefix(line, "data: ")
+		aiResponse.WriteString(line + "\n")
 	}
+
 	if err := scanner.Err(); err != nil {
+		logging.Errorf("Error reading AI response stream: %v", err)
 		notes.AppendWarning("Error reading AI response stream: %v", err)
 	}
 
-	aiResponse.WriteString("\n🤖 AI investigation completed - escalating to SRE for review 🤖")
+	logging.Info("🤖 AI investigation complete")
+	logging.Infof("AI Output:\n%s", aiResponse.String())
 
-	// Append the complete AI investigation output as automation
-	notes.AppendAutomation("%s", aiResponse.String())
+	// Add simple note about AI automation completion
+	notes.AppendAutomation("🤖 AI automation completed. Check cluster report for investigation details.")
 
 	// Return actions for executor to handle
 	result.Actions = []types.Action{
