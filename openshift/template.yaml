@@ -341,6 +341,16 @@ objects:
           secretKeyRef:
             key: token
             name: srep-ai-sa-token
+      - name: AGENTCORE_AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            key: aws_access_key_id
+            name: cad-ai-agent-aws-credentials
+      - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            key: aws_secret_access_key
+            name: cad-ai-agent-aws-credentials
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
@@ -357,14 +367,6 @@ objects:
         requests:
           cpu: 20m
           memory: 128Mi
-      volumeMounts:
-      - name: cad-ai-agent-credentials-volume
-        mountPath: /var/secrets/cad-ai-agent-credentials
-        readOnly: true
-    volumes:
-    - name: cad-ai-agent-credentials-volume
-      secret:
-        secretName: cad-ai-agent-aws-credentials
 - apiVersion: batch/v1
   kind: CronJob
   metadata:
