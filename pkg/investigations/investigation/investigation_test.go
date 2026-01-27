@@ -307,12 +307,11 @@ func TestManagementRestConfigError_Unwrap(t *testing.T) {
 func TestManagementOCClientError_Error(t *testing.T) {
 	wrappedErr := errors.New("oc client creation failed")
 	err := ManagementOCClientError{
-		ClusterID:           "hcp-cluster-999",
-		ManagementClusterID: "mgmt-cluster-888",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-999",
+		Err:       wrappedErr,
 	}
 
-	expected := "could not create oc client for management cluster mgmt-cluster-888 (HCP cluster: hcp-cluster-999): oc client creation failed"
+	expected := "could not create oc client for management cluster (HCP cluster: hcp-cluster-999): oc client creation failed"
 	assert.Equal(t, expected, err.Error())
 }
 
@@ -320,9 +319,8 @@ func TestManagementOCClientError_Error(t *testing.T) {
 func TestManagementOCClientError_Unwrap(t *testing.T) {
 	wrappedErr := errors.New("oc client creation failed")
 	err := ManagementOCClientError{
-		ClusterID:           "hcp-cluster-999",
-		ManagementClusterID: "mgmt-cluster-888",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-999",
+		Err:       wrappedErr,
 	}
 
 	// Verify Unwrap() returns the wrapped error
@@ -515,12 +513,11 @@ func TestBuildManagementClusterResources_OCClientCreationError(t *testing.T) {
 	// Verify that errors creating management cluster OC client are properly handled
 	wrappedErr := errors.New("kubeconfig generation failed")
 	err := ManagementOCClientError{
-		ClusterID:           "hcp-cluster-333",
-		ManagementClusterID: "mgmt-cluster-444",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-333",
+		Err:       wrappedErr,
 	}
 
-	assert.Contains(t, err.Error(), "could not create oc client for management cluster mgmt-cluster-444")
+	assert.Contains(t, err.Error(), "could not create oc client for management cluster")
 	assert.Contains(t, err.Error(), "HCP cluster: hcp-cluster-333")
 	assert.Contains(t, err.Error(), "kubeconfig generation failed")
 }
@@ -530,10 +527,8 @@ func TestResourceBuilder_HCPFields_InitializedCorrectly(t *testing.T) {
 	resources := &Resources{}
 
 	// Verify initial state for HCP fields
-	assert.Empty(t, resources.ManagementClusterID, "ManagementClusterID should be empty initially")
 	assert.Empty(t, resources.HCPNamespace, "HCPNamespace should be empty initially")
 	assert.False(t, resources.IsHCP, "IsHCP should be false initially")
-	assert.Nil(t, resources.ManagementCluster, "ManagementCluster should be nil initially")
 	assert.Nil(t, resources.ManagementRestConfig, "ManagementRestConfig should be nil initially")
 	assert.Nil(t, resources.ManagementOCClient, "ManagementOCClient should be nil initially")
 }
@@ -541,13 +536,11 @@ func TestResourceBuilder_HCPFields_InitializedCorrectly(t *testing.T) {
 // TestResourceBuilder_HCPFields_CanBeSet verifies HCP fields can be set
 func TestResourceBuilder_HCPFields_CanBeSet(t *testing.T) {
 	resources := &Resources{
-		ManagementClusterID: "mgmt-cluster-123",
-		HCPNamespace:        "clusters-hcp-456",
-		IsHCP:               true,
+		HCPNamespace: "clusters-hcp-456",
+		IsHCP:        true,
 	}
 
 	// Verify fields can be set
-	assert.Equal(t, "mgmt-cluster-123", resources.ManagementClusterID)
 	assert.Equal(t, "clusters-hcp-456", resources.HCPNamespace)
 	assert.True(t, resources.IsHCP)
 }
@@ -556,9 +549,8 @@ func TestResourceBuilder_HCPFields_CanBeSet(t *testing.T) {
 func TestResourceBuilderMock_SupportsManagementClusterMethods(t *testing.T) {
 	mock := &ResourceBuilderMock{
 		Resources: &Resources{
-			ManagementClusterID: "test-mgmt",
-			HCPNamespace:        "test-namespace",
-			IsHCP:               true,
+			HCPNamespace: "test-namespace",
+			IsHCP:        true,
 		},
 	}
 
@@ -575,7 +567,6 @@ func TestResourceBuilderMock_SupportsManagementClusterMethods(t *testing.T) {
 	// Verify Build returns the mocked resources
 	resources, err := mock.Build()
 	assert.NoError(t, err)
-	assert.Equal(t, "test-mgmt", resources.ManagementClusterID)
 	assert.Equal(t, "test-namespace", resources.HCPNamespace)
 	assert.True(t, resources.IsHCP)
 }

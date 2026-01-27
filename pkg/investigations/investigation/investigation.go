@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	BackplaneApi "github.com/openshift/backplane-api/pkg/client"
 	"github.com/openshift/backplane-cli/pkg/cli/config"
 	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 
@@ -89,9 +90,8 @@ type Resources struct {
 	Notes                *notewriter.NoteWriter
 	OCClient             oc.Client
 	ManagementRestConfig *RestConfig
+	ManagementK8sClient  k8sclient.Client
 	ManagementOCClient   oc.Client
-	ManagementCluster    *cmv1.Cluster
-	ManagementClusterID  string
 	HCPNamespace         string
 	IsHCP                bool
 }
@@ -106,19 +106,21 @@ type ResourceBuilder interface {
 	WithOC() ResourceBuilder
 	WithNotes() ResourceBuilder
 	WithManagementRestConfig() ResourceBuilder
+	WithManagementK8sClient() ResourceBuilder
 	WithManagementOCClient() ResourceBuilder
 	Build() (*Resources, error)
 }
 
 type ResourceBuilderT struct {
-	buildCluster           bool
-	buildClusterDeployment bool
-	buildAwsClient         bool
-	buildRestConfig        bool
-	buildK8sClient         bool
-	buildOC                bool
-	buildNotes             bool
+	buildCluster              bool
+	buildClusterDeployment    bool
+	buildAwsClient            bool
+	buildRestConfig           bool
+	buildK8sClient            bool
+	buildOC                   bool
+	buildNotes                bool
 	buildManagementRestConfig bool
+	buildManagementK8sClient  bool
 	buildManagementOCClient   bool
 
 	clusterId    string
@@ -174,9 +176,14 @@ func (r *ResourceBuilderT) WithNotes() ResourceBuilder {
 	return r
 }
 
-
 func (r *ResourceBuilderT) WithPdClient(pdClient pagerduty.Client) ResourceBuilder {
 	r.builtResources.PdClient = pdClient
+	return r
+}
+
+func (r *ResourceBuilderT) WithManagementK8sClient() ResourceBuilder {
+	r.WithManagementRestConfig()
+	r.buildManagementK8sClient = true
 	return r
 }
 
@@ -227,7 +234,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	}
 
 	if r.buildRestConfig && r.builtResources.RestConfig == nil {
-		r.builtResources.RestConfig, err = newRestConfig(r.builtResources.Cluster.ID(), r.backplaneUrl, r.ocmClient, r.name)
+		r.builtResources.RestConfig, err = newRestConfig(r.builtResources.Cluster.ID(), r.backplaneUrl, r.ocmClient, r.name, false)
 		if err != nil {
 			r.buildErr = RestConfigError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
@@ -259,9 +266,8 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		}
 	}
 
-
 	// Check if this is an HCP cluster and build management cluster resources if requested
-	if r.buildManagementRestConfig || r.buildManagementOCClient {
+	if r.buildManagementRestConfig || r.buildManagementOCClient || r.buildManagementK8sClient {
 		err = r.buildManagementClusterResources()
 		if err != nil {
 			r.buildErr = err
@@ -290,15 +296,6 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 		return ManagementClusterNotFoundError{ClusterID: r.clusterId, Err: err}
 	}
 
-	managementClusterID := hypershiftConfig.ManagementCluster()
-	if managementClusterID == "" {
-		return ManagementClusterNotFoundError{
-			ClusterID: r.clusterId,
-			Err:       fmt.Errorf("management cluster ID is empty in HypershiftConfig"),
-		}
-	}
-	r.builtResources.ManagementClusterID = managementClusterID
-
 	hcpNamespace := hypershiftConfig.HCPNamespace()
 	if hcpNamespace == "" {
 		return ManagementClusterNotFoundError{
@@ -308,38 +305,43 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	}
 	r.builtResources.HCPNamespace = hcpNamespace
 
-	logging.Infof("Management cluster ID: %s, HCP namespace: %s", managementClusterID, hcpNamespace)
-
-	r.builtResources.ManagementCluster, err = r.ocmClient.GetClusterInfo(managementClusterID)
-	if err != nil {
-		return ManagementClusterNotFoundError{ClusterID: r.clusterId, Err: err}
-	}
+	logging.Infof("HCP namespace: %s", hcpNamespace)
 
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
-		logging.Infof("Creating RestConfig for management cluster %s", managementClusterID)
+		logging.Infof("Creating RestConfig for management cluster")
 		r.builtResources.ManagementRestConfig, err = newRestConfig(
-			r.builtResources.ManagementCluster.ID(),
+			r.builtResources.Cluster.ID(),
 			r.backplaneUrl,
 			r.ocmClient,
-			fmt.Sprintf("%s-mgmt", r.name), // Use a unique remediation name for management cluster
+			r.name,
+			true,
 		)
 		if err != nil {
 			return ManagementRestConfigError{
-				ClusterID:           r.clusterId,
-				ManagementClusterID: managementClusterID,
-				Err:                 err,
+				ClusterID: r.clusterId,
+				Err:       err,
+			}
+		}
+	}
+
+	if r.buildManagementK8sClient && r.builtResources.ManagementK8sClient == nil {
+		logging.Infof("Creating k8s client for management cluster of %s\", r.clusterId)")
+		r.builtResources.ManagementK8sClient, err = k8sclient.New(&r.builtResources.ManagementRestConfig.Config)
+		if err != nil {
+			return ManagementK8sClientError{
+				ClusterID: r.clusterId,
+				Err:       err,
 			}
 		}
 	}
 
 	if r.buildManagementOCClient && r.builtResources.ManagementOCClient == nil {
-		logging.Infof("Creating OC client for management cluster %s", managementClusterID)
+		logging.Infof("Creating OC client for management cluster of %s", r.clusterId)
 		r.builtResources.ManagementOCClient, err = oc.New(context.Background(), &r.builtResources.ManagementRestConfig.Config)
 		if err != nil {
 			return ManagementOCClientError{
-				ClusterID:           r.clusterId,
-				ManagementClusterID: managementClusterID,
-				Err:                 err,
+				ClusterID: r.clusterId,
+				Err:       err,
 			}
 		}
 	}
@@ -369,12 +371,21 @@ func (cleaner remediationCleaner) Clean() error {
 }
 
 // New returns a k8s rest config for the given cluster scoped to a given remediation's permissions.
-func newRestConfig(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationName string) (*RestConfig, error) {
+func newRestConfig(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationName string, isManagementCluster bool) (*RestConfig, error) {
+	createRemediationParams := BackplaneApi.CreateRemediationParams{
+		RemediationName: remediationName,
+		ManagingCluster: nil, // If this parameter is nil in CreateRemediationParams, it specifies spoke cluster
+	}
+	if isManagementCluster {
+		managingCluster := BackplaneApi.CreateRemediationParamsManagingClusterManagement
+		createRemediationParams.ManagingCluster = &managingCluster
+	}
+
 	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
 		config.BackplaneConfiguration{URL: backplaneUrl},
 		ocmClient.GetConnection(),
 		clusterID,
-		remediationName,
+		&createRemediationParams,
 	)
 	if err != nil {
 		return nil, err
@@ -427,13 +438,16 @@ func (r *ResourceBuilderMock) WithK8sClient() ResourceBuilder {
 	return r
 }
 
-
 func (r *ResourceBuilderMock) WithPdClient(client pagerduty.Client) ResourceBuilder {
 	r.Resources.PdClient = client
 	return r
 }
 
 func (r *ResourceBuilderMock) WithManagementRestConfig() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithManagementK8sClient() ResourceBuilder {
 	return r
 }
 
