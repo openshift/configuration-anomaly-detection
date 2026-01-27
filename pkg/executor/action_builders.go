@@ -222,29 +222,26 @@ func (b *EscalateIncidentActionBuilder) Build() Action {
 
 // BackplaneReportActionBuilder builds BackplaneReportAction instances
 type BackplaneReportActionBuilder struct {
-	report     BackplaneReport
-	reportType string
+	clusterID string
+	summary   string
+	data      string
 }
 
 // NewBackplaneReportAction creates a builder with required fields
-func NewBackplaneReportAction(reportType string, report BackplaneReport) *BackplaneReportActionBuilder {
+func NewBackplaneReportAction(clusterID, summary, data string) *BackplaneReportActionBuilder {
 	return &BackplaneReportActionBuilder{
-		reportType: reportType,
-		report:     report,
+		clusterID: clusterID,
+		summary:   summary,
+		data:      data,
 	}
-}
-
-// WithReport sets the report payload
-func (b *BackplaneReportActionBuilder) WithReport(report BackplaneReport) *BackplaneReportActionBuilder {
-	b.report = report
-	return b
 }
 
 // Build creates the BackplaneReportAction
 func (b *BackplaneReportActionBuilder) Build() Action {
 	return &BackplaneReportAction{
-		Report:     b.report,
-		ReportType: b.reportType,
+		ClusterID: b.clusterID,
+		Summary:   b.summary,
+		Data:      b.data,
 	}
 }
 

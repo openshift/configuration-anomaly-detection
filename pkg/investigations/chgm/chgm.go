@@ -2,7 +2,6 @@
 package chgm
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -17,7 +16,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
@@ -87,7 +85,6 @@ func isInfrastructureError(err error) bool {
 
 // Run runs the investigation for a triggered chgm pagerduty event
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
-	ctx := context.Background()
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithClusterDeployment().Build()
 	if err != nil {
@@ -188,20 +185,16 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// Write investigations to a cluster report
-	report, err := reports.New(ctx, r.BpClient, &reports.Input{
+	backplaneReportAction := &executor.BackplaneReportAction{
 		ClusterID: r.Cluster.ExternalID(),
 		Summary:   "CAD Investigation: Cluster Has Gone Missing",
 		Data:      fmt.Sprintf("# Investigation Notes:\n %s \n", r.Notes.String()),
-	})
-	if err != nil {
-		r.Notes.AppendWarning("failed to create cluster report: %v", err)
-	}
-	if report != nil {
-		r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
 	}
 
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
+	// The report action will append to notes when executed, then note sends them to PagerDuty
 	result.Actions = []types.Action{
+		backplaneReportAction,
 		executor.NoteFrom(r.Notes),
 		executor.Escalate("No automated remediation available - manual investigation required"),
 	}

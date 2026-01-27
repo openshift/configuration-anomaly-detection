@@ -11,12 +11,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/reports"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -138,17 +139,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	logging.Info("etcd snapshot analysis completed successfully")
 
-	report, err := reports.New(ctx, r.BpClient, &reports.Input{
+	// Create backplane report action
+	backplaneReportAction := &executor.BackplaneReportAction{
 		ClusterID: r.Cluster.ExternalID(),
 		Summary:   "CAD Investigation: Analysis of etcd storage utilization",
 		Data:      formattedResults,
-	})
-	if err != nil {
-		r.Notes.AppendWarning("Failed to create cluster report: %v", err)
-		logging.Warnf("failed to create cluster report: %v", err)
-	}
-	if report != nil {
-		r.Notes.AppendAutomation("%s", report.GenerateStringForNoteWriter())
 	}
 
 	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
@@ -156,7 +151,15 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		Labels:    []string{"success", "completed"},
 	}
 
-	return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+	// Add the backplane report action and note/escalation to the result
+	// The report action will append to notes when executed, then note sends them to PagerDuty
+	result.Actions = []types.Action{
+		backplaneReportAction,
+		executor.NoteFrom(r.Notes),
+		executor.Escalate("etcd analysis complete - see report for details"),
+	}
+
+	return result, nil
 }
 
 func (i *Investigation) Name() string {
