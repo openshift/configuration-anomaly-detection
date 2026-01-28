@@ -31,15 +31,16 @@ const (
 
 // Client is the interface exposing pagerduty functions
 type Client interface {
-	SilenceIncident() error
-	SilenceIncidentWithNote(notes string) error
 	AddNote(notes string) error
-	GetServiceID() string
-	EscalateIncidentWithNote(notes string) error
 	EscalateIncident() error
-	UpdateIncidentTitle(title string) error
+	EscalateIncidentWithNote(notes string) error
+	GetServiceID() string
+	GetTitle() string
 	MoveToEscalationPolicy(escalationPolicyID string) error
 	RetrieveClusterID() (string, error)
+	SilenceIncident() error
+	SilenceIncidentWithNote(notes string) error
+	UpdateIncidentTitle(title string) error
 }
 
 // SdkClient will hold all the required fields for any SdkClient Operation

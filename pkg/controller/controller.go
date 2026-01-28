@@ -17,6 +17,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"go.uber.org/zap"
 )
 
@@ -319,7 +320,11 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), err)
 	}
 
-	return updateIncidentTitle(pdClient)
+	a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
+	result = investigation.InvestigationResult{
+		Actions: []types.Action{&a},
+	}
+	return c.executeActions(builder, &result, inv.Name())
 }
 
 func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pagerduty.SdkClient) {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -45,19 +44,6 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 
 	// Continue with investigation...
 	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient)
-}
-
-func updateIncidentTitle(pdClient *pagerduty.SdkClient) error {
-	currentTitle := pdClient.GetTitle()
-	if strings.Contains(currentTitle, pagerdutyTitlePrefix) {
-		return nil
-	}
-	newTitle := fmt.Sprintf("%s %s", pagerdutyTitlePrefix, currentTitle)
-	err := pdClient.UpdateIncidentTitle(newTitle)
-	if err != nil {
-		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
-	}
-	return nil
 }
 
 func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {

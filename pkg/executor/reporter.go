@@ -142,7 +142,8 @@ func isPagerDutyAction(action Action) bool {
 	switch action.Type() {
 	case string(ActionTypePagerDutyNote),
 		string(ActionTypeSilenceIncident),
-		string(ActionTypeEscalateIncident):
+		string(ActionTypeEscalateIncident),
+		string(ActionTypePagerDutyTitleUpdate):
 		return true
 	default:
 		return false

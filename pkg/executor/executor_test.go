@@ -11,6 +11,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 
+	bpmock "github.com/openshift/configuration-anomaly-detection/pkg/backplane/mock"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 )
@@ -49,10 +50,11 @@ func TestWebhookExecutor_ExecutesAllActions(t *testing.T) {
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
 	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
 	// Create WebhookExecutor
-	exec := NewWebhookExecutor(mockOCMClient, mockPDClient, logger)
+	exec := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
 
 	// Track execution
 	pdNoteExecuted := false
@@ -94,10 +96,11 @@ func TestManualExecutor_FiltersPagerDutyActions(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
 	// Create ManualExecutor (no PD client)
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	// Track execution
 	pdNoteExecuted := false
@@ -142,10 +145,11 @@ func TestManualExecutor_ExecutesOCMActions(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
 	// Create ManualExecutor
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	// Track execution
 	serviceLogExecuted := false
@@ -184,10 +188,11 @@ func TestManualExecutor_ReturnsNilWhenAllActionsFiltered(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
 	// Create ManualExecutor
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	// Track execution
 	pdNoteExecuted := false
@@ -273,9 +278,10 @@ func TestWebhookExecutor_Type(t *testing.T) {
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
 	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
-	exec := NewWebhookExecutor(mockOCMClient, mockPDClient, logger)
+	exec := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
 	require.NotNil(t, exec)
 
 	// Verify it's the right type
@@ -289,9 +295,10 @@ func TestManualExecutor_Type(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 	require.NotNil(t, exec)
 
 	// Verify it's the right type
@@ -305,9 +312,10 @@ func TestManualExecutor_NilInputHandling(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	// Execute with nil input
 	err := exec.Execute(context.Background(), nil)
@@ -322,9 +330,10 @@ func TestManualExecutor_EmptyActionsHandling(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
 	input := &ExecutorInput{
@@ -352,9 +361,10 @@ func TestManualExecutor_IntegrationFiltering(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
-	exec := NewManualExecutor(mockOCMClient, logger)
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
 
 	// Create a realistic scenario: investigation returns both OCM and PD actions
 	pdNote1Executed := false
@@ -363,6 +373,7 @@ func TestManualExecutor_IntegrationFiltering(t *testing.T) {
 	serviceLog2Executed := false
 	silenceExecuted := false
 	limitedSupportExecuted := false
+	titleUpdateExecuted := false
 
 	actions := []Action{
 		&mockAction{actionType: ActionTypePagerDutyNote, executed: &pdNote1Executed},
@@ -371,6 +382,7 @@ func TestManualExecutor_IntegrationFiltering(t *testing.T) {
 		&mockAction{actionType: ActionTypeLimitedSupport, executed: &limitedSupportExecuted},
 		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLog2Executed},
 		&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+		&mockAction{actionType: ActionTypePagerDutyTitleUpdate, executed: &titleUpdateExecuted},
 	}
 
 	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
@@ -396,4 +408,5 @@ func TestManualExecutor_IntegrationFiltering(t *testing.T) {
 	assert.True(t, limitedSupportExecuted, "Limited support should execute")
 	assert.True(t, serviceLog2Executed, "Second service log should execute")
 	assert.False(t, silenceExecuted, "Silence should be filtered")
+	assert.False(t, titleUpdateExecuted, "Title update should be filtered")
 }

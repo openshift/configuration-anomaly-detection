@@ -19,6 +19,7 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -92,6 +93,20 @@ func (m *MockClient) GetServiceID() string {
 func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
+}
+
+// GetTitle mocks base method.
+func (m *MockClient) GetTitle() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTitle")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetTitle indicates an expected call of GetTitle.
+func (mr *MockClientMockRecorder) GetTitle() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTitle", reflect.TypeOf((*MockClient)(nil).GetTitle))
 }
 
 // MoveToEscalationPolicy mocks base method.
