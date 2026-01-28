@@ -14,6 +14,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
@@ -83,7 +84,7 @@ var _ = Describe("aiassisted", func() {
 				BpClient:          &backplanemock.MockClient{},
 				OcmClient:         ocmmock.NewMockClient(mockCtrl),
 				PdClient:          pdmock.NewMockClient(mockCtrl),
-				Notes:             nil,
+				Notes:             notewriter.New("Test", logging.RawLogger),
 			},
 		}
 	})

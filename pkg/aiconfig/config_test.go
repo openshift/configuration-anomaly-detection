@@ -55,7 +55,7 @@ func TestParseAIAgentConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "Config without timeout uses default 300 seconds",
+			name: "Config without timeout uses default 900 seconds",
 			envValue: `{
 				"runtime_arn": "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/test",
 				"user_id": "test-user",
@@ -72,7 +72,7 @@ func TestParseAIAgentConfig(t *testing.T) {
 				Organizations:  []string{"org1"},
 				Clusters:       []string{},
 				Enabled:        true,
-				TimeoutSeconds: 300,
+				TimeoutSeconds: 900,
 			},
 		},
 		{
@@ -93,7 +93,7 @@ func TestParseAIAgentConfig(t *testing.T) {
 				Organizations:  []string{},
 				Clusters:       []string{},
 				Enabled:        false,
-				TimeoutSeconds: 300,
+				TimeoutSeconds: 900,
 			},
 		},
 	}
