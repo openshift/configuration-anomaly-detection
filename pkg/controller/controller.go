@@ -205,7 +205,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 			investigationRunner: investigationRunner{
 				ocmClient:    deps.OCMClient,
 				bpClient:     deps.BackplaneClient,
-				executor:     executor.NewWebhookExecutor(deps.OCMClient, pdClient, logger),
+				executor:     executor.NewWebhookExecutor(deps.OCMClient, pdClient, deps.BackplaneClient, logger),
 				logger:       logger,
 				dependencies: deps,
 			},
@@ -226,7 +226,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 			investigationRunner: investigationRunner{
 				ocmClient:    deps.OCMClient,
 				bpClient:     deps.BackplaneClient,
-				executor:     executor.NewManualExecutor(deps.OCMClient, logger),
+				executor:     executor.NewManualExecutor(deps.OCMClient, deps.BackplaneClient, logger),
 				logger:       logger,
 				dependencies: deps,
 			},

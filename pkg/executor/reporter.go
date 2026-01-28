@@ -68,12 +68,13 @@ type WebhookExecutor struct {
 
 // NewWebhookExecutor creates an executor for webhook-triggered investigations
 // Executes all action types including PagerDuty actions
-func NewWebhookExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, logger *zap.SugaredLogger) Executor {
+func NewWebhookExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, bpClient backplane.Client, logger *zap.SugaredLogger) Executor {
 	return &WebhookExecutor{
 		DefaultExecutor: &DefaultExecutor{
-			ocmClient: ocmClient,
-			pdClient:  pdClient,
-			logger:    logger,
+			ocmClient:       ocmClient,
+			pdClient:        pdClient,
+			backplaneClient: bpClient,
+			logger:          logger,
 		},
 	}
 }
@@ -86,12 +87,13 @@ type ManualExecutor struct {
 
 // NewManualExecutor creates an executor for manual investigations
 // Filters out PagerDuty actions (notes, silence, escalate) since there's no incident
-func NewManualExecutor(ocmClient ocm.Client, logger *zap.SugaredLogger) Executor {
+func NewManualExecutor(ocmClient ocm.Client, bpClient backplane.Client, logger *zap.SugaredLogger) Executor {
 	return &ManualExecutor{
 		DefaultExecutor: &DefaultExecutor{
-			ocmClient: ocmClient,
-			pdClient:  nil, // No PD client for manual runs
-			logger:    logger,
+			ocmClient:       ocmClient,
+			pdClient:        nil, // No PD client for manual runs
+			backplaneClient: bpClient,
+			logger:          logger,
 		},
 	}
 }
