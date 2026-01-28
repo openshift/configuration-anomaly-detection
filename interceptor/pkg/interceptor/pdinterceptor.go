@@ -133,7 +133,6 @@ func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *htt
 	logging.Debug("Unwrapped Request body: ", originalReq.Body)
 
 	token, _ := os.LookupEnv("PD_SIGNATURE")
-
 	err = webhookv3.VerifySignature(extractedRequest, token)
 	if err != nil {
 		return nil, pdi.badRequest("failed to verify signature", err)
@@ -168,23 +167,22 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 		orgMap = make(map[string]string)
 	}
 
-	// Create OCM client if credentials are available
-	var ocmClient ocm.Client
-	if len(orgMap) > 0 {
-		ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
-		ocmClientSecret := os.Getenv("CAD_OCM_CLIENT_SECRET")
-		ocmURL := os.Getenv("CAD_OCM_URL")
+	// Create OCM client - required for AI investigations and org routing
+	ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
+	ocmClientSecret := os.Getenv("CAD_OCM_CLIENT_SECRET")
+	ocmURL := os.Getenv("CAD_OCM_URL")
 
-		if ocmClientID != "" && ocmClientSecret != "" && ocmURL != "" {
-			ocmClient, err = ocm.New(ocmClientID, ocmClientSecret, ocmURL)
-			if err != nil {
-				logging.Warnf("Failed to create OCM client: %v", err)
-			}
-		}
+	if ocmClientID == "" || ocmClientSecret == "" || ocmURL == "" {
+		return interceptors.Failf(codes.FailedPrecondition, "OCM credentials not configured - required environment variables: CAD_OCM_CLIENT_ID, CAD_OCM_CLIENT_SECRET, CAD_OCM_URL")
 	}
 
-	// Perform org-based routing if we have both clients
-	if ocmClient != nil {
+	ocmClient, err := ocm.New(ocmClientID, ocmClientSecret, ocmURL)
+	if err != nil {
+		return interceptors.Failf(codes.Internal, "failed to create OCM client: %v", err)
+	}
+
+	// Perform org-based routing if org mapping is configured
+	if len(orgMap) > 0 {
 		reassignToOrgEscalationPolicy(pdClient, ocmClient, orgMap)
 	}
 
@@ -195,21 +193,9 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 	// If no formal investigation found, check if AI investigation should run
 	if investigation == nil {
-		aiConfig, err := aiconfig.ParseAIAgentConfig()
-		if err != nil {
-			logging.Warnf("Failed to parse AI config for incident %s: %v", pdClient.GetIncidentID(), err)
-		}
-
-		// Check if AI investigation should run
-		if aiConfig != nil && aiConfig.Enabled && ocmClient != nil {
-			clusterID, err := pdClient.RetrieveClusterID()
-			if err == nil {
-				orgID, _ := ocmClient.GetOrganizationID(clusterID)
-				if aiConfig.IsAllowedForAI(clusterID, orgID) {
-					logging.Infof("No formal investigation for incident %s, launching AI investigation for cluster %s", pdClient.GetIncidentID(), clusterID)
-					return &triggersv1.InterceptorResponse{Continue: true}
-				}
-			}
+		if shouldRunAIInvestigation(pdClient, ocmClient) {
+			logging.Infof("Launching AI investigation")
+			return &triggersv1.InterceptorResponse{Continue: true}
 		}
 
 		// No formal investigation and AI not enabled/allowed - escalate to SRE
@@ -225,6 +211,37 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
 	}
+}
+
+func shouldRunAIInvestigation(pdClient pagerduty.Client, ocmClient ocm.Client) bool {
+	aiConfig, err := aiconfig.ParseAIAgentConfig()
+	if err != nil {
+		logging.Warnf("Failed to parse AI config: %v", err)
+		return false
+	}
+
+	if aiConfig == nil || !aiConfig.Enabled {
+		return false
+	}
+
+	clusterID, err := pdClient.RetrieveClusterID()
+	if err != nil {
+		logging.Warnf("Cannot run AI investigation: failed to retrieve cluster ID: %v", err)
+		return false
+	}
+
+	orgID, err := ocmClient.GetOrganizationID(clusterID)
+	if err != nil {
+		logging.Warnf("Cannot run AI investigation: failed to get org ID for cluster %s: %v", clusterID, err)
+		return false
+	}
+
+	if !aiConfig.IsAllowedForAI(clusterID, orgID) {
+		logging.Debugf("Cluster %s (org: %s) not in AI allowlist", clusterID, orgID)
+		return false
+	}
+
+	return true
 }
 
 func loadOrgEscalationMapping() (map[string]string, error) {
