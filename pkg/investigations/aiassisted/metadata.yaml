@@ -1,0 +1,6 @@
+name: aiassisted
+rbac:
+  roles: []
+  clusterRoleRules: []
+customerDataAccess: false
+

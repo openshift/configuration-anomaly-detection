@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	aws "github.com/aws/aws-sdk-go-v2/aws"
+	bedrockagentcore "github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	cloudtrail "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -26,7 +27,6 @@ import (
 type MockEC2API struct {
 	ctrl     *gomock.Controller
 	recorder *MockEC2APIMockRecorder
-	isgomock struct{}
 }
 
 // MockEC2APIMockRecorder is the mock recorder for MockEC2API.
@@ -130,7 +130,6 @@ func (mr *MockEC2APIMockRecorder) DescribeSubnets(ctx, in any, optFns ...any) *g
 type MockCloudTrailAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockCloudTrailAPIMockRecorder
-	isgomock struct{}
 }
 
 // MockCloudTrailAPIMockRecorder is the mock recorder for MockCloudTrailAPI.
@@ -174,7 +173,6 @@ func (mr *MockCloudTrailAPIMockRecorder) LookupEvents(ctx, in any, optFns ...any
 type MockStsAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockStsAPIMockRecorder
-	isgomock struct{}
 }
 
 // MockStsAPIMockRecorder is the mock recorder for MockStsAPI.
@@ -214,11 +212,53 @@ func (mr *MockStsAPIMockRecorder) AssumeRole(ctx, in any, optFns ...any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssumeRole", reflect.TypeOf((*MockStsAPI)(nil).AssumeRole), varargs...)
 }
 
+// MockAgentCoreAPI is a mock of AgentCoreAPI interface.
+type MockAgentCoreAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockAgentCoreAPIMockRecorder
+}
+
+// MockAgentCoreAPIMockRecorder is the mock recorder for MockAgentCoreAPI.
+type MockAgentCoreAPIMockRecorder struct {
+	mock *MockAgentCoreAPI
+}
+
+// NewMockAgentCoreAPI creates a new mock instance.
+func NewMockAgentCoreAPI(ctrl *gomock.Controller) *MockAgentCoreAPI {
+	mock := &MockAgentCoreAPI{ctrl: ctrl}
+	mock.recorder = &MockAgentCoreAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAgentCoreAPI) EXPECT() *MockAgentCoreAPIMockRecorder {
+	return m.recorder
+}
+
+// InvokeAgentRuntime mocks base method.
+func (m *MockAgentCoreAPI) InvokeAgentRuntime(ctx context.Context, in *bedrockagentcore.InvokeAgentRuntimeInput, optFns ...func(*bedrockagentcore.Options)) (*bedrockagentcore.InvokeAgentRuntimeOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "InvokeAgentRuntime", varargs...)
+	ret0, _ := ret[0].(*bedrockagentcore.InvokeAgentRuntimeOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// InvokeAgentRuntime indicates an expected call of InvokeAgentRuntime.
+func (mr *MockAgentCoreAPIMockRecorder) InvokeAgentRuntime(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeAgentRuntime", reflect.TypeOf((*MockAgentCoreAPI)(nil).InvokeAgentRuntime), varargs...)
+}
+
 // MockClient is a mock of Client interface.
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.

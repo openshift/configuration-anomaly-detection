@@ -11,6 +11,7 @@ import (
 
 	// V2 SDK
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	bedrockagentcore "github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	cloudtrailv2 "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -45,6 +46,10 @@ type StsAPI interface {
 	AssumeRole(ctx context.Context, in *stsv2.AssumeRoleInput, optFns ...func(*stsv2.Options)) (*stsv2.AssumeRoleOutput, error)
 }
 
+type AgentCoreAPI interface {
+	InvokeAgentRuntime(ctx context.Context, in *bedrockagentcore.InvokeAgentRuntimeInput, optFns ...func(*bedrockagentcore.Options)) (*bedrockagentcore.InvokeAgentRuntimeOutput, error)
+}
+
 type Client interface {
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
@@ -71,6 +76,13 @@ func NewClient(config awsv2.Config) (*SdkClient, error) {
 		Ec2Client:        ec2v2.NewFromConfig(config),
 		StsClient:        stsv2.NewFromConfig(config),
 	}, nil
+}
+
+// NewAgentCoreClient creates a Bedrock AgentCore client.
+// The config should contain credentials for the AWS account where the AgentCore
+// runtime lives (not customer account credentials).
+func NewAgentCoreClient(config awsv2.Config) AgentCoreAPI {
+	return bedrockagentcore.NewFromConfig(config)
 }
 
 // GetAWSCredentials gets the AWS credentials

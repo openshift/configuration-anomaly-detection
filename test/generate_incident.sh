@@ -13,6 +13,7 @@ declare -A alert_mapping=(
     ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
     ["UpgradeConfigSyncFailureOver4HrSRE"]="UpgradeConfigSyncFailureOver4HrSRE Critical (1)"
     ["etcdDatabaseQuotaLowSpace"]="etcdDatabaseQuotaLowSpace CRITICAL (1)"
+    ["console-errorbudgetburn"]="console-errorbudgetburn Critical (1)"
 )
 
 # Function to print help message

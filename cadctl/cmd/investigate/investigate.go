@@ -24,9 +24,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
@@ -64,6 +66,35 @@ func init() {
 	}
 
 	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
+}
+
+var errAlertEscalated = fmt.Errorf("alert escalated to SRE")
+
+// handleUnsupportedAlertWithAI checks if AI is enabled for unsupported alerts.
+// If AI is enabled, returns an AI investigation. If disabled, escalates the alert.
+// Returns errAlertEscalated if the alert was escalated.
+func handleUnsupportedAlertWithAI(alertInvestigation investigation.Investigation, pdClient *pagerduty.SdkClient) (investigation.Investigation, error) {
+	if alertInvestigation != nil {
+		return alertInvestigation, nil
+	}
+
+	// Parse AI config
+	aiConfig, err := aiconfig.ParseAIAgentConfig()
+	if err != nil {
+		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
+		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
+	}
+
+	// Escalate if AI is disabled
+	if !aiConfig.Enabled {
+		if err := pdClient.EscalateIncident(); err != nil {
+			return nil, fmt.Errorf("could not escalate unsupported alert: %w", err)
+		}
+		return nil, errAlertEscalated
+	}
+
+	// Use AI investigation for unsupported alerts
+	return &aiassisted.Investigation{}, nil
 }
 
 func run(_ *cobra.Command, _ []string) error {
@@ -124,13 +155,14 @@ func run(_ *cobra.Command, _ []string) error {
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 
-	// Escalate all unsupported alerts
-	if alertInvestigation == nil {
-		err = pdClient.EscalateIncident()
-		if err != nil {
-			return fmt.Errorf("could not escalate unsupported alert: %w", err)
+	// Handle unsupported alerts (escalate or use AI)
+	// If AI is enabled on unsupported alerts alertInvestigation set to &aiassisted.Investigation{}
+	alertInvestigation, err = handleUnsupportedAlertWithAI(alertInvestigation, pdClient)
+	if err != nil {
+		if errors.Is(err, errAlertEscalated) {
+			return nil // Successfully escalated
 		}
-		return nil
+		return err
 	}
 
 	metrics.Inc(metrics.Alerts, alertInvestigation.Name())
