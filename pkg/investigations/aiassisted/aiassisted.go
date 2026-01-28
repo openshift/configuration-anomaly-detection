@@ -20,7 +20,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
@@ -64,12 +63,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result := investigation.InvestigationResult{}
 
 	// Build resources
-	r, err := rb.Build()
+	r, err := rb.WithNotes().Build()
 	if err != nil {
 		return result, err
 	}
 
-	notes := notewriter.New(r.Name, logging.RawLogger)
+	notes := r.Notes
 
 	config, err := aiconfig.ParseAIAgentConfig()
 	if err != nil {
@@ -178,6 +177,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Create AgentCore client
 	agentClient := aws.NewAgentCoreClient(awsCfg)
 
+	// TODO: Move session ID generation outside of AI investigation so all investigations have unique IDs
+	// This will require adapting this code to use the externally-generated ID instead
 	// Generate unique session ID for this investigation
 	sessionID := generateSessionID(incidentID)
 
@@ -244,7 +245,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("AI Output:\n%s", aiResponse.String())
 
 	// Add simple note about AI automation completion
-	notes.AppendAutomation("🤖 AI automation completed. Check cluster report for investigation details.")
+	notes.AppendAutomation("AI automation completed. Check cluster report for investigation details.")
 
 	// Return actions for executor to handle
 	result.Actions = []types.Action{

@@ -68,6 +68,35 @@ func init() {
 	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
 }
 
+var errAlertEscalated = fmt.Errorf("alert escalated to SRE")
+
+// handleUnsupportedAlertWithAI checks if AI is enabled for unsupported alerts.
+// If AI is enabled, returns an AI investigation. If disabled, escalates the alert.
+// Returns errAlertEscalated if the alert was escalated.
+func handleUnsupportedAlertWithAI(alertInvestigation investigation.Investigation, pdClient *pagerduty.SdkClient) (investigation.Investigation, error) {
+	if alertInvestigation != nil {
+		return alertInvestigation, nil
+	}
+
+	// Parse AI config
+	aiConfig, err := aiconfig.ParseAIAgentConfig()
+	if err != nil {
+		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
+		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
+	}
+
+	// Escalate if AI is disabled
+	if !aiConfig.Enabled {
+		if err := pdClient.EscalateIncident(); err != nil {
+			return nil, fmt.Errorf("could not escalate unsupported alert: %w", err)
+		}
+		return nil, errAlertEscalated
+	}
+
+	// Use AI investigation for unsupported alerts
+	return &aiassisted.Investigation{}, nil
+}
+
 func run(_ *cobra.Command, _ []string) error {
 	// early init of logger for logs before clusterID is known
 	logging.RawLogger = logging.InitLogger(logLevelFlag, pipelineNameEnv, "")
@@ -109,12 +138,6 @@ func run(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("missing required environment variable CAD_OCM_URL")
 	}
 
-	aiConfig, err := aiconfig.ParseAIAgentConfig()
-	if err != nil {
-		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
-		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
-	}
-
 	payload, err := os.ReadFile(payloadPath)
 	if err != nil {
 		return fmt.Errorf("failed to read webhook payload: %w", err)
@@ -132,16 +155,14 @@ func run(_ *cobra.Command, _ []string) error {
 	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
 
-	// Escalate all unsupported alerts
-	if alertInvestigation == nil {
-		if !aiConfig.Enabled {
-			err = pdClient.EscalateIncident()
-			if err != nil {
-				return fmt.Errorf("could not escalate unsupported alert: %w", err)
-			}
-			return nil
+	// Handle unsupported alerts (escalate or use AI)
+	// If AI is enabled on unsupported alerts alertInvestigation set to &aiassisted.Investigation{}
+	alertInvestigation, err = handleUnsupportedAlertWithAI(alertInvestigation, pdClient)
+	if err != nil {
+		if errors.Is(err, errAlertEscalated) {
+			return nil // Successfully escalated
 		}
-		alertInvestigation = &aiassisted.Investigation{}
+		return err
 	}
 
 	metrics.Inc(metrics.Alerts, alertInvestigation.Name())

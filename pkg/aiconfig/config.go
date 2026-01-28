@@ -25,7 +25,7 @@ type AIAgentConfig struct {
 	Clusters      []string `json:"clusters"`
 
 	Enabled        bool `json:"enabled"`                   // Global on/off switch for AI investigation
-	TimeoutSeconds int  `json:"timeout_seconds,omitempty"` // Timeout for agent API call (default: 300 seconds / 5 minutes)
+	TimeoutSeconds int  `json:"timeout_seconds,omitempty"` // Timeout for agent API call (default: 900 seconds / 15 minutes)
 }
 
 // ParseAIAgentConfig parses the AI agent configuration from the CAD_AI_AGENT_CONFIG environment variable
@@ -45,7 +45,7 @@ func ParseAIAgentConfig() (*AIAgentConfig, error) {
 
 	// Set default timeout
 	if config.TimeoutSeconds == 0 {
-		config.TimeoutSeconds = 300
+		config.TimeoutSeconds = 900
 	}
 
 	return &config, nil
