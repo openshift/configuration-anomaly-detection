@@ -97,6 +97,12 @@ var _ = Describe("aiassisted", func() {
 
 	Describe("Run", func() {
 		Context("when AI configuration is not set", func() {
+			BeforeEach(func() {
+				// Explicitly unset to ensure clean test environment
+				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			It("should escalate with configuration warning", func() {
 				// By default, CAD_AI_AGENT_CONFIG env var is not set in tests
 				result, err := inv.Run(r)
