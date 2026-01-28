@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
@@ -52,19 +53,20 @@ type ExecutionOptions struct {
 
 // DefaultExecutor is the production implementation of Executor
 type DefaultExecutor struct {
-	ocmClient ocm.Client
-	pdClient  pagerduty.Client
-	// Future: backplaneClient backplane.Client
+	ocmClient       ocm.Client
+	pdClient        pagerduty.Client
+	backplaneClient backplane.Client
 
 	logger *zap.SugaredLogger
 }
 
 // NewExecutor creates a new DefaultExecutor
-func NewExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, logger *zap.SugaredLogger) Executor {
+func NewExecutor(ocmClient ocm.Client, pdClient pagerduty.Client, backplaneClient backplane.Client, logger *zap.SugaredLogger) Executor {
 	return &DefaultExecutor{
-		ocmClient: ocmClient,
-		pdClient:  pdClient,
-		logger:    logger,
+		ocmClient:       ocmClient,
+		pdClient:        pdClient,
+		backplaneClient: backplaneClient,
+		logger:          logger,
 	}
 }
 
@@ -102,6 +104,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, input *ExecutorInput) err
 		Cluster:           input.Cluster,
 		OCMClient:         e.ocmClient,
 		PDClient:          e.pdClient,
+		BackplaneClient:   e.backplaneClient,
 		InvestigationName: input.InvestigationName,
 		Logger:            e.logger,
 	}
