@@ -30,6 +30,7 @@ import (
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -247,7 +248,8 @@ func run(_ *cobra.Command, _ []string) error {
 	// FIXME: Once all migrations are converted this can be removed.
 	updateMetrics(alertInvestigation.Name(), &result)
 	// FIXME: This is a quick fix - we might want to put CCAM as a composable check per investigation so each investigation can decide to proceed or not.
-	if result.StopInvestigations != nil && alertInvestigation.AlertTitle() == "Cluster Has Gone Missing (CHGM)" {
+	chgmInv := chgm.Investigation{}
+	if result.StopInvestigations != nil && alertInvestigation.AlertTitle() == chgmInv.AlertTitle() {
 		return result.StopInvestigations
 	}
 
