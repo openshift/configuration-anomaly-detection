@@ -5,16 +5,19 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 
 	v1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,7 +35,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
 	if err != nil {
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s\nPlease investigate.", err)
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Failed to check if user is banned"),
+		}
+		return result, nil
 	}
 	if userBannedStatus {
 		notes.AppendWarning("%s", userBannedNotes)
@@ -43,7 +50,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("User ID is: %v", user.ID())
 	if err != nil {
 		notes.AppendWarning("Failed getting cluster creator from ocm: %s", err)
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Failed to get cluster creator from OCM"),
+		}
+		return result, nil
 	}
 
 	r, err = rb.WithK8sClient().Build()
@@ -51,40 +62,54 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		k8sErr := &investigation.K8SClientError{}
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Note("CAD was unable to access cluster's kube-api. Please investigate manually."),
+					executor.Escalate("Cluster API unavailable"),
+				}
+				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Note("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually."),
+					executor.Escalate("Cannot access infrastructure"),
+				}
+				return result, nil
 			}
-			return result, err
+			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
 		}
-		return result, err
+		return result, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
 	clusterSecretToken, note, err := getClusterPullSecret(r.K8sClient)
 	if err != nil {
-		notes.AppendWarning("Failed getting ClusterSecret: %s", err)
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("failed getting ClusterSecret: %w", err),
+			"K8s API failure retrieving pull secret")
 	}
 	if note != "" {
 		notes.AppendWarning("%s", note)
 	}
 	registryCredential, err := ocm.GetOCMPullSecret(r.OcmClient.GetConnection(), user.ID())
 	if err != nil {
-		notes.AppendWarning("Error getting OCMPullSecret: %s", err)
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("error getting OCMPullSecret: %w", err),
+			"OCM API failure retrieving pull secret")
 	}
 	if clusterSecretToken == registryCredential {
 		notes.AppendSuccess("Pull Secret matches on cluster and in OCM. Please continue investigation.")
 	} else {
 		notes.AppendWarning("Pull secret does not match on cluster and in OCM.")
 	}
-	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(notes),
+		executor.Escalate("UpgradeConfigSyncFailure investigation complete"),
+	}
+	return result, nil
 }
 
 func getClusterPullSecret(k8scli client.Client) (secretToken string, note string, err error) {
 	secret := &corev1.Secret{}
-	err = k8scli.Get(context.TODO(), types.NamespacedName{
+	err = k8scli.Get(context.TODO(), k8stypes.NamespacedName{
 		Namespace: "openshift-config",
 		Name:      "pull-secret",
 	}, secret)

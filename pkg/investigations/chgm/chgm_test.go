@@ -177,7 +177,7 @@ var _ = Describe("chgm", func() {
 				_, gotErr := inv.Run(r)
 
 				Expect(gotErr).To(HaveOccurred())
-				Expect(gotErr.Error()).To(ContainSubstring("investigation infrastructure failure"))
+				Expect(gotErr.Error()).To(ContainSubstring("infrastructure error"))
 			})
 		})
 		When("there were no stopped instances", func() {
@@ -206,7 +206,7 @@ var _ = Describe("chgm", func() {
 
 				_, gotErr := inv.Run(r)
 				Expect(gotErr).To(HaveOccurred())
-				Expect(gotErr.Error()).To(ContainSubstring("investigation infrastructure failure"))
+				Expect(gotErr.Error()).To(ContainSubstring("infrastructure error"))
 			})
 		})
 		When("there were no StopInstancesEvents", func() {

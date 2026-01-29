@@ -8,9 +8,11 @@ import (
 	"regexp"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type CloudCredentialsCheck struct{}
@@ -34,12 +36,10 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 			// We aren't able to jumpRole because of an error that is different than
 			// a removed support role/policy or removed installer role/policy
 			// This would normally be a backplane failure.
-			return result, err
+			return result, investigation.WrapInfrastructure(awsClientErr.Err, "AWS/Backplane infrastructure failure")
 		}
 		result.StopInvestigations = err
 		cluster := resources.Cluster
-		ocmClient := resources.OcmClient
-		pdClient := resources.PdClient
 
 		// The jumprole failed because of a missing support role/policy:
 		// we need to figure out if we cluster state allows us to set limited support
@@ -47,22 +47,25 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 
 		switch cluster.State() {
 		case cmv1.ClusterStateReady:
-			// Cluster is in functional sate but we can't jumprole to it: post limited support
-			result.LimitedSupportSet.Performed = true
-			result.LimitedSupportSet.Labels = []string{ccamLimitedSupport.Summary}
-			err := ocmClient.PostLimitedSupportReason(cluster, ccamLimitedSupport)
-			if err != nil {
-				return result, fmt.Errorf("could not post limited support reason for %s: %w", cluster.Name(), err)
+			// Cluster is in functional state but we can't jumprole to it: post limited support
+			result.Actions = []types.Action{
+				executor.NewLimitedSupportAction(ccamLimitedSupport.Summary, ccamLimitedSupport.Details, "CCAM").Build(),
+				executor.Silence("Cluster credentials are missing - limited support added"),
 			}
-
-			return result, pdClient.SilenceIncidentWithNote(fmt.Sprintf("Added the following Limited Support reason to cluster: %#v. Silencing alert.\n", ccamLimitedSupport))
+			return result, nil
 		case cmv1.ClusterStateUninstalling:
 			// A cluster in uninstalling state should not alert primary - we just skip this
-			return result, pdClient.SilenceIncidentWithNote(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling.", ccamLimitedSupport.Summary))
+			result.Actions = []types.Action{
+				executor.Silence(fmt.Sprintf("Skipped adding limited support reason '%s': cluster is already uninstalling", ccamLimitedSupport.Summary)),
+			}
+			return result, nil
 		default:
 			// Anything else is an unknown state to us and/or requires investigation.
 			// E.g. we land here if we run into a CPD alert where credentials were removed (installing state) and don't want to put it in LS yet.
-			return result, pdClient.EscalateIncidentWithNote(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State()))
+			result.Actions = []types.Action{
+				executor.Escalate(fmt.Sprintf("Cluster has invalid cloud credentials (support role/policy is missing) and the cluster is in state '%s'. Please investigate.", cluster.State())),
+			}
+			return result, nil
 		}
 	}
 	return result, err

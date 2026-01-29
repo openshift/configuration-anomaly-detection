@@ -52,25 +52,40 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "hcp_check_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Failed to determine cluster type - manual investigation required"),
+		}
+		return result, nil
 	}
 	if isHCP {
 		r.Notes.AppendWarning("Cluster is HCP - skipping snapshot")
 		logging.Info("skipping etcd snapshot for HCP cluster")
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("HCP cluster - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	r.Notes.AppendSuccess("Cluster is non-HCP, proceeding with etcd snapshot")
 
 	snapshotResult, err := takeEtcdSnapshot(ctx, r.K8sClient)
 	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
 		r.Notes.AppendWarning("Failed to take etcd snapshot: %v", err)
 		logging.Errorf("failed to take etcd snapshot: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 			Performed: true,
 			Labels:    []string{"failure", "snapshot_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Failed to take etcd snapshot - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	r.Notes.AppendSuccess("Successfully took etcd snapshot from pod %s", snapshotResult.PodName)
@@ -89,39 +104,60 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	job, err := createAnalysisJob(ctx, r.K8sClient, snapshotResult.NodeName, snapshotResult.SnapshotPath, timestamp)
 	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
 		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
 		logging.Errorf("failed to create analysis job: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 			Performed: true,
 			Labels:    []string{"failure", "analysis_job_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Failed to create analysis job - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	r.Notes.AppendAutomation("Created analysis job: %s (will auto-delete after 10 minutes)", job.Name)
 
 	err = waitForJobCompletion(ctx, r.K8sClient, job.Name, analysisJobTimeout)
 	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
 		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
 		logging.Errorf("analysis job failed: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 			Performed: true,
 			Labels:    []string{"failure", "analysis_job_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Analysis job failed or timed out - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	r.Notes.AppendSuccess("Analysis job completed successfully")
 
 	logs, err := getJobLogs(ctx, r.K8sClient, job.Name)
 	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
 		r.Notes.AppendWarning("Failed to retrieve analysis results: %v", err)
 		logging.Errorf("failed to get job logs: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 			Performed: true,
 			Labels:    []string{"failure", "parse_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Failed to retrieve analysis results - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	analysisResult, err := parseAnalysisOutput(logs)
@@ -132,7 +168,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "parse_failed"},
 		}
-		return result, r.PdClient.EscalateIncidentWithNote(r.Notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(r.Notes),
+			executor.Escalate("Failed to parse analysis results - manual investigation required"),
+		}
+		return result, nil
 	}
 
 	formattedResults := formatAnalysisResults(analysisResult)
@@ -203,7 +243,9 @@ func takeEtcdSnapshot(ctx context.Context, k8sClient k8sclient.Client) (*Snapsho
 		client.MatchingLabels{"k8s-app": "etcd"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list etcd pods: %w", err)
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to list etcd pods: %w", err),
+			"K8s API failure listing etcd pods")
 	}
 
 	if len(podList.Items) == 0 {
@@ -243,7 +285,9 @@ func takeEtcdSnapshot(ctx context.Context, k8sClient k8sclient.Client) (*Snapsho
 func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *corev1.Pod) (string, int64, error) {
 	restConfig, err := k8sclient.GetRestConfig(k8sClient)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to get REST config: %w", err)
+		return "", 0, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to get REST config: %w", err),
+			"K8s REST config failure")
 	}
 
 	timestamp := time.Now().Format("20060102_150405")
@@ -257,7 +301,9 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 
 	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", takeSnapshotCmd)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to take snapshot: %w", err)
+		return "", 0, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to take snapshot: %w", err),
+			"K8s pod exec failure taking snapshot")
 	}
 
 	logging.Info("setting snapshot file permissions...")
@@ -266,7 +312,9 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 	}
 	_, err = k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", chmodCmd)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to set snapshot permissions: %w", err)
+		return "", 0, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to set snapshot permissions: %w", err),
+			"K8s pod exec failure setting permissions")
 	}
 
 	logging.Info("checking snapshot size...")
@@ -276,7 +324,9 @@ func execSnapshotCommands(ctx context.Context, k8sClient k8sclient.Client, pod *
 
 	output, err := k8sclient.ExecInPod(ctx, restConfig, pod, "etcdctl", statCmd)
 	if err != nil {
-		return "", 0, fmt.Errorf("failed to get snapshot size: %w", err)
+		return "", 0, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to get snapshot size: %w", err),
+			"K8s pod exec failure getting snapshot size")
 	}
 
 	sizeStr := strings.TrimSpace(output)
