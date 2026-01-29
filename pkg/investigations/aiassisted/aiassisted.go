@@ -34,22 +34,6 @@ type InvestigationPayload struct {
 	ClusterID            string `json:"cluster_id"`
 }
 
-// ToAgentCorePayload wraps the investigation data in the "prompt" field
-func (p InvestigationPayload) ToAgentCorePayload() ([]byte, error) {
-	// Marshal the investigation payload to JSON string
-	innerJSON, err := json.Marshal(p)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal investigation payload: %w", err)
-	}
-
-	// Wrap in "prompt" field for AgentCore as a string
-	wrapper := map[string]string{
-		"prompt": string(innerJSON),
-	}
-
-	return json.Marshal(wrapper)
-}
-
 // generateSessionID generates a unique session ID for this investigation
 func generateSessionID(incidentID string) string {
 	timestamp := time.Now().Unix()
@@ -158,18 +142,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Build investigation payload using typed structure
 	investigationData := &InvestigationPayload{
 		InvestigationID:      incidentID,
-		InvestigationPayload: "", // TODO: Populate with alert details when implemented
+		InvestigationPayload: "{}", // TODO: Populate with alert details when implemented
 		AlertName:            alertName,
 		ClusterID:            clusterID,
 	}
 
-	// Convert to AgentCore payload format
-	payloadJSON, err := investigationData.ToAgentCorePayload()
+	// Marshal to JSON for AgentCore
+	payloadJSON, err := json.Marshal(investigationData)
 	if err != nil {
-		notes.AppendWarning("Failed to build investigation payload: %v", err)
+		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
 		result.Actions = []types.Action{
 			executor.NoteFrom(notes),
-			executor.Escalate("Failed to create investigation prompt"),
+			executor.Escalate("Failed to create investigation payload"),
 		}
 		return result, nil
 	}
