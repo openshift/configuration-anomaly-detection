@@ -105,15 +105,9 @@ func (e FindingError) Unwrap() error { return e.Err }
 
 func (e FindingError) Error() string {
 	if e.Context != "" {
-		if e.Err != nil {
-			return fmt.Sprintf("investigation finding (%s): %v", e.Context, e.Err)
-		}
-		return fmt.Sprintf("investigation finding: %s", e.Context)
+		return fmt.Sprintf("investigation finding (%s): %v", e.Context, e.Err)
 	}
-	if e.Err != nil {
-		return fmt.Sprintf("investigation finding: %v", e.Err)
-	}
-	return "investigation finding"
+	return fmt.Sprintf("investigation finding: %v", e.Err)
 }
 
 // WrapInfrastructure wraps an error as an InfrastructureError with context.
@@ -137,15 +131,6 @@ func WrapFinding(err error, context string) error {
 	return FindingError{
 		Context: context,
 		Err:     err,
-	}
-}
-
-// NewFinding creates a FindingError without an underlying error.
-// Used to report a finding that isn't based on an error.
-func NewFinding(context string) error {
-	return FindingError{
-		Context: context,
-		Err:     nil,
 	}
 }
 
