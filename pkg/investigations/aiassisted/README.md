@@ -50,9 +50,8 @@ Main investigation implementation:
 - **InvestigationPayload** - Struct representing data sent to AI agent (investigation ID, alert name, cluster ID)
 - **generateSessionID()** - Creates unique session ID for tracking each investigation in CloudWatch
 - **Run()** - Main investigation logic implementing the `investigation.Investigation` interface
-- **ToAgentCorePayload()** - Wraps investigation data in the "prompt" field expected by AgentCore
 
-The investigation uses the ResourceBuilder pattern to construct notes via `rb.WithNotes().Build()`.
+The investigation uses the ResourceBuilder pattern to construct notes via `rb.WithNotes().Build()` and marshals the payload directly to JSON for AgentCore.
 
 #### pkg/aiconfig/config.go
 

@@ -1,7 +1,6 @@
 package aiassisted
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"testing"
@@ -228,64 +227,6 @@ var _ = Describe("aiassisted", func() {
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
-			})
-		})
-	})
-
-	Describe("InvestigationPayload", func() {
-		Context("ToAgentCorePayload", func() {
-			It("should marshal to correct JSON format", func() {
-				payload := InvestigationPayload{
-					InvestigationID:      "test-incident-id",
-					InvestigationPayload: "",
-					AlertName:            "test-alert-name",
-					ClusterID:            "test-cluster-id",
-				}
-
-				jsonBytes, err := payload.ToAgentCorePayload()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(jsonBytes).NotTo(BeNil())
-
-				// Unmarshal to verify structure
-				var wrapper map[string]interface{}
-				err = json.Unmarshal(jsonBytes, &wrapper)
-				Expect(err).ToNot(HaveOccurred())
-
-				// Check wrapper has "prompt" field
-				Expect(wrapper).To(HaveKey("prompt"))
-				promptStr, ok := wrapper["prompt"].(string)
-				Expect(ok).To(BeTrue())
-
-				// Parse inner JSON
-				var innerPayload InvestigationPayload
-				err = json.Unmarshal([]byte(promptStr), &innerPayload)
-				Expect(err).ToNot(HaveOccurred())
-
-				// Verify inner fields
-				Expect(innerPayload.InvestigationID).To(Equal("test-incident-id"))
-				Expect(innerPayload.AlertName).To(Equal("test-alert-name"))
-				Expect(innerPayload.ClusterID).To(Equal("test-cluster-id"))
-				Expect(innerPayload.InvestigationPayload).To(Equal(""))
-			})
-
-			It("should handle special characters in alert name", func() {
-				payload := InvestigationPayload{
-					InvestigationID:      "test-id",
-					InvestigationPayload: "",
-					AlertName:            "[HCP] (Critical) api-RapidErrorBudgetBurn test-cluster - test-host",
-					ClusterID:            "test-cluster-id",
-				}
-
-				jsonBytes, err := payload.ToAgentCorePayload()
-				Expect(err).ToNot(HaveOccurred())
-
-				var wrapper map[string]interface{}
-				err = json.Unmarshal(jsonBytes, &wrapper)
-				Expect(err).ToNot(HaveOccurred())
-
-				promptStr := wrapper["prompt"].(string)
-				Expect(promptStr).To(ContainSubstring("[HCP]"))
-				Expect(promptStr).To(ContainSubstring("(Critical)"))
 			})
 		})
 	})
