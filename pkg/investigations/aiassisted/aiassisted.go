@@ -229,7 +229,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("AI Output:\n%s", aiResponse.String())
 
 	// Add simple note about AI automation completion
-	notes.AppendAutomation("AI automation completed. Check cluster report for investigation details.")
+	notes.AppendAutomation("AI automation completed. Check cluster list for report Summary %s . osdctl cluster reports list -C %s ", incidentID, clusterID)
 
 	// Return actions for executor to handle
 	result.Actions = []types.Action{
