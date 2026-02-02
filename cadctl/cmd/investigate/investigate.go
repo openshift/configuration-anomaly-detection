@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
@@ -56,6 +57,13 @@ var (
 )
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
+
+// Retry configuration for transient infrastructure errors
+const (
+	maxInvestigationRetries = 3
+	initialRetryBackoff     = 1 * time.Second
+	maxRetryBackoff         = 10 * time.Second
+)
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload, defaults to './payload.json'")
@@ -257,9 +265,9 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	logging.Infof("Starting investigation for %s", alertInvestigation.Name())
-	result, err = alertInvestigation.Run(builder)
+	result, attempts, err := runInvestigationWithRetry(alertInvestigation, builder)
 	if err != nil {
-		return err
+		return fmt.Errorf("investigation failed after %d attempt(s): %w", attempts, err)
 	}
 	updateMetrics(alertInvestigation.Name(), &result)
 
@@ -269,6 +277,58 @@ func run(_ *cobra.Command, _ []string) error {
 	}
 
 	return updateIncidentTitle(pdClient)
+}
+
+// runInvestigationWithRetry executes an investigation with retry logic for transient errors.
+// It retries up to maxInvestigationRetries times with exponential backoff for InfrastructureErrors.
+// Returns the result, the number of attempts made, and the final error.
+func runInvestigationWithRetry(
+	inv investigation.Investigation,
+	builder investigation.ResourceBuilder,
+) (investigation.InvestigationResult, int, error) {
+	var result investigation.InvestigationResult
+	var err error
+
+	maxAttempts := maxInvestigationRetries + 1
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		result, err = inv.Run(builder)
+
+		if err == nil { // Success
+			if attempt > 1 {
+				logging.Infof("Investigation succeeded on attempt %d", attempt)
+			}
+			return result, attempt, nil
+		}
+
+		if !investigation.IsInfrastructureError(err) {
+			logging.Debugf("Non-retriable error encountered: %v", err)
+			return result, attempt, err
+		}
+
+		// Infra error; retry if any attempts left
+		if attempt < maxAttempts {
+			backoff := calculateBackoff(attempt)
+			logging.Warnf("Infrastructure error on attempt %d/%d, retrying in %v: %v",
+				attempt, maxAttempts, backoff, err)
+			time.Sleep(backoff)
+		} else {
+			logging.Errorf("Infrastructure error on final attempt %d/%d: %v",
+				attempt, maxAttempts, err)
+		}
+	}
+
+	return result, maxAttempts, err
+}
+
+// calculateBackoff returns an exponential backoff duration for the given attempt.
+// Backoff doubles each attempt (1s, 2s, 4s, ...) up to maxRetryBackoff.
+func calculateBackoff(attempt int) time.Duration {
+	backoff := initialRetryBackoff << (attempt - 1) // 1s, 2s, 4s, ...
+	if backoff > maxRetryBackoff {
+		backoff = maxRetryBackoff
+	}
+	return backoff
 }
 
 func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pagerduty.SdkClient) {

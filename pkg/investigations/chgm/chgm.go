@@ -34,55 +34,6 @@ var (
 
 type Investigation struct{}
 
-// isInfrastructureError determines if an error is a transient infrastructure
-// failure that should cause the investigation to be retried (return error),
-// vs an investigation finding that should be reported (return actions).
-func isInfrastructureError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := err.Error()
-
-	// Transient API failures that should trigger retry
-	infraPatterns := []string{
-		"could not retrieve non running instances",
-		"could not retrieve running cluster nodes",
-		"could not retrieve expected cluster nodes",
-		"could not PollStopEventsFor",
-		"failed to retrieve",
-		"timeout",
-		"rate limit",
-		"connection refused",
-		"service unavailable",
-	}
-
-	for _, pattern := range infraPatterns {
-		if strings.Contains(errStr, pattern) {
-			return true
-		}
-	}
-
-	// Investigation findings that should be reported (NOT retried)
-	findingPatterns := []string{
-		"stopped instances but no stoppedInstancesEvents", // CloudTrail data too old
-		"clusterdeployment is empty",                      // Data missing but not retriable
-		"no non running instances found",                  // Investigation finding
-		"could not extractUserDetails",                    // Invalid CloudTrail event data
-		"failed to parse CloudTrail event version",        // Invalid CloudTrail event data
-		"cannot parse a nil input",                        // Invalid CloudTrail event data
-	}
-
-	for _, pattern := range findingPatterns {
-		if strings.Contains(errStr, pattern) {
-			return false
-		}
-	}
-
-	// Default: assume infrastructure error to be safe (retry)
-	return true
-}
-
 // Run runs the investigation for a triggered chgm pagerduty event
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
@@ -96,17 +47,26 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	res, err := investigateStoppedInstances(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		// Check if this is a transient infrastructure error (AWS/OCM API failures)
-		// These should trigger a retry of the entire investigation
-		if isInfrastructureError(err) {
-			return result, fmt.Errorf("investigation infrastructure failure: %w", err)
+		// These should trigger a retry of the entire investigation (runInvestigationWithRetry)
+		if investigation.IsInfrastructureError(err) {
+			return result, err
 		}
 
-		// Otherwise, it's an investigation finding (e.g., CloudTrail data too old)
-		// Report this as a finding that needs manual investigation
-		r.Notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
+		// Check for finding errors (should be reported)
+		if investigation.IsFindingError(err) {
+			r.Notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
+			result.Actions = []types.Action{
+				executor.NoteFrom(r.Notes),
+				executor.Escalate("Investigation incomplete - manual review required"),
+			}
+			return result, nil
+		}
+
+		// Unknown error type - escalate for manual investigation
+		r.Notes.AppendWarning("Unexpected error during instance investigation: %s", err.Error())
 		result.Actions = []types.Action{
 			executor.NoteFrom(r.Notes),
-			executor.Escalate("Investigation incomplete - manual review required"),
+			executor.Escalate("Investigation error - manual review required"),
 		}
 		return result, nil
 	}
@@ -312,25 +272,33 @@ type investigateInstancesOutput struct {
 
 func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCli aws.Client, ocmCli ocm.Client) (investigateInstancesOutput, error) {
 	if clusterDeployment == nil {
-		return investigateInstancesOutput{}, fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before")
+		return investigateInstancesOutput{}, investigation.WrapFinding(
+			fmt.Errorf("clusterdeployment is empty when investigating stopped instances, did not populate the instance before"),
+			"clusterdeployment data missing")
 	}
 
 	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
 
 	stoppedInstances, err := awsCli.ListNonRunningInstances(infraID)
 	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, investigation.WrapInfrastructure(
+			fmt.Errorf("could not retrieve non running instances while investigating stopped instances for %s: %w", infraID, err),
+			"AWS API failure retrieving non-running instances")
 	}
 
 	runningNodesCount, err := getRunningNodesCount(infraID, awsCli)
 	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, investigation.WrapInfrastructure(
+			fmt.Errorf("could not retrieve running cluster nodes while investigating stopped instances for %s: %w", infraID, err),
+			"AWS API failure retrieving running nodes")
 	}
 
 	// evaluate number of all supposed nodes
 	expectedNodesCount, err := getExpectedNodesCount(cluster, ocmCli)
 	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err)
+		return investigateInstancesOutput{}, investigation.WrapInfrastructure(
+			fmt.Errorf("could not retrieve expected cluster nodes while investigating stopped instances for %s: %w", infraID, err),
+			"OCM API failure retrieving expected node count")
 	}
 
 	if len(stoppedInstances) == 0 {
@@ -343,11 +311,15 @@ func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev
 
 	stoppedInstancesEvents, err := awsCli.PollInstanceStopEventsFor(stoppedInstances, 15)
 	if err != nil {
-		return investigateInstancesOutput{}, fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err)
+		return investigateInstancesOutput{}, investigation.WrapInfrastructure(
+			fmt.Errorf("could not PollStopEventsFor stoppedInstances: %w", err),
+			"AWS CloudTrail API failure polling stop events")
 	}
 
 	if len(stoppedInstancesEvents) == 0 {
-		return investigateInstancesOutput{}, fmt.Errorf("there are stopped instances but no stoppedInstancesEvents, this means the instances were stopped too long ago or CloudTrail is not up to date")
+		return investigateInstancesOutput{}, investigation.WrapFinding(
+			fmt.Errorf("there are stopped instances but no stoppedInstancesEvents"),
+			"CloudTrail data too old - instances were stopped too long ago or CloudTrail is not up to date")
 	}
 
 	output := investigateInstancesOutput{
@@ -364,7 +336,10 @@ func investigateStoppedInstances(cluster *cmv1.Cluster, clusterDeployment *hivev
 				resourceData = fmt.Sprintf("with resource %v", event.Resources[0].ResourceName)
 			}
 
-			return investigateInstancesOutput{}, fmt.Errorf("could not extractUserDetails for event %s: %w", resourceData, err)
+			// extractUserDetails failures are investigation findings (invalid data format)
+			return investigateInstancesOutput{}, investigation.WrapFinding(
+				fmt.Errorf("could not extractUserDetails for event %s: %w", resourceData, err),
+				"invalid CloudTrail event data format")
 		}
 
 		output.User = userInfo{
@@ -426,24 +401,32 @@ func getExpectedNodesCount(cluster *cmv1.Cluster, ocmCli ocm.Client) (*expectedN
 	nodes, ok := cluster.GetNodes()
 	if !ok {
 		logging.Errorf("node data is missing, dumping cluster object: %#v", cluster)
-		return nil, fmt.Errorf("failed to retrieve cluster node data")
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to retrieve cluster node data"),
+			"OCM cluster object missing node data")
 	}
 	masterCount, ok := nodes.GetMaster()
 	if !ok {
 		logging.Errorf("master node data is missing, dumping cluster object: %#v", cluster)
-		return nil, fmt.Errorf("failed to retrieve master node data")
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to retrieve master node data"),
+			"OCM cluster object missing master node data")
 	}
 	infraCount, ok := nodes.GetInfra()
 	if !ok {
 		logging.Errorf("infra node data is missing, dumping cluster object: %#v", cluster)
-		return nil, fmt.Errorf("failed to retrieve infra node data")
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to retrieve infra node data"),
+			"OCM cluster object missing infra node data")
 	}
 
 	poolMinWorkersCount, poolMaxWorkersCount := 0, 0
 	machinePools, err := ocmCli.GetClusterMachinePools(cluster.ID())
 	if err != nil {
 		logging.Errorf("machine pools data is missing, dumping cluster object: %#v", cluster)
-		return nil, fmt.Errorf("failed to retrieve machine pools data")
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to retrieve machine pools data: %w", err),
+			"OCM API failure retrieving machine pools")
 	}
 	for _, pool := range machinePools {
 		replicasCount, replicasCountOk := pool.GetReplicas()
@@ -457,13 +440,17 @@ func getExpectedNodesCount(cluster *cmv1.Cluster, ocmCli ocm.Client) (*expectedN
 			minReplicasCount, ok := autoscaling.GetMinReplicas()
 			if !ok {
 				logging.Errorf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-				return nil, fmt.Errorf("failed to retrieve min replicas data from autoscaling pool")
+				return nil, investigation.WrapInfrastructure(
+					fmt.Errorf("failed to retrieve min replicas data from autoscaling pool"),
+					"OCM machine pool object missing min replicas data")
 			}
 
 			maxReplicasCount, ok := autoscaling.GetMaxReplicas()
 			if !ok {
-				logging.Errorf("min replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
-				return nil, fmt.Errorf("failed to retrieve max replicas data from autoscaling pool")
+				logging.Errorf("max replicas data is missing from autoscaling pool, dumping pool object: %v#", pool)
+				return nil, investigation.WrapInfrastructure(
+					fmt.Errorf("failed to retrieve max replicas data from autoscaling pool"),
+					"OCM machine pool object missing max replicas data")
 			}
 
 			poolMinWorkersCount += minReplicasCount
@@ -472,7 +459,9 @@ func getExpectedNodesCount(cluster *cmv1.Cluster, ocmCli ocm.Client) (*expectedN
 
 		if !replicasCountOk && !autoscalingOk {
 			logging.Errorf("pool replicas and autoscaling data are missing from autoscaling pool, dumping pool object: %v#", pool)
-			return nil, fmt.Errorf("failed to retrieve replicas and autoscaling data from autoscaling pool")
+			return nil, investigation.WrapInfrastructure(
+				fmt.Errorf("failed to retrieve replicas and autoscaling data from autoscaling pool"),
+				"OCM machine pool object missing replicas and autoscaling data")
 		}
 	}
 
@@ -503,12 +492,16 @@ type CloudTrailEventRaw struct {
 // extractUserDetails will take an event and
 func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 	if cloudTrailEvent == nil || *cloudTrailEvent == "" {
-		return CloudTrailEventRaw{}, fmt.Errorf("cannot parse a nil input")
+		return CloudTrailEventRaw{}, investigation.WrapFinding(
+			fmt.Errorf("cannot parse a nil input"),
+			"CloudTrail event is nil or empty")
 	}
 	var res CloudTrailEventRaw
 	err := json.Unmarshal([]byte(*cloudTrailEvent), &res)
 	if err != nil {
-		return CloudTrailEventRaw{}, fmt.Errorf("could not marshal event.CloudTrailEvent: %w", err)
+		return CloudTrailEventRaw{}, investigation.WrapFinding(
+			fmt.Errorf("could not marshal event.CloudTrailEvent: %w", err),
+			"invalid CloudTrail event JSON format")
 	}
 
 	// To be sure that your applications can parse the event structure, we recommend that you perform an equal-to
@@ -520,11 +513,15 @@ func extractUserDetails(cloudTrailEvent *string) (CloudTrailEventRaw, error) {
 
 	var responseMajor, responseMinor int
 	if _, err := fmt.Sscanf(res.EventVersion, "%d.%d", &responseMajor, &responseMinor); err != nil {
-		return CloudTrailEventRaw{}, fmt.Errorf("failed to parse CloudTrail event version: %w", err)
+		return CloudTrailEventRaw{}, investigation.WrapFinding(
+			fmt.Errorf("failed to parse CloudTrail event version: %w", err),
+			"invalid CloudTrail event version format")
 	}
 
 	if responseMajor != supportedEventVersionMajor || responseMinor < minSupportedEventVersionMinor {
-		return CloudTrailEventRaw{}, fmt.Errorf("unexpected event version (got %s, expected compatibility with %d.%d)", res.EventVersion, supportedEventVersionMajor, minSupportedEventVersionMinor)
+		return CloudTrailEventRaw{}, investigation.WrapFinding(
+			fmt.Errorf("unexpected event version (got %s, expected compatibility with %d.%d)", res.EventVersion, supportedEventVersionMajor, minSupportedEventVersionMinor),
+			"unsupported CloudTrail event version")
 	}
 
 	return res, nil

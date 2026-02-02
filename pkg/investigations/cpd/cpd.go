@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -53,7 +55,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// We currently believe this never happens, but want to be made aware if it does.
 		notes.AppendWarning("This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future")
 
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Cluster ready but alert fired - CAD team investigation required"),
+		}
+		return result, nil
 	}
 	notes.AppendSuccess("Cluster installation did not yet finish")
 
@@ -62,14 +68,22 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// In case this happens on production, we want to raise this to OCM/CS.
 		notes.AppendWarning("This cluster has an empty ClusterDeployment.Spec.ClusterMetadata, meaning that the provisioning failed before the installation started. This is usually the case when the install configuration is faulty. Please investigate manually.")
 
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("ClusterDeployment.Spec.ClusterMetadata empty - faulty install configuration"),
+		}
+		return result, nil
 	}
 	notes.AppendSuccess("Installation hive job started")
 
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
 		notes.AppendWarning("DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin", r.Cluster.ID())
-		return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Cluster DNS not ready"),
+		}
+		return result, nil
 	}
 	notes.AppendSuccess("Cluster DNS is ready")
 
@@ -81,23 +95,26 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		for _, subnet := range r.Cluster.AWS().SubnetIDs() {
 			isValid, err := isSubnetRouteValid(r.AwsClient, subnet)
 			if err != nil {
-				logging.Error(err)
+				return result, investigation.WrapInfrastructure(err, "AWS API failure checking subnet route tables")
 			}
 			if !isValid {
 				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
 				byovpcRoutingSL := newBYOVPCRoutingSL(docLink)
-				if err := r.OcmClient.PostServiceLog(r.Cluster, byovpcRoutingSL); err != nil {
-					return result, err
-				}
+
 				// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
 				result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
 
 				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
-				if err := r.PdClient.AddNote(notes.String()); err != nil {
-					logging.Error(err)
-				}
 
-				return result, r.PdClient.SilenceIncident()
+				result.Actions = []types.Action{
+					executor.NewServiceLogAction(byovpcRoutingSL.Severity, byovpcRoutingSL.Summary).
+						WithDescription(byovpcRoutingSL.Description).
+						WithServiceName(byovpcRoutingSL.ServiceName).
+						Build(),
+					executor.NoteFrom(notes),
+					executor.Silence("Missing route to internet in subnet route table"),
+				}
+				return result, nil
 			}
 		}
 	}
@@ -107,12 +124,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
 		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err.Error())
-
-		err = r.PdClient.AddNote(notes.String())
-		if err != nil {
-			// We do not return as we want the alert to be escalated either no matter what.
-			logging.Error("could not add failure reason incident notes")
-		}
+		// We do not return as we want the alert to be escalated either no matter what.
 	}
 
 	switch verifierResult {
@@ -121,23 +133,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// XXX: metrics.Inc(metrics.ServicelogPrepared, investigationName)
 		result.ServiceLogPrepared = investigation.InvestigationStep{Performed: true, Labels: nil}
 		notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post --cluster-id %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=\"%s\"", r.Cluster.ID(), failureReason)
-
-		// In the future, we want to send a service log in this case
-		err = r.PdClient.AddNote(notes.String())
-		if err != nil {
-			logging.Error("could not add issues to incident notes")
-		}
 	case networkverifier.Success:
 		notes.AppendSuccess("Network verifier passed")
-		err = r.PdClient.AddNote(notes.String())
-		if err != nil {
-			logging.Error("could not add passed message to incident notes")
-		}
 	}
 
 	// We currently always escalate, in the future, when network verifier is reliable,
 	// we would silence the alert when we had a service log in the case of network verifier detecting failures.
-	return result, r.PdClient.EscalateIncident()
+	result.Actions = []types.Action{
+		executor.NoteFrom(notes),
+		executor.Escalate("ClusterProvisioningDelay - manual investigation required"),
+	}
+	return result, nil
 }
 
 func (c *Investigation) Name() string {

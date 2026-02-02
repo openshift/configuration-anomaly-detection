@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 )
@@ -118,7 +119,9 @@ func createAnalysisJob(ctx context.Context, k8sClient k8sclient.Client, nodeName
 	logging.Infof("creating analysis job %s in namespace %s", jobName, analysisJobNamespace)
 	err := k8sClient.Create(ctx, job)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create analysis job: %w", err)
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to create analysis job: %w", err),
+			"K8s API failure creating analysis job")
 	}
 
 	return job, nil
@@ -147,7 +150,9 @@ func waitForJobCompletion(ctx context.Context, k8sClient k8sclient.Client, jobNa
 				Namespace: analysisJobNamespace,
 			}, job)
 			if err != nil {
-				return fmt.Errorf("failed to get job status: %w", err)
+				return investigation.WrapInfrastructure(
+					fmt.Errorf("failed to get job status: %w", err),
+					"K8s API failure getting job status")
 			}
 
 			if job.Status.Succeeded > 0 {
@@ -174,7 +179,9 @@ func getJobLogs(ctx context.Context, k8sClient k8sclient.Client, jobName string)
 		client.MatchingLabels{"job-name": jobName},
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to list pods for job: %w", err)
+		return "", investigation.WrapInfrastructure(
+			fmt.Errorf("failed to list pods for job: %w", err),
+			"K8s API failure listing pods for job")
 	}
 
 	if len(podList.Items) == 0 {
@@ -185,12 +192,16 @@ func getJobLogs(ctx context.Context, k8sClient k8sclient.Client, jobName string)
 
 	restConfig, err := k8sclient.GetRestConfig(k8sClient)
 	if err != nil {
-		return "", fmt.Errorf("failed to get REST config: %w", err)
+		return "", investigation.WrapInfrastructure(
+			fmt.Errorf("failed to get REST config: %w", err),
+			"K8s REST config failure")
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return "", fmt.Errorf("failed to create kubernetes clientset: %w", err)
+		return "", investigation.WrapInfrastructure(
+			fmt.Errorf("failed to create kubernetes clientset: %w", err),
+			"K8s clientset creation failure")
 	}
 
 	logOptions := &corev1.PodLogOptions{
@@ -200,7 +211,9 @@ func getJobLogs(ctx context.Context, k8sClient k8sclient.Client, jobName string)
 	req := clientset.CoreV1().Pods(analysisJobNamespace).GetLogs(pod.Name, logOptions)
 	logStream, err := req.Stream(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to open log stream: %w", err)
+		return "", investigation.WrapInfrastructure(
+			fmt.Errorf("failed to open log stream: %w", err),
+			"K8s API failure opening log stream")
 	}
 	defer func() {
 		if closeErr := logStream.Close(); closeErr != nil {

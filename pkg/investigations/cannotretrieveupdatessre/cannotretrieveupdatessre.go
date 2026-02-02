@@ -5,11 +5,13 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/version"
 )
@@ -44,14 +46,24 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		k8sErr := &investigation.K8SClientError{}
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+				notes.AppendWarning("CAD was unable to access cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.NoteFrom(notes),
+					executor.Escalate("Kube-api unavailable - manual investigation required"),
+				}
+				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+				notes.AppendWarning("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.NoteFrom(notes),
+					executor.Escalate("Cannot access infra cluster - manual investigation required"),
+				}
+				return result, nil
 			}
-			return result, err
+			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
 		}
-		return result, err
+		return result, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
 	// Check ClusterVersion
@@ -69,7 +81,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 	notes.AppendWarning("Alert escalated to on-call primary for review and please check the ClusterVersion.")
-	return result, r.PdClient.EscalateIncidentWithNote(notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(notes),
+		executor.Escalate("CannotRetrieveUpdatesSRE investigation completed - manual review required"),
+	}
+	return result, nil
 }
 
 // getUpdateRetrievalFailures checks for update retrieval failures in the ClusterVersion

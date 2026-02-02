@@ -96,12 +96,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	listOptions := &client.ListOptions{FieldSelector: fields.SelectorFromSet(fields.Set{"metadata.name": "monitoring"})}
 	err = r.K8sClient.List(context.TODO(), coList, listOptions)
 	if err != nil {
-		return result, fmt.Errorf("unable to list monitoring clusteroperator: %w", err)
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("unable to list monitoring clusteroperator: %w", err),
+			"K8s API failure listing clusteroperators")
 	}
 
 	// Make sure our list output only finds a single cluster operator for `metadata.name = monitoring`
 	if len(coList.Items) != 1 {
-		return result, fmt.Errorf("found %d clusteroperators, expected 1", len(coList.Items))
+		notes.AppendWarning("Found %d monitoring clusteroperators, expected 1", len(coList.Items))
+		result.Actions = []types.Action{
+			executor.NoteFrom(notes),
+			executor.Escalate("Unexpected monitoring clusteroperator count - manual investigation required"),
+		}
+		return result, nil
 	}
 	monitoringCo := coList.Items[0]
 

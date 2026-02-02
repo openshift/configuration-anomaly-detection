@@ -12,12 +12,13 @@ import (
 	"time"
 
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
 	nodeutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
-	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -45,23 +46,31 @@ type Investigation struct {
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	ctx := context.Background()
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithK8sClient().WithCluster().Build()
+	r, err := rb.WithK8sClient().WithCluster().WithNotes().Build()
 	if err != nil {
 		k8sErr := &investigation.K8SClientError{}
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD was unable to access cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Note("CAD was unable to access cluster's kube-api. Please investigate manually."),
+					executor.Escalate("Cluster API unavailable"),
+				}
+				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				return result, r.PdClient.EscalateIncidentWithNote("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
+				result.Actions = []types.Action{
+					executor.Note("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually."),
+					executor.Escalate("Cannot access infrastructure"),
+				}
+				return result, nil
 			}
-			return result, err
+			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
 		}
-		return result, err
+		return result, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
 	i.k8scli = r.K8sClient
-	i.notes = notewriter.New(r.Name, logging.RawLogger)
+	i.notes = r.Notes
 	i.recommendations = investigationRecommendations{}
 
 	targetMachines, err := i.getMachinesFromFailingMHC(ctx)
@@ -70,7 +79,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	if len(targetMachines) == 0 {
 		i.notes.AppendWarning("no machines found for short-circuited machinehealthcheck objects")
-		return result, r.PdClient.EscalateIncidentWithNote(i.notes.String())
+		result.Actions = []types.Action{
+			executor.NoteFrom(i.notes),
+			executor.Escalate("No machines found for short-circuited MHC objects"),
+		}
+		return result, nil
 	}
 
 	problemMachines, err := i.InvestigateMachines(ctx, targetMachines)
@@ -110,14 +123,20 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		i.notes.AppendSuccess("no recommended actions to take against cluster")
 	}
 
-	return result, r.PdClient.EscalateIncidentWithNote(i.notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(i.notes),
+		executor.Escalate("MachineHealthCheck investigation complete"),
+	}
+	return result, nil
 }
 
 func (i *Investigation) getMachinesFromFailingMHC(ctx context.Context) ([]machinev1beta1.Machine, error) {
 	healthchecks := machinev1beta1.MachineHealthCheckList{}
 	err := i.k8scli.List(ctx, &healthchecks, &client.ListOptions{Namespace: machineutil.MachineNamespace})
 	if err != nil {
-		return []machinev1beta1.Machine{}, fmt.Errorf("failed to retrieve machinehealthchecks from cluster: %w", err)
+		return []machinev1beta1.Machine{}, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to retrieve machinehealthchecks from cluster: %w", err),
+			"K8s API failure listing MachineHealthChecks")
 	}
 
 	targets := []machinev1beta1.Machine{}

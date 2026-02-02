@@ -311,14 +311,101 @@ if issueDetectedButNotCritical {
 
 ## Error Handling
 
+### Error Type Classification
+
+CAD uses three distinct error types (and one additional "outcome") to help the system properly handle different failure modes:
+
+| Error Type | When to Use | System Behavior |
+|------------|-------------|-----------------|
+| **InfrastructureError** | Transient failures (AWS timeouts, rate limits, network issues) | Triggers retry |
+| **FindingError** | Investigation findings that should be reported to SRE | Returns actions to notify SRE |
+| **Regular error** | Code bugs, logic errors | Hard failure, requires code fix |
+| **Success with Actions** | Investigation completed, actions determined | Executor runs actions |
+
+### Infrastructure Errors
+
+Use `investigation.WrapInfrastructure()` for transient failures that should trigger a retry:
+
+```go
+// AWS API timeout - should retry
+events, err := r.AwsClient.GetCloudTrailEvents(...)
+if err != nil {
+    return result, investigation.WrapInfrastructure(
+        fmt.Errorf("failed to get CloudTrail events: %w", err),
+        "CloudTrail API call failed")
+}
+
+// Rate limiting - should retry
+if isRateLimited(err) {
+    return result, investigation.WrapInfrastructure(err, "API rate limit exceeded")
+}
+```
+
+**Examples of infrastructure errors:**
+- AWS API timeouts or rate limits
+- OCM service temporary unavailability
+- Network connectivity issues
+- Kubernetes API server temporarily unavailable
+
+### Finding Errors
+
+Use `investigation.WrapFinding()` for investigation findings that should be reported to the SRE rather than causing a hard failure:
+
+```go
+// CloudTrail data too old - report as finding
+events, err := r.AwsClient.GetCloudTrailEvents(...)
+if err != nil && isDataTooOld(err) {
+    notes.AppendWarning("CloudTrail data is too old to investigate")
+    result.Actions = []types.Action{
+        executor.NoteFrom(notes),
+        executor.Escalate("CloudTrail data unavailable"),
+    }
+    return result, nil
+}
+
+// Missing data - convert to actions and return nil error
+if len(events) == 0 {
+    notes.AppendWarning("No relevant CloudTrail events found")
+    result.Actions = []types.Action{
+        executor.NoteFrom(notes),
+        executor.Escalate("Insufficient data for investigation"),
+    }
+    return result, nil
+}
+```
+
+**Examples of finding errors:**
+- CloudTrail data older than retention period
+- Missing configuration data
+- No events matching criteria
+- Cluster in unexpected state
+
+### Checking Error Types
+
+Use the helper functions to check error types:
+
+```go
+if investigation.IsInfrastructureError(err) {
+    // Will be retried by the system
+    return result, err
+}
+
+if investigation.IsFindingError(err) {
+    // Should be handled with Actions
+    // (Usually you don't return FindingError directly, but convert to Actions)
+}
+```
+
 ### Investigation Errors vs Action Failures
 
 **Investigation Errors**: Return error from `Run()` when the investigation itself fails.
 
 ```go
 // Infrastructure/transient errors (retry the investigation)
-if isInfrastructureError(err) {
-    return result, fmt.Errorf("investigation infrastructure failure: %w", err)
+if err != nil {
+    return result, investigation.WrapInfrastructure(
+        fmt.Errorf("failed to get instance info: %w", err),
+        "AWS API failure")
 }
 
 // Investigation findings that need manual review
@@ -496,6 +583,17 @@ If you're working on an investigation that still uses the old pattern:
 
 ## Best Practices
 
+### Error Handling Contract
+
+The `Investigation.Run()` method follows a strict error contract:
+
+| Outcome | Return Pattern |
+|---------|---------------|
+| **Success** | `return result, nil` with `result.Actions` populated |
+| **Infrastructure failure** | `return result, investigation.WrapInfrastructure(err, "context")` |
+| **Investigation finding** | `return result, nil` with actions that escalate/note |
+| **Code bug** | `return result, err` (regular error, should not happen) |
+
 ### DO ✅
 
 - **Return actions instead of executing**: Let the executor handle external system calls
@@ -504,6 +602,8 @@ If you're working on an investigation that still uses the old pattern:
 - **Use builder pattern**: Chain method calls for readable action construction
 - **Provide clear reasons**: Always include reason strings for Silence/Escalate actions
 - **Use context for metrics**: Add `.WithContext()` to LimitedSupportAction for better metrics
+- **Wrap infrastructure errors at source**: Use `investigation.WrapInfrastructure()` when the error occurs
+- **Convert findings to Actions**: Don't return `FindingError` directly, use Actions with Note/Escalate
 
 ### DON'T ❌
 
@@ -512,6 +612,8 @@ If you're working on an investigation that still uses the old pattern:
 - **Return errors for action failures**: Only return errors when investigation logic fails
 - **Mock external clients in tests**: Test the actions returned, not execution details
 - **Skip note context**: Always add notes before silencing/escalating for SRE visibility
+- **Return regular errors for transient failures**: Always wrap with `WrapInfrastructure()`
+- **Return regular errors for findings**: Always convert to Actions with appropriate escalation
 
 ## Examples
 

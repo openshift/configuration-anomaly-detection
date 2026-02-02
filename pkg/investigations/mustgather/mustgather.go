@@ -13,9 +13,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/tarball"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 const (
@@ -39,7 +41,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	mustGatherResultDir, err := os.MkdirTemp("", mustGatherDirectoryPattern)
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to create a temporary directory for the must-gather results. Error: %w", err).Error())
+		result.Actions = []types.Action{
+			executor.Note(fmt.Sprintf("CAD was unable to create a temporary directory for the must-gather results. Error: %v", err)),
+			executor.Escalate("Failed to create temporary directory"),
+		}
+		return result, nil
 	}
 	defer func() {
 		err := os.RemoveAll(mustGatherResultDir)
@@ -50,14 +56,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	err = r.OCClient.CreateMustGather([]string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)})
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to create a must gather. Error: %w", err).Error())
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to create must-gather: %w", err),
+			"K8s must-gather execution failed")
 	}
 
 	mustGatherTarballName := fmt.Sprintf("%s-must-gather-%s.tar.gz", time.Now().UTC().Format(archiveTimestampLayout), r.Cluster.ID())
 	tarballPath := filepath.Join(os.TempDir(), mustGatherTarballName)
 	tarfile, err := os.Create(tarballPath) // #nosec G304 -- tarballPath is constructed from temp dir and timestamp/cluster ID
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to create a temporary file for the must gather results tar file: %w", err).Error())
+		result.Actions = []types.Action{
+			executor.Note(fmt.Sprintf("CAD was unable to create a temporary file for the must gather results tar file: %v", err)),
+			executor.Escalate("Failed to create tarball file"),
+		}
+		return result, nil
 	}
 
 	defer func() {
@@ -69,7 +81,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	err = tarball.CreateTarball(mustGatherResultDir, tarfile)
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to create a tar file for the must gather results: %w", err).Error())
+		result.Actions = []types.Action{
+			executor.Note(fmt.Sprintf("CAD was unable to create a tar file for the must gather results: %v", err)),
+			executor.Escalate("Failed to create tarball"),
+		}
+		return result, nil
 	}
 
 	err = tarfile.Close()
@@ -82,7 +98,9 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	defer credCancel()
 	username, token, err := getAnonymousSftpCredentials(credCtx, http.DefaultClient)
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to get the Red Hat sftp server credentials: %w", err).Error())
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("CAD was unable to get the Red Hat sftp server credentials: %w", err),
+			"failure retrieving sftp credentials")
 	}
 
 	logging.Infof("anonymous SFTP username: %s", username)
@@ -93,12 +111,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	defer uploadCancel()
 	err = sftpUpload(uploadCtx, tarfile.Name(), username, token)
 	if err != nil {
-		return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to upload to the Red Hat sftp server: %w", err).Error())
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("CAD was unable to upload to the Red Hat sftp server: %w", err),
+			"sftp upload failed")
 	}
 
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
 	result.MustGatherPerformed = investigation.InvestigationStep{Performed: true, Labels: []string{productName}}
-	return result, r.PdClient.AddNote(r.Notes.String())
+	result.Actions = []types.Action{
+		executor.NoteFrom(r.Notes),
+	}
+	return result, nil
 }
 
 func (c *Investigation) Name() string {

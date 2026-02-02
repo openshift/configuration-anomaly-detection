@@ -2,13 +2,14 @@ package precheck
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"go.uber.org/mock/gomock"
 )
 
@@ -25,9 +26,14 @@ func TestInvestigation_Run(t *testing.T) {
 		setupMocks func(*gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster)
 	}{
 		{
-			name:    "cloud provider unsupported stops investigation and escalates the alert",
-			c:       &ClusterStatePrecheck{},
-			want:    investigation.InvestigationResult{StopInvestigations: errors.New("unsupported cloud provider (non-AWS)")},
+			name: "cloud provider unsupported stops investigation and escalates the alert",
+			c:    &ClusterStatePrecheck{},
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					executor.Escalate("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
+				},
+				StopInvestigations: errors.New("unsupported cloud provider (non-AWS)"),
+			},
 			wantErr: false,
 			setupMocks: func(ctrl *gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster) {
 				pdClient := pdmock.NewMockClient(ctrl)
@@ -37,15 +43,18 @@ func TestInvestigation_Run(t *testing.T) {
 				builder.GCP(cmv1.NewGCP())
 				cluster, _ := builder.Build()
 
-				pdClient.EXPECT().EscalateIncidentWithNote("CAD could not run an automated investigation on this cluster: unsupported cloud provider.").Return(nil)
-
 				return pdClient, ocmClient, cluster
 			},
 		},
 		{
-			name:    "cluster is uninstalling stops investigation and silences the alert",
-			c:       &ClusterStatePrecheck{},
-			want:    investigation.InvestigationResult{StopInvestigations: errors.New("cluster is already uninstalling")},
+			name: "cluster is uninstalling stops investigation and silences the alert",
+			c:    &ClusterStatePrecheck{},
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					executor.Silence("CAD: Cluster is already uninstalling"),
+				},
+				StopInvestigations: errors.New("cluster is already uninstalling"),
+			},
 			wantErr: false,
 			setupMocks: func(ctrl *gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster) {
 				pdClient := pdmock.NewMockClient(ctrl)
@@ -55,15 +64,18 @@ func TestInvestigation_Run(t *testing.T) {
 				builder.State(cmv1.ClusterStateUninstalling)
 				cluster, _ := builder.Build()
 
-				pdClient.EXPECT().SilenceIncidentWithNote("CAD: Cluster is already uninstalling, silencing alert.").Return(nil)
-
 				return pdClient, ocmClient, cluster
 			},
 		},
 		{
-			name:    "access protection status unknown escalates",
-			c:       &ClusterStatePrecheck{},
-			want:    investigation.InvestigationResult{StopInvestigations: errors.New("access protection could not be determined")},
+			name: "access protection status unknown escalates",
+			c:    &ClusterStatePrecheck{},
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					executor.Escalate("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually."),
+				},
+				StopInvestigations: errors.New("access protection could not be determined"),
+			},
 			wantErr: false,
 			setupMocks: func(ctrl *gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster) {
 				pdClient := pdmock.NewMockClient(ctrl)
@@ -75,15 +87,19 @@ func TestInvestigation_Run(t *testing.T) {
 				cluster, _ := builder.Build()
 
 				ocmClient.EXPECT().IsAccessProtected(cluster).Return(false, errors.New("API error"))
-				pdClient.EXPECT().EscalateIncidentWithNote("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually.").Return(nil)
 
 				return pdClient, ocmClient, cluster
 			},
 		},
 		{
-			name:    "access protection enabled escalates",
-			c:       &ClusterStatePrecheck{},
-			want:    investigation.InvestigationResult{StopInvestigations: errors.New("cluster is access protected")},
+			name: "access protection enabled escalates",
+			c:    &ClusterStatePrecheck{},
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					executor.Escalate("CAD is unable to run against access protected clusters. Please investigate."),
+				},
+				StopInvestigations: errors.New("cluster is access protected"),
+			},
 			wantErr: false,
 			setupMocks: func(ctrl *gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster) {
 				pdClient := pdmock.NewMockClient(ctrl)
@@ -95,7 +111,6 @@ func TestInvestigation_Run(t *testing.T) {
 				cluster, _ := builder.Build()
 
 				ocmClient.EXPECT().IsAccessProtected(cluster).Return(true, nil)
-				pdClient.EXPECT().EscalateIncidentWithNote("CAD is unable to run against access protected clusters. Please investigate.").Return(nil)
 
 				return pdClient, ocmClient, cluster
 			},
@@ -122,10 +137,14 @@ func TestInvestigation_Run(t *testing.T) {
 		{
 			name: "cloud provider unsupported stops investigation",
 			c:    &ClusterStatePrecheck{},
-			want: investigation.InvestigationResult{StopInvestigations: errors.New("unsupported cloud provider (non-AWS)")},
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					executor.Escalate("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
+				},
+				StopInvestigations: errors.New("unsupported cloud provider (non-AWS)"),
+			},
 			setupMocks: func(ctrl *gomock.Controller) (*pdmock.MockClient, *ocmmock.MockClient, *cmv1.Cluster) {
 				pdClient := pdmock.NewMockClient(ctrl)
-				pdClient.EXPECT().EscalateIncidentWithNote(gomock.Any())
 				ocmClient := ocmmock.NewMockClient(ctrl)
 
 				builder := cmv1.NewCluster()
@@ -158,8 +177,25 @@ func TestInvestigation_Run(t *testing.T) {
 				t.Errorf("Investigation.Run() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Investigation.Run() = %v, want %v", got, tt.want)
+
+			// Check StopInvestigations error
+			if tt.want.StopInvestigations != nil {
+				if got.StopInvestigations == nil || got.StopInvestigations.Error() != tt.want.StopInvestigations.Error() {
+					t.Errorf("Investigation.Run() StopInvestigations = %v, want %v", got.StopInvestigations, tt.want.StopInvestigations)
+				}
+			} else if got.StopInvestigations != nil {
+				t.Errorf("Investigation.Run() StopInvestigations = %v, want nil", got.StopInvestigations)
+			}
+
+			// Check Actions
+			if len(tt.want.Actions) != len(got.Actions) {
+				t.Errorf("Investigation.Run() Actions length = %d, want %d", len(got.Actions), len(tt.want.Actions))
+				return
+			}
+			for i, wantAction := range tt.want.Actions {
+				if got.Actions[i].Type() != wantAction.Type() {
+					t.Errorf("Investigation.Run() Actions[%d].Type() = %s, want %s", i, got.Actions[i].Type(), wantAction.Type())
+				}
 			}
 		})
 	}
