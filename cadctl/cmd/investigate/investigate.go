@@ -49,35 +49,6 @@ func init() {
 	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
 }
 
-var errAlertEscalated = fmt.Errorf("alert escalated to SRE")
-
-// handleUnsupportedAlertWithAI checks if AI is enabled for unsupported alerts.
-// If AI is enabled, returns an AI investigation. If disabled, escalates the alert.
-// Returns errAlertEscalated if the alert was escalated.
-func handleUnsupportedAlertWithAI(alertInvestigation investigation.Investigation, pdClient *pagerduty.SdkClient) (investigation.Investigation, error) {
-	if alertInvestigation != nil {
-		return alertInvestigation, nil
-	}
-
-	// Parse AI config
-	aiConfig, err := aiconfig.ParseAIAgentConfig()
-	if err != nil {
-		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
-		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
-	}
-
-	// Escalate if AI is disabled
-	if !aiConfig.Enabled {
-		if err := pdClient.EscalateIncident(); err != nil {
-			return nil, fmt.Errorf("could not escalate unsupported alert: %w", err)
-		}
-		return nil, errAlertEscalated
-	}
-
-	// Use AI investigation for unsupported alerts
-	return &aiassisted.Investigation{}, nil
-}
-
 func run(_ *cobra.Command, _ []string) error {
 	opts := controller.ControllerOptions{
 		Common: controller.CommonConfig{

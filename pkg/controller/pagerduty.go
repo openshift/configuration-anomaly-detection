@@ -6,7 +6,9 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -33,7 +35,8 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	// Update logger with cluster ID now that we have it
 	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, clusterID)
 
-	// Escalate all unsupported alerts
+	// Check if we should escalate to AI or not
+	alertInvestigation = handleUnsupportedAlertWithAI(alertInvestigation, c.pdClient)
 	if alertInvestigation == nil {
 		err := c.pdClient.EscalateIncident()
 		if err != nil {
@@ -65,4 +68,28 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 	}
 
 	logging.Info("Escalated documentation mismatch to PagerDuty")
+}
+
+// handleUnsupportedAlertWithAI checks if AI is enabled for unsupported alerts.
+// If AI is enabled, returns an AI investigation. If disabled, escalates the alert.
+// Returns errAlertEscalated if the alert was escalated.
+func handleUnsupportedAlertWithAI(alertInvestigation investigation.Investigation, pdClient *pagerduty.SdkClient) investigation.Investigation {
+	if alertInvestigation != nil {
+		return alertInvestigation
+	}
+
+	// Parse AI config
+	aiConfig, err := aiconfig.ParseAIAgentConfig()
+	if err != nil {
+		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
+		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
+	}
+
+	// Escalate if AI is disabled
+	if !aiConfig.Enabled {
+		return nil
+	}
+
+	// Use AI investigation for unsupported alerts
+	return &aiassisted.Investigation{}
 }
