@@ -56,8 +56,7 @@ func run(_ *cobra.Command, _ []string) error {
 			Identifier: pipelineNameEnv,
 		},
 		Pd: &controller.PagerDutyConfig{
-			PayloadPath:  payloadPath,
-			PipelineName: pipelineNameEnv,
+			PayloadPath: payloadPath,
 		},
 		Manual: nil,
 	}

@@ -26,13 +26,12 @@ import (
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
 type PagerDutyConfig struct {
-	PayloadPath  string
-	PipelineName string
+	PayloadPath string
 }
 
 func (p *PagerDutyConfig) Validate() error {
-	if p.PayloadPath == "" || p.PipelineName == "" {
-		return fmt.Errorf("PayloadPath and PipelineName can not be empty")
+	if p.PayloadPath == "" {
+		return fmt.Errorf("PayloadPath can not be empty")
 	}
 	return nil
 }
