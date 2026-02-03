@@ -307,9 +307,6 @@ func (a *PagerDutyTitleUpdate) Validate() error {
 func (a *PagerDutyTitleUpdate) Execute(ctx context.Context, execCtx *ExecutionContext) error {
 	execCtx.Logger.Infof("Updating pagerduty title with prefix: %s", a.Prefix)
 
-	// Future implementation:
-	// return exec.BackplaneClient.UploadReport(ctx, exec.Cluster.ID(), a.Report)
-
 	currentTitle := execCtx.PDClient.GetTitle()
 	if strings.Contains(currentTitle, a.Prefix) {
 		return nil
