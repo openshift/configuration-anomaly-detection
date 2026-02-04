@@ -119,7 +119,6 @@ func TestResourceBuilder_ErrorCaching(t *testing.T) {
 
 	// Create a builder with a pre-set error to test caching behavior
 	rb := &ResourceBuilderT{
-		buildLogger:  true,
 		clusterId:    "test-cluster-999",
 		name:         "test-investigation",
 		logLevel:     "info",
@@ -173,7 +172,6 @@ func TestResourceBuilder_Build_ReturnsClusterNotFoundError(t *testing.T) {
 	}
 
 	rb := &ResourceBuilderT{
-		buildLogger:  true,
 		clusterId:    "test-cluster-123",
 		name:         "test-investigation",
 		logLevel:     "info",
@@ -247,7 +245,6 @@ func TestResourceBuilder_Build_NameIsSet(t *testing.T) {
 	mockPDClient := pdmock.NewMockClient(ctrl)
 
 	rb := &ResourceBuilderT{
-		buildLogger:  true,
 		clusterId:    "test-cluster",
 		name:         "test-investigation-name",
 		logLevel:     "info",

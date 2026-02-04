@@ -44,26 +44,19 @@ type InvestigationResult struct {
 }
 
 func NewResourceBuilder(
-	pdClient pagerduty.Client,
 	ocmClient *ocm.SdkClient,
 	bpClient backplane.Client,
 	clusterId string,
 	name string,
-	logLevel string,
-	pipelineName string,
 	backplaneUrl string,
 ) (ResourceBuilder, error) {
 	rb := &ResourceBuilderT{
-		buildLogger:  true,
 		clusterId:    clusterId,
 		name:         name,
-		logLevel:     logLevel,
-		pipelineName: pipelineName,
 		ocmClient:    ocmClient,
 		backplaneUrl: backplaneUrl,
 		builtResources: &Resources{
 			BpClient:  bpClient,
-			PdClient:  pdClient,
 			OcmClient: ocmClient,
 		},
 	}
@@ -102,6 +95,7 @@ type ResourceBuilder interface {
 	WithAwsClient() ResourceBuilder
 	WithRestConfig() ResourceBuilder
 	WithK8sClient() ResourceBuilder
+	WithPdClient(pdClient pagerduty.Client) ResourceBuilder
 	WithOC() ResourceBuilder
 	WithNotes() ResourceBuilder
 	Build() (*Resources, error)
@@ -115,7 +109,6 @@ type ResourceBuilderT struct {
 	buildK8sClient         bool
 	buildOC                bool
 	buildNotes             bool
-	buildLogger            bool
 
 	clusterId    string
 	name         string
@@ -167,6 +160,11 @@ func (r *ResourceBuilderT) WithK8sClient() ResourceBuilder {
 
 func (r *ResourceBuilderT) WithNotes() ResourceBuilder {
 	r.buildNotes = true
+	return r
+}
+
+func (r *ResourceBuilderT) WithPdClient(pdClient pagerduty.Client) ResourceBuilder {
+	r.builtResources.PdClient = pdClient
 	return r
 }
 
@@ -235,11 +233,6 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
 		}
-	}
-
-	if r.buildLogger {
-		// Re-initialize the logger with the cluster ID.
-		logging.RawLogger = logging.InitLogger(r.logLevel, r.pipelineName, internalClusterId)
 	}
 
 	return r.builtResources, nil
@@ -322,6 +315,11 @@ func (r *ResourceBuilderMock) WithNotes() ResourceBuilder {
 }
 
 func (r *ResourceBuilderMock) WithK8sClient() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithPdClient(client pagerduty.Client) ResourceBuilder {
+	r.Resources.PdClient = client
 	return r
 }
 

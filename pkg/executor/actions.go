@@ -20,12 +20,13 @@ type ExecutionContext = types.ExecutionContext
 type ActionType string
 
 const (
-	ActionTypeServiceLog       ActionType = "service_log"
-	ActionTypeLimitedSupport   ActionType = "limited_support"
-	ActionTypePagerDutyNote    ActionType = "pagerduty_note"
-	ActionTypeSilenceIncident  ActionType = "silence_incident"
-	ActionTypeEscalateIncident ActionType = "escalate_incident"
-	ActionTypeBackplaneReport  ActionType = "backplane_report"
+	ActionTypeServiceLog           ActionType = "service_log"
+	ActionTypeLimitedSupport       ActionType = "limited_support"
+	ActionTypePagerDutyNote        ActionType = "pagerduty_note"
+	ActionTypePagerDutyTitleUpdate ActionType = "pagerduty_title_update"
+	ActionTypeSilenceIncident      ActionType = "silence_incident"
+	ActionTypeEscalateIncident     ActionType = "escalate_incident"
+	ActionTypeBackplaneReport      ActionType = "backplane_report"
 )
 
 // ServiceLogAction sends a service log via OCM
@@ -282,4 +283,38 @@ func (a *BackplaneReportAction) GenerateStringForNoteWriter() string {
 	}
 	return fmt.Sprintf("CAD created a cluster report, access it with the following command:\n"+
 		"osdctl cluster reports get --cluster-id %s --report-id %s", a.createdReport.ClusterID, a.createdReport.ReportID)
+}
+
+type PagerDutyTitleUpdate struct {
+	Prefix string
+}
+
+func (a *PagerDutyTitleUpdate) Type() string {
+	return string(ActionTypePagerDutyTitleUpdate)
+}
+
+func (a *PagerDutyTitleUpdate) ActionType() ActionType {
+	return ActionTypePagerDutyTitleUpdate
+}
+
+func (a *PagerDutyTitleUpdate) Validate() error {
+	if a.Prefix == "" {
+		return fmt.Errorf("prefix cannot be empty")
+	}
+	return nil
+}
+
+func (a *PagerDutyTitleUpdate) Execute(ctx context.Context, execCtx *ExecutionContext) error {
+	execCtx.Logger.Infof("Updating pagerduty title with prefix: %s", a.Prefix)
+
+	currentTitle := execCtx.PDClient.GetTitle()
+	if strings.Contains(currentTitle, a.Prefix) {
+		return nil
+	}
+	newTitle := fmt.Sprintf("%s %s", a.Prefix, currentTitle)
+	err := execCtx.PDClient.UpdateIncidentTitle(newTitle)
+	if err != nil {
+		return fmt.Errorf("failed to update PagerDuty incident title: %w", err)
+	}
+	return nil
 }

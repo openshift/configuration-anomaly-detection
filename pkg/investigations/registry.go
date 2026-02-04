@@ -39,6 +39,15 @@ func GetInvestigation(title string, experimental bool) investigation.Investigati
 	return nil
 }
 
+func GetInvestigationByName(name string, experimental bool) investigation.Investigation {
+	for _, inv := range availableInvestigations {
+		if strings.Contains(inv.Name(), name) && (experimental || !inv.IsExperimental()) {
+			return inv
+		}
+	}
+	return nil
+}
+
 // GetAvailableInvestigationsTitles returns a string array with the alert titles of all available investigations.
 func GetAvailableInvestigationsTitles() []string {
 	alertTitles := make([]string, 0, len(availableInvestigations))
@@ -47,4 +56,14 @@ func GetAvailableInvestigationsTitles() []string {
 		alertTitles = append(alertTitles, inv.AlertTitle())
 	}
 	return alertTitles
+}
+
+// GetAvailableInvestigationsNames returns a string array with the alert names of all available investigations.
+func GetAvailableInvestigationsNames() []string {
+	alertNames := make([]string, 0, len(availableInvestigations))
+
+	for _, inv := range availableInvestigations {
+		alertNames = append(alertNames, inv.Name())
+	}
+	return alertNames
 }
