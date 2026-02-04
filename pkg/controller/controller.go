@@ -319,7 +319,6 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 
 	logging.Infof("Starting investigation for %s", inv.Name())
 	result, attempts, err := runInvestigationWithRetry(inv, builder)
-	// result, err = inv.Run(builder)
 	if err != nil {
 		return fmt.Errorf("investigation failed after %d attempt(s): %w", attempts, err)
 	}
