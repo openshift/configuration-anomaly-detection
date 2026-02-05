@@ -39,6 +39,7 @@ func (p *PagerDutyConfig) Validate() error {
 type ManualConfig struct {
 	ClusterId         string
 	InvestigationName string
+	DryRun            bool
 }
 
 func (p *ManualConfig) Validate() error {
@@ -63,6 +64,7 @@ type investigationRunner struct {
 	executor     executor.Executor
 	logger       *zap.SugaredLogger
 	dependencies *Dependencies
+	dryRun       bool
 }
 
 type ControllerOptions struct {
@@ -237,6 +239,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 				executor:     executor.NewManualExecutor(deps.OCMClient, deps.BackplaneClient, logger),
 				logger:       logger,
 				dependencies: deps,
+				dryRun:       opts.Manual.DryRun,
 			},
 		}, nil
 	}
@@ -464,7 +467,7 @@ func (c *investigationRunner) executeActions(
 		Cluster:           resources.Cluster,
 		Notes:             resources.Notes,
 		Options: executor.ExecutionOptions{
-			DryRun:            false,
+			DryRun:            c.dryRun,
 			StopOnError:       false, // Continue executing actions even if one fails
 			MaxRetries:        3,
 			ConcurrentActions: true, // Use concurrent execution for better performance

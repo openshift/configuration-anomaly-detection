@@ -42,6 +42,10 @@ func getInvestigation(name string, experimental bool) investigation.Investigatio
 }
 
 func (c *ManualController) Investigate(ctx context.Context) error {
+	if c.manual.DryRun {
+		c.logger.Info("🔍 DRY RUN MODE: Investigation will run without performing any external operations")
+	}
+
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := getInvestigation(c.manual.InvestigationName, experimentalEnabled)
