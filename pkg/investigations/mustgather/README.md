@@ -1,13 +1,13 @@
 # mustgather Investigation
 
-Automated collection and upload of OpenShift must-gather diagnostics for ROSA classic clusters.
+Automated collection and upload of OpenShift must-gather diagnostics for ROSA clusters.
 
 ## Overview
 
 The mustgather investigation automates the process of collecting cluster diagnostics using `oc adm must-gather` and uploading them to the Red Hat SFTP server. This reduces manual SRE effort when diagnosing cluster issues by providing immediate access to comprehensive diagnostic data.
 
 **Trigger**: PagerDuty alert with title "CreateMustGather"
-**Clusters**: ROSA classic only (HCP/Hypershift not supported)
+**Clusters**: ROSA classic and HCP (Hypershift)
 **Status**: Experimental (`IsExperimental() = true`)
 
 ## How It Works
@@ -15,6 +15,8 @@ The mustgather investigation automates the process of collecting cluster diagnos
 The investigation performs the following steps:
 
 1. **Collect diagnostics** - Executes `oc adm must-gather` via backplane connection to gather cluster diagnostic data
+   - For **ROSA classic** clusters: Runs standard `oc adm must-gather` on the cluster
+   - For **HCP clusters**: Runs `oc adm must-gather` on the management cluster using the ACM must-gather image (`registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8`) with hosted cluster namespace and name parameters
 2. **Create tarball** - Compresses the must-gather output directory into a `.tar.gz` archive
 3. **Fetch SFTP credentials** - Requests temporary anonymous credentials from Red Hat SFTP service
 4. **Upload tarball** - Transfers the compressed diagnostics to the Red Hat SFTP server
@@ -138,7 +140,7 @@ export CAD_EXPERIMENTAL_ENABLED=true
 For end-to-end testing instructions, see [testing/README.md](./testing/README.md).
 
 Integration testing requires:
-- A real ROSA classic cluster
+- A real ROSA classic or HCP cluster
 - Local backplane API instance
 - Access to staging PagerDuty
 
@@ -149,7 +151,6 @@ Common issues and solutions are documented in [testing/README.md](./testing/READ
 ## Future Enhancements
 
 Potential improvements when graduating from experimental:
-- Support for HCP/Hypershift clusters (pending backplane support)
 - Configurable upload timeouts
 - Parallel uploads for very large files
 - Progress reporting during upload
