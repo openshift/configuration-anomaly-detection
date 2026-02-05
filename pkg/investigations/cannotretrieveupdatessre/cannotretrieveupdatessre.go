@@ -11,7 +11,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/version"
 )
@@ -47,18 +46,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
 				notes.AppendWarning("CAD was unable to access cluster's kube-api. Please investigate manually.")
-				result.Actions = []types.Action{
-					executor.NoteFrom(notes),
+				result.Actions = append(
+					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.Escalate("Kube-api unavailable - manual investigation required"),
-				}
+				)
 				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
 				notes.AppendWarning("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
-				result.Actions = []types.Action{
-					executor.NoteFrom(notes),
+				result.Actions = append(
+					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.Escalate("Cannot access infra cluster - manual investigation required"),
-				}
+				)
 				return result, nil
 			}
 			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
@@ -81,10 +80,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 	notes.AppendWarning("Alert escalated to on-call primary for review and please check the ClusterVersion.")
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 		executor.Escalate("CannotRetrieveUpdatesSRE investigation completed - manual review required"),
-	}
+	)
 	return result, nil
 }
 

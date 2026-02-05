@@ -3,6 +3,7 @@ package executor
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -246,6 +247,14 @@ func (b *BackplaneReportActionBuilder) Build() Action {
 }
 
 // Convenience functions for simple cases
+
+// NoteAndReportFrom writes both a PD note and a backplane report with the same content and prepends the current timestamp to the summary
+func NoteAndReportFrom(nw *notewriter.NoteWriter, clusterID, summary string) []Action {
+	return []Action{
+		NewBackplaneReportAction(clusterID, fmt.Sprintf("%s : %s", time.Now().UTC().Format(time.RFC3339), summary), nw.String()).Build(),
+		NoteFrom(nw),
+	}
+}
 
 // ServiceLog creates a basic service log action
 func ServiceLog(severity, summary, description string) Action {

@@ -148,7 +148,44 @@ action := executor.LimitedSupport("Summary", "Detailed explanation...")
 - `.WithContext(string)`: Add context for logging and metrics (used as metric label)
 - `.AllowDuplicates()`: Set even if identical LS exists
 
-### 3. PagerDutyNoteAction
+### 3. Combined Note and Report (Recommended)
+
+**This is the recommended pattern for all investigations.** Combines a PagerDuty note with a Backplane report in a single helper function.
+
+```go
+// Recommended: Use NoteAndReportFrom for both note and report
+actions := executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
+
+// This is equivalent to manually creating both:
+actions := []types.Action{
+    executor.NewBackplaneReportAction(r.Cluster.ID(), summary, r.Notes.String()).Build(),
+    executor.NoteFrom(r.Notes),
+}
+
+// Typical usage in investigations
+result.Actions = append(
+    executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+    executor.Escalate("Manual investigation required"),
+)
+```
+
+**Parameters:**
+- `notewriter`: The NoteWriter containing investigation findings
+- `clusterID`: The cluster ID (use `r.Cluster.ID()`)
+- `summary`: Investigation name (use `i.Name()`)
+
+**Benefits:**
+- Automatically creates both PagerDuty note and Backplane report
+- Timestamps the report for historical tracking and searchability
+- Reduces boilerplate - replaces manual BackplaneReportAction creation
+- Ensures consistent reporting across all investigations
+
+**When to use:**
+- This should be the default for all investigations
+- When completing any investigation (success or failure paths)
+- Replaces standalone `NoteFrom()` usage in most cases
+
+### 4. PagerDutyNoteAction
 
 Add a note to the current PagerDuty incident.
 
@@ -167,7 +204,7 @@ action := executor.NewPagerDutyNoteAction().
     Build()
 ```
 
-### 4. SilenceIncidentAction
+### 5. SilenceIncidentAction
 
 Silence (resolve) the current PagerDuty incident.
 
@@ -178,7 +215,7 @@ action := executor.Silence("Customer misconfigured UWM - sent service log")
 action := executor.NewSilenceIncidentAction("Reason for silencing").Build()
 ```
 
-### 5. EscalateIncidentAction
+### 6. EscalateIncidentAction
 
 Escalate the current PagerDuty incident to primary.
 
@@ -189,12 +226,16 @@ action := executor.Escalate("Manual investigation required")
 action := executor.NewEscalateIncidentAction("Reason for escalation").Build()
 ```
 
-### 6. BackplaneReportAction
+### 7. BackplaneReportAction (Low-Level)
 
-Upload a report to the backplane reports API (future implementation).
+Upload a report to the Backplane reports API. **Note:** Most investigations should use `NoteAndReportFrom()` instead of this action directly.
 
 ```go
-action := executor.NewBackplaneReportAction("investigation-report", reportData).Build()
+// Low-level usage (rarely needed)
+action := executor.NewBackplaneReportAction(clusterID, summary, reportData).Build()
+
+// Preferred: Use the convenience function
+actions := executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
 ```
 
 ## Action Execution Order
@@ -239,14 +280,14 @@ if customerMisconfigurationDetected {
         ServiceName: "SREManualAction",
     }
 
-    result.Actions = []types.Action{
+    result.Actions = append(
+        executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
         executor.NewServiceLogAction(serviceLog.Severity, serviceLog.Summary).
             WithDescription(serviceLog.Description).
             WithServiceName(serviceLog.ServiceName).
             Build(),
-        executor.NoteFrom(notes),
         executor.Silence("Customer misconfigured X"),
-    }
+    )
     return result, nil
 }
 ```
@@ -264,13 +305,12 @@ if unsupportedActionDetected {
         Details: "Your cluster performed X which is not supported. Please...",
     }
 
-    result.Actions = []types.Action{
-        executor.NewLimitedSupportAction(limitedSupportReason.Summary, limitedSupportReason.Details).
-            WithContext("ActionType").  // Used for metrics
+    result.Actions = append(
+        executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
+        executor.NewLimitedSupportAction(limitedSupportReason.Summary, limitedSupportReason.Details, "ActionType").
             Build(),
-        executor.NoteFrom(notes),
         executor.Silence("Customer performed unsupported action"),
-    }
+    )
     return result, nil
 }
 ```
@@ -283,10 +323,10 @@ Use when CAD cannot automatically remediate the issue.
 notes.AppendSuccess("Investigation completed, no automated remediation available")
 notes.AppendWarning("Found issue X, requires manual investigation")
 
-result.Actions = []types.Action{
-    executor.NoteFrom(notes),
+result.Actions = append(
+    executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
     executor.Escalate("Manual investigation required"),
-}
+)
 return result, nil
 ```
 
@@ -298,13 +338,13 @@ Use when issues are detected but don't warrant limited support.
 if issueDetectedButNotCritical {
     notes.AppendWarning("Network issue detected, sending service log")
 
-    result.Actions = []types.Action{
+    result.Actions = append(
+        executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
         executor.NewServiceLogAction("Warning", "Network connectivity issue detected").
             WithDescription("We detected that...").
             Build(),
-        executor.NoteFrom(notes),
         executor.Escalate("Manual investigation required"),
-    }
+    )
     return result, nil
 }
 ```

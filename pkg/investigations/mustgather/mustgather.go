@@ -118,9 +118,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
 	result.MustGatherPerformed = investigation.InvestigationStep{Performed: true, Labels: []string{productName}}
-	result.Actions = []types.Action{
-		executor.NoteFrom(r.Notes),
-	}
+	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name())
 	return result, nil
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -32,19 +31,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
 	if err != nil {
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Failed to check user ban status - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
 	if user.Banned() {
 		notes.AppendWarning("User is banned: %s\nBan description: %s\nPlease open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("User is banned - proactive case required"),
-		}
+		)
 		return result, nil
 	} else {
 		notes.AppendSuccess("User is not banned.")
@@ -56,18 +55,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		if errors.As(err, k8sErr) {
 			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
 				notes.AppendWarning("CAD was unable to access cluster's kube-api. Please investigate manually.")
-				result.Actions = []types.Action{
-					executor.NoteFrom(notes),
+				result.Actions = append(
+					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.Escalate("Kube-api unavailable - manual investigation required"),
-				}
+				)
 				return result, nil
 			}
 			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
 				notes.AppendWarning("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
-				result.Actions = []types.Action{
-					executor.NoteFrom(notes),
+				result.Actions = append(
+					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.Escalate("Cannot access infra cluster - manual investigation required"),
-				}
+				)
 				return result, nil
 			}
 			return result, err
@@ -86,20 +85,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if len(coList.Items) != 1 {
 		notes.AppendWarning("Found %d insights clusteroperators, expected 1", len(coList.Items))
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Unexpected insights clusteroperator count - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 	co := coList.Items[0]
 
 	if isOCPBUG22226(&co) {
 		notes.AppendWarning("Found symptom of OCPBUGS-22226. Try deleting the insights operator pod to remediate.\n$ oc -n openshift-insights delete pods -l app=insights-operator --wait=false")
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("OCPBUGS-22226 detected - manual remediation required"),
-		}
+		)
 		return result, nil
 	} else {
 		notes.AppendSuccess("Ruled out OCPBUGS-22226")
@@ -120,10 +119,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		notes.AppendSuccess("Network verifier passed")
 	}
 
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 		executor.Escalate("InsightsOperatorDown investigation completed - manual review required"),
-	}
+	)
 	return result, nil
 }
 
