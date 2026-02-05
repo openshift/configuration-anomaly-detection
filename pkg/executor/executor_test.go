@@ -410,3 +410,90 @@ func TestManualExecutor_IntegrationFiltering(t *testing.T) {
 	assert.False(t, silenceExecuted, "Silence should be filtered")
 	assert.False(t, titleUpdateExecuted, "Title update should be filtered")
 }
+
+func TestManualExecutor_DryRunMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	exec := NewManualExecutor(mockOCMClient, mockBPClient, logger)
+
+	// Track execution - should NOT be executed in dry-run mode
+	serviceLogExecuted := false
+	limitedSupportExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+		&mockAction{actionType: ActionTypeLimitedSupport, executed: &limitedSupportExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			DryRun:            true, // Enable dry-run mode
+			StopOnError:       false,
+			MaxRetries:        0,
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	// Verify no actions were executed in dry-run mode
+	assert.NoError(t, err)
+	assert.False(t, serviceLogExecuted, "Service log should NOT execute in dry-run mode")
+	assert.False(t, limitedSupportExecuted, "Limited support should NOT execute in dry-run mode")
+}
+
+func TestWebhookExecutor_DryRunMode_ConcurrentActions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	exec := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+
+	// Track execution - should NOT be executed in dry-run mode
+	pdNoteExecuted := false
+	serviceLogExecuted := false
+	silenceExecuted := false
+	backplaneExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypePagerDutyNote, executed: &pdNoteExecuted},
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+		&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+		&mockAction{actionType: ActionTypeBackplaneReport, executed: &backplaneExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			DryRun:            true, // Enable dry-run mode
+			StopOnError:       false,
+			MaxRetries:        0,
+			ConcurrentActions: true, // Test concurrent execution path
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	// Verify no actions were executed in dry-run mode
+	assert.NoError(t, err)
+	assert.False(t, pdNoteExecuted, "PD note should NOT execute in dry-run mode")
+	assert.False(t, serviceLogExecuted, "Service log should NOT execute in dry-run mode")
+	assert.False(t, silenceExecuted, "Silence should NOT execute in dry-run mode")
+	assert.False(t, backplaneExecuted, "Backplane report should NOT execute in dry-run mode")
+}

@@ -11,6 +11,7 @@ var (
 	logLevelFlag      = ""
 	investigationFlag = ""
 	clusterIdFlag     = ""
+	dryRunFlag        = false
 )
 
 func NewManualCmd() (*cobra.Command, error) {
@@ -22,6 +23,7 @@ func NewManualCmd() (*cobra.Command, error) {
 	}
 	cmd.Flags().StringVarP(&clusterIdFlag, "cluster-id", "c", "", "the cluster to run an investigation againstk")
 	cmd.Flags().StringVarP(&investigationFlag, "investigation", "i", "", "the investigation to run manually")
+	cmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "d", false, "run investigation without performing any external operations")
 	err := cmd.MarkFlagRequired("cluster-id")
 	if err != nil {
 		return nil, err
@@ -47,6 +49,7 @@ func run(_ *cobra.Command, _ []string) error {
 		Manual: &controller.ManualConfig{
 			ClusterId:         clusterIdFlag,
 			InvestigationName: investigationFlag,
+			DryRun:            dryRunFlag,
 		},
 	}
 	return controller.Run(opts)

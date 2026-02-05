@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
+	"go.uber.org/zap"
 )
 
 func (e *DefaultExecutor) executeSequential(
@@ -36,7 +37,7 @@ func (e *DefaultExecutor) executeSequential(
 		}
 
 		if opts.DryRun {
-			actionLogger.Infof("DRY RUN: Would execute action %s", action.Type())
+			logDryRunAction(action, actionLogger)
 			continue
 		}
 
@@ -98,6 +99,20 @@ func (e *DefaultExecutor) executeConcurrent(
 		case string(ActionTypeBackplaneReport):
 			bpActions = append(bpActions, actionWithIndex{action, i})
 		}
+	}
+
+	// If dry-run mode, just log what would be executed
+	if opts.DryRun {
+		for _, a := range pdActions {
+			logDryRunAction(a.action, execCtx.Logger)
+		}
+		for _, a := range ocmActions {
+			logDryRunAction(a.action, execCtx.Logger)
+		}
+		for _, a := range bpActions {
+			logDryRunAction(a.action, execCtx.Logger)
+		}
+		return nil
 	}
 
 	var wg sync.WaitGroup
@@ -260,5 +275,30 @@ func emitMetricsForAction(action Action, execCtx *ExecutionContext) {
 	default:
 		// No metrics for other action types
 		execCtx.Logger.Debugf("No metrics defined for action type %s", action.Type())
+	}
+}
+
+// logDryRunAction provides detailed logging for dry-run mode
+func logDryRunAction(action Action, logger *zap.SugaredLogger) {
+	switch a := action.(type) {
+	case *ServiceLogAction:
+		logger.Infof("DRY RUN: Would send service log - Summary: %s, Severity: %s, Reason: %s",
+			a.ServiceLog.Summary, a.ServiceLog.Severity, a.Reason)
+	case *LimitedSupportAction:
+		logger.Infof("DRY RUN: Would set limited support - Summary: %s, Context: %s",
+			a.Reason.Summary, a.Context)
+	case *PagerDutyNoteAction:
+		logger.Infof("DRY RUN: Would add PagerDuty note (%d chars)", len(a.Content))
+	case *SilenceIncidentAction:
+		logger.Infof("DRY RUN: Would silence incident - Reason: %s", a.Reason)
+	case *EscalateIncidentAction:
+		logger.Infof("DRY RUN: Would escalate incident - Reason: %s", a.Reason)
+	case *PagerDutyTitleUpdate:
+		logger.Infof("DRY RUN: Would update PagerDuty title with prefix: %s", a.Prefix)
+	case *BackplaneReportAction:
+		logger.Infof("DRY RUN: Would create backplane report - ClusterID: %s, Summary: %s",
+			a.ClusterID, a.Summary)
+	default:
+		logger.Infof("DRY RUN: Would execute action %s", action.Type())
 	}
 }
