@@ -34,6 +34,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 
 	// Update logger with cluster ID now that we have it
 	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, clusterID)
+	c.logger.Infof("Investigating incident '%s' for service '%s (%s)'", c.pdClient.GetIncidentRef(), c.pdClient.GetServiceID(), c.pdClient.GetServiceName())
 
 	// Check if we should escalate to AI or not
 	alertInvestigation = handleUnsupportedAlertWithAI(alertInvestigation, c.pdClient)
