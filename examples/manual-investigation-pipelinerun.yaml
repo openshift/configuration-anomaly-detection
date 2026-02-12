@@ -1,0 +1,46 @@
+---
+# Example PipelineRun for manual investigation
+# This demonstrates how to trigger a manual CAD investigation using the cad-manual-investigation-pipeline
+#
+# Usage:
+#   1. Update the cluster-id and investigation parameters below
+#   2. Login to the CAD cluster "cadp01ue1"
+#   3. Apply to the CAD cluster:
+#      oc create -f manual-investigation-pipelinerun.yaml -n configuration-anomaly-detection
+#   4. Monitor progress:
+#      osdctl cluster reports
+
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: cad-manual-
+  namespace: configuration-anomaly-detection
+  labels:
+    investigation-type: manual
+    triggered-by: external-tool
+spec:
+  params:
+  # REQUIRED: The cluster ID to investigate
+  - name: cluster-id
+    value: "REPLACE_WITH_CLUSTER_ID"
+  # REQUIRED: The investigation to run (e.g., chgm, ccam, etc.)
+  - name: investigation
+    value: "REPLACE_WITH_INVESTIGATION_NAME"
+  # OPTIONAL: Set to "true" to run in dry-run mode (no external operations)
+  # Dry-run mode will execute investigation logic but won't post to PagerDuty or send service logs
+  - name: dry-run
+    value: "false"
+  pipelineRef:
+    name: cad-manual-investigation-pipeline
+  serviceAccountName: cad-sa
+
+  taskRunSpecs:
+  - computeResources:
+      limits:
+        cpu: 500m
+        memory: 256Mi
+      requests:
+        cpu: 100m
+        memory: 64Mi
+    pipelineTaskName: run-manual-investigation
+  timeout: 30m

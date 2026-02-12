@@ -12,6 +12,7 @@ var (
 	investigationFlag = ""
 	clusterIdFlag     = ""
 	dryRunFlag        = false
+	pipelineNameEnv   = ""
 )
 
 func NewManualCmd() (*cobra.Command, error) {
@@ -33,9 +34,9 @@ func NewManualCmd() (*cobra.Command, error) {
 		return nil, err
 	}
 
-	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
-		logLevelFlag = envLogLevel
-	}
+	logLevelFlag = os.Getenv("LOG_LEVEL")
+	pipelineNameEnv = os.Getenv("PIPELINE_NAME")
+
 	return cmd, nil
 }
 
@@ -43,7 +44,7 @@ func run(_ *cobra.Command, _ []string) error {
 	opts := controller.ControllerOptions{
 		Common: controller.CommonConfig{
 			LogLevel:   logLevelFlag,
-			Identifier: "",
+			Identifier: pipelineNameEnv,
 		},
 		Pd: nil,
 		Manual: &controller.ManualConfig{

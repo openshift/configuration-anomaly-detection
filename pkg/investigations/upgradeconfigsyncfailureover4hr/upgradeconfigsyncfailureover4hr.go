@@ -35,10 +35,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
 	if err != nil {
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s\nPlease investigate.", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Failed to check if user is banned"),
-		}
+		)
 		return result, nil
 	}
 	if userBannedStatus {
@@ -50,10 +50,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("User ID is: %v", user.ID())
 	if err != nil {
 		notes.AppendWarning("Failed getting cluster creator from ocm: %s", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Failed to get cluster creator from OCM"),
-		}
+		)
 		return result, nil
 	}
 
@@ -100,10 +100,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	} else {
 		notes.AppendWarning("Pull secret does not match on cluster and in OCM.")
 	}
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 		executor.Escalate("UpgradeConfigSyncFailure investigation complete"),
-	}
+	)
 	return result, nil
 }
 

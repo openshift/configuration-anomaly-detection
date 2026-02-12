@@ -240,6 +240,35 @@ objects:
         value: $(context.pipelineRun.name)
       taskRef:
         name: cad-checks
+- apiVersion: tekton.dev/v1beta1
+  kind: Pipeline
+  metadata:
+    name: cad-manual-investigation-pipeline
+  spec:
+    params:
+    - description: The cluster ID to investigate
+      name: cluster-id
+      type: string
+    - description: The investigation name to run
+      name: investigation
+      type: string
+    - default: "false"
+      description: Run in dry-run mode (no external operations)
+      name: dry-run
+      type: string
+    tasks:
+    - name: run-manual-investigation
+      params:
+      - name: cluster-id
+        value: $(params.cluster-id)
+      - name: investigation
+        value: $(params.investigation)
+      - name: dry-run
+        value: $(params.dry-run)
+      - name: pipeline-name
+        value: $(context.pipelineRun.name)
+      taskRef:
+        name: cad-manual-investigation
 - apiVersion: v1
   kind: ResourceQuota
   metadata:
@@ -360,6 +389,67 @@ objects:
           name: cad-backplane-secret
       image: ${REGISTRY_IMG}:${IMAGE_TAG}
       name: check-infrastructure
+      resources:
+        limits:
+          cpu: 100m
+          memory: 256Mi
+        requests:
+          cpu: 20m
+          memory: 128Mi
+- apiVersion: tekton.dev/v1beta1
+  kind: Task
+  metadata:
+    name: cad-manual-investigation
+  spec:
+    params:
+    - description: The cluster ID to investigate
+      name: cluster-id
+      type: string
+    - description: The investigation name to run
+      name: investigation
+      type: string
+    - default: "false"
+      description: Run in dry-run mode (no external operations)
+      name: dry-run
+      type: string
+    - description: The pipelinerun name
+      name: pipeline-name
+      type: string
+    steps:
+    - args:
+      - |-
+        PIPELINE_NAME=$(params.pipeline-name) cadctl run --cluster-id $(params.cluster-id) --investigation $(params.investigation) --dry-run=$(params.dry-run)
+      command:
+      - /bin/bash
+      - -c
+      env:
+      - name: CAD_PROMETHEUS_PUSHGATEWAY
+        value: aggregation-pushgateway:9091
+      - name: CAD_EXPERIMENTAL_ENABLED
+        value: ${CAD_EXPERIMENTAL_ENABLED}
+      - name: LOG_LEVEL
+        value: ${LOG_LEVEL}
+      - name: CAD_AI_AGENT_CONFIG
+        value: ${CAD_AI_AGENT_CONFIG}
+      - name: CAD_OCTOSQL_IMAGE
+        value: ${CAD_OCTOSQL_IMAGE}
+      - name: AGENTCORE_AWS_ACCESS_KEY_ID
+        valueFrom:
+          secretKeyRef:
+            key: aws_access_key_id
+            name: cad-ai-agent-aws-credentials
+      - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
+        valueFrom:
+          secretKeyRef:
+            key: aws_secret_access_key
+            name: cad-ai-agent-aws-credentials
+      envFrom:
+      - secretRef:
+          name: cad-ocm-client-secret
+      - secretRef:
+          name: cad-backplane-secret
+      image: ${REGISTRY_IMG}:${IMAGE_TAG}
+      name: run-manual-investigation
       resources:
         limits:
           cpu: 100m

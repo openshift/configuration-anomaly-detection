@@ -104,10 +104,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// Make sure our list output only finds a single cluster operator for `metadata.name = monitoring`
 	if len(coList.Items) != 1 {
 		notes.AppendWarning("Found %d monitoring clusteroperators, expected 1", len(coList.Items))
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Unexpected monitoring clusteroperator count - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 	monitoringCo := coList.Items[0]
@@ -121,14 +121,14 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
 		configMapSL := newUwmConfigMapMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = []types.Action{
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.NewServiceLogAction(configMapSL.Severity, configMapSL.Summary).
 				WithDescription(configMapSL.Description).
 				WithServiceName(configMapSL.ServiceName).
 				Build(),
-			executor.NoteFrom(notes),
 			executor.Silence("Customer misconfigured UWM configmap"),
-		}
+		)
 		return result, nil
 	}
 
@@ -136,14 +136,14 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager), sending service log and silencing the alert")
 		alertManagerSL := newUwmAMMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = []types.Action{
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.NewServiceLogAction(alertManagerSL.Severity, alertManagerSL.Summary).
 				WithDescription(alertManagerSL.Description).
 				WithServiceName(alertManagerSL.ServiceName).
 				Build(),
-			executor.NoteFrom(notes),
 			executor.Silence("Customer misconfigured UWM AlertManager"),
-		}
+		)
 		return result, nil
 	}
 
@@ -151,24 +151,24 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus), sending service log and silencing the alert")
 		genericSL := newUwmGenericMisconfiguredSL(monitoringDocLink)
 
-		result.Actions = []types.Action{
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.NewServiceLogAction(genericSL.Severity, genericSL.Summary).
 				WithDescription(genericSL.Description).
 				WithServiceName(genericSL.ServiceName).
 				Build(),
-			executor.NoteFrom(notes),
 			executor.Silence("Customer misconfigured UWM Prometheus"),
-		}
+		)
 		return result, nil
 	}
 
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to UWM misconfiguration")
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 		executor.Escalate("Monitoring CO not degraded due to UWM misconfiguration - manual investigation required"),
-	}
+	)
 	return result, nil
 }
 

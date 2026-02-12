@@ -17,7 +17,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -52,19 +51,19 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "hcp_check_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to determine cluster type - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 	if isHCP {
 		r.Notes.AppendWarning("Cluster is HCP - skipping snapshot")
 		logging.Info("skipping etcd snapshot for HCP cluster")
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("HCP cluster - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -81,10 +80,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "snapshot_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to take etcd snapshot - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -113,10 +112,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "analysis_job_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to create analysis job - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -133,10 +132,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "analysis_job_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Analysis job failed or timed out - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -153,10 +152,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "parse_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to retrieve analysis results - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -168,10 +167,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			Performed: true,
 			Labels:    []string{"failure", "parse_failed"},
 		}
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to parse analysis results - manual investigation required"),
-		}
+		)
 		return result, nil
 	}
 
@@ -193,11 +192,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Add the backplane report action and note/escalation to the result
 	// The report action will append to notes when executed, then note sends them to PagerDuty
-	result.Actions = []types.Action{
-		backplaneReportAction,
-		executor.NoteFrom(r.Notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		backplaneReportAction, // write a second report here, as this contains the formatted results
 		executor.Escalate("etcd analysis complete - see report for details"),
-	}
+	)
 
 	return result, nil
 }

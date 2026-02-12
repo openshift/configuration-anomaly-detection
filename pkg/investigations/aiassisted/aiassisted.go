@@ -21,7 +21,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -54,42 +53,43 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	notes := r.Notes
 
+	clusterID := r.Cluster.ID()
+
 	config, err := aiconfig.ParseAIAgentConfig()
 	if err != nil {
 		notes.AppendWarning("Failed to parse AI agent configuration: %v", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("AI config parse error"),
-		}
+		)
 		return result, nil
 	}
 
 	if !config.Enabled {
 		notes.AppendWarning("AI investigation is disabled (CAD_AI_AGENT_CONFIG not configured or enabled=false)")
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("AI investigation disabled"),
-		}
+		)
 		return result, nil
 	}
 
-	clusterID := r.Cluster.ID()
 	orgID, err := r.OcmClient.GetOrganizationID(clusterID)
 	if err != nil {
 		notes.AppendWarning("Failed to get organization ID: %v", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to get organization ID"),
-		}
+		)
 		return result, nil
 	}
 
 	if !config.IsAllowedForAI(clusterID, orgID) {
 		notes.AppendWarning("Cluster %s (org: %s) is not in the AI investigation allowlist", clusterID, orgID)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Cluster not in AI allowlist"),
-		}
+		)
 		return result, nil
 	}
 
@@ -98,19 +98,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	awsAccessKeyID := os.Getenv("AGENTCORE_AWS_ACCESS_KEY_ID")
 	if awsAccessKeyID == "" {
 		notes.AppendWarning("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID")
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID"),
-		}
+		)
 		return result, nil
 	}
 	awsSecretAccessKey := os.Getenv("AGENTCORE_AWS_SECRET_ACCESS_KEY")
 	if awsSecretAccessKey == "" {
 		notes.AppendWarning("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY")
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY"),
-		}
+		)
 		return result, nil
 	}
 
@@ -129,10 +129,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
 	if !ok {
 		notes.AppendWarning("Failed to access PagerDuty client details")
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to access PagerDuty client"),
-		}
+		)
 		return result, nil
 	}
 
@@ -151,10 +151,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	payloadJSON, err := json.Marshal(investigationData)
 	if err != nil {
 		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to create investigation payload"),
-		}
+		)
 		return result, nil
 	}
 
@@ -183,10 +183,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	output, err := agentClient.InvokeAgentRuntime(ctx, input)
 	if err != nil {
 		notes.AppendWarning("Failed to invoke AgentCore runtime: %v", err)
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 			executor.Escalate("Failed to invoke AgentCore"),
-		}
+		)
 		return result, nil
 	}
 	defer func() {
@@ -232,10 +232,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes.AppendAutomation("AI automation completed. Check recent cluster reports for report Summary %s: 'osdctl cluster reports list --cluster-id %s'", incidentID, clusterID)
 
 	// Return actions for executor to handle
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, clusterID, c.Name()),
 		executor.Escalate("AI investigation completed - manual review required"),
-	}
+	)
 	return result, nil
 }
 

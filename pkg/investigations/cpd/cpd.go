@@ -11,7 +11,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -55,10 +54,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// We currently believe this never happens, but want to be made aware if it does.
 		notes.AppendWarning("This cluster is in a ready state, thus provisioning succeeded. Please contact CAD team to investigate if we can just silence this case in the future")
 
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Cluster ready but alert fired - CAD team investigation required"),
-		}
+		)
 		return result, nil
 	}
 	notes.AppendSuccess("Cluster installation did not yet finish")
@@ -68,10 +67,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// In case this happens on production, we want to raise this to OCM/CS.
 		notes.AppendWarning("This cluster has an empty ClusterDeployment.Spec.ClusterMetadata, meaning that the provisioning failed before the installation started. This is usually the case when the install configuration is faulty. Please investigate manually.")
 
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("ClusterDeployment.Spec.ClusterMetadata empty - faulty install configuration"),
-		}
+		)
 		return result, nil
 	}
 	notes.AppendSuccess("Installation hive job started")
@@ -79,10 +78,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Check if DNS is ready, exit out if not
 	if !r.Cluster.Status().DNSReady() {
 		notes.AppendWarning("DNS not ready.\nInvestigate reasons using the dnszones CR in the cluster namespace:\noc get dnszones -n uhc-production-%s -o yaml --as backplane-cluster-admin", r.Cluster.ID())
-		result.Actions = []types.Action{
-			executor.NoteFrom(notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 			executor.Escalate("Cluster DNS not ready"),
-		}
+		)
 		return result, nil
 	}
 	notes.AppendSuccess("Cluster DNS is ready")
@@ -106,14 +105,14 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
 
-				result.Actions = []types.Action{
+				result.Actions = append(
+					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.NewServiceLogAction(byovpcRoutingSL.Severity, byovpcRoutingSL.Summary).
 						WithDescription(byovpcRoutingSL.Description).
 						WithServiceName(byovpcRoutingSL.ServiceName).
 						Build(),
-					executor.NoteFrom(notes),
 					executor.Silence("Missing route to internet in subnet route table"),
-				}
+				)
 				return result, nil
 			}
 		}
@@ -139,10 +138,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// We currently always escalate, in the future, when network verifier is reliable,
 	// we would silence the alert when we had a service log in the case of network verifier detecting failures.
-	result.Actions = []types.Action{
-		executor.NoteFrom(notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 		executor.Escalate("ClusterProvisioningDelay - manual investigation required"),
-	}
+	)
 	return result, nil
 }
 

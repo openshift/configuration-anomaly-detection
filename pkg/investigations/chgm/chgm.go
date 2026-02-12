@@ -16,7 +16,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 )
 
@@ -55,19 +54,19 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		// Check for finding errors (should be reported)
 		if investigation.IsFindingError(err) {
 			r.Notes.AppendWarning("Could not complete instance investigation: %s", err.Error())
-			result.Actions = []types.Action{
-				executor.NoteFrom(r.Notes),
+			result.Actions = append(
+				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 				executor.Escalate("Investigation incomplete - manual review required"),
-			}
+			)
 			return result, nil
 		}
 
 		// Unknown error type - escalate for manual investigation
 		r.Notes.AppendWarning("Unexpected error during instance investigation: %s", err.Error())
-		result.Actions = []types.Action{
-			executor.NoteFrom(r.Notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Investigation error - manual review required"),
-		}
+		)
 		return result, nil
 	}
 	logging.Debugf("the investigation returned: [infras running: %d] - [masters running: %d]", res.RunningInstances.Infra, res.RunningInstances.Master)
@@ -76,12 +75,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
 		r.Notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
 
-		result.Actions = []types.Action{
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.NewLimitedSupportAction(stoppedInfraLS.Summary, stoppedInfraLS.Details, "StoppedInstances").
 				Build(),
-			executor.NoteFrom(r.Notes),
 			executor.Silence("Customer stopped instances - cluster in limited support"),
-		}
+		)
 		return result, nil
 	}
 	r.Notes.AppendSuccess("Customer did not stop nodes.")
@@ -116,12 +115,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		if strings.Contains(failureReason, "nosnch.in") {
 			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
 
-			result.Actions = []types.Action{
+			result.Actions = append(
+				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 				executor.NewLimitedSupportAction(egressLS.Summary, egressLS.Details, "EgressBlocked").
 					Build(),
-				executor.NoteFrom(r.Notes),
 				executor.Silence("Deadman's snitch blocked - cluster in limited support"),
-			}
+			)
 			return result, nil
 		}
 
@@ -130,34 +129,26 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 
-		result.Actions = []types.Action{
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.NewServiceLogAction(egressSL.Severity, egressSL.Summary).
 				WithDescription(egressSL.Description).
 				WithServiceName(egressSL.ServiceName).
 				Build(),
-			executor.NoteFrom(r.Notes),
 			executor.Escalate("Egress blocked but not deadman's snitch - manual investigation required"),
-		}
+		)
 		return result, nil
 	case networkverifier.Success:
 		r.Notes.AppendSuccess("Network verifier passed")
 		logging.Info("Network verifier passed.")
 	}
 
-	// Write investigations to a cluster report
-	backplaneReportAction := &executor.BackplaneReportAction{
-		ClusterID: r.Cluster.ExternalID(),
-		Summary:   "CAD Investigation: Cluster Has Gone Missing",
-		Data:      fmt.Sprintf("# Investigation Notes:\n %s \n", r.Notes.String()),
-	}
-
 	// Found no issues that CAD can handle by itself - forward notes to SRE.
 	// The report action will append to notes when executed, then note sends them to PagerDuty
-	result.Actions = []types.Action{
-		backplaneReportAction,
-		executor.NoteFrom(r.Notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		executor.Escalate("No automated remediation available - manual investigation required"),
-	}
+	)
 	return result, nil
 }
 

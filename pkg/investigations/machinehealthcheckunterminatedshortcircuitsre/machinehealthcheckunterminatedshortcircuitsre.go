@@ -79,10 +79,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	if len(targetMachines) == 0 {
 		i.notes.AppendWarning("no machines found for short-circuited machinehealthcheck objects")
-		result.Actions = []types.Action{
-			executor.NoteFrom(i.notes),
+		result.Actions = append(
+			executor.NoteAndReportFrom(i.notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("No machines found for short-circuited MHC objects"),
-		}
+		)
 		return result, nil
 	}
 
@@ -123,10 +123,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		i.notes.AppendSuccess("no recommended actions to take against cluster")
 	}
 
-	result.Actions = []types.Action{
-		executor.NoteFrom(i.notes),
+	result.Actions = append(
+		executor.NoteAndReportFrom(i.notes, r.Cluster.ID(), i.Name()),
 		executor.Escalate("MachineHealthCheck investigation complete"),
-	}
+	)
 	return result, nil
 }
 
