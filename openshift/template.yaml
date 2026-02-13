@@ -17,6 +17,8 @@ parameters:
   value: ""
 - name: CAD_AI_AGENT_CONFIG
   value: ""
+- name: CAD_ACM_HCP_MUST_GATHER_IMAGE
+  value: "registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8"
 - name: CAD_OCTOSQL_IMAGE
   value: quay.io/redhat_emp1/octosql-etcd:latest
 - name: TEKTON_RESOURCE_PRUNER_IMAGE
@@ -359,6 +361,8 @@ objects:
         value: aggregation-pushgateway:9091
       - name: CAD_EXPERIMENTAL_ENABLED
         value: ${CAD_EXPERIMENTAL_ENABLED}
+      - name: CAD_ACM_HCP_MUST_GATHER_IMAGE
+        value: ${CAD_ACM_HCP_MUST_GATHER_IMAGE}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
       - name: CAD_AI_AGENT_CONFIG
