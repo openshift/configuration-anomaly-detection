@@ -290,12 +290,14 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	preCheck := precheck.ClusterStatePrecheck{}
 	result, err := preCheck.Run(builder)
 	if err != nil {
-		clusterNotFound := &investigation.ClusterNotFoundError{}
-		if errors.As(err, clusterNotFound) {
-			logging.Warnf("No cluster found with ID '%s'. Escalating and exiting: %w", clusterId, clusterNotFound)
-			return pdClient.EscalateIncidentWithNote("CAD was unable to find the incident cluster in OCM. An alert for a non-existing cluster is unexpected. Please investigate manually.")
-		}
 		return err
+	}
+	if len(result.Actions) > 0 {
+		if err = c.executeActions(builder, &result, "precheck"); err != nil {
+			return fmt.Errorf("failed to execute precheck actions: %w", err)
+		}
+		// We stop if the precheck returns any action this mean we do not want to run anything else.
+		return nil
 	}
 	if result.StopInvestigations != nil {
 		logging.Errorf("Stopping investigations due to: %w", result.StopInvestigations)
