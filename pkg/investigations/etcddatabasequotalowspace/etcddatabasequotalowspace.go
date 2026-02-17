@@ -206,7 +206,7 @@ func (i *Investigation) Name() string {
 }
 
 func (i *Investigation) AlertTitle() string {
-	return "etcdDatabaseQuotaLowSpace CRITICAL (1)"
+	return "etcdDatabaseQuotaLowSpace"
 }
 
 func (i *Investigation) Description() string {
