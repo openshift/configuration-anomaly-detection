@@ -73,7 +73,7 @@ func TestInvestigationMethods(t *testing.T) {
 	})
 
 	t.Run("AlertTitle", func(t *testing.T) {
-		expected := "etcdDatabaseQuotaLowSpace CRITICAL (1)"
+		expected := "etcdDatabaseQuotaLowSpace"
 		got := inv.AlertTitle()
 		assert.Equal(t, expected, got)
 	})
