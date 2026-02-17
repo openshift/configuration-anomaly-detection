@@ -379,11 +379,13 @@ objects:
           secretKeyRef:
             key: aws_access_key_id
             name: cad-ai-agent-aws-credentials
+            optional: true
       - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
         valueFrom:
           secretKeyRef:
             key: aws_secret_access_key
             name: cad-ai-agent-aws-credentials
+            optional: true
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
@@ -442,11 +444,13 @@ objects:
           secretKeyRef:
             key: aws_access_key_id
             name: cad-ai-agent-aws-credentials
+            optional: true
       - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
         valueFrom:
           secretKeyRef:
             key: aws_secret_access_key
             name: cad-ai-agent-aws-credentials
+            optional: true
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
