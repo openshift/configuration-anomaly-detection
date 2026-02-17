@@ -11,7 +11,11 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"time"
+
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -25,19 +29,39 @@ const (
 	mustGatherDirectoryPattern = "must-gather.cad.*"   // the directory name of the local temporary storage used to store the must-gather
 	archiveTimestampLayout     = "2006-01-02_15-04-05" // the layout of the timestamp used to create the must-gather archive name to be stored on the SFTP server
 
+	// constants for the HCP must-gather
+	defaultAcmHcpMustGatherImage    = "registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8"
+	AcmHcpMustGatherCommandTemplate = "/usr/bin/gather hosted-cluster-namespace=%s hosted-cluster-name=%s"
+	mustGatherNamespacePrefix       = "openshift-must-gather-"
+	mustGatherOperatorNamespace     = "openshift-must-gather-operator" // permanent namespace to exclude from checks
+	mustGatherWaitTimeout           = 30 * time.Minute                 // timeout for waiting for existing must-gather namespace to be deleted
+	mustGatherPollInterval          = 60 * time.Second                 // interval for polling namespace existence
+
 	// label for metrics
-	productName = "ROSA classic"
+	productNameClassic = "ROSA classic"
+	productNameHCP     = "ROSA HCP"
 )
+
+// getAcmHcpMustGatherImage returns the ACM HCP must-gather image to use.
+// It can be overridden via the CAD_ACM_HCP_MUST_GATHER_IMAGE environment variable.
+func getAcmHcpMustGatherImage() string {
+	if image := os.Getenv("CAD_ACM_HCP_MUST_GATHER_IMAGE"); image != "" {
+		return image
+	}
+	return defaultAcmHcpMustGatherImage
+}
 
 type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
-	r, err := rb.WithNotes().WithOC().Build()
+	r, err := rb.WithNotes().WithOC().WithManagementOCClient().WithManagementK8sClient().Build()
 	if err != nil {
 		return result, err
 	}
+
+	productName := productNameClassic
 
 	mustGatherResultDir, err := os.MkdirTemp("", mustGatherDirectoryPattern)
 	if err != nil {
@@ -54,7 +78,23 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}()
 
-	err = r.OCClient.CreateMustGather([]string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)})
+	mustGatherCommandFlags := []string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)}
+
+	if r.IsHCP {
+		productName = productNameHCP
+		err = waitForMustGatherNamespaceDeletion(context.Background(), r.ManagementK8sClient, mustGatherWaitTimeout, mustGatherPollInterval)
+		if err != nil {
+			return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to proceed with must-gather: %w", err).Error())
+		}
+
+		mustGatherCommandFlags = append(mustGatherCommandFlags,
+			fmt.Sprintf("--image=%s", getAcmHcpMustGatherImage()),
+			fmt.Sprintf(AcmHcpMustGatherCommandTemplate, r.HCPNamespace, r.Cluster.Name()),
+		)
+		err = r.ManagementOCClient.CreateMustGather(mustGatherCommandFlags)
+	} else {
+		err = r.OCClient.CreateMustGather(mustGatherCommandFlags)
+	}
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("failed to create must-gather: %w", err),
@@ -135,4 +175,46 @@ func (c *Investigation) Description() string {
 func (c *Investigation) IsExperimental() bool {
 	// TODO: Update to false when graduating to production.
 	return true
+}
+
+// waitForMustGatherNamespaceDeletion waits for any existing openshift-must-gather-* namespace to be deleted
+// from the management cluster. This ensures that a previous must-gather job has completed before starting a new one.
+// Returns an error if the namespace still exists after the timeout period.
+func waitForMustGatherNamespaceDeletion(ctx context.Context, k8sClient client.Client, timeout time.Duration, pollInterval time.Duration) error {
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	for {
+		select {
+		case <-timeoutCtx.Done():
+			return fmt.Errorf("timeout waiting for must-gather namespace to be deleted after %v", timeout)
+		case <-ticker.C:
+			namespaceList := &corev1.NamespaceList{}
+			err := k8sClient.List(ctx, namespaceList, &client.ListOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to list namespaces on management cluster: %w", err)
+			}
+
+			var mustGatherNamespaceFound bool
+			var foundNamespaceName string
+			for _, ns := range namespaceList.Items {
+				// Check if namespace starts with prefix and is not the permanent operator namespace
+				if strings.HasPrefix(ns.Name, mustGatherNamespacePrefix) && ns.Name != mustGatherOperatorNamespace {
+					mustGatherNamespaceFound = true
+					foundNamespaceName = ns.Name
+					break
+				}
+			}
+
+			if !mustGatherNamespaceFound {
+				logging.Info("No must-gather namespace found on management cluster, proceeding with must-gather")
+				return nil
+			}
+
+			logging.Infof("Must-gather namespace %s still exists on management cluster, waiting for deletion...", foundNamespaceName)
+		}
+	}
 }
