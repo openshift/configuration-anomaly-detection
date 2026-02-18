@@ -37,13 +37,15 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	c.logger.Infof("Investigating incident '%s' for service '%s (%s)'", c.pdClient.GetIncidentRef(), c.pdClient.GetServiceID(), c.pdClient.GetServiceName())
 
 	// Check if we should escalate to AI or not
-	alertInvestigation = handleUnsupportedAlertWithAI(alertInvestigation, c.pdClient)
-	if alertInvestigation == nil {
-		err := c.pdClient.EscalateIncident()
-		if err != nil {
-			return fmt.Errorf("could not escalate unsupported alert: %w", err)
+	if experimentalEnabled {
+		alertInvestigation = handleUnsupportedAlertWithAI(alertInvestigation, c.pdClient)
+		if alertInvestigation == nil {
+			err := c.pdClient.EscalateIncident()
+			if err != nil {
+				return fmt.Errorf("could not escalate unsupported alert: %w", err)
+			}
+			return nil
 		}
-		return nil
 	}
 
 	// Continue with investigation...
