@@ -7,15 +7,35 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 
 	bpapi "github.com/openshift/backplane-api/pkg/client"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"k8s.io/client-go/rest"
 )
 
 // Client provides methods for interacting with the backplane API
 type Client interface {
 	// CreateReport creates a new cluster report
 	CreateReport(ctx context.Context, clusterId string, summary string, reportData string) (*bpapi.Report, error)
+	// GetRestConfig creates a remediation and returns a rest.Config for connecting to the cluster's API server through the backplane proxy
+	GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error)
+}
+
+type Cleaner interface {
+	Clean() error
+}
+
+type CleanerFunc func() error
+
+func (f CleanerFunc) Clean() error {
+	return f()
+}
+
+type RestConfig struct {
+	rest.Config
+	backplaneUrl string
+	Cleaner
 }
 
 // ClientImpl implements the Client interface
@@ -94,6 +114,62 @@ func (c *ClientImpl) CreateReport(ctx context.Context, clusterId string, summary
 	}
 
 	return resp.JSON201, nil
+}
+
+func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error) {
+	createRemediationParams := bpapi.CreateRemediationParams{
+		RemediationName: remediationName,
+		ManagingCluster: nil, // If this parameter is nil in CreateRemediationParams, it specifies spoke cluster
+	}
+	if isManagementCluster {
+		managingCluster := bpapi.CreateRemediationParamsManagingClusterManagement
+		createRemediationParams.ManagingCluster = &managingCluster
+	}
+
+	ocmConnection := c.ocmClient.GetConnection()
+	accessToken, _, err := ocmConnection.TokensContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get OCM token: %w", err)
+	}
+	accessToken = strings.TrimSuffix(accessToken, "\n")
+
+	response, err := c.bpClient.CreateRemediationWithResponse(ctx, clusterId, &createRemediationParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create remediation: %w", err)
+	}
+
+	bpAPIClusterURL := c.baseURL + *response.JSON200.ProxyUri
+
+	cfg := &rest.Config{
+		Host:        bpAPIClusterURL,
+		BearerToken: accessToken,
+	}
+
+	deleteRemediationParams := bpapi.DeleteRemediationParams{
+		RemediationInstanceId: response.JSON200.RemediationInstanceId,
+		ManagingCluster:       nil,
+	}
+	if isManagementCluster {
+		managingCluster := bpapi.DeleteRemediationParamsManagingClusterManagement
+		deleteRemediationParams.ManagingCluster = &managingCluster
+	}
+
+	restConfig := &RestConfig{
+		Config:       *cfg,
+		backplaneUrl: c.baseURL,
+		Cleaner: CleanerFunc(func() error {
+			delResponse, err := c.bpClient.DeleteRemediationWithResponse(context.Background(), clusterId, &deleteRemediationParams)
+			if err != nil {
+				return fmt.Errorf("failed to delete remediation: %w", err)
+			}
+			if delResponse.StatusCode() >= http.StatusMultipleChoices {
+				return fmt.Errorf("unexpected status code %d when deleting remediation: %s", delResponse.StatusCode(), delResponse.Body)
+			}
+			return nil
+		}),
+	}
+
+	return restConfig, nil
 }
 
 func httpDoerWithProxy(proxyURL string) (*http.Client, error) {
