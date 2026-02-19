@@ -5,6 +5,7 @@ import (
 	"time"
 
 	bpapi "github.com/openshift/backplane-api/pkg/client"
+	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/segmentio/ksuid"
 )
 
@@ -17,5 +18,11 @@ func (m *MockClient) CreateReport(_ context.Context, _ string, summary string, r
 		Data:      reportData,
 		ReportId:  ksuid.New().String(),
 		CreatedAt: time.Now(),
+	}, nil
+}
+
+func (m *MockClient) GetRestConfig(_ context.Context, _ string, _ string, _ bool) (*backplane.RestConfig, error) {
+	return &backplane.RestConfig{
+		Cleaner: backplane.CleanerFunc(func() error { return nil }),
 	}, nil
 }
