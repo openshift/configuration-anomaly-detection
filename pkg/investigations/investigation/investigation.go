@@ -3,6 +3,7 @@ package investigation
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	BackplaneApi "github.com/openshift/backplane-api/pkg/client"
@@ -93,6 +94,7 @@ type Resources struct {
 	ManagementK8sClient  k8sclient.Client
 	ManagementOCClient   oc.Client
 	HCPNamespace         string
+	HCNamespace          string
 	IsHCP                bool
 }
 
@@ -306,6 +308,17 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	r.builtResources.HCPNamespace = hcpNamespace
 
 	logging.Infof("HCP namespace: %s", hcpNamespace)
+
+	// get HCNamespace from the HCPNamespace and Domain Prefix
+	if !strings.HasSuffix(hcpNamespace, "-"+r.builtResources.Cluster.DomainPrefix()) {
+		return ManagementClusterNamespaceError{
+			ClusterID: r.clusterId,
+			Err:       fmt.Errorf("HCP namespace %s doesn't end with the -DomainPrefix %s", hcpNamespace, r.builtResources.Cluster.DomainPrefix()),
+		}
+	}
+	r.builtResources.HCNamespace = strings.TrimSuffix(hcpNamespace, "-"+r.builtResources.Cluster.DomainPrefix())
+
+	logging.Infof("HC namespace: %s", r.builtResources.HCNamespace)
 
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
 		logging.Infof("Creating RestConfig for management cluster")
