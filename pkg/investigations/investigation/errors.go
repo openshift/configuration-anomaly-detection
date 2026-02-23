@@ -155,6 +155,15 @@ func (e ManagementClusterNotFoundError) Error() string {
 	return fmt.Sprintf("could not retrieve management cluster for HCP cluster %s: %s", e.ClusterID, e.Err.Error())
 }
 
+type ManagementClusterNamespaceError struct {
+	ClusterID string
+	Err       error
+}
+
+func (e ManagementClusterNamespaceError) Error() string {
+	return fmt.Sprintf("problem with management cluster namespaces for HCP cluster %s: %s", e.ClusterID, e.Err.Error())
+}
+
 type ManagementRestConfigError struct {
 	ClusterID           string
 	ManagementClusterID string

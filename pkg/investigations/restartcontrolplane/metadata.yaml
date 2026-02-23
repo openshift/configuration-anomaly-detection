@@ -1,0 +1,11 @@
+name: restartcontrlplane
+managementClusterRbac:
+  hcNamespace:
+    - verbs:
+        - "get"
+        - "list"
+        - "update"
+      apiGroups:
+        - "hypershift.openshift.io"
+      resources:
+        - "hostedclusters"
