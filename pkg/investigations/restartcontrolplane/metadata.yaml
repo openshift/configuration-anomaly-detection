@@ -1,4 +1,4 @@
-name: restartcontrlplane
+name: restartcontrolplane
 managementClusterRbac:
   hcNamespace:
     - verbs:
