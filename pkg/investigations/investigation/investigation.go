@@ -323,7 +323,7 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
 		logging.Infof("Creating RestConfig for management cluster")
 		r.builtResources.ManagementRestConfig, err = newRestConfig(
-			hypershiftConfig.ManagementCluster(),
+			r.clusterId,
 			r.backplaneUrl,
 			r.ocmClient,
 			r.name,
