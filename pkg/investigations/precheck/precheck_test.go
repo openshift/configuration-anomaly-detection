@@ -30,6 +30,7 @@ func TestInvestigation_Run(t *testing.T) {
 			c:    &ClusterStatePrecheck{},
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
+					executor.Note("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 					executor.Escalate("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 				},
 				StopInvestigations: errors.New("unsupported cloud provider (non-AWS)"),
@@ -51,7 +52,8 @@ func TestInvestigation_Run(t *testing.T) {
 			c:    &ClusterStatePrecheck{},
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
-					executor.Silence("CAD: Cluster is already uninstalling"),
+					executor.Note("CAD: Cluster is already uninstalling, silencing alert."),
+					executor.Silence("CAD: Cluster is already uninstalling, silencing alert."),
 				},
 				StopInvestigations: errors.New("cluster is already uninstalling"),
 			},
@@ -72,6 +74,7 @@ func TestInvestigation_Run(t *testing.T) {
 			c:    &ClusterStatePrecheck{},
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
+					executor.Note("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually."),
 					executor.Escalate("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually."),
 				},
 				StopInvestigations: errors.New("access protection could not be determined"),
@@ -96,6 +99,7 @@ func TestInvestigation_Run(t *testing.T) {
 			c:    &ClusterStatePrecheck{},
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
+					executor.Note("CAD is unable to run against access protected clusters. Please investigate."),
 					executor.Escalate("CAD is unable to run against access protected clusters. Please investigate."),
 				},
 				StopInvestigations: errors.New("cluster is access protected"),
@@ -139,6 +143,7 @@ func TestInvestigation_Run(t *testing.T) {
 			c:    &ClusterStatePrecheck{},
 			want: investigation.InvestigationResult{
 				Actions: []types.Action{
+					executor.Note("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 					executor.Escalate("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 				},
 				StopInvestigations: errors.New("unsupported cloud provider (non-AWS)"),

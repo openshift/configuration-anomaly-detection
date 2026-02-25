@@ -37,6 +37,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		logging.Info("Cluster is uninstalling and requires no investigation. Silencing alert.")
 		result.StopInvestigations = errors.New("cluster is already uninstalling")
 		result.Actions = []types.Action{
+			executor.Note("CAD: Cluster is already uninstalling, silencing alert."),
 			executor.Silence("CAD: Cluster is already uninstalling, silencing alert."),
 		}
 		return result, nil
@@ -46,6 +47,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		logging.Info("Cloud provider unsupported, forwarding to primary.")
 		result.StopInvestigations = errors.New("unsupported cloud provider (non-AWS)")
 		result.Actions = []types.Action{
+			executor.Note("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 			executor.Escalate("CAD could not run an automated investigation on this cluster: unsupported cloud provider."),
 		}
 		return result, nil
@@ -56,6 +58,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		logging.Warnf("failed to get access protection status for cluster: %v. Escalating for manual handling.", err)
 		result.StopInvestigations = errors.New("access protection could not be determined")
 		result.Actions = []types.Action{
+			executor.Note("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually."),
 			executor.Escalate("CAD could not determine access protection status for this cluster, as CAD is unable to run against access protected clusters, please investigate manually."),
 		}
 		return result, nil
@@ -64,6 +67,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		logging.Info("Cluster is access protected. Escalating alert.")
 		result.StopInvestigations = errors.New("cluster is access protected")
 		result.Actions = []types.Action{
+			executor.Note("CAD is unable to run against access protected clusters. Please investigate."),
 			executor.Escalate("CAD is unable to run against access protected clusters. Please investigate."),
 		}
 		return result, nil
