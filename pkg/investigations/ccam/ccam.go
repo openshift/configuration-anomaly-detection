@@ -32,10 +32,12 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 	// Only an AWS error indicates that the permissions are incorrect - all other mean the resource build failed for other reasons
 	awsClientErr := &investigation.AWSClientError{}
 	if errors.As(err, awsClientErr) {
+		logging.Debug("Inspecting AWS error")
 		if customerRemovedPermissions := customerRemovedPermissions(awsClientErr.Err.Error()); !customerRemovedPermissions {
 			// We aren't able to jumpRole because of an error that is different than
 			// a removed support role/policy or removed installer role/policy
 			// This would normally be a backplane failure.
+			logging.Debug("Unhandled AWS error: ", awsClientErr.Error())
 			return result, investigation.WrapInfrastructure(awsClientErr.Err, "AWS/Backplane infrastructure failure")
 		}
 		result.StopInvestigations = err
@@ -45,6 +47,7 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 		// we need to figure out if we cluster state allows us to set limited support
 		// (the cluster is in a ready state, not uninstalling, installing, etc.)
 
+		logging.Debug("Checking cluster state: ", cluster.State())
 		switch cluster.State() {
 		case cmv1.ClusterStateReady:
 			// Cluster is in functional state but we can't jumprole to it: post limited support
