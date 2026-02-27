@@ -311,15 +311,19 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	}
 	// FIXME: Once all migrations are converted this can be removed.
 	updateMetrics(inv.Name(), &result)
-	// FIXME: This is a quick fix - we might want to put CCAM as a composable check per investigation so each investigation can decide to proceed or not.
-	chgmInv := chgm.Investigation{}
-	if result.StopInvestigations != nil && inv.AlertTitle() == chgmInv.AlertTitle() {
-		return result.StopInvestigations
-	}
 
 	// Execute ccam actions if any
-	if err := c.executeActions(builder, &result, "ccam"); err != nil {
-		return fmt.Errorf("failed to execute ccam actions: %w", err)
+	if len(result.Actions) > 0 {
+		if err := c.executeActions(builder, &result, "ccam"); err != nil {
+			return fmt.Errorf("failed to execute ccam actions: %w", err)
+		}
+		chgmInv := chgm.Investigation{}
+		// In case of a CHGM there is no need to investigate further now, other investigations that don't need AWS might
+		// be able to proceed. To handle this case we will *only* return when CCAM found something and it's CGHM - handling
+		// non-AWS access is up to following investigations.
+		if inv.AlertTitle() == chgmInv.AlertTitle() {
+			return nil
+		}
 	}
 
 	logging.Infof("Starting investigation for %s", inv.Name())
