@@ -9,12 +9,38 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
+	ktypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+// Test helper functions to check for specific action types
+func hasActionType(actions []types.Action, actionType string) bool {
+	for _, action := range actions {
+		if action.Type() == actionType {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSilenceAction(actions []types.Action) bool {
+	return hasActionType(actions, string(executor.ActionTypeSilenceIncident))
+}
+
+func hasNoteAction(actions []types.Action) bool {
+	return hasActionType(actions, string(executor.ActionTypePagerDutyNote))
+}
+
+func hasBackplaneReportAction(actions []types.Action) bool {
+	return hasActionType(actions, string(executor.ActionTypeBackplaneReport))
+}
 
 func TestInvestigation_Name(t *testing.T) {
 	inv := &Investigation{}
@@ -51,21 +77,27 @@ func TestInvestigation_Run_BuildError(t *testing.T) {
 }
 
 func TestInvestigation_Run_NonHCPCluster(t *testing.T) {
+	cluster, err := cmv1.NewCluster().ID("test-123").Build()
+	require.NoError(t, err)
+
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
-			IsHCP: false,
+			IsHCP:   false,
+			Cluster: cluster,
+			Notes:   notewriter.New("test", logging.RawLogger),
 		},
 		BuildError: nil,
 	}
 	inv := &Investigation{}
 
 	result, err := inv.Run(rb)
-	assert.Empty(t, result)
-	assert.Error(t, err)
-	var findingErr investigation.FindingError
-	assert.True(t, errors.As(err, &findingErr))
-	assert.Contains(t, err.Error(), "target cluster isn't an HCP cluster")
-	assert.Contains(t, err.Error(), "Restarting Control Plane failed")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, result.Actions)
+
+	// Verify we have the expected actions for skipping non-HCP cluster
+	assert.True(t, hasSilenceAction(result.Actions), "should have silence action")
+	assert.True(t, hasNoteAction(result.Actions), "should have note action")
+	assert.True(t, hasBackplaneReportAction(result.Actions), "should have backplane report action")
 }
 
 func TestInvestigation_Run_GetHostedClusterFails(t *testing.T) {
@@ -134,7 +166,7 @@ func TestInvestigation_Run_Success(t *testing.T) {
 		Version: "v1beta1",
 		Kind:    "HostedCluster",
 	})
-	err = fakeK8s.Get(context.Background(), types.NamespacedName{Namespace: hcNamespace, Name: domainPrefix}, updated)
+	err = fakeK8s.Get(context.Background(), ktypes.NamespacedName{Namespace: hcNamespace, Name: domainPrefix}, updated)
 	require.NoError(t, err)
 	annotations := updated.GetAnnotations()
 	require.NotNil(t, annotations)
