@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -19,16 +20,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	ctx := context.Background()
 
-	r, err := rb.WithCluster().WithManagementK8sClient().Build()
+	r, err := rb.WithCluster().WithManagementK8sClient().WithNotes().Build()
 	if err != nil {
 		return result, err
 	}
 
-	// fail in a non-retryable way if the cluster isn't an HCP cluster
+	// report and exit if the cluster isn't an HCP cluster
 	if !r.IsHCP {
-		return result, investigation.WrapFinding(
-			fmt.Errorf("target cluster isn't an HCP cluster"),
-			"Restarting Control Plane failed")
+		r.Notes.AppendSuccess("Cluster is not an HCP cluster, skipping control plane restart")
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
+			executor.Silence("Control plane restart only applies to HCP clusters"),
+		)
+		return result, nil
 	}
 
 	hcNamespace := r.HCNamespace
