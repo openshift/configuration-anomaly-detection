@@ -22,7 +22,7 @@ type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithAwsClient().Build()
+	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
 	if err != nil {
 		return result, err
 	}
