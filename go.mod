@@ -1,6 +1,6 @@
 module github.com/openshift/configuration-anomaly-detection
 
-go 1.25.3
+go 1.25.7
 
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
