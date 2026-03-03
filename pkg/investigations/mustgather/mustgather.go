@@ -84,7 +84,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		productName = productNameHCP
 		err = waitForMustGatherNamespaceDeletion(context.Background(), r.ManagementK8sClient, mustGatherWaitTimeout, mustGatherPollInterval)
 		if err != nil {
-			return result, r.PdClient.EscalateIncidentWithNote(fmt.Errorf("CAD was unable to proceed with must-gather: %w", err).Error())
+			logging.Errorf("CAD was unable to proceed with must-gather. Error: %v", err)
+			result.Actions = []types.Action{
+				executor.Note(fmt.Sprintf("CAD was unable to proceed with must-gather. Error: %v", err)),
+				executor.Escalate("Failed to access must-gather namespace on management cluster"),
+			}
+			return result, nil
 		}
 
 		mustGatherCommandFlags = append(mustGatherCommandFlags,

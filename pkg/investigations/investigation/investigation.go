@@ -6,12 +6,8 @@ import (
 	"strings"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	BackplaneApi "github.com/openshift/backplane-api/pkg/client"
-	"github.com/openshift/backplane-cli/pkg/cli/config"
-	bpremediation "github.com/openshift/backplane-cli/pkg/remediation"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	"k8s.io/client-go/rest"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
@@ -84,13 +80,13 @@ type Resources struct {
 	ClusterDeployment    *hivev1.ClusterDeployment
 	AwsClient            aws.Client
 	BpClient             backplane.Client
-	RestConfig           *RestConfig
+	RestConfig           *backplane.RestConfig
 	K8sClient            k8sclient.Client
 	OcmClient            ocm.Client
 	PdClient             pagerduty.Client
 	Notes                *notewriter.NoteWriter
 	OCClient             oc.Client
-	ManagementRestConfig *RestConfig
+	ManagementRestConfig *backplane.RestConfig
 	ManagementK8sClient  k8sclient.Client
 	ManagementOCClient   oc.Client
 	HCPNamespace         string
@@ -236,7 +232,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	}
 
 	if r.buildRestConfig && r.builtResources.RestConfig == nil {
-		r.builtResources.RestConfig, err = newRestConfig(r.builtResources.Cluster.ID(), r.backplaneUrl, r.ocmClient, r.name, false)
+		r.builtResources.RestConfig, err = r.builtResources.BpClient.GetRestConfig(context.Background(), internalClusterId, r.name, false)
 		if err != nil {
 			r.buildErr = RestConfigError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
@@ -322,13 +318,7 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
 		logging.Infof("Creating RestConfig for management cluster")
-		r.builtResources.ManagementRestConfig, err = newRestConfig(
-			r.clusterId,
-			r.backplaneUrl,
-			r.ocmClient,
-			r.name,
-			true,
-		)
+		r.builtResources.ManagementRestConfig, err = r.builtResources.BpClient.GetRestConfig(context.Background(), r.builtResources.Cluster.ID(), r.name, true)
 		if err != nil {
 			return ManagementRestConfigError{
 				ClusterID: r.clusterId,
@@ -360,61 +350,6 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	}
 
 	return nil
-}
-
-type remediationCleaner struct {
-	clusterID             string
-	ocmClient             ocm.Client
-	remediationInstanceId string
-	backplaneUrl          string
-}
-
-type Cleaner interface {
-	Clean() error
-}
-
-type RestConfig struct {
-	rest.Config
-	backplaneUrl string
-	Cleaner
-}
-
-func (cleaner remediationCleaner) Clean() error {
-	return deleteRemediation(cleaner.clusterID, cleaner.backplaneUrl, cleaner.ocmClient, cleaner.remediationInstanceId)
-}
-
-// New returns a k8s rest config for the given cluster scoped to a given remediation's permissions.
-func newRestConfig(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationName string, isManagementCluster bool) (*RestConfig, error) {
-	createRemediationParams := BackplaneApi.CreateRemediationParams{
-		RemediationName: remediationName,
-		ManagingCluster: nil, // If this parameter is nil in CreateRemediationParams, it specifies spoke cluster
-	}
-	if isManagementCluster {
-		managingCluster := BackplaneApi.CreateRemediationParamsManagingClusterManagement
-		createRemediationParams.ManagingCluster = &managingCluster
-	}
-
-	decoratedCfg, remediationInstanceId, err := bpremediation.CreateRemediationWithConn(
-		config.BackplaneConfiguration{URL: backplaneUrl},
-		ocmClient.GetConnection(),
-		clusterID,
-		&createRemediationParams,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &RestConfig{*decoratedCfg, backplaneUrl, remediationCleaner{clusterID, ocmClient, remediationInstanceId, backplaneUrl}}, nil
-}
-
-// Cleanup removes the remediation created for the cluster.
-func deleteRemediation(clusterID, backplaneUrl string, ocmClient ocm.Client, remediationInstanceId string) error {
-	return bpremediation.DeleteRemediationWithConn(
-		config.BackplaneConfiguration{URL: backplaneUrl},
-		ocmClient.GetConnection(),
-		clusterID,
-		remediationInstanceId,
-	)
 }
 
 // This is an implementation to be used in tests, but putting it into a _test.go file will make it not resolvable.
