@@ -373,21 +373,3 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 	}
 	return creator, nil
 }
-
-func GetOCMPullSecret(ocmConn *sdk.Connection, userID string) (string, error) {
-	searchString := fmt.Sprintf("account_id = '%s'", userID)
-	var registryCredentialToken string
-	registryCredentials, err := ocmConn.AccountsMgmt().V1().RegistryCredentials().List().Search(searchString).Send()
-	if err != nil {
-		return "", err
-	}
-	for _, tempToken := range registryCredentials.Items().Items() {
-		if tempToken.Registry().ID() == "Redhat_registry.redhat.io" {
-			registryCredentialToken = tempToken.Token()
-		}
-	}
-	if registryCredentialToken == "" {
-		return "", errors.New("failed to parse pull secret from OCM")
-	}
-	return registryCredentialToken, nil
-}
