@@ -38,13 +38,6 @@ if [[ -z "${OCM_BACKPLANE_REPO_PATH}" ]]; then
 fi
 set -u
 
-if ! [ "$(cat ${OCM_BACKPLANE_REPO_PATH}/configs/ocm.json | jq -r .client_id)" = "ocm-backplane-staging" ]; then
-    echo "OCM Backplane ocm.json (${OCM_BACKPLANE_REPO_PATH}/configs/ocm.json) isn't the ocm-backplane-staging config."
-    echo "Please get the config from a backplane pod on a staging backplanes0* cluster (in /ocm inside the pod)"
-    echo "and place it in the configs subdirectory of the backplane-api repo."
-    exit -1
-fi
-
 #checking certificate validity
 if ! openssl verify ${OCM_BACKPLANE_REPO_PATH}/localhost.crt; then
     echo "Certificate ${OCM_BACKPLANE_REPO_PATH}/localhost.crt not valid, please run make dev-certs in the OCM Backplane directory as root to generate and trust the localhost certificates"
