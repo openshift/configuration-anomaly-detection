@@ -3,14 +3,12 @@ package clustermonitoringerrorbudgetburn
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -68,21 +66,11 @@ type Investigation struct{}
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigation.InvestigationResult, err error) {
 	r, err := rb.WithK8sClient().Build()
 	if err != nil {
-		k8sErr := &investigation.K8SClientError{}
-		if errors.As(err, k8sErr) {
-			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				result.Actions = []types.Action{
-					executor.Escalate("CAD was unable to access cluster's kube-api. Please investigate manually."),
-				}
-				return result, nil
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			result.Actions = []types.Action{
+				executor.Escalate(msg),
 			}
-			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				result.Actions = []types.Action{
-					executor.Escalate("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually."),
-				}
-				return result, nil
-			}
-			return result, err
+			return result, nil
 		}
 		return result, err
 	}
