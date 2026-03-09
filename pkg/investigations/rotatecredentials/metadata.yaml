@@ -1,0 +1,74 @@
+name: rotatecredentials
+clusterRbac:
+  roles:
+    - namespace: "kube-system"
+      rules:
+      - verbs:
+          - "get"
+          - "list"
+        apiGroups:
+          - ""
+        resources:
+          - "secrets"
+    - namespace: "openshift-cloud-credential-operator"
+      rules:
+      - verbs:
+          - "get"
+          - "list"
+          - "delete"
+        apiGroups:
+          - "cloudcredential.openshift.io"
+        resources:
+          - "credentialsrequests"
+hiveClusterRbac:
+  rbac:
+    roles:
+      - namespace: "aws-account-operator"
+        rules:
+          - verbs:
+              - "get"
+              - "list"
+            apiGroups:
+              - "aws.managed.openshift.io"
+            resources:
+              - "accounts"
+          - verbs:
+              - "get"
+              - "list"
+              - "update"
+            apiGroups:
+              - ""
+            resources:
+              - "secrets"
+  clusterDeploymentNamespace:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "hive.openshift.io"
+      resources:
+        - "clusterdeployments"
+    - verbs:
+        - "get"
+        - "list"
+        - "create"
+        - "delete"
+      apiGroups:
+        - "hive.openshift.io"
+      resources:
+        - "syncsets"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "hiveinternal.openshift.io"
+      resources:
+        - "clustersyncs"
+    - verbs:
+        - "get"
+        - "list"
+        - "update"
+      apiGroups:
+        - ""
+      resources:
+        - "secrets"

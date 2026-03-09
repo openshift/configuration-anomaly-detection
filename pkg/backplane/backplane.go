@@ -20,6 +20,8 @@ type Client interface {
 	// CreateReport creates a new cluster report
 	CreateReport(ctx context.Context, clusterId string, summary string, reportData string) (*bpapi.Report, error)
 	// GetRestConfig creates a remediation and returns a rest.Config for connecting to the cluster's API server through the backplane proxy
+	//
+	// Deprecated: Use GetRestConfigWithManagingClusterType instead
 	GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error)
 }
 
