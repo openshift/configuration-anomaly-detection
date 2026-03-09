@@ -48,23 +48,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result := investigation.InvestigationResult{}
 	r, err := rb.WithK8sClient().WithCluster().WithNotes().Build()
 	if err != nil {
-		k8sErr := &investigation.K8SClientError{}
-		if errors.As(err, k8sErr) {
-			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				result.Actions = []types.Action{
-					executor.Note("CAD was unable to access cluster's kube-api. Please investigate manually."),
-					executor.Escalate("Cluster API unavailable"),
-				}
-				return result, nil
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			result.Actions = []types.Action{
+				executor.Note(msg),
+				executor.Escalate(msg),
 			}
-			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				result.Actions = []types.Action{
-					executor.Note("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually."),
-					executor.Escalate("Cannot access infrastructure"),
-				}
-				return result, nil
-			}
-			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
+			return result, nil
 		}
 		return result, investigation.WrapInfrastructure(err, "Resource build error")
 	}

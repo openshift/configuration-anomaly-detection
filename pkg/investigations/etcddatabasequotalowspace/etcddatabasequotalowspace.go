@@ -17,6 +17,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type Investigation struct{}
@@ -40,6 +41,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		WithNotes().
 		Build()
 	if err != nil {
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			result.Actions = []types.Action{
+				executor.Escalate(msg),
+			}
+			return result, nil
+		}
 		return result, err
 	}
 

@@ -1,13 +1,11 @@
 package cannotretrieveupdatessre
 
 import (
-	"errors"
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
@@ -42,25 +40,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {
-		k8sErr := &investigation.K8SClientError{}
-		if errors.As(err, k8sErr) {
-			if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
-				notes.AppendWarning("CAD was unable to access cluster's kube-api. Please investigate manually.")
-				result.Actions = append(
-					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
-					executor.Escalate("Kube-api unavailable - manual investigation required"),
-				)
-				return result, nil
-			}
-			if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
-				notes.AppendWarning("CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.")
-				result.Actions = append(
-					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
-					executor.Escalate("Cannot access infra cluster - manual investigation required"),
-				)
-				return result, nil
-			}
-			return result, investigation.WrapInfrastructure(k8sErr.Err, "K8s client error")
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			notes.AppendWarning("%s", msg)
+			result.Actions = append(
+				executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+				executor.Escalate(msg),
+			)
+			return result, nil
 		}
 		return result, investigation.WrapInfrastructure(err, "Resource build error")
 	}

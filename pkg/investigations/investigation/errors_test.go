@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 )
 
 func TestInfrastructureError_Error(t *testing.T) {
@@ -277,6 +279,70 @@ func TestIsFindingError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsFindingError(tt.err); got != tt.want {
 				t.Errorf("IsFindingError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClusterAccessErrorMessage(t *testing.T) {
+	tests := []struct {
+		name    string
+		err     error
+		wantMsg string
+		wantOk  bool
+	}{
+		{
+			name:    "K8SClientError with ErrAPIServerUnavailable",
+			err:     K8SClientError{ClusterID: "test", Err: k8sclient.ErrAPIServerUnavailable},
+			wantMsg: "CAD was unable to access cluster's kube-api. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "K8SClientError with ErrCannotAccessInfra",
+			err:     K8SClientError{ClusterID: "test", Err: k8sclient.ErrCannotAccessInfra},
+			wantMsg: "CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "K8SClientError with other error",
+			err:     K8SClientError{ClusterID: "test", Err: errors.New("some other error")},
+			wantMsg: "",
+			wantOk:  false,
+		},
+		{
+			name:    "RestConfigError",
+			err:     RestConfigError{ClusterID: "test", Err: errors.New("backplane unavailable")},
+			wantMsg: "CAD was unable to get credentials to the cluster. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "unrelated error",
+			err:     errors.New("something else"),
+			wantMsg: "",
+			wantOk:  false,
+		},
+		{
+			name:    "ClusterNotFoundError is not handled",
+			err:     ClusterNotFoundError{ClusterID: "test", Err: errors.New("not found")},
+			wantMsg: "",
+			wantOk:  false,
+		},
+		{
+			name:    "wrapped K8SClientError with ErrAPIServerUnavailable",
+			err:     fmt.Errorf("wrapped: %w", K8SClientError{ClusterID: "test", Err: k8sclient.ErrAPIServerUnavailable}),
+			wantMsg: "CAD was unable to access cluster's kube-api. Please investigate manually.",
+			wantOk:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, ok := ClusterAccessErrorMessage(tt.err)
+			if ok != tt.wantOk {
+				t.Errorf("ClusterAccessErrorMessage() ok = %v, want %v", ok, tt.wantOk)
+			}
+			if msg != tt.wantMsg {
+				t.Errorf("ClusterAccessErrorMessage() msg = %q, want %q", msg, tt.wantMsg)
 			}
 		})
 	}

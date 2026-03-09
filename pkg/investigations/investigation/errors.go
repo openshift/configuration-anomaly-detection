@@ -3,6 +3,8 @@ package investigation
 import (
 	"errors"
 	"fmt"
+
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 )
 
 type ClusterNotFoundError struct {
@@ -144,6 +146,27 @@ func IsInfrastructureError(err error) bool {
 func IsFindingError(err error) bool {
 	var findingErr FindingError
 	return errors.As(err, &findingErr)
+}
+
+// ClusterAccessErrorMessage checks if a Build error is a known cluster access issue
+// (K8SClientError or RestConfigError). If recognized, it returns an escalation message
+// and true. Otherwise, it returns an empty string and false.
+// Callers can use the message to construct their own escalation actions.
+func ClusterAccessErrorMessage(err error) (string, bool) {
+	k8sErr := &K8SClientError{}
+	if errors.As(err, k8sErr) {
+		if errors.Is(k8sErr.Err, k8sclient.ErrAPIServerUnavailable) {
+			return "CAD was unable to access cluster's kube-api. Please investigate manually.", true
+		}
+		if errors.Is(k8sErr.Err, k8sclient.ErrCannotAccessInfra) {
+			return "CAD is not allowed to access hive, management or service cluster's kube-api. Please investigate manually.", true
+		}
+	}
+	restCfgErr := &RestConfigError{}
+	if errors.As(err, restCfgErr) {
+		return "CAD was unable to get credentials to the cluster. Please investigate manually.", true
+	}
+	return "", false
 }
 
 type ManagementClusterNotFoundError struct {
