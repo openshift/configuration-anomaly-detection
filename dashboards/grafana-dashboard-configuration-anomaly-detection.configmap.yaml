@@ -668,6 +668,85 @@ data:
           ],
           "title": "Prepared servicelogs",
           "type": "piechart"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "description": "Percentage of CreateMustGather investigations that successfully performed a must-gather",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "null": {
+                      "text": "No alerts"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 75
+                  },
+                  {
+                    "color": "green",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 33
+          },
+          "id": 21,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(cad_investigate_must_gather_performed_total{alert_type=\"mustgather\"}[$__range])) / sum(increase(cad_investigate_alerts_total{alert_type=\"mustgather\"}[$__range])) * 100",
+              "hide": false,
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Must-Gather Success Rate",
+          "type": "gauge"
         }
       ],
       "refresh": false,
