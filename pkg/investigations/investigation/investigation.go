@@ -2,6 +2,7 @@ package investigation
 
 import (
 	"context"
+	"fmt"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/backplane-cli/pkg/cli/config"
@@ -87,6 +88,12 @@ type Resources struct {
 	PdClient          pagerduty.Client
 	Notes             *notewriter.NoteWriter
 	OCClient          oc.Client
+	
+	// Management cluster resources for HCP
+	ManagementClusterID             string
+	ManagementClusterNamespace      string
+	ManagementClusterRestConfig     *RestConfig
+	ManagementClusterK8sClient      k8sclient.Client
 }
 
 type ResourceBuilder interface {
@@ -98,6 +105,9 @@ type ResourceBuilder interface {
 	WithPdClient(pdClient pagerduty.Client) ResourceBuilder
 	WithOC() ResourceBuilder
 	WithNotes() ResourceBuilder
+	WithManagementCluster() ResourceBuilder
+	WithManagementClusterRestConfig() ResourceBuilder
+	WithManagementClusterK8sClient() ResourceBuilder
 	Build() (*Resources, error)
 }
 
@@ -109,6 +119,9 @@ type ResourceBuilderT struct {
 	buildK8sClient         bool
 	buildOC                bool
 	buildNotes             bool
+		buildManagementCluster           bool
+	buildManagementClusterRestConfig bool
+	buildManagementClusterK8sClient  bool
 
 	clusterId    string
 	name         string
@@ -165,6 +178,25 @@ func (r *ResourceBuilderT) WithNotes() ResourceBuilder {
 
 func (r *ResourceBuilderT) WithPdClient(pdClient pagerduty.Client) ResourceBuilder {
 	r.builtResources.PdClient = pdClient
+	return r
+}
+
+
+func (r *ResourceBuilderT) WithManagementCluster() ResourceBuilder {
+	r.WithCluster() // Ensure customer cluster is loaded first
+	r.buildManagementCluster = true
+	return r
+}
+
+func (r *ResourceBuilderT) WithManagementClusterRestConfig() ResourceBuilder {
+	r.WithManagementCluster()
+	r.buildManagementClusterRestConfig = true
+	return r
+}
+
+func (r *ResourceBuilderT) WithManagementClusterK8sClient() ResourceBuilder {
+	r.WithManagementClusterRestConfig()
+	r.buildManagementClusterK8sClient = true
 	return r
 }
 
@@ -233,6 +265,69 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.buildErr = ClusterDeploymentNotFoundError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
 		}
+	}
+
+
+	// Build management cluster resources
+	if r.buildManagementCluster && r.builtResources.ManagementClusterID == "" {
+		// Ensure cluster is HCP
+		isHCP, err := isHCPCluster(r.builtResources.Cluster)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check if cluster is HCP: %w", err)
+		}
+		if !isHCP {
+			return nil, fmt.Errorf("cannot request management cluster resources for non-HCP cluster")
+		}
+		
+		// Get management cluster ID
+		mcID, err := r.ocmClient.GetManagementClusterID(r.clusterId)
+		if err != nil {
+			r.buildErr = WrapInfrastructure(
+				fmt.Errorf("failed to get management cluster ID: %w", err),
+				"OCM API failure getting management cluster ID")
+			return r.builtResources, r.buildErr
+		}
+		r.builtResources.ManagementClusterID = mcID
+		
+		// Get HCP namespace on management cluster
+		mcNamespace, err := r.ocmClient.GetManagementClusterNamespace(r.clusterId)
+		if err != nil {
+			r.buildErr = WrapInfrastructure(
+				fmt.Errorf("failed to get management cluster namespace: %w", err),
+				"OCM API failure getting HCP namespace")
+			return r.builtResources, r.buildErr
+		}
+		r.builtResources.ManagementClusterNamespace = mcNamespace
+		
+		logging.Infof("Management cluster: %s, namespace: %s", mcID, mcNamespace)
+	}
+	
+	if r.buildManagementClusterRestConfig && r.builtResources.ManagementClusterRestConfig == nil {
+		// Create remediation on management cluster using existing newRestConfig pattern
+		restConfig, err := newRestConfig(
+			r.builtResources.ManagementClusterID, 
+			r.backplaneUrl, 
+			r.ocmClient, 
+			r.name,
+		)
+		if err != nil {
+			r.buildErr = WrapInfrastructure(
+				fmt.Errorf("failed to create management cluster REST config: %w", err),
+				"Backplane remediation failure for management cluster")
+			return r.builtResources, r.buildErr
+		}
+		r.builtResources.ManagementClusterRestConfig = restConfig
+	}
+	
+	if r.buildManagementClusterK8sClient && r.builtResources.ManagementClusterK8sClient == nil {
+		k8sClient, err := k8sclient.New(&r.builtResources.ManagementClusterRestConfig.Config)
+		if err != nil {
+			r.buildErr = WrapInfrastructure(
+				fmt.Errorf("failed to create management cluster K8s client: %w", err),
+				"K8s client creation failure for management cluster")
+			return r.builtResources, r.buildErr
+		}
+		r.builtResources.ManagementClusterK8sClient = k8sClient
 	}
 
 	return r.builtResources, nil
@@ -323,9 +418,42 @@ func (r *ResourceBuilderMock) WithPdClient(client pagerduty.Client) ResourceBuil
 	return r
 }
 
+
+func (r *ResourceBuilderMock) WithManagementCluster() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithManagementClusterRestConfig() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithManagementClusterK8sClient() ResourceBuilder {
+	return r
+}
+
+
 func (r *ResourceBuilderMock) Build() (*Resources, error) {
 	if r.BuildError != nil {
 		return nil, r.BuildError
 	}
 	return r.Resources, nil
+}
+
+// isHCPCluster checks if a cluster is a Hosted Control Plane (HCP) cluster
+func isHCPCluster(cluster *cmv1.Cluster) (bool, error) {
+	if cluster == nil {
+		return false, fmt.Errorf("cluster is nil")
+	}
+	
+	hypershift, ok := cluster.GetHypershift()
+	if !ok {
+		return false, nil
+	}
+
+	enabled, ok := hypershift.GetEnabled()
+	if !ok {
+		return false, nil
+	}
+
+	return enabled, nil
 }
