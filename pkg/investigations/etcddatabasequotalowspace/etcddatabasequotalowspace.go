@@ -58,11 +58,49 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 	if isHCP {
-		r.Notes.AppendWarning("Cluster is HCP - skipping snapshot")
-		logging.Info("skipping etcd snapshot for HCP cluster")
+		// Phase 1: Validate management cluster access
+		r.Notes.AppendAutomation("HCP cluster detected - validating management cluster access (Phase 1)")
+		logging.Info("HCP cluster detected - establishing management cluster connection")
+		
+		// Request management cluster resources
+		r, err = rb.
+			WithManagementCluster().
+			WithManagementClusterK8sClient().
+			Build()
+		if err != nil {
+			if investigation.IsInfrastructureError(err) {
+				return result, err
+			}
+			r.Notes.AppendWarning("Failed to access management cluster: %v", err)
+			logging.Errorf("failed to access management cluster: %v", err)
+			result.Actions = append(
+				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+				executor.Escalate("HCP cluster - management cluster access failed"),
+			)
+			return result, nil
+		}
+		
+		r.Notes.AppendSuccess("Successfully connected to management cluster: %s", r.ManagementClusterID)
+		r.Notes.AppendSuccess("HCP namespace: %s", r.ManagementClusterNamespace)
+		r.Notes.AppendAutomation("Phase 1 complete - management cluster access established")
+		r.Notes.AppendWarning("Automated etcd analysis not yet implemented for HCP (coming in Phase 2)")
+		
+		logging.Infof("Management cluster access validated: MC=%s, namespace=%s", 
+			r.ManagementClusterID, r.ManagementClusterNamespace)
+		
+		// TODO(Phase 2): Create etcd analysis Job on management cluster
+		// Job spec from enhancement: init container (etcdctl) + analysis container (octosql)
+		// Retrieve results from DynaTrace (MC logs not available via K8s API)
+		// Parse and format results same as Classic ROSA
+		
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"hcp", "phase1_complete", "manual_investigation_required"},
+		}
+		
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("HCP cluster - manual investigation required"),
+			executor.Escalate("HCP cluster - manual investigation required (automated analysis coming in Phase 2)"),
 		)
 		return result, nil
 	}

@@ -17,3 +17,8 @@ export BACKPLANE_PROXY=${PROXY_URL}
 export AWS_PROXY=${PROXY_URL}
 
 set +euo pipefail
+
+# Example HCP clusters for testing management cluster access (Phase 1):
+# - To test Phase 1 MC access: Use any stage HCP cluster ID
+# - Get HCP cluster IDs from OCM or existing PagerDuty alerts
+# - Example test: ./pkg/investigations/etcddatabasequotalowspace/testing/test_mc_connection.sh <hcp-cluster-id>
