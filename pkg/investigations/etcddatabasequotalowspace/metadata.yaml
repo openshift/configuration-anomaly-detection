@@ -1,5 +1,5 @@
 name: etcddatabasequotalowspace
-rbac:
+rbac:  # Customer cluster RBAC (for Classic ROSA)
   roles:
     - namespace: openshift-etcd
       rules:
@@ -29,4 +29,46 @@ rbac:
             - "batch"
           resources:
             - jobs
-customerDataAccess: false
+
+# Management cluster RBAC (for HCP)
+managementClusterRbac:
+  roles:
+    # Note: Namespace will be resolved dynamically using ManagementClusterNamespace from resources
+    # The backplane remediation API will create the Role in the correct HCP namespace
+    - namespace: ""  # Empty = will be populated with r.ManagementClusterNamespace
+      rules:
+        # Job management permissions
+        - verbs:
+            - "create"
+            - "get"
+            - "list"
+            - "delete"
+          apiGroups:
+            - "batch"
+          resources:
+            - jobs
+        # Pod inspection permissions (for job status checking)
+        - verbs:
+            - "get"
+            - "list"
+          apiGroups:
+            - ""
+          resources:
+            - pods
+        # Log reading permissions (will fail on MC, triggering DynaTrace fallback)
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - pods/log
+        # ConfigMap and Secret access for etcd client certificates
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - configmaps
+            - secrets
+
+customerDataAccess: false  # Snapshot stays on MC, never exported
