@@ -24,12 +24,12 @@ RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/opensh
     mv /tmp/oc /bin/oc && \
     rm -f /tmp/oc.tar.gz
 
-LABEL vendor="RedHat" \
+LABEL vendor="Red Hat, Inc." \
   name="openshift/configuration-anomaly-detection" \
   description="a CLI tool to detect and mitigate configuration mishaps" \
   io.k8s.display-name="openshift/configuration-anomaly-detection" \
   io.k8s.description="a CLI tool to detect and mitigate configuration mishaps" \
-  maintainer="RedHat <>" \
+  maintainer="Red Hat, Inc." \
   version="$VERSION" \
   org.label-schema.build-date=$BUILD_DATE \
   org.label-schema.description="a CLI tool to detect and mitigate configuration mishaps" \
