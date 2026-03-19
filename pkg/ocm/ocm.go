@@ -46,6 +46,8 @@ type Client interface {
 	GetConnection() *sdk.Connection
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
 	GetOrganizationID(clusterID string) (string, error)
+	GetManagementClusterID(clusterID string) (string, error)
+	GetManagementClusterNamespace(clusterID string) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -380,4 +382,86 @@ func GetOCMPullSecret(ocmConn *sdk.Connection, userID string) (string, error) {
 		return "", errors.New("failed to parse pull secret from OCM")
 	}
 	return registryCredentialToken, nil
+}
+
+// GetManagementClusterID returns the management cluster ID for a given hosted cluster
+func (c *SdkClient) GetManagementClusterID(clusterID string) (string, error) {
+	// Get hypershift configuration for the cluster
+	hypershiftResp, err := c.conn.ClustersMgmt().V1().Clusters().
+		Cluster(clusterID).
+		Hypershift().
+		Get().
+		Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to get hypershift config for cluster %s: %w", clusterID, err)
+	}
+
+	hypershiftConfig := hypershiftResp.Body()
+	managementClusterName, ok := hypershiftConfig.GetManagementCluster()
+	if !ok || managementClusterName == "" {
+		return "", fmt.Errorf("cluster %s does not have a management cluster configured", clusterID)
+	}
+
+	// Search for management cluster by name
+	searchQuery := fmt.Sprintf("name='%s'", managementClusterName)
+	response, err := c.conn.ClustersMgmt().V1().Clusters().List().
+		Search(searchQuery).
+		Size(1).
+		Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to search for management cluster %s: %w", managementClusterName, err)
+	}
+
+	if response.Total() == 0 {
+		return "", fmt.Errorf("management cluster '%s' not found in OCM", managementClusterName)
+	}
+
+	managementClusterID := response.Items().Get(0).ID()
+	logging.Infof("Cluster '%s' is hosted on management cluster '%s' (ID: %s)", 
+		clusterID, managementClusterName, managementClusterID)
+
+	return managementClusterID, nil
+}
+
+// GetManagementClusterNamespace returns the namespace on the management cluster
+// where this HCP cluster's control plane components are running
+// Namespace format: ocm-{environment}-{cluster-id}-{domain}
+// Example: ocm-staging-abc123def456-apps.example.com
+func (c *SdkClient) GetManagementClusterNamespace(clusterID string) (string, error) {
+	cluster, err := c.GetClusterInfo(clusterID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster info: %w", err)
+	}
+
+	// Determine environment from OCM URL
+	environment := "production"
+	if c.conn != nil {
+		// Check if we're using a non-production OCM API
+		// Staging typically uses integration.api.openshift.com or similar
+		conn := c.GetConnection()
+		if conn != nil {
+			url := conn.URL()
+			if strings.Contains(url, "integration") || strings.Contains(url, "staging") || strings.Contains(url, "stage") {
+				environment = "staging"
+			}
+		}
+	}
+
+	// Get DNS base domain
+	dns, ok := cluster.GetDNS()
+	if !ok {
+		return "", fmt.Errorf("cluster %s does not have DNS configuration", clusterID)
+	}
+	
+	baseDomain, ok := dns.GetBaseDomain()
+	if !ok || baseDomain == "" {
+		return "", fmt.Errorf("cluster %s does not have a base domain configured", clusterID)
+	}
+
+	// Construct namespace following the pattern: ocm-{env}-{id}-{domain}
+	// Strip "apps." prefix if present
+	domain := strings.TrimPrefix(baseDomain, "apps.")
+	namespace := fmt.Sprintf("ocm-%s-%s-%s", environment, cluster.ID(), domain)
+	
+	return namespace, nil
 }

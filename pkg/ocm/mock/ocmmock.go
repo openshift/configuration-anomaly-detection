@@ -23,7 +23,6 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -85,6 +84,36 @@ func (m *MockClient) GetConnection() *sdk.Connection {
 func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
+}
+
+// GetManagementClusterID mocks base method.
+func (m *MockClient) GetManagementClusterID(clusterID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagementClusterID", clusterID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetManagementClusterID indicates an expected call of GetManagementClusterID.
+func (mr *MockClientMockRecorder) GetManagementClusterID(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagementClusterID", reflect.TypeOf((*MockClient)(nil).GetManagementClusterID), clusterID)
+}
+
+// GetManagementClusterNamespace mocks base method.
+func (m *MockClient) GetManagementClusterNamespace(clusterID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetManagementClusterNamespace", clusterID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetManagementClusterNamespace indicates an expected call of GetManagementClusterNamespace.
+func (mr *MockClientMockRecorder) GetManagementClusterNamespace(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetManagementClusterNamespace", reflect.TypeOf((*MockClient)(nil).GetManagementClusterNamespace), clusterID)
 }
 
 // GetOrganizationID mocks base method.
