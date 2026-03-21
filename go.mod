@@ -146,7 +146,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.452 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.452 // indirect
-	github.com/openshift-online/ocm-cli v1.0.11 // indirect
+	github.com/openshift-online/ocm-cli v1.0.12 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
