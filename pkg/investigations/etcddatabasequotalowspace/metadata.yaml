@@ -29,4 +29,21 @@ rbac:
             - "batch"
           resources:
             - jobs
+managementClusterRbac:
+  hcpNamespace:
+    - verbs:
+        - "create"
+        - "get"
+        - "list"
+      apiGroups:
+        - "batch"
+      resources:
+        - jobs
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - pods
 customerDataAccess: false
