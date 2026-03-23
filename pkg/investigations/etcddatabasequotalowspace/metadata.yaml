@@ -29,4 +29,23 @@ rbac:
             - "batch"
           resources:
             - jobs
+managementClusterRbac:
+  roles:
+    - namespace: ""
+      rules:
+        - verbs:
+            - "create"
+            - "get"
+            - "list"
+          apiGroups:
+            - "batch"
+          resources:
+            - jobs
+        - verbs:
+            - "get"
+            - "list"
+          apiGroups:
+            - ""
+          resources:
+            - pods
 customerDataAccess: false
