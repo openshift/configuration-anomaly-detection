@@ -88,12 +88,12 @@ type Resources struct {
 	PdClient          pagerduty.Client
 	Notes             *notewriter.NoteWriter
 	OCClient          oc.Client
-	
+
 	// Management cluster resources for HCP
-	ManagementClusterID             string
-	ManagementClusterNamespace      string
-	ManagementClusterRestConfig     *RestConfig
-	ManagementClusterK8sClient      k8sclient.Client
+	ManagementClusterID         string
+	ManagementClusterNamespace  string
+	ManagementClusterRestConfig *RestConfig
+	ManagementClusterK8sClient  k8sclient.Client
 }
 
 type ResourceBuilder interface {
@@ -112,14 +112,14 @@ type ResourceBuilder interface {
 }
 
 type ResourceBuilderT struct {
-	buildCluster           bool
-	buildClusterDeployment bool
-	buildAwsClient         bool
-	buildRestConfig        bool
-	buildK8sClient         bool
-	buildOC                bool
-	buildNotes             bool
-		buildManagementCluster           bool
+	buildCluster                     bool
+	buildClusterDeployment           bool
+	buildAwsClient                   bool
+	buildRestConfig                  bool
+	buildK8sClient                   bool
+	buildOC                          bool
+	buildNotes                       bool
+	buildManagementCluster           bool
 	buildManagementClusterRestConfig bool
 	buildManagementClusterK8sClient  bool
 
@@ -181,7 +181,6 @@ func (r *ResourceBuilderT) WithPdClient(pdClient pagerduty.Client) ResourceBuild
 	return r
 }
 
-
 func (r *ResourceBuilderT) WithManagementCluster() ResourceBuilder {
 	r.WithCluster() // Ensure customer cluster is loaded first
 	r.buildManagementCluster = true
@@ -200,7 +199,7 @@ func (r *ResourceBuilderT) WithManagementClusterK8sClient() ResourceBuilder {
 	return r
 }
 
-func (r *ResourceBuilderT) Build() (*Resources, error) {
+func (r *ResourceBuilderT) Build() (*Resources, error) { //nolint:gocyclo
 	if r.buildErr != nil {
 		// Return whatever managed to build + an error. this might allow some subset of checks to proceed.
 		return r.builtResources, r.buildErr
@@ -267,7 +266,6 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		}
 	}
 
-
 	// Build management cluster resources
 	if r.buildManagementCluster && r.builtResources.ManagementClusterID == "" {
 		// Ensure cluster is HCP
@@ -278,7 +276,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		if !isHCP {
 			return nil, fmt.Errorf("cannot request management cluster resources for non-HCP cluster")
 		}
-		
+
 		// Get management cluster ID
 		mcID, err := r.ocmClient.GetManagementClusterID(r.clusterId)
 		if err != nil {
@@ -288,7 +286,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			return r.builtResources, r.buildErr
 		}
 		r.builtResources.ManagementClusterID = mcID
-		
+
 		// Get HCP namespace on management cluster
 		mcNamespace, err := r.ocmClient.GetManagementClusterNamespace(r.clusterId)
 		if err != nil {
@@ -298,16 +296,16 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			return r.builtResources, r.buildErr
 		}
 		r.builtResources.ManagementClusterNamespace = mcNamespace
-		
+
 		logging.Infof("Management cluster: %s, namespace: %s", mcID, mcNamespace)
 	}
-	
+
 	if r.buildManagementClusterRestConfig && r.builtResources.ManagementClusterRestConfig == nil {
 		// Create remediation on management cluster using existing newRestConfig pattern
 		restConfig, err := newRestConfig(
-			r.builtResources.ManagementClusterID, 
-			r.backplaneUrl, 
-			r.ocmClient, 
+			r.builtResources.ManagementClusterID,
+			r.backplaneUrl,
+			r.ocmClient,
 			r.name,
 		)
 		if err != nil {
@@ -318,7 +316,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		}
 		r.builtResources.ManagementClusterRestConfig = restConfig
 	}
-	
+
 	if r.buildManagementClusterK8sClient && r.builtResources.ManagementClusterK8sClient == nil {
 		k8sClient, err := k8sclient.New(&r.builtResources.ManagementClusterRestConfig.Config)
 		if err != nil {
@@ -418,7 +416,6 @@ func (r *ResourceBuilderMock) WithPdClient(client pagerduty.Client) ResourceBuil
 	return r
 }
 
-
 func (r *ResourceBuilderMock) WithManagementCluster() ResourceBuilder {
 	return r
 }
@@ -430,7 +427,6 @@ func (r *ResourceBuilderMock) WithManagementClusterRestConfig() ResourceBuilder 
 func (r *ResourceBuilderMock) WithManagementClusterK8sClient() ResourceBuilder {
 	return r
 }
-
 
 func (r *ResourceBuilderMock) Build() (*Resources, error) {
 	if r.BuildError != nil {
@@ -444,7 +440,7 @@ func isHCPCluster(cluster *cmv1.Cluster) (bool, error) {
 	if cluster == nil {
 		return false, fmt.Errorf("cluster is nil")
 	}
-	
+
 	hypershift, ok := cluster.GetHypershift()
 	if !ok {
 		return false, nil

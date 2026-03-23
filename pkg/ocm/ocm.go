@@ -417,7 +417,7 @@ func (c *SdkClient) GetManagementClusterID(clusterID string) (string, error) {
 	}
 
 	managementClusterID := response.Items().Get(0).ID()
-	logging.Infof("Cluster '%s' is hosted on management cluster '%s' (ID: %s)", 
+	logging.Infof("Cluster '%s' is hosted on management cluster '%s' (ID: %s)",
 		clusterID, managementClusterName, managementClusterID)
 
 	return managementClusterID, nil
@@ -452,7 +452,7 @@ func (c *SdkClient) GetManagementClusterNamespace(clusterID string) (string, err
 	if !ok {
 		return "", fmt.Errorf("cluster %s does not have DNS configuration", clusterID)
 	}
-	
+
 	baseDomain, ok := dns.GetBaseDomain()
 	if !ok || baseDomain == "" {
 		return "", fmt.Errorf("cluster %s does not have a base domain configured", clusterID)
@@ -462,6 +462,6 @@ func (c *SdkClient) GetManagementClusterNamespace(clusterID string) (string, err
 	// Strip "apps." prefix if present
 	domain := strings.TrimPrefix(baseDomain, "apps.")
 	namespace := fmt.Sprintf("ocm-%s-%s-%s", environment, cluster.ID(), domain)
-	
+
 	return namespace, nil
 }
