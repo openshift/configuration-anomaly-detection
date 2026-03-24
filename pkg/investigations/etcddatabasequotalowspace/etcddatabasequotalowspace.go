@@ -64,14 +64,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		)
 		return result, nil
 	}
+
 	if isHCP {
-		r.Notes.AppendWarning("Cluster is HCP - skipping snapshot")
-		logging.Info("skipping etcd snapshot for HCP cluster")
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("HCP cluster - manual investigation required"),
-		)
-		return result, nil
+		return i.runHCPEtcdAnalysis(ctx, rb)
 	}
 
 	r.Notes.AppendSuccess("Cluster is non-HCP, proceeding with etcd snapshot")
@@ -208,6 +203,116 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	return result, nil
 }
 
+// runHCPEtcdAnalysis performs etcd analysis for HCP clusters by creating and running an analysis job
+func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
+	result := investigation.InvestigationResult{}
+
+	r, err := rb.
+		WithCluster().
+		WithManagementRestConfig().
+		WithManagementK8sClient().
+		Build()
+	if err != nil {
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			result.Actions = []types.Action{
+				executor.Escalate(msg),
+			}
+			return result, nil
+		}
+		return result, err
+	}
+
+	etcdPod, err := getEtcdPod(ctx, r.ManagementK8sClient, r.HCPNamespace)
+	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
+		r.Notes.AppendWarning("Failed to get etcd pod: %v", err)
+		logging.Errorf("failed to get etcd pod: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "etcd_not_found"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Failed to get etcd pod - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	etcdContainerImage, err := getEtcdctlContainerImage(etcdPod)
+	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
+		r.Notes.AppendWarning("Etcdctl container image not found")
+		logging.Errorf("Etcdctl container image not found")
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "etcdctl_container_image_not_found"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Failed to find etcdctl container image - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	jobConfig := JobConfig{
+		Namespace:          r.HCPNamespace,
+		ClusterID:          r.Cluster.ID(),
+		EtcdPodName:        etcdPod.Name,
+		EtcdContainerImage: etcdContainerImage,
+	}
+
+	etcdAnalysisJob, err := BuildEtcdAnalysisJob(jobConfig)
+	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
+		r.Notes.AppendWarning("Failed to build analysis job: %v", err)
+		logging.Errorf("Failed to build analysis job: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "analysis_job_failed"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Failed to build analysis job - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	err = r.ManagementK8sClient.Create(ctx, etcdAnalysisJob)
+	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
+		r.Notes.AppendWarning("Failed to run analysis job: %v", err)
+		logging.Errorf("Failed to run build analysis job: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "analysis_job_failed"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Failed to run analysis job - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+		Performed: true,
+		Labels:    []string{"success", "completed"},
+	}
+
+	result.Actions = append(
+		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		executor.Escalate("HCP etcd analysis complete - see dynatrace logs for details"),
+	)
+	return result, nil
+}
+
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
 }
@@ -242,36 +347,10 @@ func isHCPCluster(cluster *cmv1.Cluster) (bool, error) {
 // takeEtcdSnapshot finds an etcd pod and takes a snapshot
 func takeEtcdSnapshot(ctx context.Context, k8sClient k8sclient.Client) (*SnapshotResult, error) {
 	const etcdNamespace = "openshift-etcd"
-
-	podList := &corev1.PodList{}
-	err := k8sClient.List(ctx, podList,
-		client.InNamespace(etcdNamespace),
-		client.MatchingLabels{"k8s-app": "etcd"},
-	)
+	selectedPod, err := getEtcdPod(ctx, k8sClient, etcdNamespace)
 	if err != nil {
-		return nil, investigation.WrapInfrastructure(
-			fmt.Errorf("failed to list etcd pods: %w", err),
-			"K8s API failure listing etcd pods")
+		return nil, fmt.Errorf("failed to get etcd pod from namespace %s: %w", etcdNamespace, err)
 	}
-
-	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no etcd pods found in namespace %s", etcdNamespace)
-	}
-
-	var selectedPod *corev1.Pod
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if pod.Status.Phase == corev1.PodRunning {
-			selectedPod = pod
-			break
-		}
-	}
-
-	if selectedPod == nil {
-		return nil, fmt.Errorf("no running etcd pods found in namespace %s", etcdNamespace)
-	}
-
-	logging.Infof("selected etcd pod %s on node %s", selectedPod.Name, selectedPod.Spec.NodeName)
 
 	snapshotPath, snapshotSize, err := execSnapshotCommands(ctx, k8sClient, selectedPod)
 	if err != nil {
@@ -398,4 +477,47 @@ func cleanupSnapshot(ctx context.Context, k8sClient k8sclient.Client, podName, s
 
 	logging.Infof("snapshot file deleted successfully: %s", snapshotPath)
 	return nil
+}
+
+func getEtcdPod(ctx context.Context, k8sClient k8sclient.Client, namespace string) (*corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	err := k8sClient.List(ctx, podList,
+		client.InNamespace(namespace),
+		client.MatchingLabels{"k8s-app": "etcd"},
+	)
+	if err != nil {
+		return nil, investigation.WrapInfrastructure(
+			fmt.Errorf("failed to list etcd pods: %w", err),
+			"K8s API failure listing etcd pods")
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no etcd pods found in namespace %s", namespace)
+	}
+
+	var selectedPod *corev1.Pod
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		if pod.Status.Phase == corev1.PodRunning {
+			selectedPod = pod
+			break
+		}
+	}
+
+	if selectedPod == nil {
+		return nil, fmt.Errorf("no running etcd pods found in namespace %s", namespace)
+	}
+
+	logging.Infof("selected etcd pod %s on node %s", selectedPod.Name, selectedPod.Spec.NodeName)
+
+	return selectedPod, nil
+}
+
+func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
+	for _, v := range pod.Spec.InitContainers {
+		if v.Name == "reset-member" {
+			return v.Image, nil
+		}
+	}
+	return "", fmt.Errorf("etcdctl container image not found in pod: %s", pod.Name)
 }
