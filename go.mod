@@ -147,7 +147,7 @@ require (
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.452 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.452 // indirect
 	github.com/openshift-online/ocm-cli v1.0.11 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
+	github.com/pelletier/go-toml/v2 v2.3.0 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
