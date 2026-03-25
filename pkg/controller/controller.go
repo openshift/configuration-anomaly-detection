@@ -460,10 +460,16 @@ func (c *investigationRunner) executeActions(
 		return nil
 	}
 
-	// Build resources to get cluster and notes
+	// Build resources to get cluster, notes, and infra cluster status.
 	resources, err := builder.Build()
-	if err != nil {
+	if err != nil && resources.Cluster == nil {
 		return fmt.Errorf("failed to build resources for action execution: %w", err)
+	}
+
+	exec := c.executor
+	if resources.IsInfrastructureCluster {
+		logging.Infof("Infrastructure cluster detected for %s: wrapping executor to intercept LS/Silence/ServiceLog actions", investigationName)
+		exec = executor.NewInfraClusterExecutor(exec, c.logger)
 	}
 
 	// Execute actions with default options using controller's executor
@@ -481,7 +487,7 @@ func (c *investigationRunner) executeActions(
 	}
 
 	logging.Infof("Executing %d actions for %s", len(result.Actions), investigationName)
-	if err := c.executor.Execute(context.Background(), input); err != nil {
+	if err := exec.Execute(context.Background(), input); err != nil {
 		// Log the error but don't fail the investigation
 		// This matches the current behavior where we log failures but continue
 		logging.Errorf("Action execution failed for %s: %v", investigationName, err)
