@@ -51,7 +51,7 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 	alertInvestigation := getInvestigation(c.manual.InvestigationName, experimentalEnabled)
 	if alertInvestigation == nil {
-		availableInvestigations := make([]string, 0)
+		availableInvestigations := make([]string, 0, len(shortNameToInvestigation))
 		for shortName, longName := range shortNameToInvestigation {
 			format := fmt.Sprintf("- %s (%s)", shortName, longName)
 			availableInvestigations = append(availableInvestigations, format)
