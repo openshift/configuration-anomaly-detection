@@ -10,14 +10,10 @@ import (
 )
 
 const (
-	// octosqlEtcdImage is the container image for the etcd snapshot analyzer
 	octosqlEtcdImage = "quay.io/redhat_emp1/octosql-etcd:latest"
-
-	// snapshotPath is the path where the snapshot will be saved in the emptyDir volume
-	snapshotPath = "/snapshot/etcd.snapshot"
+	snapshotPath     = "/snapshot/etcd.snapshot"
 )
 
-// JobConfig contains the configuration needed to build an HCP etcd analysis job
 type JobConfig struct {
 	Namespace          string // HCP namespace on management cluster (e.g., "ocm-staging-2o8lh1sqlem21729m1oq8pneu67doc3r-alexasmi-test")
 	ClusterID          string // Cluster ID for labels
@@ -41,15 +37,11 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 		return nil, fmt.Errorf("etcd container image is required")
 	}
 
-	// Generate a unique job name based on timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	jobName := fmt.Sprintf("etcd-analysis-%s", timestamp)
 
-	// TTL: auto-delete job 1 hour after completion
 	ttlSecondsAfterFinished := int32(3600)
-	// Timeout: max 10 minutes execution time
 	activeDeadlineSeconds := int64(600)
-	// Backoff: allow 1 retry on failure
 	backoffLimit := int32(1)
 
 	job := &batchv1.Job{
@@ -59,7 +51,6 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			Labels: map[string]string{
 				"app":        "etcd-snapshot-analysis",
 				"cluster-id": cfg.ClusterID,
-				"timestamp":  timestamp,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -74,7 +65,6 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 					},
 				},
 				Spec: corev1.PodSpec{
-					// Pod affinity: schedule near the etcd pod on a non-request-serving node
 					Affinity: &corev1.Affinity{
 						PodAffinity: &corev1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
@@ -89,9 +79,21 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 							},
 						},
 					},
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "hypershift.openshift.io/control-plane",
+							Operator: corev1.TolerationOpEqual,
+							Value:    "true",
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+						{
+							Key:      "hypershift.openshift.io/cluster",
+							Operator: corev1.TolerationOpEqual,
+							Value:    cfg.Namespace,
+							Effect:   corev1.TaintEffectNoSchedule,
+						},
+					},
 					RestartPolicy: corev1.RestartPolicyNever,
-
-					// Init container: takes the etcd snapshot using etcdctl
 					InitContainers: []corev1.Container{
 						{
 							Name:  "snapshot",
@@ -142,7 +144,6 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 						},
 					},
 
-					// Analysis container: analyzes the snapshot using octosql-etcd
 					Containers: []corev1.Container{
 						{
 							Name:  "analyzer",
@@ -161,7 +162,6 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 						},
 					},
 
-					// Volumes
 					Volumes: []corev1.Volume{
 						{
 							Name: "snapshot-volume",
