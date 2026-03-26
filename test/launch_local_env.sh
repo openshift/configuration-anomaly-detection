@@ -39,7 +39,7 @@ fi
 set -u
 
 #checking certificate validity
-if ! openssl verify ${OCM_BACKPLANE_REPO_PATH}/localhost.crt; then
+if ! openssl verify -CAfile ${OCM_BACKPLANE_REPO_PATH}/localhost.crt ${OCM_BACKPLANE_REPO_PATH}/localhost.crt; then
     echo "Certificate ${OCM_BACKPLANE_REPO_PATH}/localhost.crt not valid, please run make dev-certs in the OCM Backplane directory as root to generate and trust the localhost certificates"
     exit -1
 fi

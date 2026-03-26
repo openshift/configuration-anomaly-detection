@@ -37,7 +37,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r, err := rb.
 		WithCluster().
-		WithK8sClient().
 		WithNotes().
 		Build()
 	if err != nil {
@@ -67,6 +66,19 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if isHCP {
 		return i.runHCPEtcdAnalysis(ctx, rb)
+	}
+
+	r, err = rb.
+		WithK8sClient().
+		Build()
+	if err != nil {
+		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
+			result.Actions = []types.Action{
+				executor.Escalate(msg),
+			}
+			return result, nil
+		}
+		return result, err
 	}
 
 	r.Notes.AppendSuccess("Cluster is non-HCP, proceeding with etcd snapshot")
@@ -492,7 +504,19 @@ func getEtcdPod(ctx context.Context, k8sClient k8sclient.Client, namespace strin
 	}
 
 	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no etcd pods found in namespace %s", namespace)
+		err = k8sClient.List(ctx, podList,
+			client.InNamespace(namespace),
+			client.MatchingLabels{"app": "etcd"},
+		)
+		if err != nil {
+			return nil, investigation.WrapInfrastructure(
+				fmt.Errorf("failed to list etcd pods: %w", err),
+				"K8s API failure listing etcd pods")
+		}
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no etcd pods found in namespace %s with labels k8s-app=etcd or app=etcd", namespace)
 	}
 
 	var selectedPod *corev1.Pod

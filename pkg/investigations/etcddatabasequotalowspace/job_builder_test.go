@@ -90,7 +90,6 @@ func TestBuildEtcdAnalysisJob(t *testing.T) {
 				return
 			}
 
-			// Verify basic job metadata
 			if job.Namespace != tt.config.Namespace {
 				t.Errorf("Job namespace = %v, want %v", job.Namespace, tt.config.Namespace)
 			}
@@ -99,17 +98,14 @@ func TestBuildEtcdAnalysisJob(t *testing.T) {
 				t.Errorf("Job cluster-id label = %v, want %v", job.Labels["cluster-id"], tt.config.ClusterID)
 			}
 
-			// Verify TTL is set correctly (1 hour)
 			if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 3600 {
 				t.Errorf("Job TTLSecondsAfterFinished = %v, want 3600", job.Spec.TTLSecondsAfterFinished)
 			}
 
-			// Verify timeout is set correctly (10 minutes)
 			if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 600 {
 				t.Errorf("Job ActiveDeadlineSeconds = %v, want 600", job.Spec.ActiveDeadlineSeconds)
 			}
 
-			// Verify backoff limit (1 retry)
 			if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 1 {
 				t.Errorf("Job BackoffLimit = %v, want 1", job.Spec.BackoffLimit)
 			}
@@ -130,7 +126,6 @@ func TestJobSpecPodAffinity(t *testing.T) {
 		t.Fatalf("BuildEtcdAnalysisJob() unexpected error: %v", err)
 	}
 
-	// Verify pod affinity is configured
 	affinity := job.Spec.Template.Spec.Affinity
 	if affinity == nil {
 		t.Fatal("Job pod affinity is nil, expected it to be configured")
@@ -146,14 +141,12 @@ func TestJobSpecPodAffinity(t *testing.T) {
 
 	term := affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0]
 
-	// Verify it's looking for the correct etcd pod
 	if term.LabelSelector.MatchLabels["statefulset.kubernetes.io/pod-name"] != config.EtcdPodName {
 		t.Errorf("Pod affinity pod-name = %v, want %v",
 			term.LabelSelector.MatchLabels["statefulset.kubernetes.io/pod-name"],
 			config.EtcdPodName)
 	}
 
-	// Verify topology key
 	if term.TopologyKey != "kubernetes.io/hostname" {
 		t.Errorf("Pod affinity topology key = %v, want kubernetes.io/hostname", term.TopologyKey)
 	}
@@ -172,24 +165,20 @@ func TestJobSpecInitContainer(t *testing.T) {
 		t.Fatalf("BuildEtcdAnalysisJob() unexpected error: %v", err)
 	}
 
-	// Verify init container exists
 	if len(job.Spec.Template.Spec.InitContainers) != 1 {
 		t.Fatalf("Expected 1 init container, got %d", len(job.Spec.Template.Spec.InitContainers))
 	}
 
 	initContainer := job.Spec.Template.Spec.InitContainers[0]
 
-	// Verify container name
 	if initContainer.Name != "snapshot" {
 		t.Errorf("Init container name = %v, want snapshot", initContainer.Name)
 	}
 
-	// Verify it uses the etcd container image
 	if initContainer.Image != config.EtcdContainerImage {
 		t.Errorf("Init container image = %v, want %v", initContainer.Image, config.EtcdContainerImage)
 	}
 
-	// Verify etcdctl environment variables
 	expectedEnvVars := map[string]string{
 		"ETCDCTL_API":       "3",
 		"ETCDCTL_CACERT":    "/etc/etcd/tls/etcd-ca/ca.crt",
@@ -214,7 +203,6 @@ func TestJobSpecInitContainer(t *testing.T) {
 		}
 	}
 
-	// Verify volume mounts
 	expectedVolumeMounts := []struct {
 		name      string
 		mountPath string
@@ -255,24 +243,20 @@ func TestJobSpecAnalysisContainer(t *testing.T) {
 		t.Fatalf("BuildEtcdAnalysisJob() unexpected error: %v", err)
 	}
 
-	// Verify analysis container exists
 	if len(job.Spec.Template.Spec.Containers) != 1 {
 		t.Fatalf("Expected 1 container, got %d", len(job.Spec.Template.Spec.Containers))
 	}
 
 	container := job.Spec.Template.Spec.Containers[0]
 
-	// Verify container name
 	if container.Name != "analyzer" {
 		t.Errorf("Analysis container name = %v, want analyzer", container.Name)
 	}
 
-	// Verify it uses the octosql-etcd image
 	if container.Image != octosqlEtcdImage {
 		t.Errorf("Analysis container image = %v, want %v", container.Image, octosqlEtcdImage)
 	}
 
-	// Verify command
 	expectedCommand := []string{
 		"/usr/local/bin/analyze-snapshot.sh",
 		"--delete",
@@ -289,7 +273,6 @@ func TestJobSpecAnalysisContainer(t *testing.T) {
 		}
 	}
 
-	// Verify volume mount
 	found := false
 	for _, mount := range container.VolumeMounts {
 		if mount.Name == "snapshot-volume" {
@@ -320,12 +303,10 @@ func TestJobSpecVolumes(t *testing.T) {
 
 	volumes := job.Spec.Template.Spec.Volumes
 
-	// Should have 3 volumes
 	if len(volumes) != 3 {
 		t.Fatalf("Expected 3 volumes, got %d", len(volumes))
 	}
 
-	// Verify snapshot-volume is emptyDir
 	var snapshotVolume *corev1.Volume
 	for i := range volumes {
 		if volumes[i].Name == "snapshot-volume" {
@@ -342,7 +323,6 @@ func TestJobSpecVolumes(t *testing.T) {
 		t.Error("snapshot-volume should be an emptyDir volume")
 	}
 
-	// Verify client-tls is a secret
 	var clientTLSVolume *corev1.Volume
 	for i := range volumes {
 		if volumes[i].Name == "client-tls" {
@@ -362,7 +342,6 @@ func TestJobSpecVolumes(t *testing.T) {
 			clientTLSVolume.Secret.SecretName)
 	}
 
-	// Verify etcd-ca is a configmap
 	var etcdCAVolume *corev1.Volume
 	for i := range volumes {
 		if volumes[i].Name == "etcd-ca" {
@@ -396,7 +375,6 @@ func TestJobSpecRestartPolicy(t *testing.T) {
 		t.Fatalf("BuildEtcdAnalysisJob() unexpected error: %v", err)
 	}
 
-	// Verify restart policy is Never (jobs should not restart on failure)
 	if job.Spec.Template.Spec.RestartPolicy != corev1.RestartPolicyNever {
 		t.Errorf("Job restart policy = %v, want Never", job.Spec.Template.Spec.RestartPolicy)
 	}
