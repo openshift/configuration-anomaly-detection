@@ -135,7 +135,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r.Notes.AppendAutomation("Created analysis job: %s (will auto-delete after 10 minutes)", job.Name)
 
-	err = waitForJobCompletion(ctx, r.K8sClient, job.Name, analysisJobTimeout)
+	err = waitForJobCompletion(ctx, r.K8sClient, job.Name, job.Namespace, analysisJobTimeout)
 	if err != nil {
 		if investigation.IsInfrastructureError(err) {
 			return result, err
@@ -300,15 +300,35 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		if investigation.IsInfrastructureError(err) {
 			return result, err
 		}
-		r.Notes.AppendWarning("Failed to run analysis job: %v", err)
-		logging.Errorf("Failed to run build analysis job: %v", err)
+		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
+		logging.Errorf("failed to create analysis job: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 			Performed: true,
 			Labels:    []string{"failure", "analysis_job_failed"},
 		}
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("Failed to run analysis job - manual investigation required"),
+			executor.Escalate("Failed to create analysis job - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	r.Notes.AppendAutomation("Created HCP analysis job: %s in namespace %s", etcdAnalysisJob.Name, r.HCPNamespace)
+
+	err = waitForJobCompletion(ctx, r.ManagementK8sClient, etcdAnalysisJob.Name, r.HCPNamespace, analysisJobTimeout)
+	if err != nil {
+		if investigation.IsInfrastructureError(err) {
+			return result, err
+		}
+		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
+		logging.Errorf("analysis job failed: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "analysis_job_failed"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Analysis job failed or timed out - manual investigation required"),
 		)
 		return result, nil
 	}
