@@ -152,6 +152,104 @@ func isPagerDutyAction(action Action) bool {
 	}
 }
 
+// InfraClusterExecutor wraps another executor and transforms actions that should not
+// be performed on infrastructure clusters (hive, management, or service clusters).
+// Limited Support, Silence, and SL actions are replaced with an escalation and
+// a PagerDuty note explaining the substitution.
+type InfraClusterExecutor struct {
+	inner  Executor
+	logger *zap.SugaredLogger
+}
+
+// NewInfraClusterExecutor creates an executor that intercepts unsuitable actions
+// for infrastructure clusters.
+func NewInfraClusterExecutor(inner Executor, logger *zap.SugaredLogger) Executor {
+	return &InfraClusterExecutor{inner: inner, logger: logger}
+}
+
+func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput) error {
+	if input == nil {
+		return fmt.Errorf("ExecutorInput cannot be nil")
+	}
+
+	if len(input.Actions) == 0 {
+		return e.inner.Execute(ctx, input)
+	}
+
+	transformedActions := make([]Action, 0, len(input.Actions))
+	needsEscalation := false
+	var interceptedDescriptions []string
+
+	for _, action := range input.Actions {
+		switch action.Type() {
+		case string(ActionTypeLimitedSupport):
+			e.logger.Infof("Infrastructure cluster: intercepting LimitedSupport action")
+			interceptedDescriptions = append(interceptedDescriptions, "Limited Support")
+			needsEscalation = true
+
+		case string(ActionTypeSilenceIncident):
+			e.logger.Infof("Infrastructure cluster: intercepting Silence action")
+			interceptedDescriptions = append(interceptedDescriptions, "Silence")
+			needsEscalation = true
+
+		case string(ActionTypeServiceLog):
+			e.logger.Infof("Infrastructure cluster: intercepting ServiceLog action")
+			interceptedDescriptions = append(interceptedDescriptions, "ServiceLog")
+			needsEscalation = true
+
+		default:
+			transformedActions = append(transformedActions, action)
+		}
+	}
+
+	if needsEscalation {
+		noteContent := fmt.Sprintf(
+			"⚠️ Infra cluster detected: the following action(s) were not executed and replaced with escalation: %s. "+
+				"Please investigate and take appropriate action manually.",
+			joinDescriptions(interceptedDescriptions),
+		)
+		transformedActions = append(transformedActions,
+			&PagerDutyNoteAction{Content: noteContent},
+			&EscalateIncidentAction{Reason: "Infra cluster: actions intercepted"},
+		)
+	}
+
+	filteredInput := *input
+	filteredInput.Actions = transformedActions
+	return e.inner.Execute(ctx, &filteredInput)
+}
+
+// joinDescriptions joins action type descriptions for the PD note
+func joinDescriptions(descriptions []string) string {
+	seen := make(map[string]bool)
+	unique := make([]string, 0, len(descriptions))
+	for _, d := range descriptions {
+		if !seen[d] {
+			seen[d] = true
+			unique = append(unique, d)
+		}
+	}
+
+	if len(unique) == 1 {
+		return unique[0]
+	}
+	return fmt.Sprintf("%s and %s",
+		joinWithComma(unique[:len(unique)-1]),
+		unique[len(unique)-1],
+	)
+}
+
+func joinWithComma(items []string) string {
+	result := ""
+	for i, item := range items {
+		if i > 0 {
+			result += ", "
+		}
+		result += item
+	}
+	return result
+}
+
 func (e *DefaultExecutor) Execute(ctx context.Context, input *ExecutorInput) error {
 	if input == nil {
 		return fmt.Errorf("ExecutorInput cannot be nil")

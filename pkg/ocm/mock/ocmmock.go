@@ -12,7 +12,7 @@ package ocmmock
 import (
 	reflect "reflect"
 
-	ocm_sdk_go "github.com/openshift-online/ocm-sdk-go"
+	sdk "github.com/openshift-online/ocm-sdk-go"
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -89,10 +89,10 @@ func (mr *MockClientMockRecorder) GetClusterMachinePools(internalClusterID any) 
 }
 
 // GetConnection mocks base method.
-func (m *MockClient) GetConnection() *ocm_sdk_go.Connection {
+func (m *MockClient) GetConnection() *sdk.Connection {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetConnection")
-	ret0, _ := ret[0].(*ocm_sdk_go.Connection)
+	ret0, _ := ret[0].(*sdk.Connection)
 	return ret0
 }
 
@@ -160,6 +160,21 @@ func (m *MockClient) IsAccessProtected(cluster *v1.Cluster) (bool, error) {
 func (mr *MockClientMockRecorder) IsAccessProtected(cluster any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAccessProtected", reflect.TypeOf((*MockClient)(nil).IsAccessProtected), cluster)
+}
+
+// IsManagingCluster mocks base method.
+func (m *MockClient) IsManagingCluster(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsManagingCluster", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsManagingCluster indicates an expected call of IsManagingCluster.
+func (mr *MockClientMockRecorder) IsManagingCluster(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsManagingCluster", reflect.TypeOf((*MockClient)(nil).IsManagingCluster), clusterID)
 }
 
 // PostLimitedSupportReason mocks base method.

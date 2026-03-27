@@ -56,7 +56,8 @@ func (c *clientImpl) CreateMustGather(additionalFlags []string) error {
 		cancel()
 	}()
 
-	cmdArgs := []string{"adm", "must-gather", "--kubeconfig=" + c.kubeConfigFile}
+	cmdArgs := make([]string, 0, 3+len(additionalFlags))
+	cmdArgs = append(cmdArgs, "adm", "must-gather", "--kubeconfig="+c.kubeConfigFile)
 	cmdArgs = append(cmdArgs, additionalFlags...)
 
 	//nolint:gosec

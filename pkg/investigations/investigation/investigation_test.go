@@ -278,12 +278,11 @@ func TestManagementClusterNotFoundError_Error(t *testing.T) {
 func TestManagementRestConfigError_Error(t *testing.T) {
 	wrappedErr := errors.New("backplane connection failed")
 	err := ManagementRestConfigError{
-		ClusterID:           "hcp-cluster-456",
-		ManagementClusterID: "mgmt-cluster-789",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-456",
+		Err:       wrappedErr,
 	}
 
-	expected := "could not create rest config for management cluster mgmt-cluster-789 (HCP cluster: hcp-cluster-456): backplane connection failed"
+	expected := "could not create rest config for management cluster (HCP cluster: hcp-cluster-456): backplane connection failed"
 	assert.Equal(t, expected, err.Error())
 }
 
@@ -291,9 +290,8 @@ func TestManagementRestConfigError_Error(t *testing.T) {
 func TestManagementRestConfigError_Unwrap(t *testing.T) {
 	wrappedErr := errors.New("backplane connection failed")
 	err := ManagementRestConfigError{
-		ClusterID:           "hcp-cluster-456",
-		ManagementClusterID: "mgmt-cluster-789",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-456",
+		Err:       wrappedErr,
 	}
 
 	// Verify Unwrap() returns the wrapped error
@@ -498,12 +496,11 @@ func TestBuildManagementClusterResources_RestConfigCreationError(t *testing.T) {
 	// Verify that errors creating management cluster RestConfig are properly handled
 	wrappedErr := errors.New("backplane connection timeout")
 	err := ManagementRestConfigError{
-		ClusterID:           "hcp-cluster-111",
-		ManagementClusterID: "mgmt-cluster-222",
-		Err:                 wrappedErr,
+		ClusterID: "hcp-cluster-111",
+		Err:       wrappedErr,
 	}
 
-	assert.Contains(t, err.Error(), "could not create rest config for management cluster mgmt-cluster-222")
+	assert.Contains(t, err.Error(), "could not create rest config for management cluster")
 	assert.Contains(t, err.Error(), "HCP cluster: hcp-cluster-111")
 	assert.Contains(t, err.Error(), "backplane connection timeout")
 }

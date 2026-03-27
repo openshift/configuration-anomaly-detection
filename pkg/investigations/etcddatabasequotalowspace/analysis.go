@@ -240,7 +240,7 @@ func parseAnalysisOutput(output string) (*AnalysisResult, error) {
 
 	lines := strings.Split(output, "\n")
 	currentSection := 0
-	var sectionLines []string
+	sectionLines := make([]string, 0, 2)
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -254,19 +254,19 @@ func parseAnalysisOutput(output string) (*AnalysisResult, error) {
 				processSection(result, currentSection, strings.Join(sectionLines, "\n"))
 			}
 			currentSection = 1
-			sectionLines = []string{line}
+			sectionLines = append(sectionLines[:0], line)
 		case "namespace,name,total_size_megabytes,resourceType":
 			if len(sectionLines) > 0 && currentSection > 0 {
 				processSection(result, currentSection, strings.Join(sectionLines, "\n"))
 			}
 			currentSection = 2
-			sectionLines = []string{line}
+			sectionLines = append(sectionLines[:0], line)
 		case "namespace,total_event_size_megabytes":
 			if len(sectionLines) > 0 && currentSection > 0 {
 				processSection(result, currentSection, strings.Join(sectionLines, "\n"))
 			}
 			currentSection = 3
-			sectionLines = []string{line}
+			sectionLines = append(sectionLines[:0], line)
 		default:
 			sectionLines = append(sectionLines, line)
 		}

@@ -333,6 +333,30 @@ func TestClusterAccessErrorMessage(t *testing.T) {
 			wantMsg: "CAD was unable to access cluster's kube-api. Please investigate manually.",
 			wantOk:  true,
 		},
+		{
+			name:    "ManagementRestConfigError",
+			err:     ManagementRestConfigError{ClusterID: "test", Err: errors.New("backplane 500")},
+			wantMsg: "CAD was unable to get credentials to the management cluster. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "ManagementK8sClientError",
+			err:     ManagementK8sClientError{ClusterID: "test", Err: errors.New("k8s client failed")},
+			wantMsg: "CAD was unable to get credentials to the management cluster. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "ManagementOCClientError",
+			err:     ManagementOCClientError{ClusterID: "test", Err: errors.New("oc client failed")},
+			wantMsg: "CAD was unable to get credentials to the management cluster. Please investigate manually.",
+			wantOk:  true,
+		},
+		{
+			name:    "wrapped ManagementRestConfigError",
+			err:     fmt.Errorf("wrapped: %w", ManagementRestConfigError{ClusterID: "test", Err: errors.New("backplane 500")}),
+			wantMsg: "CAD was unable to get credentials to the management cluster. Please investigate manually.",
+			wantOk:  true,
+		},
 	}
 
 	for _, tt := range tests {
