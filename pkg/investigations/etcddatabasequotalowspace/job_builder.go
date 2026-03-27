@@ -146,8 +146,9 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 
 					Containers: []corev1.Container{
 						{
-							Name:  "analyzer",
-							Image: octosqlEtcdImage,
+							Name:            "analyzer",
+							Image:           octosqlEtcdImage,
+							ImagePullPolicy: "Always",
 							Command: []string{
 								"/usr/local/bin/analyze-snapshot.sh",
 								"--delete",
