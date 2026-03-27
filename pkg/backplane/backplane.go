@@ -43,6 +43,7 @@ type ClientImpl struct {
 	bpClient  *bpapi.ClientWithResponses
 	baseURL   string
 	ocmClient ocm.Client
+	proxyURL  string
 }
 
 type Config struct {
@@ -88,6 +89,7 @@ func NewClient(config Config) (Client, error) {
 		bpClient:  apiClient,
 		baseURL:   config.BaseURL,
 		ocmClient: config.OcmClient,
+		proxyURL:  config.ProxyURL,
 	}, nil
 }
 
@@ -155,6 +157,18 @@ func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remedi
 	cfg := &rest.Config{
 		Host:        bpAPIClusterURL,
 		BearerToken: accessToken,
+		TLSClientConfig: rest.TLSClientConfig{
+			Insecure: true,
+		},
+	}
+
+	if c.proxyURL != "" {
+		proxyURLParsed, err := url.Parse(c.proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse proxy URL: %w", err)
+		}
+		cfg.Proxy = http.ProxyURL(proxyURLParsed)
+		fmt.Printf("DEBUG: K8s client configured with proxy: %s\n", c.proxyURL)
 	}
 
 	deleteRemediationParams := bpapi.DeleteRemediationParams{
