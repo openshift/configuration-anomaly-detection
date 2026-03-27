@@ -157,9 +157,6 @@ func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remedi
 	cfg := &rest.Config{
 		Host:        bpAPIClusterURL,
 		BearerToken: accessToken,
-		TLSClientConfig: rest.TLSClientConfig{
-			Insecure: true,
-		},
 	}
 
 	if c.proxyURL != "" {
