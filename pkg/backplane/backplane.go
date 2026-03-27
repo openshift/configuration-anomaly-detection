@@ -165,7 +165,6 @@ func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remedi
 			return nil, fmt.Errorf("failed to parse proxy URL: %w", err)
 		}
 		cfg.Proxy = http.ProxyURL(proxyURLParsed)
-		fmt.Printf("DEBUG: K8s client configured with proxy: %s\n", c.proxyURL)
 	}
 
 	deleteRemediationParams := bpapi.DeleteRemediationParams{
