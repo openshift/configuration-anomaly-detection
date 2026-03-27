@@ -13,7 +13,7 @@ require (
 	github.com/onsi/gomega v1.39.1
 	github.com/openshift-online/ocm-common v0.0.37
 	github.com/openshift-online/ocm-sdk-go v0.1.497
-	github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c
+	github.com/openshift/api v0.0.0-20260327162646-993e604705e3
 	github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583
 	github.com/openshift/backplane-api v0.0.0-20260205054653-459856398d59
 	github.com/openshift/backplane-cli v0.7.0
