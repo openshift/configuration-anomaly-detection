@@ -20,6 +20,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
+const (
+	etcdNamespace        = "openshift-etcd"
+	etcdctlInitContainer = "reset-member"
+)
+
 type Investigation struct{}
 
 // SnapshotResult contains information about the etcd snapshot that was taken
@@ -220,7 +225,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	result := investigation.InvestigationResult{}
 
 	r, err := rb.
-		WithCluster().
 		WithManagementRestConfig().
 		WithManagementK8sClient().
 		Build()
@@ -378,7 +382,6 @@ func isHCPCluster(cluster *cmv1.Cluster) (bool, error) {
 
 // takeEtcdSnapshot finds an etcd pod and takes a snapshot
 func takeEtcdSnapshot(ctx context.Context, k8sClient k8sclient.Client) (*SnapshotResult, error) {
-	const etcdNamespace = "openshift-etcd"
 	selectedPod, err := getEtcdPod(ctx, k8sClient, etcdNamespace)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get etcd pod from namespace %s: %w", etcdNamespace, err)
@@ -559,7 +562,7 @@ func getEtcdPod(ctx context.Context, k8sClient k8sclient.Client, namespace strin
 
 func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 	for _, v := range pod.Spec.InitContainers {
-		if v.Name == "reset-member" {
+		if v.Name == etcdctlInitContainer {
 			return v.Image, nil
 		}
 	}

@@ -10,7 +10,6 @@ import (
 )
 
 const (
-	octosqlEtcdImage = "quay.io/redhat_emp1/octosql-etcd:latest"
 	snapshotPath     = "/snapshot/etcd.snapshot"
 )
 
@@ -51,6 +50,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			Labels: map[string]string{
 				"app":        "etcd-snapshot-analysis",
 				"cluster-id": cfg.ClusterID,
+				"job-id":     jobName,
 			},
 		},
 		Spec: batchv1.JobSpec{
@@ -62,6 +62,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 					Labels: map[string]string{
 						"app":        "etcd-snapshot-analysis",
 						"cluster-id": cfg.ClusterID,
+						"job-id":     jobName,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -147,7 +148,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 					Containers: []corev1.Container{
 						{
 							Name:            "analyzer",
-							Image:           octosqlEtcdImage,
+							Image:           octosqlImage,
 							ImagePullPolicy: "Always",
 							Command: []string{
 								"/usr/local/bin/analyze-snapshot.sh",
