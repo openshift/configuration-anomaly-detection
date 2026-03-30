@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	snapshotPath     = "/snapshot/etcd.snapshot"
+	snapshotPath = "/snapshot/etcd.snapshot"
 )
 
 type JobConfig struct {

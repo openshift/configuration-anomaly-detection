@@ -253,8 +253,8 @@ func TestJobSpecAnalysisContainer(t *testing.T) {
 		t.Errorf("Analysis container name = %v, want analyzer", container.Name)
 	}
 
-	if container.Image != octosqlEtcdImage {
-		t.Errorf("Analysis container image = %v, want %v", container.Image, octosqlEtcdImage)
+	if container.Image != octosqlImage {
+		t.Errorf("Analysis container image = %v, want %v", container.Image, octosqlImage)
 	}
 
 	expectedCommand := []string{
