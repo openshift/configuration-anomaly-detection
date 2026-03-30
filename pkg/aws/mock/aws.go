@@ -27,6 +27,7 @@ import (
 type MockEC2API struct {
 	ctrl     *gomock.Controller
 	recorder *MockEC2APIMockRecorder
+	isgomock struct{}
 }
 
 // MockEC2APIMockRecorder is the mock recorder for MockEC2API.
@@ -130,6 +131,7 @@ func (mr *MockEC2APIMockRecorder) DescribeSubnets(ctx, in any, optFns ...any) *g
 type MockCloudTrailAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockCloudTrailAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockCloudTrailAPIMockRecorder is the mock recorder for MockCloudTrailAPI.
@@ -173,6 +175,7 @@ func (mr *MockCloudTrailAPIMockRecorder) LookupEvents(ctx, in any, optFns ...any
 type MockStsAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockStsAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockStsAPIMockRecorder is the mock recorder for MockStsAPI.
@@ -216,6 +219,7 @@ func (mr *MockStsAPIMockRecorder) AssumeRole(ctx, in any, optFns ...any) *gomock
 type MockAgentCoreAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockAgentCoreAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockAgentCoreAPIMockRecorder is the mock recorder for MockAgentCoreAPI.
@@ -259,6 +263,7 @@ func (mr *MockAgentCoreAPIMockRecorder) InvokeAgentRuntime(ctx, in any, optFns .
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
