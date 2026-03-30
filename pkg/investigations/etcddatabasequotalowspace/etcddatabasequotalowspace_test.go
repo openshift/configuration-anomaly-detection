@@ -3,10 +3,13 @@ package etcddatabasequotalowspace
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -239,7 +242,38 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 		},
 	}
 
-	fakeK8s := fake.NewClientBuilder().WithObjects(etcdPod).Build()
+	fakeK8s := fake.NewClientBuilder().
+		WithObjects(etcdPod).
+		WithStatusSubresource(&batchv1.Job{}).
+		Build()
+
+	ctx := t.Context()
+
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				jobList := &batchv1.JobList{}
+				if err := fakeK8s.List(ctx, jobList, client.InNamespace("ocm-test-namespace")); err != nil {
+					continue
+				}
+
+				for i := range jobList.Items {
+					job := &jobList.Items[i]
+					if job.Status.Succeeded == 0 {
+						// Mark job as succeeded
+						job.Status.Succeeded = 1
+						_ = fakeK8s.Status().Update(ctx, job)
+					}
+				}
+			}
+		}
+	}()
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
@@ -251,7 +285,7 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
+	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
 	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
