@@ -5,6 +5,7 @@
 //
 //	mockgen --build_flags=--mod=readonly -source ocm.go -destination ./mock/ocmmock.go -package ocmmock
 //
+
 // Package ocmmock is a generated GoMock package.
 package ocmmock
 
@@ -22,6 +23,7 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -69,6 +71,21 @@ func (m *MockClient) GetClusterHypershiftConfig(cluster *v1.Cluster) (*v1.Hypers
 func (mr *MockClientMockRecorder) GetClusterHypershiftConfig(cluster any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterHypershiftConfig", reflect.TypeOf((*MockClient)(nil).GetClusterHypershiftConfig), cluster)
+}
+
+// GetClusterInfo mocks base method.
+func (m *MockClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterInfo", identifier)
+	ret0, _ := ret[0].(*v1.Cluster)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterInfo indicates an expected call of GetClusterInfo.
+func (mr *MockClientMockRecorder) GetClusterInfo(identifier any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockClient)(nil).GetClusterInfo), identifier)
 }
 
 // GetClusterMachinePools mocks base method.

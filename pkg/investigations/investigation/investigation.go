@@ -75,24 +75,26 @@ type Investigation interface {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Name                    string
-	Cluster                 *cmv1.Cluster
-	ClusterDeployment       *hivev1.ClusterDeployment
-	AwsClient               aws.Client
-	BpClient                backplane.Client
-	RestConfig              *backplane.RestConfig
-	K8sClient               k8sclient.Client
-	OcmClient               ocm.Client
-	PdClient                pagerduty.Client
-	Notes                   *notewriter.NoteWriter
-	OCClient                oc.Client
-	ManagementRestConfig    *backplane.RestConfig
-	ManagementK8sClient     k8sclient.Client
-	ManagementOCClient      oc.Client
-	HCPNamespace            string
-	HCNamespace             string
-	IsHCP                   bool
-	IsInfrastructureCluster bool
+	Name                          string
+	Cluster                       *cmv1.Cluster
+	ClusterDeployment             *hivev1.ClusterDeployment
+	AwsClient                     aws.Client
+	BpClient                      backplane.Client
+	RestConfig                    *backplane.RestConfig
+	K8sClient                     k8sclient.Client
+	OcmClient                     ocm.Client
+	PdClient                      pagerduty.Client
+	Notes                         *notewriter.NoteWriter
+	OCClient                      oc.Client
+	ManagementRestConfig          *backplane.RestConfig
+	ManagementK8sClient           k8sclient.Client
+	ManagementOCClient            oc.Client
+	HCPNamespace                  string
+	HCNamespace                   string
+	IsHCP                         bool
+	IsInfrastructureCluster       bool
+	ManagementClusterName         string
+	DynatraceManagementClusterURL string
 }
 
 type ResourceBuilder interface {
@@ -363,6 +365,27 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 		}
 	}
 
+	managementClusterName := hypershiftConfig.ManagementCluster()
+	if managementClusterName == "" {
+		logging.Warnf("Management cluster name is empty, cannot fetch Dynatrace URL")
+		return nil
+	}
+
+	r.builtResources.ManagementClusterName = managementClusterName
+
+	managementCluster, err := r.ocmClient.GetClusterInfo(managementClusterName)
+	if err != nil {
+		logging.Warnf("Failed to get management cluster info for Dynatrace URL: %v", err)
+		return nil
+	}
+
+	dynatraceURL, err := r.ocmClient.GetDynatraceURL(managementCluster.ID())
+	if err != nil {
+		logging.Warnf("Failed to get Dynatrace URL: %v", err)
+		return nil
+	}
+
+	r.builtResources.DynatraceManagementClusterURL = dynatraceURL
 	return nil
 }
 

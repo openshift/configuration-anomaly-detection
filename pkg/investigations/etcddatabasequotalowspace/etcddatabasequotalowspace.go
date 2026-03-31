@@ -238,17 +238,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		return result, err
 	}
 
-	// Fetch Dynatrace URL for the management cluster (best-effort, non-critical)
-	if r.OcmClient != nil {
-		dynatraceURL, err := getDynatraceURLForManagementCluster(r)
-		if err != nil {
-			logging.Warnf("Failed to get Dynatrace URL: %v", err)
-			r.Notes.AppendWarning("Failed to retrieve Dynatrace dashboard URL: %v", err)
-		} else {
-			r.Notes.AppendSuccess("Dynatrace Dashboard: %s", dynatraceURL)
-		}
-	}
-
 	etcdPod, err := getEtcdPod(ctx, r.ManagementK8sClient, r.HCPNamespace)
 	if err != nil {
 		if investigation.IsInfrastructureError(err) {
@@ -331,6 +320,18 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	r.Notes.AppendAutomation("Created HCP analysis job: %s in namespace %s", etcdAnalysisJob.Name, r.HCPNamespace)
 
 	err = waitForJobCompletion(ctx, r.ManagementK8sClient, etcdAnalysisJob.Name, r.HCPNamespace, analysisJobTimeout)
+
+	// Add Dynatrace logs query URL to notes if available
+	if r.DynatraceManagementClusterURL != "" && r.ManagementClusterName != "" {
+		dynatraceLogsURL := buildDynatraceLogsURL(
+			r.DynatraceManagementClusterURL,
+			r.ManagementClusterName,
+			r.HCPNamespace,
+			etcdAnalysisJob.Name,
+		)
+		r.Notes.AppendSuccess("Dynatrace Logs: %s", dynatraceLogsURL)
+	}
+
 	if err != nil {
 		if investigation.IsInfrastructureError(err) {
 			return result, err
@@ -580,35 +581,27 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 	return "", fmt.Errorf("etcdctl container image not found in pod: %s", pod.Name)
 }
 
-// getDynatraceURLForManagementCluster retrieves the Dynatrace URL for an HCP cluster's management cluster
-func getDynatraceURLForManagementCluster(r *investigation.Resources) (string, error) {
-	hypershiftConfig, err := r.OcmClient.GetClusterHypershiftConfig(r.Cluster)
-	if err != nil {
-		return "", fmt.Errorf("failed to get HypershiftConfig: %w", err)
-	}
+// buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
+func buildDynatraceLogsURL(baseURL, managementClusterName, namespace, podName string) string {
+	// Build DQL query following osdctl pattern
+	// Example: fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and matchesPhrase(dt.kubernetes.cluster.name, "mgmt-cluster") and (matchesValue(k8s.namespace.name, "namespace")) and (matchesValue(k8s.pod.name, "pod-name")) | sort timestamp desc
+	query := fmt.Sprintf(
+		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and matchesPhrase(dt.kubernetes.cluster.name, "%s") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s")) | sort timestamp desc | limit 1000`,
+		managementClusterName,
+		namespace,
+		podName,
+	)
 
-	managementClusterName := hypershiftConfig.ManagementCluster()
-	if managementClusterName == "" {
-		return "", fmt.Errorf("management cluster name is empty")
-	}
+	// URL encode the query for use in URL parameter
+	encodedQuery := strings.ReplaceAll(query, " ", "%20")
+	encodedQuery = strings.ReplaceAll(encodedQuery, ",", "%2C")
+	encodedQuery = strings.ReplaceAll(encodedQuery, "\"", "%22")
+	encodedQuery = strings.ReplaceAll(encodedQuery, "(", "%28")
+	encodedQuery = strings.ReplaceAll(encodedQuery, ")", "%29")
+	encodedQuery = strings.ReplaceAll(encodedQuery, "|", "%7C")
+	encodedQuery = strings.ReplaceAll(encodedQuery, ":", "%3A")
 
-	// Get the management cluster object using OCM SDK connection
-	conn := r.OcmClient.GetConnection()
-	query := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", managementClusterName)
-	resp, err := conn.ClustersMgmt().V1().Clusters().List().Search(query).Send()
-	if err != nil {
-		return "", fmt.Errorf("failed to get management cluster info: %w", err)
-	}
-
-	if resp.Total() != 1 {
-		return "", fmt.Errorf("expected 1 management cluster, found %d", resp.Total())
-	}
-
-	managementCluster := resp.Items().Get(0)
-	dynatraceURL, err := r.OcmClient.GetDynatraceURL(managementCluster.ID())
-	if err != nil {
-		return "", fmt.Errorf("failed to get Dynatrace URL: %w", err)
-	}
-
-	return dynatraceURL, nil
+	// Construct full Dynatrace UI URL
+	// Format: https://{tenant}.apps.dynatrace.com/ui/logs?query={encoded_query}
+	return fmt.Sprintf("%sui/logs?query=%s", baseURL, encodedQuery)
 }

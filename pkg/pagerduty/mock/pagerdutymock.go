@@ -5,6 +5,7 @@
 //
 //	mockgen --build_flags=--mod=readonly -source pagerduty.go -destination ./mock/pagerdutymock.go -package pdmock
 //
+
 // Package pdmock is a generated GoMock package.
 package pdmock
 
@@ -18,6 +19,7 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
