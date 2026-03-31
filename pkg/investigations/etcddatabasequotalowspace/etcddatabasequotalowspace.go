@@ -238,6 +238,17 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		return result, err
 	}
 
+	// Fetch Dynatrace URL for the management cluster (best-effort, non-critical)
+	if r.OcmClient != nil {
+		dynatraceURL, err := getDynatraceURLForManagementCluster(r)
+		if err != nil {
+			logging.Warnf("Failed to get Dynatrace URL: %v", err)
+			r.Notes.AppendWarning("Failed to retrieve Dynatrace dashboard URL: %v", err)
+		} else {
+			r.Notes.AppendSuccess("Dynatrace Dashboard: %s", dynatraceURL)
+		}
+	}
+
 	etcdPod, err := getEtcdPod(ctx, r.ManagementK8sClient, r.HCPNamespace)
 	if err != nil {
 		if investigation.IsInfrastructureError(err) {
@@ -567,4 +578,37 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("etcdctl container image not found in pod: %s", pod.Name)
+}
+
+// getDynatraceURLForManagementCluster retrieves the Dynatrace URL for an HCP cluster's management cluster
+func getDynatraceURLForManagementCluster(r *investigation.Resources) (string, error) {
+	hypershiftConfig, err := r.OcmClient.GetClusterHypershiftConfig(r.Cluster)
+	if err != nil {
+		return "", fmt.Errorf("failed to get HypershiftConfig: %w", err)
+	}
+
+	managementClusterName := hypershiftConfig.ManagementCluster()
+	if managementClusterName == "" {
+		return "", fmt.Errorf("management cluster name is empty")
+	}
+
+	// Get the management cluster object using OCM SDK connection
+	conn := r.OcmClient.GetConnection()
+	query := fmt.Sprintf("(id like '%[1]s' or external_id like '%[1]s' or display_name like '%[1]s')", managementClusterName)
+	resp, err := conn.ClustersMgmt().V1().Clusters().List().Search(query).Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to get management cluster info: %w", err)
+	}
+
+	if resp.Total() != 1 {
+		return "", fmt.Errorf("expected 1 management cluster, found %d", resp.Total())
+	}
+
+	managementCluster := resp.Items().Get(0)
+	dynatraceURL, err := r.OcmClient.GetDynatraceURL(managementCluster.ID())
+	if err != nil {
+		return "", fmt.Errorf("failed to get Dynatrace URL: %w", err)
+	}
+
+	return dynatraceURL, nil
 }

@@ -5,7 +5,6 @@
 //
 //	mockgen --build_flags=--mod=readonly -source ocm.go -destination ./mock/ocmmock.go -package ocmmock
 //
-
 // Package ocmmock is a generated GoMock package.
 package ocmmock
 
@@ -23,7 +22,6 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
-	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -100,6 +98,21 @@ func (m *MockClient) GetConnection() *sdk.Connection {
 func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
+}
+
+// GetDynatraceURL mocks base method.
+func (m *MockClient) GetDynatraceURL(clusterID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDynatraceURL", clusterID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDynatraceURL indicates an expected call of GetDynatraceURL.
+func (mr *MockClientMockRecorder) GetDynatraceURL(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDynatraceURL", reflect.TypeOf((*MockClient)(nil).GetDynatraceURL), clusterID)
 }
 
 // GetOrganizationID mocks base method.
