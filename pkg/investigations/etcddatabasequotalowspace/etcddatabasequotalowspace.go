@@ -584,7 +584,6 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 
 // buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
 func buildDynatraceLogsURL(baseURL, namespace, JobId string) string {
-	// Build DQL query
 	query := fmt.Sprintf(
 		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
 		namespace,
@@ -608,10 +607,8 @@ func buildDynatraceLogsURL(baseURL, namespace, JobId string) string {
 		"facetsCollapse":   true,
 	}
 
-	// Marshal to JSON
 	jsonBytes, err := json.Marshal(state)
 	if err != nil {
-		// Fallback to empty state if marshaling fails
 		jsonBytes = []byte("{}")
 		logging.Warnf("failed to marshal Dynatrace state to JSON: %v", err)
 	}
@@ -621,7 +618,5 @@ func buildDynatraceLogsURL(baseURL, namespace, JobId string) string {
 	encodedState := url.QueryEscape(string(jsonBytes))
 	encodedState = strings.ReplaceAll(encodedState, "+", "%20")
 
-	// Construct full Dynatrace UI URL with hash fragment
-	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.logs/#{encoded_json_state}
 	return fmt.Sprintf("%sui/apps/dynatrace.logs/#%s", baseURL, encodedState)
 }
