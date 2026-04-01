@@ -583,11 +583,11 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 }
 
 // buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
-func buildDynatraceLogsURL(baseURL, namespace, JobId string) string {
+func buildDynatraceLogsURL(baseURL, namespace, jobId string) string {
 	query := fmt.Sprintf(
 		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
 		namespace,
-		JobId,
+		jobId,
 	)
 
 	// Build the state object for Dynatrace logs UI
