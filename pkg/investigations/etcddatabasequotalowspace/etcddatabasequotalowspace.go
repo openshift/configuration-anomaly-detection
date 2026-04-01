@@ -3,6 +3,7 @@ package etcddatabasequotalowspace
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -326,7 +327,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	if r.DynatraceManagementClusterURL != "" && r.ManagementClusterName != "" {
 		dynatraceLogsURL := buildDynatraceLogsURL(
 			r.DynatraceManagementClusterURL,
-			r.ManagementClusterName,
 			r.HCPNamespace,
 			etcdAnalysisJob.Name,
 		)
@@ -583,25 +583,45 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 }
 
 // buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
-func buildDynatraceLogsURL(baseURL, managementClusterName, namespace, podName string) string {
-	// Build DQL query following osdctl pattern
-	// Example: fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and matchesPhrase(dt.kubernetes.cluster.name, "mgmt-cluster") and (matchesValue(k8s.namespace.name, "namespace")) and (matchesValue(k8s.pod.name, "pod-name")) | sort timestamp desc
+func buildDynatraceLogsURL(baseURL, namespace, JobId string) string {
+	// Build DQL query
 	query := fmt.Sprintf(
-		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and matchesPhrase(dt.kubernetes.cluster.name, "%s") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s")) | sort timestamp desc | limit 1000`,
-		managementClusterName,
+		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
 		namespace,
-		podName,
+		JobId,
 	)
 
-	// Dynatrace uses a JSON object in the hash fragment for the query
-	// Build minimal JSON with just the query field
-	jsonConfig := fmt.Sprintf(`{"version":2,"dt.timeframe":{"from":"now()-1h","to":"now()"},"dt.query":"%s"}`,
-		strings.ReplaceAll(strings.ReplaceAll(query, `"`, `\"`), "\n", ""))
+	// Build the state object for Dynatrace logs UI
+	// The order of fields matters for some Dynatrace UI versions
+	state := map[string]interface{}{
+		"version": 2,
+		"dt.timeframe": map[string]string{
+			"from": "now()-30m",
+			"to":   "now()",
+		},
+		"tableConfig": map[string]interface{}{
+			"columns": []string{"timestamp", "status", "Log message"},
+		},
+		"showDqlEditor":    true,
+		"filterFieldQuery": query,
+		"dt.query":         query,
+		"facetsCollapse":   true,
+	}
 
-	// URL encode the JSON config
-	encodedConfig := url.QueryEscape(jsonConfig)
+	// Marshal to JSON
+	jsonBytes, err := json.Marshal(state)
+	if err != nil {
+		// Fallback to empty state if marshaling fails
+		jsonBytes = []byte("{}")
+		logging.Warnf("failed to marshal Dynatrace state to JSON: %v", err)
+	}
+
+	// URL encode the JSON state
+	// Note: QueryEscape uses + for spaces, but hash fragments need %20
+	encodedState := url.QueryEscape(string(jsonBytes))
+	encodedState = strings.ReplaceAll(encodedState, "+", "%20")
 
 	// Construct full Dynatrace UI URL with hash fragment
-	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.logs/#{encoded_json}
-	return fmt.Sprintf("%sui/apps/dynatrace.logs/#%s", baseURL, encodedConfig)
+	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.logs/#{encoded_json_state}
+	return fmt.Sprintf("%sui/apps/dynatrace.logs/#%s", baseURL, encodedState)
 }
