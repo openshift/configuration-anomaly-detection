@@ -330,7 +330,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 			r.HCPNamespace,
 			etcdAnalysisJob.Name,
 		)
-		r.Notes.AppendSuccess("Dynatrace Logs: %s", dynatraceLogsURL)
+		r.Notes.AppendSuccess("Note: Click 'Show full note' to access the full URL. Logs may take up to 5 minutes to appear in Dynatrace.\n\nDynatrace Logs: %s", dynatraceLogsURL)
 	}
 
 	if err != nil {
