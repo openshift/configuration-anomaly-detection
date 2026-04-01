@@ -75,23 +75,24 @@ type Investigation interface {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Name                 string
-	Cluster              *cmv1.Cluster
-	ClusterDeployment    *hivev1.ClusterDeployment
-	AwsClient            aws.Client
-	BpClient             backplane.Client
-	RestConfig           *backplane.RestConfig
-	K8sClient            k8sclient.Client
-	OcmClient            ocm.Client
-	PdClient             pagerduty.Client
-	Notes                *notewriter.NoteWriter
-	OCClient             oc.Client
-	ManagementRestConfig *backplane.RestConfig
-	ManagementK8sClient  k8sclient.Client
-	ManagementOCClient   oc.Client
-	HCPNamespace         string
-	HCNamespace          string
-	IsHCP                bool
+	Name                    string
+	Cluster                 *cmv1.Cluster
+	ClusterDeployment       *hivev1.ClusterDeployment
+	AwsClient               aws.Client
+	BpClient                backplane.Client
+	RestConfig              *backplane.RestConfig
+	K8sClient               k8sclient.Client
+	OcmClient               ocm.Client
+	PdClient                pagerduty.Client
+	Notes                   *notewriter.NoteWriter
+	OCClient                oc.Client
+	ManagementRestConfig    *backplane.RestConfig
+	ManagementK8sClient     k8sclient.Client
+	ManagementOCClient      oc.Client
+	HCPNamespace            string
+	HCNamespace             string
+	IsHCP                   bool
+	IsInfrastructureCluster bool
 }
 
 type ResourceBuilder interface {
@@ -215,6 +216,19 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			r.buildErr = ClusterNotFoundError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
 		}
+
+		// Check if this is an infra cluster (hive, management or service)
+		internalID := r.builtResources.Cluster.ID()
+		isManaging, err := r.ocmClient.IsManagingCluster(internalID)
+		if err != nil {
+			logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
+			r.builtResources.IsInfrastructureCluster = true
+		} else {
+			r.builtResources.IsInfrastructureCluster = isManaging
+			if isManaging {
+				logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
+			}
+		}
 	}
 
 	if r.buildNotes && r.builtResources.Notes == nil {
@@ -328,7 +342,7 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	}
 
 	if r.buildManagementK8sClient && r.builtResources.ManagementK8sClient == nil {
-		logging.Infof("Creating k8s client for management cluster of %s\", r.clusterId)")
+		logging.Infof("Creating k8s client for management cluster of %s", r.clusterId)
 		r.builtResources.ManagementK8sClient, err = k8sclient.New(&r.builtResources.ManagementRestConfig.Config)
 		if err != nil {
 			return ManagementK8sClientError{

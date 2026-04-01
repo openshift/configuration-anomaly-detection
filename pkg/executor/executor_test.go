@@ -451,6 +451,249 @@ func TestManualExecutor_DryRunMode(t *testing.T) {
 	assert.False(t, limitedSupportExecuted, "Limited support should NOT execute in dry-run mode")
 }
 
+func TestInfraClusterExecutor_InterceptsLimitedSupportAndSilence(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	mockPDClient.EXPECT().AddNote(gomock.Any()).Return(nil)
+	mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	limitedSupportExecuted := false
+	silenceExecuted := false
+	backplaneExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeLimitedSupport, executed: &limitedSupportExecuted},
+		&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+		&mockAction{actionType: ActionTypeBackplaneReport, executed: &backplaneExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-infra-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.False(t, limitedSupportExecuted, "LimitedSupport should be intercepted on infra cluster")
+	assert.False(t, silenceExecuted, "Silence should be intercepted on infra cluster")
+	assert.True(t, backplaneExecuted, "Backplane report should pass through")
+}
+
+func TestInfraClusterExecutor_InterceptsServiceLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	mockPDClient.EXPECT().AddNote(gomock.Any()).Return(nil)
+	mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	serviceLogExecuted := false
+	pdNoteExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+		&mockAction{actionType: ActionTypePagerDutyNote, executed: &pdNoteExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-infra-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.False(t, serviceLogExecuted, "ServiceLog should be intercepted on infra cluster")
+	assert.True(t, pdNoteExecuted, "Original PD note should pass through")
+}
+
+func TestInfraClusterExecutor_PassesThroughNonInterceptedActions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	pdNoteExecuted := false
+	escalateExecuted := false
+	backplaneExecuted := false
+
+	// These actions should all pass through untouched
+	actions := []Action{
+		&mockAction{actionType: ActionTypePagerDutyNote, executed: &pdNoteExecuted},
+		&mockAction{actionType: ActionTypeEscalateIncident, executed: &escalateExecuted},
+		&mockAction{actionType: ActionTypeBackplaneReport, executed: &backplaneExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-infra-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.True(t, pdNoteExecuted, "PD note should pass through")
+	assert.True(t, escalateExecuted, "Escalate should pass through")
+	assert.True(t, backplaneExecuted, "Backplane report should pass through")
+}
+
+func TestInfraClusterExecutor_NoActionsToIntercept(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	escalateExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeEscalateIncident, executed: &escalateExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-infra-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.True(t, escalateExecuted, "Escalate should execute normally")
+}
+
+func TestInfraClusterExecutor_NilInput(t *testing.T) {
+	logger := zap.NewNop().Sugar()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	err := exec.Execute(context.Background(), nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "ExecutorInput cannot be nil")
+}
+
+func TestInfraClusterExecutor_IntegrationAllIntercepted(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	mockPDClient.EXPECT().AddNote(gomock.Any()).Return(nil)
+	mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger)
+
+	limitedSupportExecuted := false
+	silenceExecuted := false
+	serviceLogExecuted := false
+	backplaneExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeLimitedSupport, executed: &limitedSupportExecuted},
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+		&mockAction{actionType: ActionTypeBackplaneReport, executed: &backplaneExecuted},
+		&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-infra-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.False(t, limitedSupportExecuted, "LimitedSupport should be intercepted")
+	assert.False(t, serviceLogExecuted, "ServiceLog should be intercepted")
+	assert.False(t, silenceExecuted, "Silence should be intercepted")
+	assert.True(t, backplaneExecuted, "Backplane report should pass through")
+}
+
+func TestJoinDescriptions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected string
+	}{
+		{"single", []string{"Limited Support"}, "Limited Support"},
+		{"two", []string{"Limited Support", "Silence"}, "Limited Support and Silence"},
+		{"three", []string{"Limited Support", "ServiceLog", "Silence"}, "Limited Support, ServiceLog and Silence"},
+		{"duplicates", []string{"Limited Support", "Limited Support", "Silence"}, "Limited Support and Silence"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := joinDescriptions(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestWebhookExecutor_DryRunMode_ConcurrentActions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

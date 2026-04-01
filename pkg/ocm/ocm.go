@@ -47,6 +47,7 @@ type Client interface {
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
 	GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.HypershiftConfig, error)
 	GetOrganizationID(clusterID string) (string, error)
+	IsManagingCluster(clusterID string) (bool, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -340,6 +341,35 @@ func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, e
 		return true, noteMessage, nil
 	}
 	return false, "User is not banned.", nil
+}
+
+const (
+	hypershiftClusterTypeLabel  = "ext-hypershift.openshift.io/cluster-type"
+	managementClusterLabelValue = "management-cluster"
+	serviceClusterLabelValue    = "service-cluster"
+	hiveLabel                   = "ext-managed.openshift.io/hive-shard"
+	hiveLabelValue              = "true"
+)
+
+// IsManagingCluster returns true if the cluster is a managing cluster,
+// meaning it is one of: hive shard, service cluster, or management cluster.
+func (c *SdkClient) IsManagingCluster(clusterID string) (bool, error) {
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).ExternalConfiguration().Labels().List().Send()
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch external configuration labels for cluster %s: %w", clusterID, err)
+	}
+
+	for _, label := range resp.Items().Slice() {
+		key := label.Key()
+		value := label.Value()
+
+		if (key == hypershiftClusterTypeLabel && (value == managementClusterLabelValue || value == serviceClusterLabelValue)) ||
+			(key == hiveLabel && value == hiveLabelValue) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {

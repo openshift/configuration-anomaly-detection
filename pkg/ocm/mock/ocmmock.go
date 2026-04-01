@@ -162,6 +162,21 @@ func (mr *MockClientMockRecorder) IsAccessProtected(cluster any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAccessProtected", reflect.TypeOf((*MockClient)(nil).IsAccessProtected), cluster)
 }
 
+// IsManagingCluster mocks base method.
+func (m *MockClient) IsManagingCluster(clusterID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsManagingCluster", clusterID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsManagingCluster indicates an expected call of IsManagingCluster.
+func (mr *MockClientMockRecorder) IsManagingCluster(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsManagingCluster", reflect.TypeOf((*MockClient)(nil).IsManagingCluster), clusterID)
+}
+
 // PostLimitedSupportReason mocks base method.
 func (m *MockClient) PostLimitedSupportReason(cluster *v1.Cluster, limitedSupportReason *ocm.LimitedSupportReason) error {
 	m.ctrl.T.Helper()

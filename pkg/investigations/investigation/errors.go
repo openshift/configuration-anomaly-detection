@@ -148,9 +148,11 @@ func IsFindingError(err error) bool {
 	return errors.As(err, &findingErr)
 }
 
+const managementClusterAccessError = "CAD was unable to get credentials to the management cluster. Please investigate manually."
+
 // ClusterAccessErrorMessage checks if a Build error is a known cluster access issue
-// (K8SClientError or RestConfigError). If recognized, it returns an escalation message
-// and true. Otherwise, it returns an empty string and false.
+// (K8SClientError, RestConfigError, or management cluster equivalents). If recognized,
+// it returns an escalation message and true. Otherwise, it returns an empty string and false.
 // Callers can use the message to construct their own escalation actions.
 func ClusterAccessErrorMessage(err error) (string, bool) {
 	k8sErr := &K8SClientError{}
@@ -166,6 +168,20 @@ func ClusterAccessErrorMessage(err error) (string, bool) {
 	if errors.As(err, restCfgErr) {
 		return "CAD was unable to get credentials to the cluster. Please investigate manually.", true
 	}
+
+	mgmtRestCfgErr := &ManagementRestConfigError{}
+	if errors.As(err, mgmtRestCfgErr) {
+		return managementClusterAccessError, true
+	}
+	mgmtK8sErr := &ManagementK8sClientError{}
+	if errors.As(err, mgmtK8sErr) {
+		return managementClusterAccessError, true
+	}
+	mgmtOCErr := &ManagementOCClientError{}
+	if errors.As(err, mgmtOCErr) {
+		return managementClusterAccessError, true
+	}
+
 	return "", false
 }
 
@@ -188,15 +204,14 @@ func (e ManagementClusterNamespaceError) Error() string {
 }
 
 type ManagementRestConfigError struct {
-	ClusterID           string
-	ManagementClusterID string
-	Err                 error
+	ClusterID string
+	Err       error
 }
 
 func (e ManagementRestConfigError) Unwrap() error { return e.Err }
 
 func (e ManagementRestConfigError) Error() string {
-	return fmt.Sprintf("could not create rest config for management cluster %s (HCP cluster: %s): %s", e.ManagementClusterID, e.ClusterID, e.Err.Error())
+	return fmt.Sprintf("could not create rest config for management cluster (HCP cluster: %s): %s", e.ClusterID, e.Err.Error())
 }
 
 type ManagementK8sClientError struct {
