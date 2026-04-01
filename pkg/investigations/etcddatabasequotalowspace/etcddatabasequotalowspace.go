@@ -593,10 +593,15 @@ func buildDynatraceLogsURL(baseURL, managementClusterName, namespace, podName st
 		podName,
 	)
 
-	// URL encode the query for use in URL parameter
-	encodedQuery := url.QueryEscape(query)
+	// Dynatrace uses a JSON object in the hash fragment for the query
+	// Build minimal JSON with just the query field
+	jsonConfig := fmt.Sprintf(`{"version":2,"dt.timeframe":{"from":"now()-1h","to":"now()"},"dt.query":"%s"}`,
+		strings.ReplaceAll(strings.ReplaceAll(query, `"`, `\"`), "\n", ""))
 
-	// Construct full Dynatrace UI URL
-	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.classic.logs/ui/logs/query?query={encoded_query}
-	return fmt.Sprintf("%sui/apps/dynatrace.classic.logs/ui/logs/query?query=%s", baseURL, encodedQuery)
+	// URL encode the JSON config
+	encodedConfig := url.QueryEscape(jsonConfig)
+
+	// Construct full Dynatrace UI URL with hash fragment
+	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.logs/#{encoded_json}
+	return fmt.Sprintf("%sui/apps/dynatrace.logs/#%s", baseURL, encodedConfig)
 }
