@@ -4,6 +4,7 @@ package etcddatabasequotalowspace
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -593,15 +594,9 @@ func buildDynatraceLogsURL(baseURL, managementClusterName, namespace, podName st
 	)
 
 	// URL encode the query for use in URL parameter
-	encodedQuery := strings.ReplaceAll(query, " ", "%20")
-	encodedQuery = strings.ReplaceAll(encodedQuery, ",", "%2C")
-	encodedQuery = strings.ReplaceAll(encodedQuery, "\"", "%22")
-	encodedQuery = strings.ReplaceAll(encodedQuery, "(", "%28")
-	encodedQuery = strings.ReplaceAll(encodedQuery, ")", "%29")
-	encodedQuery = strings.ReplaceAll(encodedQuery, "|", "%7C")
-	encodedQuery = strings.ReplaceAll(encodedQuery, ":", "%3A")
+	encodedQuery := url.QueryEscape(query)
 
 	// Construct full Dynatrace UI URL
-	// Format: https://{tenant}.apps.dynatrace.com/ui/logs?query={encoded_query}
-	return fmt.Sprintf("%sui/logs?query=%s", baseURL, encodedQuery)
+	// Format: https://{tenant}.apps.dynatrace.com/ui/apps/dynatrace.classic.logs/ui/logs/query?query={encoded_query}
+	return fmt.Sprintf("%sui/apps/dynatrace.classic.logs/ui/logs/query?query=%s", baseURL, encodedQuery)
 }
