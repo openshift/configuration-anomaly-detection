@@ -49,7 +49,7 @@ type Client interface {
 	GetOrganizationID(clusterID string) (string, error)
 	GetClusterInfo(identifier string) (*cmv1.Cluster, error)
 	IsManagingCluster(clusterID string) (bool, error)
-	GetDynatraceURL(clusterID string) (string, error)
+	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -407,17 +407,12 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 }
 
 // GetDynatraceURL retrieves the Dynatrace tenant URL from the cluster's subscription labels
-func (c *SdkClient) GetDynatraceURL(clusterID string) (string, error) {
+func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
 	const dynatraceTenantKeyLabel = "dynatrace.regional-tenant"
-
-	cluster, err := c.GetClusterInfo(clusterID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get cluster info: %w", err)
-	}
 
 	cmv1Subscription, ok := cluster.GetSubscription()
 	if !ok {
-		return "", fmt.Errorf("failed to get subscription from cluster: %s", clusterID)
+		return "", fmt.Errorf("failed to get subscription from cluster: %s", cluster.ID())
 	}
 
 	subscriptionLabels, err := c.conn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Labels().List().Send()

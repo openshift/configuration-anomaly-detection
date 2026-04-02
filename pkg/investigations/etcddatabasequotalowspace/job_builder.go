@@ -44,7 +44,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 
 	ttlSecondsAfterFinished := int32(600)
 	activeDeadlineSeconds := int64(600)
-	backoffLimit := int32(1)
+	backoffLimit := int32(0)
 
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -152,7 +152,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 						{
 							Name:            "analyzer",
 							Image:           octosqlImage,
-							ImagePullPolicy: "Always",
+							ImagePullPolicy: corev1.PullAlways,
 							Command: []string{
 								"/usr/local/bin/analyze-snapshot.sh",
 								"--delete",

@@ -113,8 +113,8 @@ func TestBuildEtcdAnalysisJob(t *testing.T) {
 				t.Errorf("Job ActiveDeadlineSeconds = %v, want 600", job.Spec.ActiveDeadlineSeconds)
 			}
 
-			if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 1 {
-				t.Errorf("Job BackoffLimit = %v, want 1", job.Spec.BackoffLimit)
+			if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 0 {
+				t.Errorf("Job BackoffLimit = %v, want 0", job.Spec.BackoffLimit)
 			}
 		})
 	}

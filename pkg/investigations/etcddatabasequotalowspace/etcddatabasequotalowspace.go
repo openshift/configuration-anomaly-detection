@@ -1,4 +1,4 @@
-// Package etcddatabasequotalowspace takes etcd snapshots for non-HCP clusters for analysis
+// Package etcddatabasequotalowspace takes etcd snapshots and performs database analysis for etcd quota issues
 package etcddatabasequotalowspace
 
 import (
@@ -260,9 +260,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	etcdContainerImage, err := getEtcdctlContainerImage(etcdPod)
 	if err != nil {
-		if investigation.IsInfrastructureError(err) {
-			return result, err
-		}
 		r.Notes.AppendWarning("Etcdctl container image not found")
 		logging.Errorf("Etcdctl container image not found")
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
@@ -273,7 +270,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to find etcdctl container image - manual investigation required"),
 		)
-		return result, nil
+		return result, nil //nolint:nilerr // Error handled gracefully with notes and escalation
 	}
 
 	jobConfig := JobConfig{
@@ -285,9 +282,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	etcdAnalysisJob, err := BuildEtcdAnalysisJob(jobConfig)
 	if err != nil {
-		if investigation.IsInfrastructureError(err) {
-			return result, err
-		}
 		r.Notes.AppendWarning("Failed to build analysis job: %v", err)
 		logging.Errorf("Failed to build analysis job: %v", err)
 		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
@@ -371,7 +365,7 @@ func (i *Investigation) AlertTitle() string {
 }
 
 func (i *Investigation) Description() string {
-	return "Takes etcd snapshots for non-HCP clusters for analysis"
+	return "Takes etcd snapshots and performs database analysis for etcd quota issues"
 }
 
 func (i *Investigation) IsExperimental() bool {

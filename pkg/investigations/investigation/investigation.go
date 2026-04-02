@@ -379,7 +379,7 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 		return nil
 	}
 
-	dynatraceURL, err := r.ocmClient.GetDynatraceURL(managementCluster.ID())
+	dynatraceURL, err := r.ocmClient.GetDynatraceURL(managementCluster)
 	if err != nil {
 		logging.Warnf("Failed to get Dynatrace URL: %v", err)
 		return nil
