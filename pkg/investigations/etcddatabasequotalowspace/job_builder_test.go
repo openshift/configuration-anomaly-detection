@@ -105,6 +105,14 @@ func TestBuildEtcdAnalysisJob(t *testing.T) {
 				t.Errorf("Job cluster-id label = %v, want %v", job.Labels["cluster-id"], tt.config.ClusterID)
 			}
 
+			if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 600 {
+				t.Errorf("Job TTLSecondsAfterFinished = %v, want 600", job.Spec.TTLSecondsAfterFinished)
+			}
+
+			if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 600 {
+				t.Errorf("Job ActiveDeadlineSeconds = %v, want 600", job.Spec.ActiveDeadlineSeconds)
+			}
+
 			if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 1 {
 				t.Errorf("Job BackoffLimit = %v, want 1", job.Spec.BackoffLimit)
 			}

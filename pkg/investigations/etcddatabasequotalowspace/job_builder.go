@@ -42,6 +42,8 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 	timestamp := time.Now().Format("20060102-150405")
 	jobName := fmt.Sprintf("etcd-analysis-%s", timestamp)
 
+	ttlSecondsAfterFinished := int32(600)
+	activeDeadlineSeconds := int64(600)
 	backoffLimit := int32(1)
 
 	job := &batchv1.Job{
@@ -55,7 +57,9 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			},
 		},
 		Spec: batchv1.JobSpec{
-			BackoffLimit: &backoffLimit,
+			TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
+			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
+			BackoffLimit:            &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
