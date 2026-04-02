@@ -2,6 +2,8 @@
 
 set -e
 
+SED="${SED:-sed}"
+
 read -p "Enter the new investigation (package) name: " INVESTIGATION_NAME
 if [[ "${INVESTIGATION_NAME}" == "" ]] ; then
 	echo "Investigation name cannot be empty."
@@ -61,7 +63,7 @@ cat <<EOF > "${INVESTIGATION_DIR}/testing/README.md"
 # Testing ${INVESTIGATION_NAME} Investigation
 
 TODO:
-- Add a test script or test objects to this `testing/` directory for future maintainers to use
+- Add a test script or test objects to this \`testing/\` directory for future maintainers to use
 - Edit this README file and add detailed instructions on how to use the script/objects to recreate the conditions for the investigation. Be sure to include any assumptions or prerequisites about the environment (disable hive syncsetting, etc)
 EOF
 
@@ -123,8 +125,8 @@ echo "metadata.yaml file created in ${INVESTIGATION_DIR}"
 
 # Update registry.go to contain new investigation
 if ! grep -q "${INVESTIGATION_NAME}" ../pkg/investigations/registry.go && ! grep -q "${INVESTIGATION_NAME}" ../pkg/investigations/registry.go; then
-	sed -i "/import (/a \\\t\"github.com/openshift/configuration-anomaly-detection/pkg/investigations/${INVESTIGATION_NAME}\"" ../pkg/investigations/registry.go
-    sed -i "/var availableInvestigations = \[/a \\\t&${INVESTIGATION_NAME}.Investigation{}," ../pkg/investigations/registry.go
+	"${SED}" -i "/import (/a \\\t\"github.com/openshift/configuration-anomaly-detection/pkg/investigations/${INVESTIGATION_NAME}\"" ../pkg/investigations/registry.go
+    "${SED}" -i "/var availableInvestigations = \[/a \\\t&${INVESTIGATION_NAME}.Investigation{}," ../pkg/investigations/registry.go
     echo "${INVESTIGATION_NAME} added to registry.go"
 else
     echo "${INVESTIGATION_NAME} already exists in registry.go"
