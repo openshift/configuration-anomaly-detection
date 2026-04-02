@@ -35,12 +35,13 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 	if cfg.EtcdContainerImage == "" {
 		return nil, fmt.Errorf("etcd container image is required")
 	}
+	if octosqlImage == "" {
+		return nil, fmt.Errorf("octosql image is required (CAD_OCTOSQL_IMAGE)")
+	}
 
 	timestamp := time.Now().Format("20060102-150405")
 	jobName := fmt.Sprintf("etcd-analysis-%s", timestamp)
 
-	ttlSecondsAfterFinished := int32(3600)
-	activeDeadlineSeconds := int64(600)
 	backoffLimit := int32(1)
 
 	job := &batchv1.Job{
@@ -54,9 +55,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			},
 		},
 		Spec: batchv1.JobSpec{
-			TTLSecondsAfterFinished: &ttlSecondsAfterFinished,
-			ActiveDeadlineSeconds:   &activeDeadlineSeconds,
-			BackoffLimit:            &backoffLimit,
+			BackoffLimit: &backoffLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{

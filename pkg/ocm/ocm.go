@@ -434,8 +434,10 @@ func (c *SdkClient) GetDynatraceURL(clusterID string) (string, error) {
 		if key, ok := label.GetKey(); ok {
 			if key == dynatraceTenantKeyLabel {
 				if value, ok := label.GetValue(); ok {
-					url := fmt.Sprintf("https://%s.apps.dynatrace.com/", value)
-					return url, nil
+					if value == "" {
+						return "", errors.New("dynatrace tenant label is empty")
+					}
+					return fmt.Sprintf("https://%s.apps.dynatrace.com/", value), nil
 				}
 			}
 		}

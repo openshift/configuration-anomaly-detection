@@ -1,10 +1,17 @@
 package etcddatabasequotalowspace
 
 import (
+	"os"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
 )
+
+func TestMain(m *testing.M) {
+	// Set octosqlImage for all tests
+	octosqlImage = "quay.io/openshift/octosql-etcd:latest"
+	os.Exit(m.Run())
+}
 
 func TestBuildEtcdAnalysisJob(t *testing.T) {
 	tests := []struct {
@@ -96,14 +103,6 @@ func TestBuildEtcdAnalysisJob(t *testing.T) {
 
 			if job.Labels["cluster-id"] != tt.config.ClusterID {
 				t.Errorf("Job cluster-id label = %v, want %v", job.Labels["cluster-id"], tt.config.ClusterID)
-			}
-
-			if job.Spec.TTLSecondsAfterFinished == nil || *job.Spec.TTLSecondsAfterFinished != 3600 {
-				t.Errorf("Job TTLSecondsAfterFinished = %v, want 3600", job.Spec.TTLSecondsAfterFinished)
-			}
-
-			if job.Spec.ActiveDeadlineSeconds == nil || *job.Spec.ActiveDeadlineSeconds != 600 {
-				t.Errorf("Job ActiveDeadlineSeconds = %v, want 600", job.Spec.ActiveDeadlineSeconds)
 			}
 
 			if job.Spec.BackoffLimit == nil || *job.Spec.BackoffLimit != 1 {
