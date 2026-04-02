@@ -73,6 +73,21 @@ func (mr *MockClientMockRecorder) GetClusterHypershiftConfig(cluster any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterHypershiftConfig", reflect.TypeOf((*MockClient)(nil).GetClusterHypershiftConfig), cluster)
 }
 
+// GetClusterInfo mocks base method.
+func (m *MockClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterInfo", identifier)
+	ret0, _ := ret[0].(*v1.Cluster)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterInfo indicates an expected call of GetClusterInfo.
+func (mr *MockClientMockRecorder) GetClusterInfo(identifier any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterInfo", reflect.TypeOf((*MockClient)(nil).GetClusterInfo), identifier)
+}
+
 // GetClusterMachinePools mocks base method.
 func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
 	m.ctrl.T.Helper()
@@ -100,6 +115,21 @@ func (m *MockClient) GetConnection() *sdk.Connection {
 func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
+}
+
+// GetDynatraceURL mocks base method.
+func (m *MockClient) GetDynatraceURL(cluster *v1.Cluster) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDynatraceURL", cluster)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDynatraceURL indicates an expected call of GetDynatraceURL.
+func (mr *MockClientMockRecorder) GetDynatraceURL(cluster any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDynatraceURL", reflect.TypeOf((*MockClient)(nil).GetDynatraceURL), cluster)
 }
 
 // GetOrganizationID mocks base method.

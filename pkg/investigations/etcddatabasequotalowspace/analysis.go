@@ -128,8 +128,8 @@ func createAnalysisJob(ctx context.Context, k8sClient k8sclient.Client, nodeName
 }
 
 // waitForJobCompletion waits for the Job to complete (success or failure)
-func waitForJobCompletion(ctx context.Context, k8sClient k8sclient.Client, jobName string, timeout time.Duration) error {
-	logging.Infof("waiting for job %s to complete (timeout: %v)", jobName, timeout)
+func waitForJobCompletion(ctx context.Context, k8sClient k8sclient.Client, jobName string, namespace string, timeout time.Duration) error {
+	logging.Infof("waiting for job %s in namespace %s to complete (timeout: %v)", jobName, namespace, timeout)
 
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(5 * time.Second)
@@ -147,7 +147,7 @@ func waitForJobCompletion(ctx context.Context, k8sClient k8sclient.Client, jobNa
 			job := &batchv1.Job{}
 			err := k8sClient.Get(ctx, client.ObjectKey{
 				Name:      jobName,
-				Namespace: analysisJobNamespace,
+				Namespace: namespace,
 			}, job)
 			if err != nil {
 				return investigation.WrapInfrastructure(

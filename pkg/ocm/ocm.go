@@ -47,7 +47,9 @@ type Client interface {
 	IsAccessProtected(cluster *cmv1.Cluster) (bool, error)
 	GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.HypershiftConfig, error)
 	GetOrganizationID(clusterID string) (string, error)
+	GetClusterInfo(identifier string) (*cmv1.Cluster, error)
 	IsManagingCluster(clusterID string) (bool, error)
+	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -402,4 +404,39 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 		return nil, errors.New("failed to get creator from subscription")
 	}
 	return creator, nil
+}
+
+// GetDynatraceURL retrieves the Dynatrace tenant URL from the cluster's subscription labels
+func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
+	const dynatraceTenantKeyLabel = "dynatrace.regional-tenant"
+
+	cmv1Subscription, ok := cluster.GetSubscription()
+	if !ok {
+		return "", fmt.Errorf("failed to get subscription from cluster: %s", cluster.ID())
+	}
+
+	subscriptionLabels, err := c.conn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Labels().List().Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to get subscription labels: %w", err)
+	}
+
+	labels, ok := subscriptionLabels.GetItems()
+	if !ok {
+		return "", errors.New("failed to get labels from subscription")
+	}
+
+	for _, label := range labels.Slice() {
+		if key, ok := label.GetKey(); ok {
+			if key == dynatraceTenantKeyLabel {
+				if value, ok := label.GetValue(); ok {
+					if value == "" {
+						return "", errors.New("dynatrace tenant label is empty")
+					}
+					return fmt.Sprintf("https://%s.apps.dynatrace.com/", value), nil
+				}
+			}
+		}
+	}
+
+	return "", errors.New("dynatrace tenant label not found in subscription")
 }

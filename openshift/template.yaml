@@ -20,7 +20,7 @@ parameters:
 - name: CAD_ACM_HCP_MUST_GATHER_IMAGE
   value: "registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8"
 - name: CAD_OCTOSQL_IMAGE
-  value: quay.io/redhat_emp1/octosql-etcd:latest
+  value: quay.io/redhat_emp1/octosql-etcd:f1c13b27
 - name: TEKTON_RESOURCE_PRUNER_IMAGE
   value: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8
 - name: TEKTON_RESOURCE_PRUNER_SHA
