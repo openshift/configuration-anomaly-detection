@@ -4,9 +4,12 @@ Investigates the UpgradeConfigSyncFailureOver4HrSRE alert by validating cluster 
 
 ## What it checks
 
-Uses `pkg/pullsecret` to validate:
-1. **Email**: `cloud.openshift.com` email in cluster pull secret matches OCM account email
-2. **Registry credentials**: Per-registry email and token match OCM credentials
+- Uses `pkg/ocm` to check if the cluster owner is banned:
+  - if the owner is banned due to export control compliance, the incident is escalated for SREs to follow up ([SOP](https://github.com/openshift/ops-sop/blob/master/v4/alerts/UpgradeConfigSyncFailureOver4HrSRE.md)).
+  - if the owner is banned for any other reason, a Service Log is sent out.
+- Uses `pkg/pullsecret` to validate:
+  1. **Email**: `cloud.openshift.com` email in cluster pull secret matches OCM account email
+  2. **Registry credentials**: Per-registry email and token match OCM credentials
 
 ## Manual Integration Test
 

@@ -35,6 +35,12 @@ type ServiceLog struct {
 	InternalOnly bool
 }
 
+// UserBanedError contains the reason for a user's ban
+type UserBannedError struct {
+	Code        string
+	Description string
+}
+
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
@@ -331,18 +337,21 @@ func (c *SdkClient) GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.Hyp
 	return resp.Body(), nil
 }
 
-func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, error) {
+func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) error {
 	user, err := GetCreatorFromCluster(ocmClient.GetConnection(), cluster)
 	if err != nil {
-		return false, "encountered an issue when checking if the cluster owner is banned. Please investigate.", err
+		return fmt.Errorf("while checking if the cluster owner is banned: %w", err)
 	}
 
 	if user.Banned() {
-		noteMessage := fmt.Sprintf("User is banned %s. Ban description %s.\n Please open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
-		logging.Warnf(noteMessage)
-		return true, noteMessage, nil
+		return UserBannedError{
+			Code:        user.BanCode(),
+			Description: user.BanDescription(),
+		}
 	}
-	return false, "User is not banned.", nil
+
+	// User is not banned
+	return nil
 }
 
 const (
@@ -439,4 +448,18 @@ func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
 	}
 
 	return "", errors.New("dynatrace tenant label not found in subscription")
+}
+
+func (e UserBannedError) Error() string {
+	return fmt.Sprintf("user is banned (%s): %s", e.Code, e.Description)
+}
+
+func NewOCMBannedUserServiceLog() ServiceLog {
+	return ServiceLog{
+		Severity:     "Critical",
+		Summary:      "Action required: Arrange new cluster owner",
+		Description:  "Your cluster requires you to take action because it is no longer owned by a user with an enabled Red Hat account. This will impact the cluster's ability to upgrade to future versions. Please raise a support case with Red Hat to nominate a new owner for the cluster in https://console.redhat.com/openshift/.",
+		InternalOnly: false,
+		ServiceName:  "SREManualAction",
+	}
 }
