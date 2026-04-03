@@ -56,6 +56,8 @@ type Client interface {
 	GetClusterInfo(identifier string) (*cmv1.Cluster, error)
 	IsManagingCluster(clusterID string) (bool, error)
 	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
+	CheckIfUserBanned(cluster *cmv1.Cluster) error
+	GetCreatorFromCluster(cluster *cmv1.Cluster) (*amv1.Account, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -337,8 +339,8 @@ func (c *SdkClient) GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.Hyp
 	return resp.Body(), nil
 }
 
-func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) error {
-	user, err := GetCreatorFromCluster(ocmClient.GetConnection(), cluster)
+func (c *SdkClient) CheckIfUserBanned(cluster *cmv1.Cluster) error {
+	user, err := c.GetCreatorFromCluster(cluster)
 	if err != nil {
 		return fmt.Errorf("while checking if the cluster owner is banned: %w", err)
 	}
@@ -383,13 +385,13 @@ func (c *SdkClient) IsManagingCluster(clusterID string) (bool, error) {
 	return false, nil
 }
 
-func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {
+func (c *SdkClient) GetCreatorFromCluster(cluster *cmv1.Cluster) (*amv1.Account, error) {
 	logging.Debugf("Getting subscription from cluster: %s", cluster.ID())
 	cmv1Subscription, ok := cluster.GetSubscription()
 	if !ok {
 		return nil, fmt.Errorf("failed to get subscription from cluster: %s", cluster.ID())
 	}
-	subscriptionResponse, err := ocmConn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
+	subscriptionResponse, err := c.conn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +405,7 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 		return nil, fmt.Errorf("expecting status 'Active' found %v", status)
 	}
 
-	accountResponse, err := ocmConn.AccountsMgmt().V1().Accounts().Account(subscription.Creator().ID()).Get().Send()
+	accountResponse, err := c.conn.AccountsMgmt().V1().Accounts().Account(subscription.Creator().ID()).Get().Send()
 	if err != nil {
 		return nil, err
 	}

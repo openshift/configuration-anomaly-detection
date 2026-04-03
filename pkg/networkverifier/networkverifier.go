@@ -31,6 +31,10 @@ const (
 
 // InitializeValidateEgressInput computes the input to pass to the network verifier tool
 func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*verifier.ValidateEgressInput, error) {
+	if clusterDeployment == nil {
+		return nil, fmt.Errorf("nil clusterDeployment")
+	}
+
 	infraID := clusterDeployment.Spec.ClusterMetadata.InfraID
 	securityGroupID, err := awsClient.GetSecurityGroupID(infraID)
 	if err != nil {
