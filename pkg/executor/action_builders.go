@@ -119,7 +119,8 @@ func (b *LimitedSupportActionBuilder) Build() Action {
 
 // PagerDutyNoteActionBuilder builds PagerDutyNoteAction instances
 type PagerDutyNoteActionBuilder struct {
-	content strings.Builder
+	content    strings.Builder
+	noteWriter *notewriter.NoteWriter
 }
 
 // NewPagerDutyNoteAction creates a builder
@@ -159,13 +160,22 @@ func (b *PagerDutyNoteActionBuilder) AppendSection(header, content string) *Page
 	return b
 }
 
-// FromNoteWriter uses a notewriter's content
+// FromNoteWriter stores a reference to the notewriter so its content is read at
+// execution time rather than snapshotted at build time. This allows actions that
+// run before the note (e.g. BackplaneReportAction) to append to the notewriter
+// and have their additions included in the PagerDuty note.
 func (b *PagerDutyNoteActionBuilder) FromNoteWriter(nw *notewriter.NoteWriter) *PagerDutyNoteActionBuilder {
-	return b.WithContent(nw.String())
+	b.noteWriter = nw
+	return b
 }
 
 // Build creates the PagerDutyNoteAction
 func (b *PagerDutyNoteActionBuilder) Build() Action {
+	if b.noteWriter != nil {
+		return &PagerDutyNoteAction{
+			noteWriter: b.noteWriter,
+		}
+	}
 	return &PagerDutyNoteAction{
 		Content: b.content.String(),
 	}
