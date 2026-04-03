@@ -32,6 +32,8 @@ func (e *DefaultExecutor) executeSequential(
 			Cluster:           execCtx.Cluster,
 			OCMClient:         execCtx.OCMClient,
 			PDClient:          execCtx.PDClient,
+			BackplaneClient:   execCtx.BackplaneClient,
+			Notes:             execCtx.Notes,
 			InvestigationName: execCtx.InvestigationName,
 			Logger:            actionLogger,
 		}
@@ -115,58 +117,60 @@ func (e *DefaultExecutor) executeConcurrent(
 		return nil
 	}
 
-	var wg sync.WaitGroup
 	errorsChan := make(chan error, len(actions))
 
-	// Execute PagerDuty actions sequentially (in original order)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for _, a := range pdActions {
+	// Phase 1: Execute Backplane and OCM actions in parallel.
+	// Backplane actions must complete before PD actions because
+	// BackplaneReportAction appends report links to the NoteWriter
+	// that PagerDutyNoteAction reads from.
+	var phase1 sync.WaitGroup
+
+	for _, a := range bpActions {
+		phase1.Add(1)
+		go func(a actionWithIndex) {
+			defer phase1.Done()
 			if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
 				errorsChan <- ActionExecutionError{
 					ActionType: ActionType(a.action.Type()),
 					Attempt:    opts.MaxRetries + 1,
 					Err:        err,
 				}
-				if opts.StopOnError {
-					return
+			}
+		}(a)
+	}
+
+	for _, a := range ocmActions {
+		phase1.Add(1)
+		go func(a actionWithIndex) {
+			defer phase1.Done()
+			if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
+				errorsChan <- ActionExecutionError{
+					ActionType: ActionType(a.action.Type()),
+					Attempt:    opts.MaxRetries + 1,
+					Err:        err,
 				}
+			}
+		}(a)
+	}
+
+	phase1.Wait()
+
+	// Phase 2: Execute PagerDuty actions sequentially (in original order)
+	// after backplane actions have completed, so the NoteWriter contains
+	// any report links appended by BackplaneReportAction.
+	for _, a := range pdActions {
+		if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
+			errorsChan <- ActionExecutionError{
+				ActionType: ActionType(a.action.Type()),
+				Attempt:    opts.MaxRetries + 1,
+				Err:        err,
+			}
+			if opts.StopOnError {
+				break
 			}
 		}
-	}()
-
-	// Execute OCM actions in parallel
-	for _, a := range ocmActions {
-		wg.Add(1)
-		go func(a actionWithIndex) {
-			defer wg.Done()
-			if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
-				errorsChan <- ActionExecutionError{
-					ActionType: ActionType(a.action.Type()),
-					Attempt:    opts.MaxRetries + 1,
-					Err:        err,
-				}
-			}
-		}(a)
 	}
 
-	// Execute Backplane actions in parallel
-	for _, a := range bpActions {
-		wg.Add(1)
-		go func(a actionWithIndex) {
-			defer wg.Done()
-			if err := e.executeWithRetry(ctx, a.action, execCtx, opts.MaxRetries); err != nil {
-				errorsChan <- ActionExecutionError{
-					ActionType: ActionType(a.action.Type()),
-					Attempt:    opts.MaxRetries + 1,
-					Err:        err,
-				}
-			}
-		}(a)
-	}
-
-	wg.Wait()
 	close(errorsChan)
 
 	actionErrors := make([]error, 0, len(actions))

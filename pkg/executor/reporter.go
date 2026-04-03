@@ -291,6 +291,7 @@ func (e *DefaultExecutor) Execute(ctx context.Context, input *ExecutorInput) err
 		OCMClient:         e.ocmClient,
 		PDClient:          e.pdClient,
 		BackplaneClient:   e.backplaneClient,
+		Notes:             input.Notes,
 		InvestigationName: input.InvestigationName,
 		Logger:            e.logger,
 	}

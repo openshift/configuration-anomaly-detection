@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
@@ -130,8 +131,12 @@ func (a *LimitedSupportAction) Execute(ctx context.Context, execCtx *ExecutionCo
 
 // PagerDutyNoteAction adds a note to the current PagerDuty incident
 type PagerDutyNoteAction struct {
-	// Content of the note (can be from notewriter.String())
+	// Content of the note (used when set directly via WithContent)
 	Content string
+
+	// noteWriter provides lazy content resolution at execution time,
+	// allowing earlier actions to append to the writer before the note is sent
+	noteWriter *notewriter.NoteWriter
 }
 
 func (a *PagerDutyNoteAction) Type() string {
@@ -143,6 +148,9 @@ func (a *PagerDutyNoteAction) ActionType() ActionType {
 }
 
 func (a *PagerDutyNoteAction) Validate() error {
+	if a.noteWriter != nil {
+		return nil
+	}
 	if strings.TrimSpace(a.Content) == "" {
 		return fmt.Errorf("note content cannot be empty")
 	}
@@ -150,8 +158,12 @@ func (a *PagerDutyNoteAction) Validate() error {
 }
 
 func (a *PagerDutyNoteAction) Execute(ctx context.Context, execCtx *ExecutionContext) error {
-	execCtx.Logger.Infof("Adding PagerDuty note (%d chars)", len(a.Content))
-	return execCtx.PDClient.AddNote(a.Content)
+	content := a.Content
+	if a.noteWriter != nil {
+		content = a.noteWriter.String()
+	}
+	execCtx.Logger.Infof("Adding PagerDuty note (%d chars)", len(content))
+	return execCtx.PDClient.AddNote(content)
 }
 
 // SilenceIncidentAction silences the current PagerDuty incident
