@@ -13,8 +13,9 @@ import (
 	reflect "reflect"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
-	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	v10 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
+	v1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
+	v10 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	v11 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -44,7 +45,7 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // AwsClassicJumpRoleCompatible mocks base method.
-func (m *MockClient) AwsClassicJumpRoleCompatible(cluster *v1.Cluster) (bool, error) {
+func (m *MockClient) AwsClassicJumpRoleCompatible(cluster *v10.Cluster) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AwsClassicJumpRoleCompatible", cluster)
 	ret0, _ := ret[0].(bool)
@@ -58,11 +59,25 @@ func (mr *MockClientMockRecorder) AwsClassicJumpRoleCompatible(cluster any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AwsClassicJumpRoleCompatible", reflect.TypeOf((*MockClient)(nil).AwsClassicJumpRoleCompatible), cluster)
 }
 
+// CheckIfUserBanned mocks base method.
+func (m *MockClient) CheckIfUserBanned(cluster *v10.Cluster) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckIfUserBanned", cluster)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CheckIfUserBanned indicates an expected call of CheckIfUserBanned.
+func (mr *MockClientMockRecorder) CheckIfUserBanned(cluster any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckIfUserBanned", reflect.TypeOf((*MockClient)(nil).CheckIfUserBanned), cluster)
+}
+
 // GetClusterHypershiftConfig mocks base method.
-func (m *MockClient) GetClusterHypershiftConfig(cluster *v1.Cluster) (*v1.HypershiftConfig, error) {
+func (m *MockClient) GetClusterHypershiftConfig(cluster *v10.Cluster) (*v10.HypershiftConfig, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterHypershiftConfig", cluster)
-	ret0, _ := ret[0].(*v1.HypershiftConfig)
+	ret0, _ := ret[0].(*v10.HypershiftConfig)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,10 +89,10 @@ func (mr *MockClientMockRecorder) GetClusterHypershiftConfig(cluster any) *gomoc
 }
 
 // GetClusterInfo mocks base method.
-func (m *MockClient) GetClusterInfo(identifier string) (*v1.Cluster, error) {
+func (m *MockClient) GetClusterInfo(identifier string) (*v10.Cluster, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterInfo", identifier)
-	ret0, _ := ret[0].(*v1.Cluster)
+	ret0, _ := ret[0].(*v10.Cluster)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -89,10 +104,10 @@ func (mr *MockClientMockRecorder) GetClusterInfo(identifier any) *gomock.Call {
 }
 
 // GetClusterMachinePools mocks base method.
-func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v1.MachinePool, error) {
+func (m *MockClient) GetClusterMachinePools(internalClusterID string) ([]*v10.MachinePool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterMachinePools", internalClusterID)
-	ret0, _ := ret[0].([]*v1.MachinePool)
+	ret0, _ := ret[0].([]*v10.MachinePool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -117,8 +132,23 @@ func (mr *MockClientMockRecorder) GetConnection() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConnection", reflect.TypeOf((*MockClient)(nil).GetConnection))
 }
 
+// GetCreatorFromCluster mocks base method.
+func (m *MockClient) GetCreatorFromCluster(cluster *v10.Cluster) (*v1.Account, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCreatorFromCluster", cluster)
+	ret0, _ := ret[0].(*v1.Account)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCreatorFromCluster indicates an expected call of GetCreatorFromCluster.
+func (mr *MockClientMockRecorder) GetCreatorFromCluster(cluster any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCreatorFromCluster", reflect.TypeOf((*MockClient)(nil).GetCreatorFromCluster), cluster)
+}
+
 // GetDynatraceURL mocks base method.
-func (m *MockClient) GetDynatraceURL(cluster *v1.Cluster) (string, error) {
+func (m *MockClient) GetDynatraceURL(cluster *v10.Cluster) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDynatraceURL", cluster)
 	ret0, _ := ret[0].(string)
@@ -148,10 +178,10 @@ func (mr *MockClientMockRecorder) GetOrganizationID(clusterID any) *gomock.Call 
 }
 
 // GetServiceLog mocks base method.
-func (m *MockClient) GetServiceLog(cluster *v1.Cluster, filter string) (*v10.ClusterLogsUUIDListResponse, error) {
+func (m *MockClient) GetServiceLog(cluster *v10.Cluster, filter string) (*v11.ClusterLogsUUIDListResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetServiceLog", cluster, filter)
-	ret0, _ := ret[0].(*v10.ClusterLogsUUIDListResponse)
+	ret0, _ := ret[0].(*v11.ClusterLogsUUIDListResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -178,7 +208,7 @@ func (mr *MockClientMockRecorder) GetSupportRoleARN(internalClusterID any) *gomo
 }
 
 // IsAccessProtected mocks base method.
-func (m *MockClient) IsAccessProtected(cluster *v1.Cluster) (bool, error) {
+func (m *MockClient) IsAccessProtected(cluster *v10.Cluster) (bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "IsAccessProtected", cluster)
 	ret0, _ := ret[0].(bool)
@@ -208,7 +238,7 @@ func (mr *MockClientMockRecorder) IsManagingCluster(clusterID any) *gomock.Call 
 }
 
 // PostLimitedSupportReason mocks base method.
-func (m *MockClient) PostLimitedSupportReason(cluster *v1.Cluster, limitedSupportReason *ocm.LimitedSupportReason) error {
+func (m *MockClient) PostLimitedSupportReason(cluster *v10.Cluster, limitedSupportReason *ocm.LimitedSupportReason) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PostLimitedSupportReason", cluster, limitedSupportReason)
 	ret0, _ := ret[0].(error)
@@ -222,7 +252,7 @@ func (mr *MockClientMockRecorder) PostLimitedSupportReason(cluster, limitedSuppo
 }
 
 // PostServiceLog mocks base method.
-func (m *MockClient) PostServiceLog(cluster *v1.Cluster, sl *ocm.ServiceLog) error {
+func (m *MockClient) PostServiceLog(cluster *v10.Cluster, sl *ocm.ServiceLog) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PostServiceLog", cluster, sl)
 	ret0, _ := ret[0].(error)

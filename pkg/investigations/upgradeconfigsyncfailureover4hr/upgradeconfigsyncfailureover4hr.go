@@ -25,7 +25,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	logging.Infof("Checking if user is Banned.")
 	userBannedErr := ocm.UserBannedError{}
-	err = ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
+	err = r.OcmClient.CheckIfUserBanned(r.Cluster)
 
 	switch {
 	case errors.As(err, &userBannedErr) && userBannedErr.Code == "export_control_compliance":
@@ -85,8 +85,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	notes.AppendSuccess("User is not banned.")
 
-	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
-	logging.Infof("User ID is: %v", user.ID())
+	user, err := r.OcmClient.GetCreatorFromCluster(r.Cluster)
 	if err != nil {
 		notes.AppendWarning("Failed getting cluster creator from ocm: %s", err)
 		result.Actions = append(
@@ -95,6 +94,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		)
 		return result, nil
 	}
+	logging.Infof("User ID is: %v", user.ID())
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {

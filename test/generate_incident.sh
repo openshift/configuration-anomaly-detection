@@ -14,6 +14,7 @@ declare -A alert_mapping=(
     ["UpgradeConfigSyncFailureOver4HrSRE"]="UpgradeConfigSyncFailureOver4HrSRE Critical (1)"
     ["etcdDatabaseQuotaLowSpace"]="etcdDatabaseQuotaLowSpace CRITICAL (1)"
     ["console-errorbudgetburn"]="console-errorbudgetburn Critical (1)"
+    ["OCMAgentResponseFailureServiceLogsSRE"]="OCMAgentResponseFailureServiceLogsSRE CRITICAL (1)"
 )
 
 # Function to print help message

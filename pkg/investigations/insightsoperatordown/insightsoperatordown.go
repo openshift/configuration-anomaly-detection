@@ -11,7 +11,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"k8s.io/apimachinery/pkg/fields"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -26,7 +25,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	notes := notewriter.New(r.Name, logging.RawLogger)
 
-	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
+	user, err := r.OcmClient.GetCreatorFromCluster(r.Cluster)
 	if err != nil {
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s", err)
 		result.Actions = append(
