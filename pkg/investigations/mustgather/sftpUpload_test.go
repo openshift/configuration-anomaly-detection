@@ -8,8 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 )
 
 // errorReader simulates read errors
@@ -462,4 +465,126 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	req.URL.Scheme = "http"
 	req.URL.Host = strings.TrimPrefix(m.serverURL, "http://")
 	return http.DefaultClient.Do(req)
+}
+
+// createFlakySftpCredentialServer creates a mock server that fails for the first
+// N requests and then succeeds, simulating transient failures.
+func createFlakySftpCredentialServer(t *testing.T, failCount int) string {
+	t.Helper()
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := atomic.AddInt32(&requestCount, 1)
+		if int(count) <= failCount {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"error": "service temporarily unavailable"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"username": "retry-user",
+			"token": "retry-token",
+			"expiryDate": "2024-12-31T23:59:59Z"
+		}`))
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func TestGetAnonymousSftpCredentials_RetryOnTransientFailure(t *testing.T) {
+	tests := []struct {
+		name         string
+		failCount    int
+		maxAttempts  int
+		wantUsername string
+		wantToken    string
+		wantErr      bool
+		description  string
+	}{
+		{
+			name:         "succeeds after 1 transient failure",
+			failCount:    1,
+			maxAttempts:  3,
+			wantUsername: "retry-user",
+			wantToken:    "retry-token",
+			wantErr:      false,
+			description:  "Should succeed on second attempt after first returns 503",
+		},
+		{
+			name:         "succeeds after 2 transient failures",
+			failCount:    2,
+			maxAttempts:  3,
+			wantUsername: "retry-user",
+			wantToken:    "retry-token",
+			wantErr:      false,
+			description:  "Should succeed on third attempt after two 503 errors",
+		},
+		{
+			name:        "fails when all attempts exhausted",
+			failCount:   5,
+			maxAttempts: 3,
+			wantErr:     true,
+			description: "Should fail after all retry attempts are exhausted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverURL := createFlakySftpCredentialServer(t, tt.failCount)
+			mockClient := &mockHTTPClient{serverURL: serverURL}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			var username, token string
+			err := utils.WithRetriesContext(ctx, tt.maxAttempts, 10*time.Millisecond, func() error {
+				attemptCtx, attemptCancel := context.WithTimeout(ctx, 5*time.Second)
+				defer attemptCancel()
+				var credErr error
+				username, token, credErr = getAnonymousSftpCredentials(attemptCtx, mockClient)
+				return credErr
+			})
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("%s: expected error but got none", tt.description)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("%s: unexpected error: %v", tt.description, err)
+				}
+				if username != tt.wantUsername {
+					t.Errorf("%s: expected username %q, got %q", tt.description, tt.wantUsername, username)
+				}
+				if token != tt.wantToken {
+					t.Errorf("%s: expected token %q, got %q", tt.description, tt.wantToken, token)
+				}
+			}
+		})
+	}
+}
+
+func TestGetAnonymousSftpCredentials_RetryRespectsContextCancellation(t *testing.T) {
+	// Create a server that always fails
+	serverURL := createFlakySftpCredentialServer(t, 100)
+	mockClient := &mockHTTPClient{serverURL: serverURL}
+
+	// Use a short timeout that will expire during backoff
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	var username, token string
+	err := utils.WithRetriesContext(ctx, 5, 1*time.Second, func() error {
+		attemptCtx, attemptCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer attemptCancel()
+		var credErr error
+		username, token, credErr = getAnonymousSftpCredentials(attemptCtx, mockClient)
+		return credErr
+	})
+
+	if err == nil {
+		t.Fatal("expected error due to context cancellation, got nil")
+	}
+	if username != "" || token != "" {
+		t.Errorf("expected empty credentials on failure, got username=%q token=%q", username, token)
+	}
 }
