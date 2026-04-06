@@ -72,7 +72,7 @@ Pre-initialized clients available in investigation resources:
 - **K8s** (`pkg/k8s`) - Kubernetes API client
 - **osd-network-verifier** (`pkg/networkverifier`) - Network verification
 
-For HCP clusters, when using `WithManagementRestConfig()`, `WithManagementK8sClient()`, or `WithManagementOCClient()`, the Dynatrace management cluster URL is automatically fetched and available in `r.DynatraceManagementClusterURL`.
+For HCP clusters, when using `WithManagementRestConfig()`, `WithManagementK8sClient()`, or `WithManagementOCClient()`, the RHOBS cell endpoint is automatically fetched from the management cluster's external configuration labels and available in `r.RHOBSCell`.
 
 ### Workflow
 

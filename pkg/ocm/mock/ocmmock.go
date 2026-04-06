@@ -147,6 +147,21 @@ func (mr *MockClientMockRecorder) GetOrganizationID(clusterID any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrganizationID", reflect.TypeOf((*MockClient)(nil).GetOrganizationID), clusterID)
 }
 
+// GetRHOBSCell mocks base method.
+func (m *MockClient) GetRHOBSCell(clusterID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRHOBSCell", clusterID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRHOBSCell indicates an expected call of GetRHOBSCell.
+func (mr *MockClientMockRecorder) GetRHOBSCell(clusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRHOBSCell", reflect.TypeOf((*MockClient)(nil).GetRHOBSCell), clusterID)
+}
+
 // GetServiceLog mocks base method.
 func (m *MockClient) GetServiceLog(cluster *v1.Cluster, filter string) (*v10.ClusterLogsUUIDListResponse, error) {
 	m.ctrl.T.Helper()

@@ -277,12 +277,12 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
-			Cluster:                       cluster,
-			ManagementK8sClient:           fakeK8s,
-			HCPNamespace:                  "ocm-test-namespace",
-			ManagementClusterName:         "test-management-cluster",
-			DynatraceManagementClusterURL: "https://hrm15629.apps.dynatrace.com/",
-			Notes:                         notewriter.New("etcddatabasequotalowspace_test", logging.RawLogger),
+			Cluster:               cluster,
+			ManagementK8sClient:   fakeK8s,
+			HCPNamespace:          "ocm-test-namespace",
+			ManagementClusterName: "test-management-cluster",
+			RHOBSCell:             "grafana.rhobs.example.com",
+			Notes:                 notewriter.New("etcddatabasequotalowspace_test", logging.RawLogger),
 		},
 	}
 
@@ -295,11 +295,11 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "completed")
 	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Escalate (1 action)
 
-	// Verify Dynatrace URL appears in notes
+	// Verify RHOBS URL appears in notes
 	notesContent := rb.Resources.Notes.String()
-	assert.Contains(t, notesContent, "Dynatrace Logs:")
-	assert.Contains(t, notesContent, "https://hrm15629.apps.dynatrace.com/")
-	assert.Contains(t, notesContent, "ui/apps/dynatrace.logs/#")
+	assert.Contains(t, notesContent, "RHOBS Logs:")
+	assert.Contains(t, notesContent, "https://grafana.rhobs.example.com/")
+	assert.Contains(t, notesContent, "explore?left=")
 	assert.Contains(t, notesContent, "ocm-test-namespace")
 	assert.Contains(t, notesContent, "etcd-analysis-") // Job name prefix
 }

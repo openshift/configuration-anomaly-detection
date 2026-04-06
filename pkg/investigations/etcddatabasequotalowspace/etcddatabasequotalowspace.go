@@ -3,7 +3,6 @@ package etcddatabasequotalowspace
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -317,14 +316,14 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	err = waitForJobCompletion(ctx, r.ManagementK8sClient, etcdAnalysisJob.Name, r.HCPNamespace, analysisJobTimeout)
 
-	// Add Dynatrace logs query URL to notes if available
-	if r.DynatraceManagementClusterURL != "" && r.ManagementClusterName != "" {
-		dynatraceLogsURL := buildDynatraceLogsURL(
-			r.DynatraceManagementClusterURL,
+	// Add RHOBS logs query URL to notes if available
+	if r.RHOBSCell != "" && r.ManagementClusterName != "" {
+		rhobsLogsURL := buildRHOBSLogsURL(
+			r.RHOBSCell,
 			r.HCPNamespace,
 			etcdAnalysisJob.Name,
 		)
-		r.Notes.AppendSuccess("Note: Click 'Show full note' to access the full URL. Logs may take up to 5 minutes to appear in Dynatrace.\n\nDynatrace Logs: %s", dynatraceLogsURL)
+		r.Notes.AppendSuccess("Note: Click 'Show full note' to access the full URL. Logs may take up to 5 minutes to appear in RHOBS.\n\nRHOBS Logs: %s", rhobsLogsURL)
 	}
 
 	if err != nil {
@@ -576,41 +575,19 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 	return "", fmt.Errorf("etcdctl container image not found in pod: %s", pod.Name)
 }
 
-// buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
-func buildDynatraceLogsURL(baseURL, namespace, jobId string) string {
-	query := fmt.Sprintf(
-		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
-		namespace,
-		jobId,
-	)
+// buildRHOBSLogsURL constructs a Grafana/RHOBS explore URL with a LogQL query for the analysis job logs
+func buildRHOBSLogsURL(rhobsCell, namespace, jobId string) string {
+	// Build LogQL query to filter logs for the specific namespace and job
+	// LogQL syntax: {namespace="...", pod=~"..."}
+	logQLQuery := fmt.Sprintf(`{kubernetes_namespace_name="%s", kubernetes_pod_name=~"%s.*"}`, namespace, jobId)
 
-	// Build the state object for Dynatrace logs UI
-	// The order of fields matters for some Dynatrace UI versions
-	state := map[string]interface{}{
-		"version": 2,
-		"dt.timeframe": map[string]string{
-			"from": "now()-30m",
-			"to":   "now()",
-		},
-		"tableConfig": map[string]interface{}{
-			"columns": []string{"timestamp", "status", "Log message"},
-		},
-		"showDqlEditor":    true,
-		"filterFieldQuery": query,
-		"dt.query":         query,
-		"facetsCollapse":   true,
-	}
+	// Build Grafana explore URL with LogQL query
+	// Using relative time range of 30 minutes
+	// left parameter contains the datasource and query details
+	leftParam := url.QueryEscape(fmt.Sprintf(
+		`{"datasource":"Loki","queries":[{"refId":"A","expr":"%s","queryType":"range"}],"range":{"from":"now-30m","to":"now"}}`,
+		logQLQuery,
+	))
 
-	jsonBytes, err := json.Marshal(state)
-	if err != nil {
-		jsonBytes = []byte("{}")
-		logging.Warnf("failed to marshal Dynatrace state to JSON: %v", err)
-	}
-
-	// URL encode the JSON state
-	// Note: QueryEscape uses + for spaces, but hash fragments need %20
-	encodedState := url.QueryEscape(string(jsonBytes))
-	encodedState = strings.ReplaceAll(encodedState, "+", "%20")
-
-	return fmt.Sprintf("%sui/apps/dynatrace.logs/#%s", baseURL, encodedState)
+	return fmt.Sprintf("https://%s/explore?left=%s", rhobsCell, leftParam)
 }

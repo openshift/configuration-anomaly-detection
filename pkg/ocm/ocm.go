@@ -50,6 +50,7 @@ type Client interface {
 	GetClusterInfo(identifier string) (*cmv1.Cluster, error)
 	IsManagingCluster(clusterID string) (bool, error)
 	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
+	GetRHOBSCell(clusterID string) (string, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -439,4 +440,28 @@ func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
 	}
 
 	return "", errors.New("dynatrace tenant label not found in subscription")
+}
+
+// GetRHOBSCell retrieves the RHOBS cell endpoint from the management cluster's external configuration labels
+func (c *SdkClient) GetRHOBSCell(clusterID string) (string, error) {
+	const rhobsCellLabel = "ext-hypershift.openshift.io/rhobs-cell"
+
+	resp, err := c.conn.ClustersMgmt().V1().Clusters().Cluster(clusterID).ExternalConfiguration().Labels().List().Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch external configuration labels for cluster %s: %w", clusterID, err)
+	}
+
+	for _, label := range resp.Items().Slice() {
+		key := label.Key()
+		value := label.Value()
+
+		if key == rhobsCellLabel {
+			if value == "" {
+				return "", errors.New("rhobs-cell label is empty")
+			}
+			return value, nil
+		}
+	}
+
+	return "", errors.New("rhobs-cell label not found in external configuration")
 }
