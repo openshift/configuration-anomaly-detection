@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/rhobs"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -25,6 +26,15 @@ const (
 	etcdNamespace        = "openshift-etcd"
 	etcdctlInitContainer = "reset-member"
 )
+
+// rhobsClientFactory is a factory function for creating RHOBS clients
+// Can be overridden in tests for dependency injection
+var rhobsClientFactory = func(baseURL, token string) (rhobs.Client, error) {
+	return rhobs.NewClient(rhobs.Config{
+		BaseURL: baseURL,
+		Token:   token,
+	})
+}
 
 type Investigation struct{}
 
@@ -315,17 +325,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	r.Notes.AppendAutomation("Created HCP analysis job: %s in namespace %s", etcdAnalysisJob.Name, r.HCPNamespace)
 
 	err = waitForJobCompletion(ctx, r.ManagementK8sClient, etcdAnalysisJob.Name, r.HCPNamespace, analysisJobTimeout)
-
-	// Add RHOBS logs query URL to notes if available
-	if r.RHOBSCell != "" && r.ManagementClusterName != "" {
-		rhobsLogsURL := buildRHOBSLogsURL(
-			r.RHOBSCell,
-			r.HCPNamespace,
-			etcdAnalysisJob.Name,
-		)
-		r.Notes.AppendSuccess("Note: Click 'Show full note' to access the full URL. Logs may take up to 5 minutes to appear in RHOBS.\n\nRHOBS Logs: %s", rhobsLogsURL)
-	}
-
 	if err != nil {
 		if investigation.IsInfrastructureError(err) {
 			return result, err
@@ -343,6 +342,26 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		return result, nil
 	}
 
+	r.Notes.AppendSuccess("Analysis job completed successfully, fetching logs from RHOBS")
+
+	// Fetch logs from RHOBS
+	logs, err := fetchRHOBSLogs(ctx, r, r.HCPNamespace, etcdAnalysisJob.Name)
+	if err != nil {
+		r.Notes.AppendWarning("Failed to fetch RHOBS logs: %v", err)
+		logging.Errorf("failed to fetch RHOBS logs: %v", err)
+		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
+			Performed: true,
+			Labels:    []string{"failure", "rhobs_logs_failed"},
+		}
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Failed to fetch RHOBS logs - manual investigation required"),
+		)
+		return result, nil
+	}
+
+	r.Notes.AppendSuccess("Successfully fetched logs from RHOBS\n\n%s", logs)
+
 	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
 		Performed: true,
 		Labels:    []string{"success", "completed"},
@@ -350,7 +369,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-		executor.Escalate("HCP etcd analysis complete - see dynatrace logs for details"),
+		executor.Escalate("HCP etcd analysis complete - see logs above for details"),
 	)
 	return result, nil
 }
@@ -590,4 +609,53 @@ func buildRHOBSLogsURL(rhobsCell, namespace, jobId string) string {
 	))
 
 	return fmt.Sprintf("https://%s/explore?left=%s", rhobsCell, leftParam)
+}
+
+// fetchRHOBSLogs fetches logs from RHOBS Grafana Loki for the analysis job
+func fetchRHOBSLogs(ctx context.Context, r *investigation.Resources, namespace, jobName string) (string, error) {
+	// Validate prerequisites
+	if r.RHOBSCell == "" {
+		return "", fmt.Errorf("RHOBS cell endpoint not available")
+	}
+	if r.GrafanaToken == "" {
+		return "", fmt.Errorf("grafana token not available")
+	}
+
+	logging.Infof("Fetching logs from RHOBS for job %s in namespace %s", jobName, namespace)
+
+	// Create RHOBS client using factory (allows dependency injection in tests)
+	rhobsClient, err := rhobsClientFactory(fmt.Sprintf("https://%s", r.RHOBSCell), r.GrafanaToken)
+	if err != nil {
+		return "", fmt.Errorf("failed to create RHOBS client: %w", err)
+	}
+
+	// Build LogQL query to filter logs for the specific namespace and job
+	logQLQuery := fmt.Sprintf(`{kubernetes_namespace_name="%s", kubernetes_pod_name=~"%s.*"}`, namespace, jobName)
+
+	// Query logs from the last 30 minutes
+	now := time.Now()
+	start := now.Add(-30 * time.Minute)
+
+	logging.Debugf("Querying RHOBS with LogQL: %s (time range: %s to %s)", logQLQuery, start.Format(time.RFC3339), now.Format(time.RFC3339))
+
+	result, err := rhobsClient.QueryLogs(ctx, logQLQuery, start, now, 1000)
+	if err != nil {
+		return "", fmt.Errorf("failed to query RHOBS logs: %w", err)
+	}
+
+	if result.TotalLines == 0 {
+		logging.Warnf("No logs found in RHOBS for job %s", jobName)
+		return "No logs found in RHOBS for this job. Logs may take up to 5 minutes to appear.", nil
+	}
+
+	logging.Infof("Successfully fetched %d log lines from RHOBS", result.TotalLines)
+
+	// Format logs for display (limit to 100 lines for readability)
+	formattedLogs := rhobs.FormatLogsForDisplay(result, 100)
+
+	// Also include the Grafana explore URL for reference
+	exploreURL := buildRHOBSLogsURL(r.RHOBSCell, namespace, jobName)
+	formattedLogs += fmt.Sprintf("\n\nView full logs in Grafana: %s", exploreURL)
+
+	return formattedLogs, nil
 }

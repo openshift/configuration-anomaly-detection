@@ -48,15 +48,18 @@ func NewResourceBuilder(
 	clusterId string,
 	name string,
 	backplaneUrl string,
+	grafanaToken string,
 ) (ResourceBuilder, error) {
 	rb := &ResourceBuilderT{
 		clusterId:    clusterId,
 		name:         name,
 		ocmClient:    ocmClient,
 		backplaneUrl: backplaneUrl,
+		grafanaToken: grafanaToken,
 		builtResources: &Resources{
-			BpClient:  bpClient,
-			OcmClient: ocmClient,
+			BpClient:     bpClient,
+			OcmClient:    ocmClient,
+			GrafanaToken: grafanaToken,
 		},
 	}
 
@@ -95,6 +98,7 @@ type Resources struct {
 	IsInfrastructureCluster bool
 	ManagementClusterName   string
 	RHOBSCell               string
+	GrafanaToken            string
 }
 
 type ResourceBuilder interface {
@@ -129,6 +133,7 @@ type ResourceBuilderT struct {
 	logLevel     string
 	pipelineName string
 	backplaneUrl string
+	grafanaToken string
 
 	ocmClient *ocm.SdkClient
 

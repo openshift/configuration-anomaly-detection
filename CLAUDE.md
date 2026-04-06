@@ -71,8 +71,9 @@ Pre-initialized clients available in investigation resources:
 - **PagerDuty** (`pkg/pagerduty`) - Alert info, incident management, notes
 - **K8s** (`pkg/k8s`) - Kubernetes API client
 - **osd-network-verifier** (`pkg/networkverifier`) - Network verification
+- **RHOBS** (`pkg/rhobs`) - RHOBS Grafana Loki API for HCP log fetching
 
-For HCP clusters, when using `WithManagementRestConfig()`, `WithManagementK8sClient()`, or `WithManagementOCClient()`, the RHOBS cell endpoint is automatically fetched from the management cluster's external configuration labels and available in `r.RHOBSCell`.
+For HCP clusters, when using `WithManagementRestConfig()`, `WithManagementK8sClient()`, or `WithManagementOCClient()`, the RHOBS cell endpoint is automatically fetched from the management cluster's external configuration labels and available in `r.RHOBSCell`. A RHOBS client can be created using the `RHOBSCell` endpoint and `CAD_GRAFANA_TOKEN` to fetch logs from Loki.
 
 ### Workflow
 
@@ -99,6 +100,7 @@ For local development (available via `source test/set_stage_env.sh`):
 - `PD_SIGNATURE` - PagerDuty webhook signature validation
 - `BACKPLANE_URL`, `BACKPLANE_INITIAL_ARN` - Backplane access
 - `CAD_PROMETHEUS_PUSHGATEWAY` - Metrics endpoint
+- `CAD_GRAFANA_TOKEN` - Service account token for RHOBS Grafana/Loki API access (HCP log fetching)
 
 Optional:
 - `BACKPLANE_PROXY` - Required for local development

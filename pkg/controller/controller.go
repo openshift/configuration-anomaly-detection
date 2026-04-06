@@ -79,6 +79,7 @@ type Dependencies struct {
 	BackplaneURL        string
 	BackplaneProxy      string
 	AWSProxy            string
+	GrafanaToken        string
 	ExperimentalEnabled bool
 }
 
@@ -137,6 +138,12 @@ func initializeDependencies() (*Dependencies, error) {
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
+	// Load Grafana/RHOBS token for HCP log fetching
+	grafanaToken := os.Getenv("CAD_GRAFANA_TOKEN")
+	if grafanaToken == "" {
+		return nil, fmt.Errorf("missing required environment variable CAD_GRAFANA_TOKEN")
+	}
+
 	// Create OCM client
 	ocmClient, err := ocm.New(ocmClientID, ocmClientSecret, ocmURL)
 	if err != nil {
@@ -160,6 +167,7 @@ func initializeDependencies() (*Dependencies, error) {
 		BackplaneURL:        backplaneURL,
 		BackplaneProxy:      backplaneProxy,
 		AWSProxy:            awsProxy,
+		GrafanaToken:        grafanaToken,
 		ExperimentalEnabled: experimentalEnabled,
 	}, nil
 }
@@ -250,7 +258,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
-	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL)
+	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL, c.dependencies.GrafanaToken)
 	if pdClient != nil {
 		builder.WithPdClient(pdClient)
 	}
