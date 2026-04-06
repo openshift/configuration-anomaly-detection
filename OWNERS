@@ -1,4 +1,5 @@
 reviewers:
+- AlexSmithGH
 - Makdaam
 - Nikokolas3270
 - rafael-azevedo
@@ -10,6 +11,7 @@ reviewers:
 - MateSaary
 - srep-functional-team-orange
 approvers:
+- AlexSmithGH
 - Makdaam
 - Nikokolas3270
 - rafael-azevedo
