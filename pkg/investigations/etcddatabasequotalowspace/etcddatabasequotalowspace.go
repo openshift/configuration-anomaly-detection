@@ -323,6 +323,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 			r.DynatraceManagementClusterURL,
 			r.HCPNamespace,
 			etcdAnalysisJob.Name,
+			etcdAnalysisJob.CreationTimestamp.Time,
 		)
 		r.Notes.AppendSuccess("Note: Click 'Show full note' to access the full URL. Logs may take up to 5 minutes to appear in Dynatrace.\n\nDynatrace Logs: %s", dynatraceLogsURL)
 	}
@@ -577,9 +578,18 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 }
 
 // buildDynatraceLogsURL constructs a Dynatrace UI URL with a DQL query for the analysis job logs
-func buildDynatraceLogsURL(baseURL, namespace, jobId string) string {
+func buildDynatraceLogsURL(baseURL, namespace, jobId string, jobStartTime time.Time) string {
+	fromTime := jobStartTime.UTC()
+	toTime := fromTime.Add(1 * time.Hour)
+
+	// Format timestamps in milliseconds since epoch for Dynatrace
+	fromMs := fromTime.UnixMilli()
+	toMs := toTime.UnixMilli()
+
 	query := fmt.Sprintf(
-		`fetch logs, from:now()-1h | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
+		`fetch logs, from:%d, to:%d | filter matchesValue(event.type, "LOG") and (matchesValue(k8s.namespace.name, "%s")) and (matchesValue(k8s.pod.name, "%s*")) | sort timestamp desc | limit 1000`,
+		fromMs,
+		toMs,
 		namespace,
 		jobId,
 	)
@@ -589,8 +599,8 @@ func buildDynatraceLogsURL(baseURL, namespace, jobId string) string {
 	state := map[string]interface{}{
 		"version": 2,
 		"dt.timeframe": map[string]string{
-			"from": "now()-30m",
-			"to":   "now()",
+			"from": fmt.Sprintf("%d", fromMs),
+			"to":   fmt.Sprintf("%d", toMs),
 		},
 		"tableConfig": map[string]interface{}{
 			"columns": []string{"timestamp", "status", "Log message"},
