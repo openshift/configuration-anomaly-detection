@@ -378,25 +378,11 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 
 	managementClusterName := hypershiftConfig.ManagementCluster()
 	if managementClusterName == "" {
-		logging.Warnf("Management cluster name is empty, cannot fetch RHOBS cell")
+		logging.Warnf("Management cluster name is empty")
 		return nil
 	}
 
 	r.builtResources.ManagementClusterName = managementClusterName
-
-	managementCluster, err := r.ocmClient.GetClusterInfo(managementClusterName)
-	if err != nil {
-		logging.Warnf("Failed to get management cluster info for RHOBS cell: %v", err)
-		return nil
-	}
-
-	rhobsCell, err := r.ocmClient.GetRHOBSCell(managementCluster.ID())
-	if err != nil {
-		logging.Warnf("Failed to get RHOBS cell: %v", err)
-		return nil
-	}
-
-	r.builtResources.RHOBSCell = rhobsCell
 	return nil
 }
 
@@ -434,11 +420,28 @@ func (r *ResourceBuilderT) buildRHOBSClientResource() error {
 		return nil
 	}
 
-	if r.builtResources.RHOBSCell == "" {
-		return fmt.Errorf("RHOBS cell endpoint not available")
-	}
 	if r.grafanaToken == "" {
 		return fmt.Errorf("grafana token not available")
+	}
+
+	// Fetch RHOBS cell if not already set
+	if r.builtResources.RHOBSCell == "" {
+		if r.builtResources.ManagementClusterName == "" {
+			return fmt.Errorf("management cluster name not available - cannot determine RHOBS cell")
+		}
+
+		logging.Infof("Fetching RHOBS cell for management cluster: %s", r.builtResources.ManagementClusterName)
+		managementCluster, err := r.ocmClient.GetClusterInfo(r.builtResources.ManagementClusterName)
+		if err != nil {
+			return fmt.Errorf("failed to get management cluster info for RHOBS cell: %w", err)
+		}
+
+		rhobsCell, err := r.ocmClient.GetRHOBSCell(managementCluster.ID())
+		if err != nil {
+			return fmt.Errorf("failed to get RHOBS cell: %w", err)
+		}
+
+		r.builtResources.RHOBSCell = rhobsCell
 	}
 
 	logging.Infof("Creating RHOBS client for cell: %s", r.builtResources.RHOBSCell)
