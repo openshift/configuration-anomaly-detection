@@ -301,13 +301,6 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 		Return(mockLogResult, nil).
 		Times(1)
 
-	// Override the factory to return our mock
-	originalFactory := rhobsClientFactory
-	rhobsClientFactory = func(baseURL, token string) (rhobs.Client, error) {
-		return mockRHOBSClient, nil
-	}
-	defer func() { rhobsClientFactory = originalFactory }()
-
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
 			Cluster:               cluster,
@@ -315,6 +308,7 @@ func TestRunHCPEtcdAnalysis_Success(t *testing.T) {
 			HCPNamespace:          "ocm-test-namespace",
 			ManagementClusterName: "test-management-cluster",
 			RHOBSCell:             "grafana.rhobs.example.com",
+			RHOBSClient:           mockRHOBSClient,
 			GrafanaToken:          "test-token",
 			Notes:                 notewriter.New("etcddatabasequotalowspace_test", logging.RawLogger),
 		},
@@ -409,13 +403,6 @@ func TestRunHCPEtcdAnalysis_RHOBSFetchFailure(t *testing.T) {
 		Return(nil, assert.AnError).
 		Times(1)
 
-	// Override the factory to return our mock
-	originalFactory := rhobsClientFactory
-	rhobsClientFactory = func(baseURL, token string) (rhobs.Client, error) {
-		return mockRHOBSClient, nil
-	}
-	defer func() { rhobsClientFactory = originalFactory }()
-
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
 			Cluster:               cluster,
@@ -423,6 +410,7 @@ func TestRunHCPEtcdAnalysis_RHOBSFetchFailure(t *testing.T) {
 			HCPNamespace:          "ocm-test-namespace",
 			ManagementClusterName: "test-management-cluster",
 			RHOBSCell:             "grafana.rhobs.example.com",
+			RHOBSClient:           mockRHOBSClient,
 			GrafanaToken:          "test-token",
 			Notes:                 notewriter.New("etcddatabasequotalowspace_test", logging.RawLogger),
 		},

@@ -27,15 +27,6 @@ const (
 	etcdctlInitContainer = "reset-member"
 )
 
-// rhobsClientFactory is a factory function for creating RHOBS clients
-// Can be overridden in tests for dependency injection
-var rhobsClientFactory = func(baseURL, token string) (rhobs.Client, error) {
-	return rhobs.NewClient(rhobs.Config{
-		BaseURL: baseURL,
-		Token:   token,
-	})
-}
-
 type Investigation struct{}
 
 // SnapshotResult contains information about the etcd snapshot that was taken
@@ -238,6 +229,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	r, err := rb.
 		WithManagementRestConfig().
 		WithManagementK8sClient().
+		WithRHOBSClient().
 		Build()
 	if err != nil {
 		if msg, ok := investigation.ClusterAccessErrorMessage(err); ok {
@@ -613,21 +605,12 @@ func buildRHOBSLogsURL(rhobsCell, namespace, jobId string) string {
 
 // fetchRHOBSLogs fetches logs from RHOBS Grafana Loki for the analysis job
 func fetchRHOBSLogs(ctx context.Context, r *investigation.Resources, namespace, jobName string) (string, error) {
-	// Validate prerequisites
-	if r.RHOBSCell == "" {
-		return "", fmt.Errorf("RHOBS cell endpoint not available")
-	}
-	if r.GrafanaToken == "" {
-		return "", fmt.Errorf("grafana token not available")
+	// Validate RHOBS client is available (built by resource builder)
+	if r.RHOBSClient == nil {
+		return "", fmt.Errorf("RHOBS client not available")
 	}
 
 	logging.Infof("Fetching logs from RHOBS for job %s in namespace %s", jobName, namespace)
-
-	// Create RHOBS client using factory (allows dependency injection in tests)
-	rhobsClient, err := rhobsClientFactory(fmt.Sprintf("https://%s", r.RHOBSCell), r.GrafanaToken)
-	if err != nil {
-		return "", fmt.Errorf("failed to create RHOBS client: %w", err)
-	}
 
 	// Build LogQL query to filter logs for the specific namespace and job
 	logQLQuery := fmt.Sprintf(`{kubernetes_namespace_name="%s", kubernetes_pod_name=~"%s.*"}`, namespace, jobName)
@@ -638,7 +621,7 @@ func fetchRHOBSLogs(ctx context.Context, r *investigation.Resources, namespace, 
 
 	logging.Debugf("Querying RHOBS with LogQL: %s (time range: %s to %s)", logQLQuery, start.Format(time.RFC3339), now.Format(time.RFC3339))
 
-	result, err := rhobsClient.QueryLogs(ctx, logQLQuery, start, now, 1000)
+	result, err := r.RHOBSClient.QueryLogs(ctx, logQLQuery, start, now, 1000)
 	if err != nil {
 		return "", fmt.Errorf("failed to query RHOBS logs: %w", err)
 	}
