@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/oc"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/rhobs"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -92,6 +93,7 @@ type Resources struct {
 	ManagementRestConfig    *backplane.RestConfig
 	ManagementK8sClient     k8sclient.Client
 	ManagementOCClient      oc.Client
+	RHOBSClient             rhobs.Client
 	HCPNamespace            string
 	HCNamespace             string
 	IsHCP                   bool
@@ -113,6 +115,7 @@ type ResourceBuilder interface {
 	WithManagementRestConfig() ResourceBuilder
 	WithManagementK8sClient() ResourceBuilder
 	WithManagementOCClient() ResourceBuilder
+	WithRHOBSClient() ResourceBuilder
 	Build() (*Resources, error)
 }
 
@@ -127,6 +130,7 @@ type ResourceBuilderT struct {
 	buildManagementRestConfig bool
 	buildManagementK8sClient  bool
 	buildManagementOCClient   bool
+	buildRHOBSClient          bool
 
 	clusterId    string
 	name         string
@@ -205,6 +209,12 @@ func (r *ResourceBuilderT) WithManagementOCClient() ResourceBuilder {
 	return r
 }
 
+func (r *ResourceBuilderT) WithRHOBSClient() ResourceBuilder {
+	r.WithManagementRestConfig()
+	r.buildRHOBSClient = true
+	return r
+}
+
 func (r *ResourceBuilderT) Build() (*Resources, error) {
 	if r.buildErr != nil {
 		// Return whatever managed to build + an error. this might allow some subset of checks to proceed.
@@ -216,25 +226,12 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 
 	var err error
 
-	if r.buildCluster && r.builtResources.Cluster == nil {
-		r.builtResources.Cluster, err = r.ocmClient.GetClusterInfo(r.clusterId)
+	// Build cluster resource if requested
+	if r.buildCluster {
+		err = r.buildClusterResource()
 		if err != nil {
-			// Let the caller handle how to respond to this error.
-			r.buildErr = ClusterNotFoundError{ClusterID: r.clusterId, Err: err}
+			r.buildErr = err
 			return r.builtResources, r.buildErr
-		}
-
-		// Check if this is an infra cluster (hive, management or service)
-		internalID := r.builtResources.Cluster.ID()
-		isManaging, err := r.ocmClient.IsManagingCluster(internalID)
-		if err != nil {
-			logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
-			r.builtResources.IsInfrastructureCluster = true
-		} else {
-			r.builtResources.IsInfrastructureCluster = isManaging
-			if isManaging {
-				logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
-			}
 		}
 	}
 
@@ -286,8 +283,17 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	}
 
 	// Check if this is an HCP cluster and build management cluster resources if requested
-	if r.buildManagementRestConfig || r.buildManagementOCClient || r.buildManagementK8sClient {
+	if r.buildManagementRestConfig || r.buildManagementOCClient || r.buildManagementK8sClient || r.buildRHOBSClient {
 		err = r.buildManagementClusterResources()
+		if err != nil {
+			r.buildErr = err
+			return r.builtResources, r.buildErr
+		}
+	}
+
+	// Build RHOBS client if requested
+	if r.buildRHOBSClient {
+		err = r.buildRHOBSClientResource()
 		if err != nil {
 			r.buildErr = err
 			return r.builtResources, r.buildErr
@@ -394,6 +400,60 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	return nil
 }
 
+// buildClusterResource fetches cluster information and determines if it's an infrastructure cluster
+func (r *ResourceBuilderT) buildClusterResource() error {
+	if r.builtResources.Cluster != nil {
+		return nil
+	}
+
+	cluster, err := r.ocmClient.GetClusterInfo(r.clusterId)
+	if err != nil {
+		return ClusterNotFoundError{ClusterID: r.clusterId, Err: err}
+	}
+	r.builtResources.Cluster = cluster
+
+	// Check if this is an infra cluster (hive, management or service)
+	internalID := cluster.ID()
+	isManaging, err := r.ocmClient.IsManagingCluster(internalID)
+	if err != nil {
+		logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
+		r.builtResources.IsInfrastructureCluster = true
+	} else {
+		r.builtResources.IsInfrastructureCluster = isManaging
+		if isManaging {
+			logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
+		}
+	}
+
+	return nil
+}
+
+// buildRHOBSClientResource creates a RHOBS client for fetching logs from RHOBS/Loki
+func (r *ResourceBuilderT) buildRHOBSClientResource() error {
+	if r.builtResources.RHOBSClient != nil {
+		return nil
+	}
+
+	if r.builtResources.RHOBSCell == "" {
+		return fmt.Errorf("RHOBS cell endpoint not available")
+	}
+	if r.grafanaToken == "" {
+		return fmt.Errorf("grafana token not available")
+	}
+
+	logging.Infof("Creating RHOBS client for cell: %s", r.builtResources.RHOBSCell)
+	client, err := rhobs.NewClient(rhobs.Config{
+		BaseURL: r.builtResources.RHOBSCell,
+		Token:   r.grafanaToken,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create RHOBS client: %w", err)
+	}
+
+	r.builtResources.RHOBSClient = client
+	return nil
+}
+
 // This is an implementation to be used in tests, but putting it into a _test.go file will make it not resolvable.
 type ResourceBuilderMock struct {
 	Resources  *Resources
@@ -442,6 +502,10 @@ func (r *ResourceBuilderMock) WithManagementK8sClient() ResourceBuilder {
 }
 
 func (r *ResourceBuilderMock) WithManagementOCClient() ResourceBuilder {
+	return r
+}
+
+func (r *ResourceBuilderMock) WithRHOBSClient() ResourceBuilder {
 	return r
 }
 
