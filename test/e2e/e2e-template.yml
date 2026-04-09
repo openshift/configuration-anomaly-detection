@@ -52,9 +52,6 @@ objects:
               secret:
                 secretName: osde2e-gcp-credentials
                 optional: true
-            - name: osde2e-pagerduty-credentials
-              secret:
-                secretName: osde2e-pagerduty-credentials
           containers:
             - name: osde2e
               image: quay.io/redhat-services-prod/osde2e-cicada-tenant/osde2e:latest
@@ -69,7 +66,7 @@ objects:
                 - --configs
                 - ${OSDE2E_CONFIGS}
                 - --secret-locations
-                - "/etc/external-secrets,/etc/osde2e-ocm-sc,/etc/osde2e-aws-sc,/etc/osde2e-gcp-sc,/etc/osde2e-pagerduty-credentials"
+                - "/etc/external-secrets,/etc/osde2e-ocm-sc,/etc/osde2e-aws-sc,/etc/osde2e-gcp-sc"
               volumeMounts:
                 - name: configuration-anomaly-detection-sc
                   readOnly: true
@@ -83,9 +80,6 @@ objects:
                 - name: osde2e-gcp-sc
                   readOnly: true
                   mountPath: "/etc/osde2e-gcp-sc"
-                - name: osde2e-pagerduty-credentials
-                  readOnly: true
-                  mountPath: "/etc/osde2e-pagerduty-credentials"
               resources:
                 requests:
                   cpu: "300m"
