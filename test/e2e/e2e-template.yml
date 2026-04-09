@@ -26,8 +26,6 @@ parameters:
     required: false
   - name: SLACK_CHANNEL
     required: false
-  - name: CAD_PAGERDUTY_ROUTING_KEY
-    required: true
 objects:
   - apiVersion: batch/v1
     kind: Job
@@ -111,5 +109,3 @@ objects:
                   value: ${USE_EXISTING_CLUSTER}
                 - name: SLACK_NOTIFY
                   value: ${SLACK_NOTIFY}
-                - name: CAD_PAGERDUTY_ROUTING_KEY
-                  value: ${CAD_PAGERDUTY_ROUTING_KEY}
