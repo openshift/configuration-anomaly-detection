@@ -1,4 +1,3 @@
-// Package rhobs provides a client for querying RHOBS Grafana Loki API
 package rhobs
 
 import (
@@ -9,29 +8,30 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
-// Client provides methods for interacting with RHOBS Grafana Loki API
+const (
+	defaultHTTPTimeout = 30 * time.Second
+	maxErrorBodyLength = 500
+)
+
 type Client interface {
-	// QueryLogs queries Loki for logs matching the given LogQL query within the specified time range
 	QueryLogs(ctx context.Context, logQLQuery string, start, end time.Time, limit int) (*LogQueryResult, error)
 }
 
-// ClientImpl implements the Client interface
 type ClientImpl struct {
 	httpClient *http.Client
 	baseURL    string
 	token      string
 }
 
-// Config contains configuration for creating a new RHOBS client
 type Config struct {
 	BaseURL string
 	Token   string
 }
 
-// NewClient creates a new RHOBS client for querying Grafana Loki
 func NewClient(config Config) (Client, error) {
 	if config.BaseURL == "" {
 		return nil, fmt.Errorf("BaseURL is required")
@@ -42,7 +42,7 @@ func NewClient(config Config) (Client, error) {
 
 	return &ClientImpl{
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: defaultHTTPTimeout,
 		},
 		baseURL: config.BaseURL,
 		token:   config.Token,
@@ -51,7 +51,6 @@ func NewClient(config Config) (Client, error) {
 
 // QueryLogs queries Loki for logs matching the given LogQL query within the specified time range
 func (c *ClientImpl) QueryLogs(ctx context.Context, logQLQuery string, start, end time.Time, limit int) (*LogQueryResult, error) {
-	// Build query parameters
 	params := url.Values{}
 	params.Add("query", logQLQuery)
 	params.Add("start", strconv.FormatInt(start.UnixNano(), 10))
@@ -60,21 +59,17 @@ func (c *ClientImpl) QueryLogs(ctx context.Context, logQLQuery string, start, en
 		params.Add("limit", strconv.Itoa(limit))
 	}
 
-	// Construct URL
 	queryURL := fmt.Sprintf("%s/loki/api/v1/query_range?%s", c.baseURL, params.Encode())
 
-	// Create request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, queryURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Add authentication header
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "configuration-anomaly-detection")
 
-	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
@@ -83,18 +78,19 @@ func (c *ClientImpl) QueryLogs(ctx context.Context, logQLQuery string, start, en
 		_ = resp.Body.Close()
 	}()
 
-	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Check HTTP status
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+		errorBody := string(body)
+		if len(errorBody) > maxErrorBodyLength {
+			errorBody = errorBody[:maxErrorBodyLength] + "..."
+		}
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, errorBody)
 	}
 
-	// Parse response
 	var queryResp QueryRangeResponse
 	if err := json.Unmarshal(body, &queryResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
@@ -104,7 +100,6 @@ func (c *ClientImpl) QueryLogs(ctx context.Context, logQLQuery string, start, en
 		return nil, fmt.Errorf("query failed with status: %s", queryResp.Status)
 	}
 
-	// Parse and format results
 	result := parseQueryResponse(&queryResp)
 	return result, nil
 }
@@ -122,14 +117,12 @@ func parseQueryResponse(resp *QueryRangeResponse) *LogQueryResult {
 				continue
 			}
 
-			// Parse timestamp (nanoseconds since epoch)
 			timestampNano, err := strconv.ParseInt(value[0], 10, 64)
 			if err != nil {
 				continue
 			}
 			timestamp := time.Unix(0, timestampNano)
 
-			// Create log entry
 			entry := LogEntry{
 				Timestamp: timestamp,
 				Line:      value[1],
@@ -143,14 +136,13 @@ func parseQueryResponse(resp *QueryRangeResponse) *LogQueryResult {
 	return result
 }
 
-// FormatLogsForDisplay formats log entries into a human-readable string
 func FormatLogsForDisplay(result *LogQueryResult, maxLines int) string {
 	if result == nil || len(result.Entries) == 0 {
 		return "No logs found"
 	}
 
-	var output string
-	output += fmt.Sprintf("Found %d log entries from %d streams\n\n", result.TotalLines, result.StreamCount)
+	var output strings.Builder
+	fmt.Fprintf(&output, "Found %d log entries from %d streams\n\n", result.TotalLines, result.StreamCount)
 
 	displayCount := len(result.Entries)
 	if maxLines > 0 && displayCount > maxLines {
@@ -159,12 +151,12 @@ func FormatLogsForDisplay(result *LogQueryResult, maxLines int) string {
 
 	for i := 0; i < displayCount; i++ {
 		entry := result.Entries[i]
-		output += fmt.Sprintf("[%s] %s\n", entry.Timestamp.Format(time.RFC3339), entry.Line)
+		fmt.Fprintf(&output, "[%s] %s\n", entry.Timestamp.Format(time.RFC3339), entry.Line)
 	}
 
 	if len(result.Entries) > displayCount {
-		output += fmt.Sprintf("\n... and %d more lines (truncated for display)\n", len(result.Entries)-displayCount)
+		fmt.Fprintf(&output, "\n... and %d more lines (truncated for display)\n", len(result.Entries)-displayCount)
 	}
 
-	return output
+	return output.String()
 }

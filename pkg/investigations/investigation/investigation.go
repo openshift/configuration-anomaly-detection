@@ -420,11 +420,6 @@ func (r *ResourceBuilderT) buildRHOBSClientResource() error {
 		return nil
 	}
 
-	if r.grafanaToken == "" {
-		return fmt.Errorf("grafana token not available")
-	}
-
-	// Fetch RHOBS cell if not already set
 	if r.builtResources.RHOBSCell == "" {
 		if r.builtResources.ManagementClusterName == "" {
 			return fmt.Errorf("management cluster name not available - cannot determine RHOBS cell")

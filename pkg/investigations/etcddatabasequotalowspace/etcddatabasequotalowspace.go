@@ -588,13 +588,8 @@ func getEtcdctlContainerImage(pod *corev1.Pod) (string, error) {
 
 // buildRHOBSLogsURL constructs a Grafana/RHOBS explore URL with a LogQL query for the analysis job logs
 func buildRHOBSLogsURL(rhobsCell, namespace, jobId string) string {
-	// Build LogQL query to filter logs for the specific namespace and job
-	// LogQL syntax: {namespace="...", pod=~"..."}
 	logQLQuery := fmt.Sprintf(`{kubernetes_namespace_name="%s", kubernetes_pod_name=~"%s.*"}`, namespace, jobId)
 
-	// Build Grafana explore URL with LogQL query
-	// Using relative time range of 30 minutes
-	// left parameter contains the datasource and query details
 	leftParam := url.QueryEscape(fmt.Sprintf(
 		`{"datasource":"Loki","queries":[{"refId":"A","expr":"%s","queryType":"range"}],"range":{"from":"now-30m","to":"now"}}`,
 		logQLQuery,
@@ -605,17 +600,14 @@ func buildRHOBSLogsURL(rhobsCell, namespace, jobId string) string {
 
 // fetchRHOBSLogs fetches logs from RHOBS Grafana Loki for the analysis job
 func fetchRHOBSLogs(ctx context.Context, r *investigation.Resources, namespace, jobName string) (string, error) {
-	// Validate RHOBS client is available (built by resource builder)
 	if r.RHOBSClient == nil {
 		return "", fmt.Errorf("RHOBS client not available")
 	}
 
 	logging.Infof("Fetching logs from RHOBS for job %s in namespace %s", jobName, namespace)
 
-	// Build LogQL query to filter logs for the specific namespace and job
 	logQLQuery := fmt.Sprintf(`{kubernetes_namespace_name="%s", kubernetes_pod_name=~"%s.*"}`, namespace, jobName)
 
-	// Query logs from the last 30 minutes
 	now := time.Now()
 	start := now.Add(-30 * time.Minute)
 
@@ -633,10 +625,8 @@ func fetchRHOBSLogs(ctx context.Context, r *investigation.Resources, namespace, 
 
 	logging.Infof("Successfully fetched %d log lines from RHOBS", result.TotalLines)
 
-	// Format logs for display (limit to 100 lines for readability)
 	formattedLogs := rhobs.FormatLogsForDisplay(result, 100)
 
-	// Also include the Grafana explore URL for reference
 	exploreURL := buildRHOBSLogsURL(r.RHOBSCell, namespace, jobName)
 	formattedLogs += fmt.Sprintf("\n\nView full logs in Grafana: %s", exploreURL)
 
