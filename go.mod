@@ -4,22 +4,22 @@ go 1.25.7
 
 require (
 	github.com/PagerDuty/go-pagerduty v1.8.0
-	github.com/aws/aws-sdk-go-v2 v1.41.3
+	github.com/aws/aws-sdk-go-v2 v1.41.4
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.11
 	github.com/aws/aws-sdk-go-v2/service/bedrockagentcore v1.13.2
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.55.7
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.293.1
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.294.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.8
 	github.com/onsi/gomega v1.39.1
 	github.com/openshift-online/ocm-common v0.0.37
-	github.com/openshift-online/ocm-sdk-go v0.1.497
-	github.com/openshift/api v0.0.0-20250731182533-c7fbd085e10c
+	github.com/openshift-online/ocm-sdk-go v0.1.498
+	github.com/openshift/api v0.0.0-20260317095243-5c75e62da3e7
 	github.com/openshift/aws-account-operator/api v0.0.0-20250729145742-005e36e69583
 	github.com/openshift/backplane-api v0.0.0-20260205054653-459856398d59
 	github.com/openshift/backplane-cli v0.7.0
 	github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060
 	github.com/openshift/osd-network-verifier v1.6.1
-	github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777
+	github.com/openshift/osde2e-common v0.0.0-20260414120745-8209f1a6be36
 	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.5
@@ -54,11 +54,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.6 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.11 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.19 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.20 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.20 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.6 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.19 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.7 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.20 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.12 // indirect
@@ -144,8 +144,8 @@ require (
 	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
 	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/openshift-online/ocm-api-model/clientapi v0.0.452 // indirect
-	github.com/openshift-online/ocm-api-model/model v0.0.452 // indirect
+	github.com/openshift-online/ocm-api-model/clientapi v0.0.453 // indirect
+	github.com/openshift-online/ocm-api-model/model v0.0.453 // indirect
 	github.com/openshift-online/ocm-cli v1.0.11 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
