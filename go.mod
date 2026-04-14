@@ -30,7 +30,7 @@ require (
 	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/crypto v0.48.0
-	google.golang.org/grpc v1.79.1
+	google.golang.org/grpc v1.79.3
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.35.2
 	k8s.io/apimachinery v0.35.2
@@ -183,8 +183,8 @@ require (
 	golang.org/x/tools v0.42.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/api v0.269.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260217215200-42d3e9bedb6d // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/AlecAivazis/survey.v1 v1.8.8 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
