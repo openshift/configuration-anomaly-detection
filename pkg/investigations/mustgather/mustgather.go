@@ -22,6 +22,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/tarball"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
+	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 )
 
 const (
@@ -36,6 +37,14 @@ const (
 	mustGatherOperatorNamespace     = "openshift-must-gather-operator" // permanent namespace to exclude from checks
 	mustGatherWaitTimeout           = 30 * time.Minute                 // timeout for waiting for existing must-gather namespace to be deleted
 	mustGatherPollInterval          = 60 * time.Second                 // interval for polling namespace existence
+
+	// SFTP retry configuration; retries transient failures locally to avoid
+	// re-running the must-gather collection due to the outer investigation retry
+	sftpRetryAttempts            = 3               // total attempts (1 initial + 2 retries)
+	sftpRetryInitialBackoff      = 2 * time.Second // exp. backoff
+	sftpCredentialAttemptTimeout = 30 * time.Second
+	sftpCredentialOverallTimeout = 2 * time.Minute
+	sftpUploadOverallTimeout     = time.Hour * 6
 
 	// label for metrics
 	productNameClassic = "ROSA classic"
@@ -138,10 +147,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Warnf("CAD was unable to close the must-gather tar file descriptor: %v\n Attempting to proceed anyway...", err)
 	}
 
-	// Get SFTP credentials with a reasonable timeout for the HTTP request
-	credCtx, credCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Get SFTP credentials with retry logic to avoid re-running the must-gather
+	// on transient failures.
+	var username, token string
+	credCtx, credCancel := context.WithTimeout(context.Background(), sftpCredentialOverallTimeout)
 	defer credCancel()
-	username, token, err := getAnonymousSftpCredentials(credCtx, http.DefaultClient)
+	err = utils.WithRetriesContext(credCtx, sftpRetryAttempts, sftpRetryInitialBackoff, func() error {
+		attemptCtx, attemptCancel := context.WithTimeout(credCtx, sftpCredentialAttemptTimeout)
+		defer attemptCancel()
+		var credErr error
+		username, token, credErr = getAnonymousSftpCredentials(attemptCtx, http.DefaultClient)
+		return credErr
+	})
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("CAD was unable to get the Red Hat sftp server credentials: %w", err),
@@ -151,10 +168,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("anonymous SFTP username: %s", username)
 
 	// Upload with extended timeout - during testing, uploading to the SFTP server was very slow at 10 MB/min
+	// retry logic shares the overall timeout (6 hours), as to avoid multiple such long timeouts
 	// FIXME: As in improvement, CAD could use its own service account to upload to the SFTP server.
-	uploadCtx, uploadCancel := context.WithTimeout(context.Background(), time.Hour*6)
+	uploadCtx, uploadCancel := context.WithTimeout(context.Background(), sftpUploadOverallTimeout)
 	defer uploadCancel()
-	err = sftpUpload(uploadCtx, tarfile.Name(), username, token)
+	err = utils.WithRetriesContext(uploadCtx, sftpRetryAttempts, sftpRetryInitialBackoff, func() error {
+		return sftpUpload(uploadCtx, tarfile.Name(), username, token)
+	})
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("CAD was unable to upload to the Red Hat sftp server: %w", err),
