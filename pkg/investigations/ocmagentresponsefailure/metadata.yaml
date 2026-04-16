@@ -1,0 +1,15 @@
+name: ocmagentresponsefailure
+rbac:
+  roles:
+    - namespace: "openshift-config"
+      rules:
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - "secrets"
+          resourceNames:
+            - "pull-secret"
+  clusterRoleRules: []
+customerDataAccess: false

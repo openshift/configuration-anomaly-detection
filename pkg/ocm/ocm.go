@@ -35,6 +35,12 @@ type ServiceLog struct {
 	InternalOnly bool
 }
 
+// UserBanedError contains the reason for a user's ban
+type UserBannedError struct {
+	Code        string
+	Description string
+}
+
 // Client is the interface exposing OCM related functions
 type Client interface {
 	GetClusterMachinePools(internalClusterID string) ([]*cmv1.MachinePool, error)
@@ -50,6 +56,8 @@ type Client interface {
 	GetClusterInfo(identifier string) (*cmv1.Cluster, error)
 	IsManagingCluster(clusterID string) (bool, error)
 	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
+	CheckIfUserBanned(cluster *cmv1.Cluster) error
+	GetCreatorFromCluster(cluster *cmv1.Cluster) (*amv1.Account, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -331,18 +339,21 @@ func (c *SdkClient) GetClusterHypershiftConfig(cluster *cmv1.Cluster) (*cmv1.Hyp
 	return resp.Body(), nil
 }
 
-func CheckIfUserBanned(ocmClient Client, cluster *cmv1.Cluster) (bool, string, error) {
-	user, err := GetCreatorFromCluster(ocmClient.GetConnection(), cluster)
+func (c *SdkClient) CheckIfUserBanned(cluster *cmv1.Cluster) error {
+	user, err := c.GetCreatorFromCluster(cluster)
 	if err != nil {
-		return false, "encountered an issue when checking if the cluster owner is banned. Please investigate.", err
+		return fmt.Errorf("while checking if the cluster owner is banned: %w", err)
 	}
 
 	if user.Banned() {
-		noteMessage := fmt.Sprintf("User is banned %s. Ban description %s.\n Please open a proactive case, so that MCS can resolve the ban or organize a ownership transfer.", user.BanCode(), user.BanDescription())
-		logging.Warnf(noteMessage)
-		return true, noteMessage, nil
+		return UserBannedError{
+			Code:        user.BanCode(),
+			Description: user.BanDescription(),
+		}
 	}
-	return false, "User is not banned.", nil
+
+	// User is not banned
+	return nil
 }
 
 const (
@@ -374,13 +385,13 @@ func (c *SdkClient) IsManagingCluster(clusterID string) (bool, error) {
 	return false, nil
 }
 
-func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.Account, error) {
+func (c *SdkClient) GetCreatorFromCluster(cluster *cmv1.Cluster) (*amv1.Account, error) {
 	logging.Debugf("Getting subscription from cluster: %s", cluster.ID())
 	cmv1Subscription, ok := cluster.GetSubscription()
 	if !ok {
 		return nil, fmt.Errorf("failed to get subscription from cluster: %s", cluster.ID())
 	}
-	subscriptionResponse, err := ocmConn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
+	subscriptionResponse, err := c.conn.AccountsMgmt().V1().Subscriptions().Subscription(cmv1Subscription.ID()).Get().Send()
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +405,7 @@ func GetCreatorFromCluster(ocmConn *sdk.Connection, cluster *cmv1.Cluster) (*amv
 		return nil, fmt.Errorf("expecting status 'Active' found %v", status)
 	}
 
-	accountResponse, err := ocmConn.AccountsMgmt().V1().Accounts().Account(subscription.Creator().ID()).Get().Send()
+	accountResponse, err := c.conn.AccountsMgmt().V1().Accounts().Account(subscription.Creator().ID()).Get().Send()
 	if err != nil {
 		return nil, err
 	}
@@ -439,4 +450,18 @@ func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
 	}
 
 	return "", errors.New("dynatrace tenant label not found in subscription")
+}
+
+func (e UserBannedError) Error() string {
+	return fmt.Sprintf("user is banned (%s): %s", e.Code, e.Description)
+}
+
+func NewOCMBannedUserServiceLog() ServiceLog {
+	return ServiceLog{
+		Severity:     "Critical",
+		Summary:      "Action required: Arrange new cluster owner",
+		Description:  "Your cluster requires you to take action because it is no longer owned by a user with an enabled Red Hat account. This will impact the cluster's ability to upgrade to future versions. Please raise a support case with Red Hat to nominate a new owner for the cluster in https://console.redhat.com/openshift/.",
+		InternalOnly: false,
+		ServiceName:  "SREManualAction",
+	}
 }
