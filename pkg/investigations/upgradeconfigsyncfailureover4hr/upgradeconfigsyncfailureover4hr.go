@@ -2,6 +2,8 @@
 package upgradeconfigsyncfailureover4hr
 
 import (
+	"errors"
+
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -22,20 +24,61 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes := notewriter.New("UpgradeConfigSyncFailureOver4Hr", logging.RawLogger)
 
 	logging.Infof("Checking if user is Banned.")
-	userBannedStatus, userBannedNotes, err := ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
-	if err != nil {
+	userBannedErr := ocm.UserBannedError{}
+	err = ocm.CheckIfUserBanned(r.OcmClient, r.Cluster)
+
+	switch {
+	case errors.As(err, &userBannedErr) && userBannedErr.Code == "export_control_compliance":
+		// User is banned due to Export Control Compliance; escalate to SRE
+		notes.AppendWarning("%v", err)
+		result.Actions = append(
+			result.Actions,
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name())...,
+		)
+
+		result.Actions = append(
+			result.Actions,
+			executor.Escalate("Export Control Compliance ban detected, please refer to the SOP."),
+		)
+
+		return result, nil
+	case errors.As(err, &userBannedErr):
+		// User is banned, but not due to Export Control Compliance; Send a SL
+
+		sl := ocm.NewOCMBannedUserServiceLog()
+
+		notes.AppendWarning("%v", err)
+		notes.AppendWarning("Sending out Service Log (%s)", sl.Summary)
+		result.Actions = append(
+			result.Actions,
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name())...,
+		)
+
+		result.Actions = append(
+			result.Actions,
+			executor.NewServiceLogAction(sl.Severity, sl.Summary).
+				WithDescription(sl.Description).
+				WithServiceName(sl.ServiceName).
+				Build(),
+		)
+		return result, nil
+	case err != nil:
+		// Unhandled error; escalate to SRE
 		notes.AppendWarning("encountered an issue when checking if the cluster owner is banned: %s\nPlease investigate.", err)
 		result.Actions = append(
-			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+			result.Actions,
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name())...,
+		)
+
+		result.Actions = append(
+			result.Actions,
 			executor.Escalate("Failed to check if user is banned"),
 		)
 		return result, nil
 	}
-	if userBannedStatus {
-		notes.AppendWarning("%s", userBannedNotes)
-	} else {
-		notes.AppendSuccess("User is not banned.")
-	}
+
+	notes.AppendSuccess("User is not banned.")
+
 	user, err := ocm.GetCreatorFromCluster(r.OcmClient.GetConnection(), r.Cluster)
 	logging.Infof("User ID is: %v", user.ID())
 	if err != nil {
