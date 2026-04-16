@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgather"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/restartcontrolplane"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/rotatecredentials"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradeconfigsyncfailureover4hr"
 )
 
@@ -26,6 +27,7 @@ var availableInvestigations = []investigation.Investigation{
 	&upgradeconfigsyncfailureover4hr.Investigation{},
 	&machinehealthcheckunterminatedshortcircuitsre.Investigation{},
 	&restartcontrolplane.Investigation{},
+	&rotatecredentials.Investigation{},
 	&cannotretrieveupdatessre.Investigation{},
 	&mustgather.Investigation{},
 }
