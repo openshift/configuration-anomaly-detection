@@ -33,6 +33,7 @@ type AnalysisResult struct {
 	TopNamespaces    []NamespaceSize
 	LargestResources []ResourceSize
 	EventSizesByNS   []NamespaceSize
+	TopResourceTypes []ResourceTypeSize
 }
 
 type NamespaceSize struct {
@@ -45,6 +46,11 @@ type ResourceSize struct {
 	Name         string
 	SizeMB       float64
 	ResourceType string
+}
+
+type ResourceTypeSize struct {
+	ResourceType string
+	SizeMB       float64
 }
 
 // createAnalysisJob creates a Kubernetes Job to analyze the etcd snapshot
@@ -236,6 +242,7 @@ func parseAnalysisOutput(output string) (*AnalysisResult, error) {
 		TopNamespaces:    make([]NamespaceSize, 0),
 		LargestResources: make([]ResourceSize, 0),
 		EventSizesByNS:   make([]NamespaceSize, 0),
+		TopResourceTypes: make([]ResourceTypeSize, 0),
 	}
 
 	lines := strings.Split(output, "\n")
@@ -267,6 +274,12 @@ func parseAnalysisOutput(output string) (*AnalysisResult, error) {
 			}
 			currentSection = 3
 			sectionLines = append(sectionLines[:0], line)
+		case "resourceType,total_size_megabytes":
+			if len(sectionLines) > 0 && currentSection > 0 {
+				processSection(result, currentSection, strings.Join(sectionLines, "\n"))
+			}
+			currentSection = 4
+			sectionLines = append(sectionLines[:0], line)
 		default:
 			sectionLines = append(sectionLines, line)
 		}
@@ -288,6 +301,8 @@ func processSection(result *AnalysisResult, sectionType int, csvData string) {
 		result.LargestResources = parseResourceSizes(csvData)
 	case 3:
 		result.EventSizesByNS = parseNamespaceSizes(csvData)
+	case 4:
+		result.TopResourceTypes = parseResourceTypeSizes(csvData)
 	}
 }
 
@@ -375,6 +390,47 @@ func parseResourceSizes(csvData string) []ResourceSize {
 	return results
 }
 
+// parseResourceTypeSizes parses CSV with resourceType,total_size_megabytes format
+func parseResourceTypeSizes(csvData string) []ResourceTypeSize {
+	results := make([]ResourceTypeSize, 0)
+
+	reader := csv.NewReader(strings.NewReader(csvData))
+
+	_, err := reader.Read()
+	if err != nil {
+		logging.Warnf("failed to read CSV header: %v", err)
+		return results
+	}
+
+	for {
+		record, err := reader.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			logging.Warnf("failed to read CSV record: %v", err)
+			continue
+		}
+
+		if len(record) < 2 {
+			continue
+		}
+
+		sizeMB, err := strconv.ParseFloat(record[1], 64)
+		if err != nil {
+			logging.Warnf("failed to parse size: %v", err)
+			continue
+		}
+
+		results = append(results, ResourceTypeSize{
+			ResourceType: record[0],
+			SizeMB:       sizeMB,
+		})
+	}
+
+	return results
+}
+
 // formatAnalysisResults formats the analysis results into human-readable text
 func formatAnalysisResults(result *AnalysisResult) string {
 	var builder strings.Builder
@@ -406,6 +462,15 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("================================\n")
 		for i, ns := range result.EventSizesByNS {
 			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB))
+		}
+		builder.WriteString("\n")
+	}
+
+	if len(result.TopResourceTypes) > 0 {
+		builder.WriteString("Top Space Consumers by Resource Type:\n")
+		builder.WriteString("================================\n")
+		for i, rt := range result.TopResourceTypes {
+			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, rt.ResourceType, rt.SizeMB))
 		}
 		builder.WriteString("\n")
 	}
