@@ -442,7 +442,7 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("Top Space Consumers by Namespace:\n")
 		builder.WriteString("================================\n")
 		for i, ns := range result.TopNamespaces {
-			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB))
+			fmt.Fprintf(&builder, "%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB)
 		}
 		builder.WriteString("\n")
 	}
@@ -451,8 +451,8 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("Largest ConfigMaps & Secrets:\n")
 		builder.WriteString("================================\n")
 		for i, res := range result.LargestResources {
-			builder.WriteString(fmt.Sprintf("%d. %s/%s: %.2f MB (%s)\n",
-				i+1, res.Namespace, res.Name, res.SizeMB, res.ResourceType))
+			fmt.Fprintf(&builder, "%d. %s/%s: %.2f MB (%s)\n",
+				i+1, res.Namespace, res.Name, res.SizeMB, res.ResourceType)
 		}
 		builder.WriteString("\n")
 	}
@@ -461,7 +461,7 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("Event Storage by Namespace:\n")
 		builder.WriteString("================================\n")
 		for i, ns := range result.EventSizesByNS {
-			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB))
+			fmt.Fprintf(&builder, "%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB)
 		}
 		builder.WriteString("\n")
 	}

@@ -156,7 +156,7 @@ func (b *PagerDutyNoteActionBuilder) AppendSection(header, content string) *Page
 	if b.content.Len() > 0 {
 		b.content.WriteString("\n\n")
 	}
-	b.content.WriteString(fmt.Sprintf("## %s\n%s", header, content))
+	fmt.Fprintf(&b.content, "## %s\n%s", header, content)
 	return b
 }
 

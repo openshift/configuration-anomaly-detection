@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 // shortNameToInvestigation maps short flag names to their corresponding investigation names.
@@ -61,6 +63,22 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 		return fmt.Errorf("unknown investigation: %s - must be one of:\n%s", c.manual.InvestigationName, investigationList)
 	}
 
-	// No PD client for manual runs
-	return c.runInvestigation(ctx, c.manual.ClusterId, alertInvestigation, nil, c.manual.Params)
+	// For AI investigations, create a new instance with the runtime config from the global config.
+	if _, ok := alertInvestigation.(*aiassisted.Investigation); ok {
+		alertInvestigation = &aiassisted.Investigation{
+			AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig(),
+		}
+	}
+
+	// When --with-filtering is set, create a filter context so filters are evaluated.
+	// Otherwise pass nil to bypass filtering (default manual behavior).
+	var filterCtx *types.FilterContext
+	if c.manual.WithFiltering {
+		filterCtx = &types.FilterContext{
+			AlertName: alertInvestigation.Name(),
+		}
+	}
+
+	// No PD client for manual runs.
+	return c.runInvestigation(ctx, c.manual.ClusterId, alertInvestigation, nil, filterCtx, c.manual.Params)
 }

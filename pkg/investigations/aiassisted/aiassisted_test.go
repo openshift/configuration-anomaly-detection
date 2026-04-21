@@ -1,8 +1,6 @@
 package aiassisted
 
 import (
-	"fmt"
-	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -92,135 +90,10 @@ var _ = Describe("aiassisted", func() {
 		mockCtrl.Finish()
 	})
 
-	inv := Investigation{}
-
 	Describe("Run", func() {
-		Context("when AI configuration is not set", func() {
-			BeforeEach(func() {
-				// Explicitly unset to ensure clean test environment
-				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
+		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
-				// By default, CAD_AI_AGENT_CONFIG env var is not set in tests
-				result, err := inv.Run(r)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Actions).NotTo(BeEmpty())
-				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
-				Expect(hasNoteAction(result.Actions)).To(BeTrue())
-			})
-		})
-
-		Context("when AI is disabled in configuration", func() {
-			BeforeEach(func() {
-				err := os.Setenv("CAD_AI_AGENT_CONFIG", `{
-					"enabled": false,
-					"runtime_arn": "test-arn",
-					"region": "us-east-1",
-					"user_id": "test-user"
-				}`)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			AfterEach(func() {
-				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should escalate with disabled warning", func() {
-				result, err := inv.Run(r)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Actions).NotTo(BeEmpty())
-				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
-				Expect(hasNoteAction(result.Actions)).To(BeTrue())
-			})
-		})
-
-		Context("when organization ID fetch fails", func() {
-			BeforeEach(func() {
-				err := os.Setenv("CAD_AI_AGENT_CONFIG", `{
-					"enabled": true,
-					"runtime_arn": "test-arn",
-					"region": "us-east-1",
-					"user_id": "test-user"
-				}`)
-				Expect(err).ToNot(HaveOccurred())
-
-				ocmClient := r.Resources.OcmClient.(*ocmmock.MockClient)
-				ocmClient.EXPECT().GetOrganizationID(gomock.Any()).Return("", fmt.Errorf("failed to fetch organization"))
-			})
-
-			AfterEach(func() {
-				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should escalate with organization error", func() {
-				result, err := inv.Run(r)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Actions).NotTo(BeEmpty())
-				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
-				Expect(hasNoteAction(result.Actions)).To(BeTrue())
-			})
-		})
-
-		Context("when cluster is not in allowlist", func() {
-			BeforeEach(func() {
-				err := os.Setenv("CAD_AI_AGENT_CONFIG", `{
-					"enabled": true,
-					"runtime_arn": "test-arn",
-					"region": "us-east-1",
-					"user_id": "test-user",
-					"clusters": ["other-cluster-id"],
-					"organizations": ["test-org-id"]
-				}`)
-				Expect(err).ToNot(HaveOccurred())
-
-				ocmClient := r.Resources.OcmClient.(*ocmmock.MockClient)
-				ocmClient.EXPECT().GetOrganizationID("test-cluster-id").Return("test-org-id", nil)
-			})
-
-			AfterEach(func() {
-				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should escalate with allowlist error", func() {
-				result, err := inv.Run(r)
-
-				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Actions).NotTo(BeEmpty())
-				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
-				Expect(hasNoteAction(result.Actions)).To(BeTrue())
-			})
-		})
-
-		Context("when organization is not in allowlist", func() {
-			BeforeEach(func() {
-				err := os.Setenv("CAD_AI_AGENT_CONFIG", `{
-					"enabled": true,
-					"runtime_arn": "test-arn",
-					"region": "us-east-1",
-					"user_id": "test-user",
-					"clusters": ["test-cluster-id"],
-					"organizations": ["other-org-id"]
-				}`)
-				Expect(err).ToNot(HaveOccurred())
-
-				ocmClient := r.Resources.OcmClient.(*ocmmock.MockClient)
-				ocmClient.EXPECT().GetOrganizationID("test-cluster-id").Return("test-org-id", nil)
-			})
-
-			AfterEach(func() {
-				err := os.Unsetenv("CAD_AI_AGENT_CONFIG")
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should escalate with allowlist error", func() {
+				inv := Investigation{AIConfig: nil}
 				result, err := inv.Run(r)
 
 				Expect(err).ToNot(HaveOccurred())

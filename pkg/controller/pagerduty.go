@@ -6,13 +6,13 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 type PagerDutyController struct {
@@ -36,9 +36,12 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, clusterID)
 	c.logger.Infof("Investigating incident '%s' for service '%s (%s)'", c.pdClient.GetIncidentRef(), c.pdClient.GetServiceID(), c.pdClient.GetServiceName())
 
-	// Check if we should escalate to AI or not
-	if experimentalEnabled {
-		alertInvestigation = handleUnsupportedAlertWithAI(alertInvestigation, c.pdClient)
+	// If no formal investigation matches, fall back to AI investigation when enabled.
+	// AI is considered enabled when experimental mode is on and the filter config
+	// has an entry for "aiassisted". The actual cluster/org-level filtering happens
+	// later in runInvestigation via the filter evaluation.
+	if alertInvestigation == nil && experimentalEnabled {
+		alertInvestigation = handleUnsupportedAlertWithAI(c.dependencies)
 		if alertInvestigation == nil {
 			err := c.pdClient.EscalateIncident()
 			if err != nil {
@@ -48,8 +51,16 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		}
 	}
 
+	// Build the filter context with PagerDuty fields available at this point.
+	// OCM fields will be populated inside runInvestigation after precheck.
+	filterCtx := &types.FilterContext{
+		AlertName:   alertInvestigation.AlertTitle(),
+		AlertTitle:  c.pdClient.GetTitle(),
+		ServiceName: c.pdClient.GetServiceName(),
+	}
+
 	// Continue with investigation...
-	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient, nil)
+	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient, filterCtx, nil)
 }
 
 func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
@@ -73,26 +84,22 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 	logging.Info("Escalated documentation mismatch to PagerDuty")
 }
 
-// handleUnsupportedAlertWithAI checks if AI is enabled for unsupported alerts.
-// If AI is enabled, returns an AI investigation. If disabled, escalates the alert.
-// Returns errAlertEscalated if the alert was escalated.
-func handleUnsupportedAlertWithAI(alertInvestigation investigation.Investigation, pdClient *pagerduty.SdkClient) investigation.Investigation {
-	if alertInvestigation != nil {
-		return alertInvestigation
-	}
-
-	// Parse AI config
-	aiConfig, err := aiconfig.ParseAIAgentConfig()
-	if err != nil {
-		aiConfig = &aiconfig.AIAgentConfig{Enabled: false}
-		logging.Warnf("Failed to parse AI agent configuration, disabling AI investigation: %v", err)
-	}
-
-	// Escalate if AI is disabled
-	if !aiConfig.Enabled {
+// handleUnsupportedAlertWithAI checks if AI investigation is enabled via the filter config.
+// AI is considered enabled when the filter config has an entry for "aiassisted".
+// Returns an AI investigation populated with the runtime config, or nil if disabled.
+func handleUnsupportedAlertWithAI(deps *Dependencies) investigation.Investigation {
+	if deps.FilterConfig == nil {
 		return nil
 	}
 
-	// Use AI investigation for unsupported alerts
-	return &aiassisted.Investigation{}
+	// AI is enabled when the filter config has an entry for "aiassisted".
+	// The actual cluster/org-level gating is handled by filter evaluation
+	// in runInvestigation after OCM context is populated.
+	if deps.FilterConfig.GetFilter("aiassisted") == nil {
+		return nil
+	}
+
+	return &aiassisted.Investigation{
+		AIConfig: deps.FilterConfig.GetAIAgentConfig(),
+	}
 }

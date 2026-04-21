@@ -35,12 +35,14 @@ var InvestigateCmd = &cobra.Command{
 var (
 	logLevelFlag    = ""
 	payloadPath     = "./payload.json"
+	configPath      = ""
 	pipelineNameEnv = ""
 )
 
 func init() {
 	InvestigateCmd.Flags().StringVarP(&payloadPath, "payload-path", "p", payloadPath, "the path to the payload, defaults to './payload.json'")
 	InvestigateCmd.Flags().StringVarP(&logLevelFlag, "log-level", "l", "", "the log level [debug,info,warn,error,fatal], default = info")
+	InvestigateCmd.Flags().StringVar(&configPath, "config", "", "path to investigation filter config file (overrides CAD_INVESTIGATION_CONFIG_PATH)")
 
 	if envLogLevel, exists := os.LookupEnv("LOG_LEVEL"); exists {
 		logLevelFlag = envLogLevel
@@ -54,6 +56,7 @@ func run(_ *cobra.Command, _ []string) error {
 		Common: controller.CommonConfig{
 			LogLevel:   logLevelFlag,
 			Identifier: pipelineNameEnv,
+			ConfigPath: configPath,
 		},
 		Pd: &controller.PagerDutyConfig{
 			PayloadPath: payloadPath,
