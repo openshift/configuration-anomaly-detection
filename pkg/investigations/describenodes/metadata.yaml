@@ -1,0 +1,19 @@
+name: describenodes
+rbac:
+  roles:
+    - namespace: "kube-node-lease"
+      rules:
+        - apiGroups: ['coordination.k8s.io']
+          resources: ['leases']
+          verbs: ['get', 'list']
+  clusterRoleRules:
+    - apiGroups: ['']
+      resources: ['nodes']
+      verbs: ['get', 'list']
+    - apiGroups: ['']
+      resources: ['pods']
+      verbs: ['get', 'list']
+    - apiGroups: ['']
+      resources: ['events']
+      verbs: ['get', 'list']
+customerDataAccess: true

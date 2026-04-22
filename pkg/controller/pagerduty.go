@@ -49,7 +49,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	}
 
 	// Continue with investigation...
-	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient)
+	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient, nil)
 }
 
 func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {

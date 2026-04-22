@@ -7,6 +7,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/etcddatabasequotalowspace"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -28,12 +29,16 @@ var availableInvestigations = []investigation.Investigation{
 	&restartcontrolplane.Investigation{},
 	&cannotretrieveupdatessre.Investigation{},
 	&mustgather.Investigation{},
+	&describenodes.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.
 // Returns nil if no formal investigation matches.
 func GetInvestigation(title string, experimental bool) investigation.Investigation {
 	for _, inv := range availableInvestigations {
+		if inv.AlertTitle() == "" {
+			continue
+		}
 		if strings.Contains(title, inv.AlertTitle()) && (experimental || !inv.IsExperimental()) {
 			return inv
 		}
@@ -55,6 +60,9 @@ func GetAvailableInvestigationsTitles() []string {
 	alertTitles := make([]string, 0, len(availableInvestigations))
 
 	for _, inv := range availableInvestigations {
+		if inv.AlertTitle() == "" {
+			continue
+		}
 		alertTitles = append(alertTitles, inv.AlertTitle())
 	}
 	return alertTitles
