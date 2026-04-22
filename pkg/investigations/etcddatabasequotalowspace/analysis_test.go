@@ -49,6 +49,23 @@ default,app-config,8.75,configmap`
 	assert.Equal(t, "configmap", result[2].ResourceType)
 }
 
+func TestParseResourceTypeSizes(t *testing.T) {
+	csvData := `resourceType,total_size_megabytes
+configmaps,10.86
+secrets,8.22
+pods,3.62`
+
+	result := parseResourceTypeSizes(csvData)
+
+	assert.Len(t, result, 3)
+	assert.Equal(t, "configmaps", result[0].ResourceType)
+	assert.Equal(t, 10.86, result[0].SizeMB)
+	assert.Equal(t, "secrets", result[1].ResourceType)
+	assert.Equal(t, 8.22, result[1].SizeMB)
+	assert.Equal(t, "pods", result[2].ResourceType)
+	assert.Equal(t, 3.62, result[2].SizeMB)
+}
+
 func TestParseAnalysisOutput(t *testing.T) {
 	output := `namespace,total_size_megabytes
 openshift-monitoring,45.23
@@ -58,7 +75,10 @@ openshift-monitoring,prometheus-config,15.23,configmap
 kube-system,cluster-info,10.50,secret
 namespace,total_event_size_megabytes
 openshift-monitoring,5.00
-default,2.50`
+default,2.50
+resourceType,total_size_megabytes
+configmaps,10.86
+secrets,8.22`
 
 	result, err := parseAnalysisOutput(output)
 
@@ -76,6 +96,12 @@ default,2.50`
 	assert.Len(t, result.EventSizesByNS, 2)
 	assert.Equal(t, "openshift-monitoring", result.EventSizesByNS[0].Namespace)
 	assert.Equal(t, 5.00, result.EventSizesByNS[0].SizeMB)
+
+	assert.Len(t, result.TopResourceTypes, 2)
+	assert.Equal(t, "configmaps", result.TopResourceTypes[0].ResourceType)
+	assert.Equal(t, 10.86, result.TopResourceTypes[0].SizeMB)
+	assert.Equal(t, "secrets", result.TopResourceTypes[1].ResourceType)
+	assert.Equal(t, 8.22, result.TopResourceTypes[1].SizeMB)
 }
 
 func TestFormatAnalysisResults(t *testing.T) {
@@ -92,6 +118,10 @@ func TestFormatAnalysisResults(t *testing.T) {
 			{Namespace: "openshift-monitoring", SizeMB: 5.00},
 			{Namespace: "default", SizeMB: 2.50},
 		},
+		TopResourceTypes: []ResourceTypeSize{
+			{ResourceType: "configmaps", SizeMB: 10.86},
+			{ResourceType: "secrets", SizeMB: 8.22},
+		},
 	}
 
 	formatted := formatAnalysisResults(result)
@@ -105,4 +135,7 @@ func TestFormatAnalysisResults(t *testing.T) {
 	assert.Contains(t, formatted, "cluster-info: 10.50 MB (secret)")
 	assert.Contains(t, formatted, "Event Storage by Namespace")
 	assert.Contains(t, formatted, "openshift-monitoring: 5.00 MB")
+	assert.Contains(t, formatted, "Top Space Consumers by Resource Type")
+	assert.Contains(t, formatted, "configmaps: 10.86 MB")
+	assert.Contains(t, formatted, "secrets: 8.22 MB")
 }
