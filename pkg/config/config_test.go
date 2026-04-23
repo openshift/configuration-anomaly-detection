@@ -560,9 +560,10 @@ func TestAIAgentConfigGetTimeout(t *testing.T) {
 	}
 }
 
-func TestLoadConfig(t *testing.T) {
+func TestLoadConfig(t *testing.T) { //nolint:gocyclo,maintidx // many sub-cases for config loading paths
 	t.Run("env var not set returns nil", func(t *testing.T) {
 		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, "")
 		cfg, err := LoadConfig("", testInvestigations)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
@@ -647,4 +648,155 @@ filters:
 		}
 	})
 
+	// --- Legacy CAD_AI_AGENT_CONFIG fallback tests ---
+
+	t.Run("legacy env var with clusters and orgs", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": ["org1"],
+			"clusters": ["cluster1"],
+			"enabled": true,
+			"timeout_seconds": 600
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil {
+			t.Fatal("expected config from legacy env var")
+		}
+		if cfg.AIAgent == nil {
+			t.Fatal("expected ai_agent config")
+		}
+		if cfg.AIAgent.RuntimeARN != "arn:test" {
+			t.Errorf("RuntimeARN = %q", cfg.AIAgent.RuntimeARN)
+		}
+		if cfg.AIAgent.TimeoutSeconds != 600 {
+			t.Errorf("TimeoutSeconds = %d, want 600", cfg.AIAgent.TimeoutSeconds)
+		}
+
+		f := cfg.GetFilter("aiassisted")
+		if f == nil || f.Filter == nil {
+			t.Fatal("expected synthesized aiassisted filter")
+		}
+		// Should be OR of ClusterID + OrganizationID
+		if len(f.Filter.Or) != 2 {
+			t.Fatalf("expected 2 OR children, got %d", len(f.Filter.Or))
+		}
+	})
+
+	t.Run("legacy env var with clusters only", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": [],
+			"clusters": ["c1", "c2"],
+			"enabled": true
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		f := cfg.GetFilter("aiassisted")
+		if f == nil || f.Filter == nil {
+			t.Fatal("expected synthesized aiassisted filter")
+		}
+		// Single leaf, not OR
+		if f.Filter.Field != FieldClusterID {
+			t.Errorf("expected ClusterID leaf, got field %q", f.Filter.Field)
+		}
+		if len(f.Filter.Values) != 2 {
+			t.Errorf("expected 2 cluster values, got %d", len(f.Filter.Values))
+		}
+	})
+
+	t.Run("legacy env var disabled returns nil", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"enabled": false
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg != nil {
+			t.Fatal("expected nil config when legacy enabled=false")
+		}
+	})
+
+	t.Run("legacy env var empty allowlists returns error", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": [],
+			"clusters": [],
+			"enabled": true
+		}`)
+
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error when enabled but no allowlists")
+		}
+	})
+
+	t.Run("legacy env var invalid JSON returns error", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{invalid}`)
+
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error for invalid JSON")
+		}
+	})
+
+	t.Run("legacy env var default timeout", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"clusters": ["c1"],
+			"enabled": true
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg.AIAgent.TimeoutSeconds != 900 {
+			t.Errorf("TimeoutSeconds = %d, want 900 (default)", cfg.AIAgent.TimeoutSeconds)
+		}
+	})
+
+	t.Run("config file takes precedence over legacy env var", func(t *testing.T) {
+		// Legacy env var has invalid JSON — if used, LoadConfig would fail.
+		t.Setenv(LegacyAIConfigEnvVar, `{invalid}`)
+
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(testMustgatherFilterYAML), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(ConfigEnvVar, path)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil || len(cfg.Filters) != 1 {
+			t.Fatal("expected config from file, not legacy env var")
+		}
+	})
 }

@@ -1,16 +1,23 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"gopkg.in/yaml.v2"
 )
 
 const (
 	// ConfigEnvVar is the environment variable that holds the path to the investigation filter config file.
 	ConfigEnvVar = "CAD_INVESTIGATION_CONFIG_PATH"
+
+	// LegacyAIConfigEnvVar is the legacy environment variable that holds the AI agent config as JSON.
+	//
+	// Deprecated: use the ai_agent section in the config file instead.
+	LegacyAIConfigEnvVar = "CAD_AI_AGENT_CONFIG"
 )
 
 // AIAgentConfig holds runtime configuration for AgentCore AI investigations.
@@ -41,7 +48,9 @@ type Config struct {
 // LoadConfig reads and parses the investigation filter configuration.
 // If pathOverride is non-empty, it is used as the config file path.
 // Otherwise, the path is read from the CAD_INVESTIGATION_CONFIG_PATH environment variable.
-// Returns nil (no config) if no path is available from either source.
+// If neither is set, falls back to the legacy CAD_AI_AGENT_CONFIG JSON env var for
+// backwards compatibility.
+// Returns nil (no config) if no source is available.
 // The validInvestigations parameter is the list of known investigation names used to
 // validate that each filter references a real investigation.
 func LoadConfig(pathOverride string, validInvestigations []string) (*Config, error) {
@@ -49,16 +58,110 @@ func LoadConfig(pathOverride string, validInvestigations []string) (*Config, err
 	if path == "" {
 		path = os.Getenv(ConfigEnvVar)
 	}
-	if path == "" {
-		return nil, nil //nolint:nilnil // nil config means "no filtering configured", not an error
+	if path != "" {
+		data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
+		if err != nil {
+			return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
+		}
+		return ParseConfig(data, validInvestigations)
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
+	// Fall back to legacy CAD_AI_AGENT_CONFIG env var.
+	return loadLegacyAIConfig()
+}
+
+// legacyAIAgentConfig is the old JSON-based AI agent configuration from CAD_AI_AGENT_CONFIG.
+type legacyAIAgentConfig struct {
+	RuntimeARN         string   `json:"runtime_arn"`
+	UserID             string   `json:"user_id"`
+	Region             string   `json:"region"`
+	Version            string   `json:"version,omitempty"`
+	OpsSopVersion      string   `json:"ops_sop_version,omitempty"`
+	RosaPluginsVersion string   `json:"rosa_plugins_version,omitempty"`
+	Organizations      []string `json:"organizations"`
+	Clusters           []string `json:"clusters"`
+	Enabled            bool     `json:"enabled"`
+	TimeoutSeconds     int      `json:"timeout_seconds,omitempty"`
+}
+
+// loadLegacyAIConfig parses the legacy CAD_AI_AGENT_CONFIG JSON env var and converts it
+// into a Config with a synthesized aiassisted filter entry built from the old allowlists.
+// Returns nil if the env var is not set or enabled is false.
+func loadLegacyAIConfig() (*Config, error) {
+	configJSON := os.Getenv(LegacyAIConfigEnvVar)
+	if configJSON == "" {
+		return nil, nil //nolint:nilnil // no config means "no filtering configured"
 	}
 
-	return ParseConfig(data, validInvestigations)
+	var legacy legacyAIAgentConfig
+	if err := json.Unmarshal([]byte(configJSON), &legacy); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", LegacyAIConfigEnvVar, err)
+	}
+
+	if !legacy.Enabled {
+		return nil, nil //nolint:nilnil // disabled means no AI config
+	}
+
+	logging.Warnf("Using deprecated %s env var — migrate to a config file via %s", LegacyAIConfigEnvVar, ConfigEnvVar)
+
+	timeout := legacy.TimeoutSeconds
+	if timeout == 0 {
+		timeout = 900
+	}
+
+	// Build an OR filter from the old cluster/org allowlists.
+	filter := buildLegacyAllowlistFilter(legacy.Clusters, legacy.Organizations)
+	if filter == nil {
+		return nil, fmt.Errorf("%s: enabled but no clusters or organizations in allowlist", LegacyAIConfigEnvVar)
+	}
+
+	return &Config{
+		AIAgent: &AIAgentConfig{
+			RuntimeARN:         legacy.RuntimeARN,
+			UserID:             legacy.UserID,
+			Region:             legacy.Region,
+			Version:            legacy.Version,
+			OpsSopVersion:      legacy.OpsSopVersion,
+			RosaPluginsVersion: legacy.RosaPluginsVersion,
+			TimeoutSeconds:     timeout,
+		},
+		Filters: []InvestigationFilter{
+			{
+				Investigation: "aiassisted",
+				Filter:        filter,
+			},
+		},
+	}, nil
+}
+
+// buildLegacyAllowlistFilter converts the old clusters/organizations allowlists
+// into a filter tree. Returns nil if both lists are empty.
+func buildLegacyAllowlistFilter(clusters, organizations []string) *FilterNode {
+	var children []FilterNode
+
+	if len(clusters) > 0 {
+		children = append(children, FilterNode{
+			Field:    FieldClusterID,
+			Operator: OperatorIn,
+			Values:   clusters,
+		})
+	}
+
+	if len(organizations) > 0 {
+		children = append(children, FilterNode{
+			Field:    FieldOrganizationID,
+			Operator: OperatorIn,
+			Values:   organizations,
+		})
+	}
+
+	if len(children) == 0 {
+		return nil
+	}
+	if len(children) == 1 {
+		return &children[0]
+	}
+	return &FilterNode{Or: children}
 }
 
 // ParseConfig parses and validates a YAML config from raw bytes.
