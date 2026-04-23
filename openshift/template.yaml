@@ -258,6 +258,10 @@ objects:
       description: Run in dry-run mode (no external operations)
       name: dry-run
       type: string
+    - default: ""
+      description: Investigation-specific parameters as KEY=VALUE pairs, comma-separated
+      name: investigation-params
+      type: string
     tasks:
     - name: run-manual-investigation
       params:
@@ -267,6 +271,8 @@ objects:
         value: $(params.investigation)
       - name: dry-run
         value: $(params.dry-run)
+      - name: investigation-params
+        value: $(params.investigation-params)
       - name: pipeline-name
         value: $(context.pipelineRun.name)
       taskRef:
@@ -421,10 +427,21 @@ objects:
     - description: The pipelinerun name
       name: pipeline-name
       type: string
+    - default: ""
+      description: Investigation-specific parameters as KEY=VALUE pairs, comma-separated
+      name: investigation-params
+      type: string
     steps:
     - args:
       - |-
-        PIPELINE_NAME=$(params.pipeline-name) cadctl run --cluster-id $(params.cluster-id) --investigation $(params.investigation) --dry-run=$(params.dry-run)
+        PARAMS_FLAGS=""
+        if [ -n "$(params.investigation-params)" ]; then
+          IFS=',' read -ra PARAM_ARRAY <<< "$(params.investigation-params)"
+          for p in "${PARAM_ARRAY[@]}"; do
+            PARAMS_FLAGS="$PARAMS_FLAGS --params $p"
+          done
+        fi
+        PIPELINE_NAME=$(params.pipeline-name) cadctl run --cluster-id $(params.cluster-id) --investigation $(params.investigation) --dry-run=$(params.dry-run) $PARAMS_FLAGS
       command:
       - /bin/bash
       - -c

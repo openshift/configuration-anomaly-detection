@@ -48,7 +48,11 @@ func NewResourceBuilder(
 	clusterId string,
 	name string,
 	backplaneUrl string,
+	params map[string]string,
 ) (ResourceBuilder, error) {
+	if params == nil {
+		params = make(map[string]string)
+	}
 	rb := &ResourceBuilderT{
 		clusterId:    clusterId,
 		name:         name,
@@ -57,6 +61,7 @@ func NewResourceBuilder(
 		builtResources: &Resources{
 			BpClient:  bpClient,
 			OcmClient: ocmClient,
+			Params:    params,
 		},
 	}
 
@@ -95,6 +100,7 @@ type Resources struct {
 	IsInfrastructureCluster       bool
 	ManagementClusterName         string
 	DynatraceManagementClusterURL string
+	Params                        map[string]string
 }
 
 type ResourceBuilder interface {
@@ -230,6 +236,11 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			if isManaging {
 				logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
 			}
+		}
+
+		// Detect HCP early so investigations can use IsHCP without requiring management cluster resources
+		if hypershift := r.builtResources.Cluster.Hypershift(); hypershift != nil && hypershift.Enabled() {
+			r.builtResources.IsHCP = true
 		}
 	}
 

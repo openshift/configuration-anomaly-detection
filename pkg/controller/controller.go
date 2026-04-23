@@ -40,6 +40,7 @@ type ManualConfig struct {
 	ClusterId         string
 	InvestigationName string
 	DryRun            bool
+	Params            map[string]string
 }
 
 func (p *ManualConfig) Validate() error {
@@ -247,10 +248,10 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
-func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient) error {
+func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, params map[string]string) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
-	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL)
+	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL, params)
 	if pdClient != nil {
 		builder.WithPdClient(pdClient)
 	}
