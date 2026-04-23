@@ -225,7 +225,7 @@ func (c *Config) Validate(validInvestigations []string) error {
 		}
 
 		if f.Filter != nil {
-			if err := f.Filter.validate(fmt.Sprintf("filters[%d].filter", i)); err != nil {
+			if err := f.Filter.validate(fmt.Sprintf("filters[%d].when", i)); err != nil {
 				return fmt.Errorf("filters[%d] (investigation %q): %w", i, f.Investigation, err)
 			}
 		}

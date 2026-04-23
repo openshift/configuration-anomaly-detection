@@ -10,7 +10,7 @@
 # Structure:
 #   filters:             # Top-level list of per-investigation filters.
 #     - investigation:   # Investigation name (must match a registered name, see below).
-#       filter:          # Root of a recursive filter tree. Optional (nil = always run).
+#       when:          # Root of a recursive filter tree. Optional (nil = always run).
 #
 # Filter Tree:
 #   A filter node is either a branch (AND/OR) or a leaf (comparison/sampling).
@@ -32,7 +32,7 @@
 #
 # Behavior:
 #   - Investigations WITHOUT a filter entry here always run (no restrictions).
-#   - A filter entry with no `filter` tree (just the investigation name) always runs.
+#   - A filter entry with no `when` tree (just the investigation name) always runs.
 #   - An empty filters list (filters: []) means no filtering — all investigations run.
 #   - A node cannot have both `and` and `or`, or be both a branch and a leaf.
 #   - The `aiassisted` investigation is special: it only runs when it has an entry
@@ -98,18 +98,18 @@
 #   version: "v1.0.0"                 # Optional, audit trail only
 #   ops_sop_version: "v2.0.0"         # Optional, audit trail only
 #   rosa_plugins_version: "v3.0.0"    # Optional, audit trail only
-ai_agent:
-  runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
-  user_id: "cad-agent"
-  region: "us-east-1"
-  timeout_seconds: 900
+# ai_agent:
+#   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
+#   user_id: "cad-agent"
+#   region: "us-east-1"
+#   timeout_seconds: 900
 
 filters:
   # Enable AI investigation for specific clusters or organizations.
   # The presence of this entry enables AI investigation; remove it to disable.
   # Uses OR logic: the cluster OR the organization must match.
   # - investigation: aiassisted
-  #   filter:
+  #   when:
   #     or:
   #       - field: ClusterID
   #         operator: in
@@ -121,7 +121,7 @@ filters:
   # Only run the mustgather investigation on AWS clusters that are in "ready" state.
   # Uses AND logic: both conditions must pass.
   - investigation: mustgather
-    filter:
+    when:
       and:
         - field: CloudProvider
           operator: in
@@ -132,14 +132,14 @@ filters:
 
   # Only run the etcd investigation on non-HCP (classic) clusters.
   - investigation: etcddatabasequotalowspace
-    filter:
+    when:
       field: HCP
       operator: in
       values: ["false"]
 
   # Exclude a specific organization from the CHGM investigation.
   - investigation: "Cluster Has Gone Missing (CHGM)"
-    filter:
+    when:
       and:
         - field: ClusterID
           operator: notin
@@ -150,7 +150,7 @@ filters:
   #   - Non-redhat emails: notmatches passes (true), short-circuits OR → runs
   #   - Redhat emails: notmatches fails (false), falls through to sample(0.10) → 10% chance
   # - investigation: clustermonitoringerrorbudgetburn
-  #   filter:
+  #   when:
   #     or:
   #       - field: OwnerEmail
   #         operator: notmatches
@@ -160,7 +160,7 @@ filters:
 
   # Combining AND and OR: AWS clusters where the cluster or org is allowlisted.
   # - investigation: insightsoperatordown
-  #   filter:
+  #   when:
   #     and:
   #       - field: CloudProvider
   #         operator: in
@@ -175,14 +175,14 @@ filters:
 
   # Exclude clusters that are being uninstalled.
   # - investigation: restartcontrolplane
-  #   filter:
+  #   when:
   #     field: ClusterState
   #     operator: notin
   #     values: ["uninstalling"]
 
   # Match alert titles with a regex pattern.
   # - investigation: cannotretrieveupdatessre
-  #   filter:
+  #   when:
   #     field: AlertTitle
   #     operator: matches
   #     values: [".*CRITICAL.*", ".*WARNING.*"]

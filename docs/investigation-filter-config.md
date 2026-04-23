@@ -16,7 +16,7 @@ If the variable is not set, no filtering is applied and all investigations run u
 
 Each investigation can have an optional **filter tree** — a boolean expression evaluated against the current alert and cluster context. If the filter passes, the investigation runs; if it fails, it is skipped.
 
-Investigations that have **no entry** in the config always run. An investigation entry with no `filter` key also always runs.
+Investigations that have **no entry** in the config always run. An investigation entry with no `when` key also always runs.
 
 The one exception is `aiassisted`: it only runs if it has an entry in the config. Without an entry, the AI investigation is entirely disabled.
 
@@ -91,7 +91,7 @@ Only run an investigation on AWS clusters in `ready` state:
 ```yaml
 filters:
   - investigation: mustgather
-    filter:
+    when:
       and:
         - field: CloudProvider
           operator: in
@@ -106,7 +106,7 @@ Exclude a specific cluster:
 ```yaml
 filters:
   - investigation: "Cluster Has Gone Missing (CHGM)"
-    filter:
+    when:
       field: ClusterID
       operator: notin
       values: ["2pr3e91qrgdje312keq8denphqs70tlr"]
@@ -117,7 +117,7 @@ Sample 10% of internal (`@redhat.com`) traffic, always run for external customer
 ```yaml
 filters:
   - investigation: clustermonitoringerrorbudgetburn
-    filter:
+    when:
       or:
         - field: OwnerEmail
           operator: notmatches

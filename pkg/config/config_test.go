@@ -10,7 +10,7 @@ import (
 const testMustgatherFilterYAML = `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
@@ -57,7 +57,7 @@ func TestParseConfig(t *testing.T) { //nolint:maintidx,gocyclo // table-driven t
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       and:
         - field: CloudProvider
           operator: in
@@ -66,7 +66,7 @@ filters:
           operator: in
           values: ["ready"]
   - investigation: etcddatabasequotalowspace
-    filter:
+    when:
       field: HCP
       operator: in
       values: ["false"]
@@ -107,7 +107,7 @@ filters: []
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       or:
         - field: ClusterID
           operator: in
@@ -134,7 +134,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       and:
         - field: CloudProvider
           operator: in
@@ -165,7 +165,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: BadField
       operator: in
       values: ["x"]
@@ -177,7 +177,7 @@ filters:
 			yaml: `
 filters:
   - investigation: nonexistent
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
@@ -189,7 +189,7 @@ filters:
 			yaml: `
 filters:
   - investigation: ""
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
@@ -201,12 +201,12 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
   - investigation: mustgather
-    filter:
+    when:
       field: ClusterState
       operator: in
       values: ["ready"]
@@ -218,7 +218,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: BadFieldName
       operator: in
       values: ["aws"]
@@ -230,7 +230,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: equals
       values: ["aws"]
@@ -242,7 +242,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: []
@@ -268,7 +268,7 @@ ai_agent:
   rosa_plugins_version: "v3.0.0"
 filters:
   - investigation: aiassisted
-    filter:
+    when:
       field: ClusterID
       operator: in
       values: ["test-cluster"]
@@ -303,7 +303,7 @@ ai_agent:
   region: "us-east-1"
 filters:
   - investigation: aiassisted
-    filter:
+    when:
       field: ClusterID
       operator: in
       values: ["test-cluster"]
@@ -361,7 +361,7 @@ filters: []
 			yaml: `
 filters:
   - investigation: aiassisted
-    filter:
+    when:
       or:
         - field: ClusterID
           operator: in
@@ -399,7 +399,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       operator: sample
       values: ["0.10"]
 `,
@@ -418,7 +418,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       operator: sample
       values: ["0"]
 `,
@@ -434,7 +434,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       operator: sample
       values: ["1"]
 `,
@@ -450,7 +450,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       operator: sample
       values: ["-0.1"]
 `,
@@ -461,7 +461,7 @@ filters:
 			yaml: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       operator: sample
       values: ["1.5"]
 `,

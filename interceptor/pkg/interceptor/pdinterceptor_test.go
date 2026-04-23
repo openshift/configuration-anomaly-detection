@@ -173,7 +173,7 @@ func TestShouldRunAIInvestigation(t *testing.T) {
 			filterYAML: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
@@ -185,7 +185,7 @@ filters:
 			filterYAML: `
 filters:
   - investigation: mustgather
-    filter:
+    when:
       field: CloudProvider
       operator: in
       values: ["aws"]
@@ -201,7 +201,7 @@ ai_agent:
   region: "us-east-1"
 filters:
   - investigation: aiassisted
-    filter:
+    when:
       or:
         - field: ClusterID
           operator: in

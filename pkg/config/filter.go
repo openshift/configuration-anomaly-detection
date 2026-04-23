@@ -94,7 +94,7 @@ type InvestigationFilter struct {
 	// from the manual controller's shortNameToInvestigation map.
 	Investigation string `yaml:"investigation"`
 	// Filter is the root of the filter tree. nil means always run.
-	Filter *FilterNode `yaml:"filter,omitempty"`
+	Filter *FilterNode `yaml:"when,omitempty"`
 }
 
 // Evaluate checks the filter tree for an investigation.
