@@ -15,12 +15,29 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// ManagingClusterType represents the type of managing cluster for a remediation
+type ManagingClusterType string
+
+const (
+	// ManagingClusterTypeSpoke indicates the remediation is for the spoke cluster itself (nil in API)
+	ManagingClusterTypeSpoke ManagingClusterType = ""
+	// ManagingClusterTypeManagement indicates the remediation is for a Hypershift management cluster
+	ManagingClusterTypeManagement ManagingClusterType = "management"
+	// ManagingClusterTypeHive indicates the remediation is for a classic cluster's hive
+	ManagingClusterTypeHive ManagingClusterType = "hive"
+)
+
 // Client provides methods for interacting with the backplane API
 type Client interface {
 	// CreateReport creates a new cluster report
 	CreateReport(ctx context.Context, clusterId string, summary string, reportData string) (*bpapi.Report, error)
 	// GetRestConfig creates a remediation and returns a rest.Config for connecting to the cluster's API server through the backplane proxy
+	//
+	// Deprecated: Use GetRestConfigWithManagingClusterType instead
 	GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error)
+	// GetRestConfigWithManagingClusterType creates a remediation and returns a rest.Config for connecting through the backplane proxy
+	// managingClusterType can be ManagingClusterTypeSpoke, ManagingClusterTypeManagement, or ManagingClusterTypeHive
+	GetRestConfigWithManagingClusterType(ctx context.Context, clusterId string, remediationName string, managingClusterType ManagingClusterType) (*RestConfig, error)
 }
 
 type Cleaner interface {
@@ -119,13 +136,31 @@ func (c *ClientImpl) CreateReport(ctx context.Context, clusterId string, summary
 }
 
 func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error) {
+	managingClusterType := ManagingClusterTypeSpoke
+	if isManagementCluster {
+		managingClusterType = ManagingClusterTypeManagement
+	}
+	return c.GetRestConfigWithManagingClusterType(ctx, clusterId, remediationName, managingClusterType)
+}
+
+func (c *ClientImpl) GetRestConfigWithManagingClusterType(ctx context.Context, clusterId string, remediationName string, managingClusterType ManagingClusterType) (*RestConfig, error) {
 	createRemediationParams := bpapi.CreateRemediationParams{
 		RemediationName: remediationName,
 		ManagingCluster: nil, // If this parameter is nil in CreateRemediationParams, it specifies spoke cluster
 	}
-	if isManagementCluster {
+
+	// Set the managing cluster type based on the parameter
+	switch managingClusterType {
+	case ManagingClusterTypeManagement:
 		managingCluster := bpapi.CreateRemediationParamsManagingClusterManagement
 		createRemediationParams.ManagingCluster = &managingCluster
+	case ManagingClusterTypeHive:
+		managingCluster := bpapi.CreateRemediationParamsManagingClusterHive
+		createRemediationParams.ManagingCluster = &managingCluster
+	case ManagingClusterTypeSpoke:
+		// nil is already set, nothing to do
+	default:
+		return nil, fmt.Errorf("invalid managing cluster type: %s", managingClusterType)
 	}
 
 	ocmConnection := c.ocmClient.GetConnection()
@@ -171,9 +206,17 @@ func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remedi
 		RemediationInstanceId: response.JSON200.RemediationInstanceId,
 		ManagingCluster:       nil,
 	}
-	if isManagementCluster {
+
+	// Set the managing cluster type for deletion based on the parameter
+	switch managingClusterType {
+	case ManagingClusterTypeManagement:
 		managingCluster := bpapi.DeleteRemediationParamsManagingClusterManagement
 		deleteRemediationParams.ManagingCluster = &managingCluster
+	case ManagingClusterTypeHive:
+		managingCluster := bpapi.DeleteRemediationParamsManagingClusterHive
+		deleteRemediationParams.ManagingCluster = &managingCluster
+	case ManagingClusterTypeSpoke:
+		// nil is already set, nothing to do
 	}
 
 	restConfig := &RestConfig{
