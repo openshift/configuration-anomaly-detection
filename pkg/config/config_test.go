@@ -266,7 +266,12 @@ ai_agent:
   version: "v1.0.0"
   ops_sop_version: "v2.0.0"
   rosa_plugins_version: "v3.0.0"
-filters: []
+filters:
+  - investigation: aiassisted
+    filter:
+      field: ClusterID
+      operator: in
+      values: ["test-cluster"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
@@ -296,7 +301,12 @@ ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
   region: "us-east-1"
-filters: []
+filters:
+  - investigation: aiassisted
+    filter:
+      field: ClusterID
+      operator: in
+      values: ["test-cluster"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
@@ -356,6 +366,30 @@ filters:
         - field: ClusterID
           operator: in
           values: ["cluster-1"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "aiassisted without filter is invalid",
+			yaml: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "user"
+  region: "us-east-1"
+filters:
+  - investigation: aiassisted
+`,
+			wantErr: true,
+		},
+		{
+			name: "ai_agent without aiassisted filter entry is invalid",
+			yaml: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "user"
+  region: "us-east-1"
+filters:
+  - investigation: mustgather
 `,
 			wantErr: true,
 		},
@@ -612,4 +646,5 @@ filters:
 			t.Fatal("expected config with 1 filter from env var path")
 		}
 	})
+
 }
