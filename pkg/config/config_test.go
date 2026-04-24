@@ -589,11 +589,14 @@ func TestLoadConfig(t *testing.T) { //nolint:gocyclo,maintidx // many sub-cases 
 		}
 	})
 
-	t.Run("nonexistent file returns error", func(t *testing.T) {
+	t.Run("nonexistent file returns nil config", func(t *testing.T) {
 		t.Setenv(ConfigEnvVar, "/nonexistent/path.yaml")
-		_, err := LoadConfig("", testInvestigations)
-		if err == nil {
-			t.Fatal("expected error for nonexistent file")
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("expected no error for nonexistent file, got: %v", err)
+		}
+		if cfg != nil {
+			t.Fatal("expected nil config for nonexistent file")
 		}
 	})
 

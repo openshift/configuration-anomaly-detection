@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -61,6 +62,12 @@ func LoadConfig(pathOverride string, validInvestigations []string) (*Config, err
 	if path != "" {
 		data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
 		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// The config file is optional (e.g. mounted from an optional ConfigMap).
+				// Treat a missing file the same as "no config".
+				logging.Infof("Config file %q not found, continuing without config", path)
+				return nil, nil //nolint:nilnil // no config means "no filtering configured"
+			}
 			return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
 		}
 		return ParseConfig(data, validInvestigations)
