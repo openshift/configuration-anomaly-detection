@@ -14,6 +14,8 @@ var (
 	investigationFlag = ""
 	clusterIdFlag     = ""
 	dryRunFlag        = false
+	withFilteringFlag = false
+	configPath        = ""
 	pipelineNameEnv   = ""
 	paramsFlag        []string
 )
@@ -28,6 +30,8 @@ func NewManualCmd() (*cobra.Command, error) {
 	cmd.Flags().StringVarP(&clusterIdFlag, "cluster-id", "c", "", "the cluster to run an investigation against")
 	cmd.Flags().StringVarP(&investigationFlag, "investigation", "i", "", "the investigation to run manually")
 	cmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "d", false, "run investigation without performing any external operations")
+	cmd.Flags().BoolVar(&withFilteringFlag, "with-filtering", false, "evaluate investigation filters during manual runs (default: filters are bypassed)")
+	cmd.Flags().StringVar(&configPath, "config", "", "path to investigation filter config file (overrides CAD_INVESTIGATION_CONFIG_PATH)")
 	cmd.Flags().StringArrayVarP(&paramsFlag, "params", "p", nil, "investigation-specific parameters as KEY=VALUE (can be specified multiple times)")
 	err := cmd.MarkFlagRequired("cluster-id")
 	if err != nil {
@@ -54,12 +58,14 @@ func run(_ *cobra.Command, _ []string) error {
 		Common: controller.CommonConfig{
 			LogLevel:   logLevelFlag,
 			Identifier: pipelineNameEnv,
+			ConfigPath: configPath,
 		},
 		Pd: nil,
 		Manual: &controller.ManualConfig{
 			ClusterId:         clusterIdFlag,
 			InvestigationName: investigationFlag,
 			DryRun:            dryRunFlag,
+			WithFiltering:     withFilteringFlag,
 			Params:            params,
 		},
 	}

@@ -15,15 +15,17 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
-	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
-type Investigation struct{}
+type Investigation struct {
+	AIConfig *config.AIAgentConfig
+}
 
 // InvestigationPayload represents the payload sent to the AgentCore agent
 type InvestigationPayload struct {
@@ -37,7 +39,9 @@ type InvestigationPayload struct {
 func generateSessionID(incidentID string) string {
 	timestamp := time.Now().Unix()
 	randomBytes := make([]byte, 8)
-	rand.Read(randomBytes) //nolint:errcheck,gosec
+	if _, err := rand.Read(randomBytes); err != nil {
+		return fmt.Sprintf("cad-%s-%d-fallback", incidentID, timestamp)
+	}
 	randomHex := hex.EncodeToString(randomBytes)
 	return fmt.Sprintf("cad-%s-%d-%s", incidentID, timestamp, randomHex)
 }
@@ -55,45 +59,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	clusterID := r.Cluster.ID()
 
-	config, err := aiconfig.ParseAIAgentConfig()
-	if err != nil {
-		notes.AppendWarning("Failed to parse AI agent configuration: %v", err)
+	if c.AIConfig == nil {
+		notes.AppendWarning("AI agent runtime configuration not set (ai_agent section missing from config)")
 		result.Actions = append(
 			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("AI config parse error"),
+			executor.Escalate("AI runtime config not set"),
 		)
 		return result, nil
 	}
 
-	if !config.Enabled {
-		notes.AppendWarning("AI investigation is disabled (CAD_AI_AGENT_CONFIG not configured or enabled=false)")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("AI investigation disabled"),
-		)
-		return result, nil
-	}
-
-	orgID, err := r.OcmClient.GetOrganizationID(clusterID)
-	if err != nil {
-		notes.AppendWarning("Failed to get organization ID: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to get organization ID"),
-		)
-		return result, nil
-	}
-
-	if !config.IsAllowedForAI(clusterID, orgID) {
-		notes.AppendWarning("Cluster %s (org: %s) is not in the AI investigation allowlist", clusterID, orgID)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Cluster not in AI allowlist"),
-		)
-		return result, nil
-	}
-
-	notes.AppendSuccess("AI investigation allowlist check passed for cluster %s (org: %s)", clusterID, orgID)
+	config := c.AIConfig
 
 	awsAccessKeyID := os.Getenv("AGENTCORE_AWS_ACCESS_KEY_ID")
 	if awsAccessKeyID == "" {
@@ -199,16 +174,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Info("🤖 Receiving AI response...")
 	var aiResponse strings.Builder
 	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
-	aiResponse.WriteString(fmt.Sprintf("Session ID: %s\n", sessionID))
-	aiResponse.WriteString(fmt.Sprintf("Runtime: %s\n", config.RuntimeARN))
+	fmt.Fprintf(&aiResponse, "Session ID: %s\n", sessionID)
+	fmt.Fprintf(&aiResponse, "Runtime: %s\n", config.RuntimeARN)
 	if config.Version != "" {
-		aiResponse.WriteString(fmt.Sprintf("Agent Version: %s\n", config.Version))
+		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", config.Version)
 	}
 	if config.OpsSopVersion != "" {
-		aiResponse.WriteString(fmt.Sprintf("ops-sop Version: %s\n", config.OpsSopVersion))
+		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", config.OpsSopVersion)
 	}
 	if config.RosaPluginsVersion != "" {
-		aiResponse.WriteString(fmt.Sprintf("rosa-plugins Version: %s\n", config.RosaPluginsVersion))
+		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", config.RosaPluginsVersion)
 	}
 	aiResponse.WriteString("\n")
 

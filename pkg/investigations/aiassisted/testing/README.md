@@ -6,7 +6,7 @@ This document describes how to test the AI-assisted investigation end-to-end in 
 
 The AI-assisted investigation:
 1. Serves as a **fallback handler** for alerts without explicit investigation implementations
-2. Validates the cluster/organization against an allowlist
+2. Validates the cluster/organization against the investigation filter config
 3. Invokes an AWS Bedrock AgentCore agent runtime with incident details
 4. Streams the AI response and logs the investigation results
 5. Posts a note to PagerDuty indicating AI automation completed
@@ -20,38 +20,39 @@ You need a deployed AWS Bedrock AgentCore agent with:
 - **AWS Region**: The region where the agent is deployed (e.g., `us-east-1`)
 - **IAM Permissions**: AWS credentials with permissions to invoke the agent runtime
 
-### 2. AI Agent Configuration
+### 2. Investigation Config File
 
-Set the `CAD_AI_AGENT_CONFIG` environment variable with the agent configuration:
+Create a YAML config file with the AI agent runtime settings and filter rules:
 
-```bash
-export CAD_AI_AGENT_CONFIG='{
-  "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:135808927096:runtime/alert_investigation_agent_v0-c7B2Y68BMr",
-  "user_id": "cad-test-user",
-  "region": "us-east-1",
-  "version": "dev",
-  "ops_sop_version": "dev",
-  "rosa_plugins_version": "dev",
-  "enabled": true,
-  "timeout_seconds": 900,
-  "clusters": ["<test-cluster-id>"],
-  "organizations": ["<test-org-id>"]
-}'
+```yaml
+# test-config.yaml
+ai_agent:
+  runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:135808927096:runtime/alert_investigation_agent_v0-c7B2Y68BMr"
+  user_id: "cad-test-user"
+  region: "us-east-1"
+  timeout_seconds: 900
+  version: "dev"
+  ops_sop_version: "dev"
+  rosa_plugins_version: "dev"
+
+filters:
+  - investigation: aiassisted
+    any:
+      - input: ClusterID
+        operator: in
+        values: ["<test-cluster-id>"]
+      - input: OrganizationID
+        operator: in
+        values: ["<test-org-id>"]
 ```
 
-**Required fields:**
-- `runtime_arn`: AWS ARN of the AgentCore runtime
-- `user_id`: User identifier for audit trail
-- `region`: AWS region
-- `enabled`: Must be `true`
-- `clusters`: Array of cluster IDs allowed for AI investigation
-- `organizations`: Array of organization IDs allowed for AI investigation
+Then set the path:
 
-**Optional fields:**
-- `timeout_seconds`: API call timeout (default: 900 seconds / 15 minutes)
-- `version`, `ops_sop_version`, `rosa_plugins_version`: Version metadata for audit trail
+```bash
+export CAD_INVESTIGATION_CONFIG_PATH="./test-config.yaml"
+```
 
-**Note:** At least one cluster ID or organization ID must be specified in the allowlists.
+See `docs/investigation-filter-config.example.yaml` for the full reference.
 
 ### 3. AWS Credentials
 
@@ -96,7 +97,7 @@ CLUSTER_ID="<your-cluster-id>"
 ocm get /api/clusters_mgmt/v1/clusters/$CLUSTER_ID | jq -r '.organization.id'
 ```
 
-Ensure the cluster ID or organization ID is in your `CAD_AI_AGENT_CONFIG` allowlists.
+Ensure the cluster ID or organization ID is in your config file's `aiassisted` filter entry.
 
 ### Step 2: Generate Test Incident Payload
 
@@ -111,26 +112,15 @@ Create a PagerDuty incident payload for an **alert without an explicit CAD handl
 
 This creates a `payload` file in the current directory and a PagerDuty incident which can be checked for CAD output.
 
-### Step 3: Set Up AI Configuration and Credentials
+### Step 3: Set Up Configuration and Credentials
 
 ```bash
 # Set AWS credentials for AgentCore
 export AGENTCORE_AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY_ID"
 export AGENTCORE_AWS_SECRET_ACCESS_KEY="YOUR_SECRET_ACCESS_KEY"
 
-# Set the AI agent configuration (adjust cluster/org IDs to match your test cluster)
-export CAD_AI_AGENT_CONFIG='{
-  "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:135808927096:runtime/alert_investigation_agent_v0-c7B2Y68BMr",
-  "user_id": "cad-test-user",
-  "region": "us-east-1",
-  "enabled": true,
-  "timeout_seconds": 900,
-  "clusters": ["'$CLUSTER_ID'"],
-  "organizations": ["<your-org-id>"]
-}'
-
-# Verify configuration is set
-echo $CAD_AI_AGENT_CONFIG | jq .
+# Point to your config file (see step 2 in Prerequisites)
+export CAD_INVESTIGATION_CONFIG_PATH="./test-config.yaml"
 
 # Enable experimental investigations
 export CAD_EXPERIMENTAL_ENABLED=true
@@ -146,14 +136,7 @@ export CAD_EXPERIMENTAL_ENABLED=true
 
 The investigation should proceed through the following stages:
 
-#### 1. Configuration Validation
-
-Check logs for:
-```
-AI investigation allowlist check passed for cluster <cluster-id> (org: <org-id>)
-```
-
-#### 2. AI Agent Invocation
+#### 1. AI Agent Invocation
 
 Look for:
 ```
@@ -161,7 +144,7 @@ Look for:
 Payload: {"prompt":"{\"investigation_id\":\"...\",\"investigation_payload\":\"\",\"alert_name\":\"...\",\"cluster_id\":\"...\"}"}
 ```
 
-#### 3. Streaming Response
+#### 2. Streaming Response
 
 Check for:
 ```
@@ -169,7 +152,7 @@ Check for:
 🤖 AI investigation complete
 ```
 
-#### 4. AI Output
+#### 3. AI Output
 
 The logs should include the full AI response:
 ```
@@ -184,7 +167,7 @@ rosa-plugins Version: dev
 <AI agent response content>
 ```
 
-#### 5. PagerDuty Note
+#### 4. PagerDuty Note
 
 Verify a note was added to the PagerDuty incident:
 ```
@@ -211,9 +194,8 @@ AI investigation completed - manual review required
 ### Failure Paths
 
 The investigation will **escalate** with a warning note if:
-- AI configuration parsing fails
-- `enabled: false` in configuration
-- Cluster/organization not in allowlist
+- AI agent runtime config (`ai_agent` section) is missing
+- Cluster/organization filtered out by config
 - AWS credentials missing or invalid
 - AgentCore runtime invocation fails
 - Response stream reading fails
@@ -262,7 +244,7 @@ No manual cleanup is required.
 
 - AI investigation is currently **experimental** (`IsExperimental() = true`)
 - Only runs for alerts **without explicit investigation handlers** (fallback behavior)
-- Requires allowlist configuration (cluster ID or organization ID)
+- Requires filter config with `aiassisted` entry (cluster ID or organization ID)
 - Timeout defaults to **15 minutes** (900 seconds), configurable via `timeout_seconds`
 - Always escalates incidents for human review after AI investigation completes
 - Session IDs are unique per invocation for audit trail tracking

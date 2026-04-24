@@ -9,7 +9,7 @@ endef
 
 include boilerplate/generated-includes.mk
 
-GOLANGCI_LINT_VERSION=v2.0.2
+GOLANGCI_LINT_VERSION=v2.7.2
 GOLANGCI_LINT_BIN:=$(shell which golangci-lint 2>/dev/null || echo "$(GOPATH)/bin/golangci-lint")
 MOCKGEN_VERSION=v0.6.0
 
