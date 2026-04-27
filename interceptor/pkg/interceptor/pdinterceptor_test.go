@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"errors"
+	"os"
 	"testing"
 
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
@@ -147,98 +148,91 @@ func stringContains(s, substr string) bool {
 }
 
 func TestShouldRunAIInvestigation(t *testing.T) {
+	// Helper to write a filter config file and set the env var.
+	setupFilterConfig := func(t *testing.T, yaml string) {
+		t.Helper()
+		path := t.TempDir() + "/filter.yaml"
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", path)
+	}
+
 	tests := []struct {
 		name         string
-		aiConfigEnv  string
-		clusterID    string
-		clusterIDErr error
-		orgID        string
-		orgIDErr     error
+		filterYAML   string // empty = no filter config
 		expectResult bool
 	}{
 		{
-			name:         "AI config not set",
-			aiConfigEnv:  "",
+			name:         "no filter config — AI disabled",
+			filterYAML:   "",
 			expectResult: false,
 		},
 		{
-			name:         "AI disabled",
-			aiConfigEnv:  `{"enabled":false,"runtime_arn":"test","region":"us-east-1","user_id":"test"}`,
+			name: "filter config without aiassisted entry — AI disabled",
+			filterYAML: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
 			expectResult: false,
 		},
 		{
-			name:         "cluster ID retrieval fails",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":[],"organizations":["org-123"]}`,
-			clusterIDErr: errors.New("cluster not found"),
+			name: "no ai_agent config — AI disabled",
+			filterYAML: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
 			expectResult: false,
 		},
 		{
-			name:         "org ID retrieval fails",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":[],"organizations":["org-123"]}`,
-			clusterID:    "cluster-1",
-			orgIDErr:     errors.New("org not found"),
-			expectResult: false,
-		},
-		{
-			name:         "cluster not in allowlist",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":["other-cluster"],"organizations":[]}`,
-			clusterID:    "cluster-1",
-			orgID:        "org-123",
-			expectResult: false,
-		},
-		{
-			name:         "org not in allowlist",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":[],"organizations":["other-org"]}`,
-			clusterID:    "cluster-1",
-			orgID:        "org-123",
-			expectResult: false,
-		},
-		{
-			name:         "cluster in allowlist",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":["cluster-1"],"organizations":[]}`,
-			clusterID:    "cluster-1",
-			orgID:        "org-123",
+			name: "ai_agent and aiassisted filter present — AI enabled",
+			filterYAML: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "test"
+  region: "us-east-1"
+filters:
+  - investigation: aiassisted
+    when:
+      or:
+        - field: ClusterID
+          operator: in
+          values: ["cluster-1"]
+`,
 			expectResult: true,
 		},
 		{
-			name:         "org in allowlist",
-			aiConfigEnv:  `{"enabled":true,"runtime_arn":"test","region":"us-east-1","user_id":"test","clusters":[],"organizations":["org-123"]}`,
-			clusterID:    "cluster-1",
-			orgID:        "org-123",
-			expectResult: true,
+			name: "aiassisted with no filter tree — AI disabled (filter required)",
+			filterYAML: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "test"
+  region: "us-east-1"
+filters:
+  - investigation: aiassisted
+`,
+			expectResult: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up environment - always set it to ensure clean state per test
-			t.Setenv("CAD_AI_AGENT_CONFIG", tt.aiConfigEnv)
-
-			// Create mocks
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mockPD := pdmock.NewMockClient(ctrl)
-			mockOCM := ocmmock.NewMockClient(ctrl)
-
-			// Set up expectations
-			if tt.aiConfigEnv != "" && stringContains(tt.aiConfigEnv, `"enabled":true`) {
-				if tt.clusterIDErr != nil {
-					mockPD.EXPECT().RetrieveClusterID().Return("", tt.clusterIDErr).Times(1)
-				} else if tt.clusterID != "" {
-					mockPD.EXPECT().RetrieveClusterID().Return(tt.clusterID, nil).Times(1)
-					if tt.orgIDErr != nil {
-						mockOCM.EXPECT().GetOrganizationID(tt.clusterID).Return("", tt.orgIDErr).Times(1)
-					} else {
-						mockOCM.EXPECT().GetOrganizationID(tt.clusterID).Return(tt.orgID, nil).Times(1)
-					}
-				}
+			if tt.filterYAML != "" {
+				setupFilterConfig(t, tt.filterYAML)
+			} else {
+				t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "")
 			}
 
-			// Execute
-			result := shouldRunAIInvestigation(mockPD, mockOCM)
+			result := shouldRunAIInvestigation()
 
-			// Verify
 			if result != tt.expectResult {
 				t.Errorf("shouldRunAIInvestigation() = %v, want %v", result, tt.expectResult)
 			}

@@ -39,7 +39,11 @@ CAD consists of:
 - a tekton deployment including a custom tekton interceptor
 - the `cadctl` command line tool implementing alert remediations and pre-investigations
 
-### Workflow
+### Workflows
+
+There are two workflows - either via PagerDuty webhook or manual runs:
+
+#### PagerDuty Webhook
 
 1) [PagerDuty Webhooks](https://support.pagerduty.com/docs/webhooks) are used to trigger Configuration-Anomaly-Detection when a [PagerDuty incident](https://support.pagerduty.com/docs/incidents) is created
 2) The webhook routes to a [Tekton EventListener](https://tekton.dev/docs/triggers/eventlisteners/)
@@ -49,6 +53,14 @@ CAD consists of:
 
 ![CAD Overview](./images/cad_overview/cad_architecture_dark.png#gh-dark-mode-only)
 ![CAD Overview](./images/cad_overview/cad_architecture_light.png#gh-light-mode-only)
+
+#### Manual run
+
+1) Invoke the `cadctl` command via the `run` subcommand: this will use your locally setup credentials
+``` shell
+cadctl run -c <CLUSTER_ID> -i <INVESTIGATION>
+```
+2) Invoke a manual investigation via `osdctl cluster cad run --cluster <CLUSTER_ID>` which uses the hosted CAD to run your investigation. More information in [this document](./docs/manual-investigation-pipeline.md)
 
 ## Contributing
 
@@ -290,3 +302,7 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 For Red Hat employees, these environment variables can be found in the SRE-P vault.
 
 - `LOG_LEVEL`: refers to the CAD log level, if not set, the default is `info`. See
+
+### Configuration File
+
+CAD now also has a configuration file and over time the environment variables will be moved to this file - for the supported fields at any time see the example configuration with comments in [./docs/investigation-filter-config.example.yaml](./docs/investigation-filter-config.example.yaml "this file").

@@ -58,12 +58,18 @@ objects:
             value: ${CAD_AI_AGENT_CONFIG}
           - name: CAD_OCTOSQL_IMAGE
             value: ${CAD_OCTOSQL_IMAGE}
+          - name: CAD_INVESTIGATION_CONFIG_PATH
+            value: /config/cad-config.yaml
           envFrom:
           - secretRef:
               name: cad-pd-token
           - secretRef:
               name: cad-ocm-client-secret
           image: ${REGISTRY_IMG}:${IMAGE_TAG}
+          volumeMounts:
+          - name: cad-config
+            mountPath: /config
+            readOnly: true
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -100,6 +106,11 @@ objects:
             runAsNonRoot: true
             seccompProfile:
               type: RuntimeDefault
+        volumes:
+        - name: cad-config
+          configMap:
+            name: cad-config
+            optional: true
         restartPolicy: Always
         serviceAccountName: pipeline
         terminationGracePeriodSeconds: 30
@@ -375,6 +386,8 @@ objects:
         value: ${CAD_AI_AGENT_CONFIG}
       - name: CAD_OCTOSQL_IMAGE
         value: ${CAD_OCTOSQL_IMAGE}
+      - name: CAD_INVESTIGATION_CONFIG_PATH
+        value: /config/cad-config.yaml
       - name: CAD_HCM_AI_TOKEN
         valueFrom:
           secretKeyRef:
@@ -408,6 +421,15 @@ objects:
         requests:
           cpu: 20m
           memory: 128Mi
+      volumeMounts:
+      - name: cad-config
+        mountPath: /config
+        readOnly: true
+    volumes:
+    - name: cad-config
+      configMap:
+        name: cad-config
+        optional: true
 - apiVersion: tekton.dev/v1beta1
   kind: Task
   metadata:
@@ -456,6 +478,8 @@ objects:
         value: ${CAD_AI_AGENT_CONFIG}
       - name: CAD_OCTOSQL_IMAGE
         value: ${CAD_OCTOSQL_IMAGE}
+      - name: CAD_INVESTIGATION_CONFIG_PATH
+        value: /config/cad-config.yaml
       - name: AGENTCORE_AWS_ACCESS_KEY_ID
         valueFrom:
           secretKeyRef:
@@ -482,6 +506,15 @@ objects:
         requests:
           cpu: 20m
           memory: 128Mi
+      volumeMounts:
+      - name: cad-config
+        mountPath: /config
+        readOnly: true
+    volumes:
+    - name: cad-config
+      configMap:
+        name: cad-config
+        optional: true
 - apiVersion: batch/v1
   kind: CronJob
   metadata:

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/PagerDuty/go-pagerduty/webhookv3"
-	"github.com/openshift/configuration-anomaly-detection/pkg/aiconfig"
+	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	investigations "github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -193,15 +193,14 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 	// If no formal investigation found, check if AI investigation should run
 	if investigation == nil {
-		if shouldRunAIInvestigation(pdClient, ocmClient) {
+		if shouldRunAIInvestigation() {
 			logging.Infof("Launching AI investigation")
 			return &triggersv1.InterceptorResponse{Continue: true}
 		}
 
-		// No formal investigation and AI not enabled/allowed - escalate to SRE
+		// No formal investigation and AI not enabled/allowed — escalate to SRE
 		logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
-		err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖")
-		if err != nil {
+		if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
 			logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
 		}
 		return &triggersv1.InterceptorResponse{Continue: false}
@@ -213,31 +212,20 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	}
 }
 
-func shouldRunAIInvestigation(pdClient pagerduty.Client, ocmClient ocm.Client) bool {
-	aiConfig, err := aiconfig.ParseAIAgentConfig()
+// shouldRunAIInvestigation checks whether AI investigation is configured at all.
+// The actual filter evaluation (allowlist, sampling, etc.) is done by the controller.
+func shouldRunAIInvestigation() bool {
+	filterConfig, err := config.LoadConfig("", investigations.GetAvailableInvestigationsNames())
 	if err != nil {
-		logging.Warnf("Failed to parse AI config: %v", err)
+		logging.Warnf("Failed to load investigation filter config: %v", err)
 		return false
 	}
 
-	if aiConfig == nil || !aiConfig.Enabled {
+	if filterConfig.GetAIAgentConfig() == nil {
 		return false
 	}
 
-	clusterID, err := pdClient.RetrieveClusterID()
-	if err != nil {
-		logging.Warnf("Cannot run AI investigation: failed to retrieve cluster ID: %v", err)
-		return false
-	}
-
-	orgID, err := ocmClient.GetOrganizationID(clusterID)
-	if err != nil {
-		logging.Warnf("Cannot run AI investigation: failed to get org ID for cluster %s: %v", clusterID, err)
-		return false
-	}
-
-	if !aiConfig.IsAllowedForAI(clusterID, orgID) {
-		logging.Debugf("Cluster %s (org: %s) not in AI allowlist", clusterID, orgID)
+	if filterConfig.GetFilter("aiassisted") == nil {
 		return false
 	}
 

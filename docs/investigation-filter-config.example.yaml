@@ -1,0 +1,188 @@
+# Investigation Filter Configuration
+#
+# This file controls which investigations are allowed to run based on
+# cluster and alert attributes. It is loaded from the file path specified
+# in the CAD_INVESTIGATION_CONFIG_PATH environment variable.
+#
+# If the environment variable is not set, no filtering is applied and all
+# investigations run unconditionally.
+#
+# Structure:
+#   filters:             # Top-level list of per-investigation filters.
+#     - investigation:   # Investigation name (must match a registered name, see below).
+#       when:          # Root of a recursive filter tree. Optional (nil = always run).
+#
+# Filter Tree:
+#   A filter node is either a branch (AND/OR) or a leaf (comparison/sampling).
+#   Nodes are recursive — branches contain child nodes, which can themselves
+#   be branches or leaves, allowing arbitrary boolean composition.
+#
+#   Branch nodes (exactly one of `and` or `or`):
+#     and:               # List of child nodes — ALL must pass (AND logic).
+#     or:                # List of child nodes — at least ONE must pass (OR logic).
+#
+#   Leaf nodes (field comparison):
+#     field:             # FilterContext field name to evaluate (see valid fields below).
+#     operator:          # Comparison operator (see valid operators below).
+#     values:            # List of string values to compare against.
+#
+#   Sampling leaf (no field):
+#     operator: sample   # Probabilistic sampling — no field required.
+#     values: ["0.10"]   # Single value: probability between 0 and 1.
+#
+# Behavior:
+#   - Investigations WITHOUT a filter entry here always run (no restrictions).
+#   - A filter entry with no `when` tree (just the investigation name) always runs.
+#   - An empty filters list (filters: []) means no filtering — all investigations run.
+#   - A node cannot have both `and` and `or`, or be both a branch and a leaf.
+#   - The `aiassisted` investigation is special: it only runs when it has an entry
+#     in this config. Without an entry, AI investigation is disabled entirely.
+#
+# Valid investigation names:
+#   - aiassisted
+#   - Cluster Has Gone Missing (CHGM)
+#   - ClusterProvisioningDelay
+#   - clustermonitoringerrorbudgetburn
+#   - etcddatabasequotalowspace
+#   - insightsoperatordown
+#   - upgradeconfigsyncfailureover4hr
+#   - machinehealthcheckunterminatedshortcircuitsre
+#   - restartcontrolplane
+#   - cannotretrieveupdatessre
+#   - mustgather
+#
+# Valid input fields (from FilterContext):
+#
+#   OCM Cluster fields:
+#     ClusterID       - OCM internal cluster identifier
+#     ClusterName     - Human-readable cluster name
+#     OrganizationID  - OCM organization that owns the cluster's subscription
+#     OwnerID         - OCM account ID of the subscription creator
+#     OwnerEmail      - Email address of the subscription creator
+#     CloudProvider   - Cloud provider identifier (e.g. "aws", "gcp")
+#     HCP             - Whether the cluster is Hosted Control Plane ("true" or "false")
+#     ClusterState    - Current cluster state (e.g. "ready", "uninstalling")
+#
+#   PagerDuty fields:
+#     AlertName       - Alert name as matched by the investigation
+#     AlertTitle      - Full PagerDuty incident title
+#     ServiceName     - PagerDuty service summary (e.g. "prod-deadmanssnitch")
+#
+# Valid operators:
+#     in              - Field value must be one of the listed values
+#     notin           - Field value must NOT be one of the listed values
+#     matches         - Field value must match at least one regex pattern
+#     notmatches      - Field value must NOT match any of the regex patterns
+#     sample          - Probabilistic sampling (no field; value is rate 0.0-1.0)
+#
+# Notes:
+#   - The HCP field is a boolean internally but is compared as a string
+#     ("true" / "false") in filter values.
+#   - Each investigation name may only appear once in the filters list.
+#   - Not all FilterContext fields are guaranteed to be populated in every
+#     context. For example, PagerDuty fields are empty when running via the
+#     manual CLI. An empty field will not match any "in" value (except an
+#     explicit empty string) and will pass any "notin" check.
+
+# AI Agent Runtime Configuration
+#
+# This section configures the AgentCore runtime used by the `aiassisted`
+# investigation. All fields except the version metadata are required when
+# AI investigation is enabled.
+#
+# ai_agent:
+#   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
+#   user_id: "cad-agent"
+#   region: "us-east-1"
+#   timeout_seconds: 900              # Optional, defaults to 900 (15 min)
+#   version: "v1.0.0"                 # Optional, audit trail only
+#   ops_sop_version: "v2.0.0"         # Optional, audit trail only
+#   rosa_plugins_version: "v3.0.0"    # Optional, audit trail only
+# ai_agent:
+#   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
+#   user_id: "cad-agent"
+#   region: "us-east-1"
+#   timeout_seconds: 900
+
+filters:
+  # Enable AI investigation for specific clusters or organizations.
+  # The presence of this entry enables AI investigation; remove it to disable.
+  # Uses OR logic: the cluster OR the organization must match.
+  # - investigation: aiassisted
+  #   when:
+  #     or:
+  #       - field: ClusterID
+  #         operator: in
+  #         values: ["cluster-id-1", "cluster-id-2"]
+  #       - field: OrganizationID
+  #         operator: in
+  #         values: ["org-id-1", "org-id-2"]
+
+  # Only run the mustgather investigation on AWS clusters that are in "ready" state.
+  # Uses AND logic: both conditions must pass.
+  - investigation: mustgather
+    when:
+      and:
+        - field: CloudProvider
+          operator: in
+          values: ["aws"]
+        - field: ClusterState
+          operator: in
+          values: ["ready"]
+
+  # Only run the etcd investigation on non-HCP (classic) clusters.
+  - investigation: etcddatabasequotalowspace
+    when:
+      field: HCP
+      operator: in
+      values: ["false"]
+
+  # Exclude a specific organization from the CHGM investigation.
+  - investigation: "Cluster Has Gone Missing (CHGM)"
+    when:
+      and:
+        - field: ClusterID
+          operator: notin
+          values: ["2pr3e91qrgdje312keq8denphqs70tlr"]
+
+  # Conditional sampling: sample redhat.com emails at 10%, always run for others.
+  # Logic: NOT(@redhat.com) OR sample(0.10)
+  #   - Non-redhat emails: notmatches passes (true), short-circuits OR → runs
+  #   - Redhat emails: notmatches fails (false), falls through to sample(0.10) → 10% chance
+  # - investigation: clustermonitoringerrorbudgetburn
+  #   when:
+  #     or:
+  #       - field: OwnerEmail
+  #         operator: notmatches
+  #         values: [".*@redhat\\.com$"]
+  #       - operator: sample
+  #         values: ["0.10"]
+
+  # Combining AND and OR: AWS clusters where the cluster or org is allowlisted.
+  # - investigation: insightsoperatordown
+  #   when:
+  #     and:
+  #       - field: CloudProvider
+  #         operator: in
+  #         values: ["aws"]
+  #       - or:
+  #           - field: ClusterID
+  #             operator: in
+  #             values: ["abc123", "def456"]
+  #           - field: OrganizationID
+  #             operator: in
+  #             values: ["org-abc"]
+
+  # Exclude clusters that are being uninstalled.
+  # - investigation: restartcontrolplane
+  #   when:
+  #     field: ClusterState
+  #     operator: notin
+  #     values: ["uninstalling"]
+
+  # Match alert titles with a regex pattern.
+  # - investigation: cannotretrieveupdatessre
+  #   when:
+  #     field: AlertTitle
+  #     operator: matches
+  #     values: [".*CRITICAL.*", ".*WARNING.*"]

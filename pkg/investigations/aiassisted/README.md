@@ -7,23 +7,22 @@ AI-powered investigation using AWS Bedrock AgentCore for alerts without formal i
 The aiassisted investigation serves as a **fallback handler** for alerts that don't have explicit investigation implementations in CAD. When CAD receives an alert without a matching investigation handler, it can invoke an AWS Bedrock AgentCore agent to investigate the issue and provide remediation guidance.
 
 **Trigger**: Any alert without an explicit CAD investigation handler (fallback)
-**Clusters**: Allowlist-controlled (configured clusters and organizations only)
+**Clusters**: Allowlist-controlled via investigation filter config (configured clusters and organizations only)
 **Status**: Experimental (`IsExperimental() = true`)
 
 ## How It Works
 
 The investigation performs the following steps:
 
-1. **Validate configuration** - Parses `CAD_AI_AGENT_CONFIG` and checks if AI is enabled
-2. **Check allowlist** - Fetches organization ID from OCM and validates cluster/org is allowlisted
-3. **Load credentials** - Retrieves AWS credentials from environment variables
-4. **Fetch incident details** - Gets PagerDuty incident ID, title, and cluster information
-5. **Invoke AI agent** - Calls AWS Bedrock AgentCore runtime with investigation payload
-6. **Stream response** - Collects real-time streaming AI output
-7. **Post to PagerDuty** - Adds automation note indicating AI investigation completed
-8. **Escalate** - Always escalates to SRE for manual review
+1. **Validate configuration** - Checks that the AI runtime config (`ai_agent` section) is present in the global config
+2. **Load credentials** - Retrieves AWS credentials from environment variables
+3. **Fetch incident details** - Gets PagerDuty incident ID, title, and cluster information
+4. **Invoke AI agent** - Calls AWS Bedrock AgentCore runtime with investigation payload
+5. **Stream response** - Collects real-time streaming AI output
+6. **Post to PagerDuty** - Adds automation note indicating AI investigation completed
+7. **Escalate** - Always escalates to SRE for manual review
 
-On any failure (config parse error, allowlist check failure, credential issues, etc.), the investigation escalates with a warning note explaining the issue.
+On any failure (config missing, credential issues, etc.), the investigation escalates with a warning note explaining the issue.
 
 ## Architecture
 
@@ -37,9 +36,9 @@ pkg/investigations/aiassisted/
 └── testing/
     └── README.md           # Testing documentation
 
-pkg/aiconfig/
-├── config.go               # AI configuration parsing and validation
-└── config_test.go          # Unit tests for configuration
+pkg/config/
+├── config.go               # Global config including AIAgentConfig
+└── filter.go               # Investigation filter evaluation
 ```
 
 ### Key Components
@@ -47,58 +46,53 @@ pkg/aiconfig/
 #### aiassisted.go
 
 Main investigation implementation:
+- **Investigation** - Struct with `AIConfig *config.AIAgentConfig`, populated by the controller
 - **InvestigationPayload** - Struct representing data sent to AI agent (investigation ID, alert name, cluster ID)
 - **generateSessionID()** - Creates unique session ID for tracking each investigation in CloudWatch
 - **Run()** - Main investigation logic implementing the `investigation.Investigation` interface
 
 The investigation uses the ResourceBuilder pattern to construct notes via `rb.WithNotes().Build()` and marshals the payload directly to JSON for AgentCore.
 
-#### pkg/aiconfig/config.go
-
-AI configuration parsing and management:
-- **AIAgentConfig** - Struct holding all AI agent configuration (runtime ARN, region, allowlists, timeout, etc.)
-- **ParseAIAgentConfig()** - Parses `CAD_AI_AGENT_CONFIG` environment variable, returns disabled config if not set
-- **GetTimeout()** - Converts `TimeoutSeconds` to `time.Duration` for use with `context.WithTimeout()`
-- **IsAllowedForAI()** - Validates if a cluster ID or organization ID is in the allowlists
-
-The config package provides centralized configuration management used by both the interceptor and investigation.
-
 ### Configuration
 
 The AI investigation requires two types of configuration:
 
-#### 1. AI Agent Configuration (`CAD_AI_AGENT_CONFIG`)
+#### 1. Global Config (`CAD_INVESTIGATION_CONFIG_PATH`)
 
-JSON environment variable controlling AI behavior:
+The AI runtime config and filter rules are in the YAML config file. See `docs/investigation-filter-config.example.yaml` for the full example.
 
-```json
-{
-  "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/agent_name-abc123",
-  "user_id": "cad-service-account",
-  "region": "us-east-1",
-  "organizations": ["org-id-1", "org-id-2"],
-  "clusters": ["cluster-id-1", "cluster-id-2"],
-  "enabled": true,
-  "timeout_seconds": 900,
-  "version": "v1.0.0",
-  "ops_sop_version": "v2.3.4",
-  "rosa_plugins_version": "v1.2.3"
-}
+```yaml
+ai_agent:
+  runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/agent_name-abc123"
+  user_id: "cad-service-account"
+  region: "us-east-1"
+  timeout_seconds: 900
+  version: "v1.0.0"
+  ops_sop_version: "v2.3.4"
+  rosa_plugins_version: "v1.2.3"
+
+filters:
+  - investigation: aiassisted
+    filter:
+      or:
+        - field: ClusterID
+          operator: in
+          values: ["cluster-id-1", "cluster-id-2"]
+        - field: OrganizationID
+          operator: in
+          values: ["org-id-1", "org-id-2"]
 ```
 
-**Required fields:**
+**Required `ai_agent` fields:**
 - `runtime_arn` - AWS ARN of the AgentCore runtime to invoke
 - `user_id` - User identifier for audit trail
 - `region` - AWS region (e.g., `us-east-1`)
-- `enabled` - Global on/off switch
-- `organizations` - Allowlist of organization IDs
-- `clusters` - Allowlist of cluster IDs
 
-**Optional fields:**
+**Optional `ai_agent` fields:**
 - `timeout_seconds` - API call timeout (default: 900 / 15 minutes)
 - `version`, `ops_sop_version`, `rosa_plugins_version` - Version metadata for audit
 
-**Note:** At least one cluster ID or organization ID must be specified in the allowlists.
+**Filter entry:** The `aiassisted` entry in `filters` controls which clusters/organizations can use AI. Removing the entry disables AI entirely.
 
 #### 2. AWS Credentials
 
@@ -113,17 +107,17 @@ These credentials are **separate from customer AWS credentials** and are used ex
 
 ### Allowlist-Based Access Control
 
-The investigation implements two-level allowlist enforcement:
+Access control is handled by the investigation filter config at two levels:
 
 1. **Interceptor Level** (`interceptor/pkg/interceptor/pdinterceptor.go`)
-   - Checks allowlist before launching pipeline
+   - Evaluates the `aiassisted` filter before launching pipeline
    - Prevents unnecessary pipeline runs for non-allowed clusters
 
-2. **Investigation Level** (`pkg/investigations/aiassisted/aiassisted.go`)
-   - Validates cluster/org against allowlist during execution
-   - Escalates with warning if not allowed
+2. **Controller Level** (`pkg/controller/controller.go`)
+   - Evaluates the filter again with full OCM context during execution
+   - Escalates with a note if filtered out
 
-A cluster or organization must be in one of the allowlists for AI investigation to proceed.
+A cluster or organization must match the filter conditions for AI investigation to proceed.
 
 ### Context and Timeouts
 
@@ -199,14 +193,14 @@ For testing instructions, see [testing/README.md](./testing/README.md).
 Testing requires:
 - AWS Bedrock AgentCore agent deployed
 - AWS credentials with `bedrock-agent-runtime:InvokeAgent` permissions
-- Allowlisted test cluster or organization
+- Filter config with test cluster or organization in the aiassisted allowlist
 - Stage environment access (OCM, PagerDuty)
 
 ## Security Considerations
 
 1. **Credential Isolation** - Uses dedicated Red Hat AWS credentials, never customer credentials
-2. **Allowlist Enforcement** - Only explicitly configured clusters/organizations can use AI
-3. **Fail-Closed Design** - Config errors block pipeline, preventing unintended AI usage
+2. **Filter-Based Access Control** - Only explicitly configured clusters/organizations can use AI
+3. **Fail-Closed Design** - Config errors block pipeline, preventing unintended AI usage; absent config disables AI
 4. **Audit Trail** - Session IDs and version metadata tracked for every invocation
 5. **No Auto-Remediation** - Always escalates for human review, never takes automated action
 
@@ -223,5 +217,4 @@ Potential improvements when graduating from experimental:
 ## Related Documentation
 
 - [Testing Guide](./testing/README.md)
-- [AI Agent Configuration](../../../docs/AI_AGENT_CONFIG.md)
-- [AgentCore Integration Plan](../../../docs/AGENTCORE_CAD_IMPLEMENTATION_PLAN_FINAL.md)
+- [Investigation Filter Config Example](../../../docs/investigation-filter-config.example.yaml)

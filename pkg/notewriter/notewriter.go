@@ -23,7 +23,7 @@ type NoteWriter struct {
 // ===========================
 func New(investigationName string, logger *zap.SugaredLogger) *NoteWriter {
 	nw := &NoteWriter{investigationName, strings.Builder{}, logger}
-	nw.sb.WriteString(fmt.Sprintf("🤖 Automated %s pre-investigation 🤖\n", investigationName))
+	fmt.Fprintf(&nw.sb, "🤖 Automated %s pre-investigation 🤖\n", investigationName)
 	nw.sb.WriteString("===========================\n")
 	return nw
 }
@@ -38,7 +38,7 @@ func (n *NoteWriter) writeWithLog(format string, a ...any) {
 		n.logger.Infof(format, a...)
 	}
 
-	n.sb.WriteString(fmt.Sprintf(format, a...))
+	fmt.Fprintf(&n.sb, format, a...)
 }
 
 // AppendSuccess should be used when a CAD check succeeded, e.g.

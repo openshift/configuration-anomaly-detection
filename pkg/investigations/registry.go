@@ -3,6 +3,7 @@ package investigations
 import (
 	"strings"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cannotretrieveupdatessre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
@@ -19,6 +20,7 @@ import (
 
 // availableInvestigations holds all Investigation implementations.
 var availableInvestigations = []investigation.Investigation{
+	&aiassisted.Investigation{},
 	&chgm.Investigation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&cpd.Investigation{},

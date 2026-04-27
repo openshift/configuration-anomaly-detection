@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
+	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -40,6 +43,7 @@ type ManualConfig struct {
 	ClusterId         string
 	InvestigationName string
 	DryRun            bool
+	WithFiltering     bool // When true, evaluate investigation filters during manual runs
 	Params            map[string]string
 }
 
@@ -53,6 +57,7 @@ func (p *ManualConfig) Validate() error {
 type CommonConfig struct {
 	LogLevel   string
 	Identifier string
+	ConfigPath string // Optional path to investigation filter config file (overrides CAD_INVESTIGATION_CONFIG_PATH)
 }
 
 type Controller interface {
@@ -81,6 +86,7 @@ type Dependencies struct {
 	BackplaneProxy      string
 	AWSProxy            string
 	ExperimentalEnabled bool
+	FilterConfig        *config.Config
 }
 
 // Retry configuration for transient infrastructure errors
@@ -96,8 +102,10 @@ func (d *Dependencies) Cleanup() {
 	// But this provides a hook for future needs
 }
 
-// initializeDependencies loads environment variables and creates shared clients
-func initializeDependencies() (*Dependencies, error) {
+// initializeDependencies loads environment variables and creates shared clients.
+// configPath is an optional path to the investigation filter config file;
+// if empty, the CAD_INVESTIGATION_CONFIG_PATH env var is used instead.
+func initializeDependencies(configPath string) (*Dependencies, error) {
 	// Load k8s environment variables
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
@@ -138,6 +146,12 @@ func initializeDependencies() (*Dependencies, error) {
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
+	// Load investigation filter config (optional — nil means no filtering)
+	filterConfig, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load investigation filter config: %w", err)
+	}
+
 	// Create OCM client
 	ocmClient, err := ocm.New(ocmClientID, ocmClientSecret, ocmURL)
 	if err != nil {
@@ -162,13 +176,14 @@ func initializeDependencies() (*Dependencies, error) {
 		BackplaneProxy:      backplaneProxy,
 		AWSProxy:            awsProxy,
 		ExperimentalEnabled: experimentalEnabled,
+		FilterConfig:        filterConfig,
 	}, nil
 }
 
 // This is the main function to interact with the controller.
 // It will determine which type of controller to build based on the passed options and run the required investigation.
 func Run(opts ControllerOptions) error {
-	deps, err := initializeDependencies()
+	deps, err := initializeDependencies(opts.Common.ConfigPath)
 	if err != nil {
 		return err
 	}
@@ -248,7 +263,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
-func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, params map[string]string) error {
+func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, filterCtx *types.FilterContext, params map[string]string) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
 	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL, params)
@@ -302,6 +317,12 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	}
 	if result.StopInvestigations != nil {
 		logging.Errorf("Stopping investigations due to: %w", result.StopInvestigations)
+		return nil
+	}
+
+	// Evaluate the investigation filter if one is configured for this investigation.
+	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
+	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
 		return nil
 	}
 
@@ -496,5 +517,89 @@ func (c *investigationRunner) executeActions(
 	}
 
 	logging.Infof("Successfully executed all actions for %s", investigationName)
+	return nil
+}
+
+// evaluateFilter checks whether the investigation should be filtered out.
+// Returns true if the investigation was filtered (should not run), false otherwise.
+func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string, pdClient *pagerduty.SdkClient) bool {
+	if c.dependencies.FilterConfig == nil || filterCtx == nil {
+		return false
+	}
+
+	invFilter := c.dependencies.FilterConfig.GetFilter(invName)
+	if invFilter == nil {
+		return false
+	}
+	requiredKeys := invFilter.Keys()
+
+	if err := c.populateFilterContextFromOCM(filterCtx, builder, clusterID, requiredKeys); err != nil {
+		logging.Errorf("Could not fill context with required fields %s, skipping investigation: %v", invName, err)
+		return true
+	}
+
+	pass, reason, filterErr := invFilter.Evaluate(filterCtx)
+	switch {
+	case filterErr != nil:
+		logging.Errorf("Filter evaluation error for %s, skipping investigation: %v", invName, filterErr)
+	case pass:
+		logging.Infof("Filter passed for %s: %s", invName, reason)
+		return false
+	default:
+		logging.Infof("Investigation %s filtered out for cluster %s: %s", invName, clusterID, reason)
+	}
+
+	if pdClient != nil {
+		if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", invName)); escErr != nil {
+			logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
+		}
+	}
+
+	return true
+}
+
+// populateFilterContextFromOCM enriches the filter context with OCM cluster fields.
+// This is called after precheck so the cluster object is available from the builder cache.
+// Failures to populate individual fields are logged as warnings but do not fail the investigation.
+func (c *investigationRunner) populateFilterContextFromOCM(filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string, requiredKeys []string) error {
+	resources, err := builder.Build()
+	if err != nil {
+		logging.Warnf("Could not populate filter context: builder error: %v", err)
+		return err
+	}
+	if resources.Cluster == nil {
+		return fmt.Errorf("could not populate filter context: cluster not available from builder")
+	}
+
+	cluster := resources.Cluster
+
+	filterCtx.ClusterID = cluster.ID()
+	filterCtx.ClusterName = cluster.Name()
+	filterCtx.ClusterState = string(cluster.State())
+	filterCtx.HCP = cluster.Hypershift() != nil && cluster.Hypershift().Enabled()
+
+	if cp := cluster.CloudProvider(); cp != nil {
+		filterCtx.CloudProvider = cp.ID()
+	}
+
+	// Organization ID requires a subscription lookup — only call if a filter needs it.
+	if slices.Contains(requiredKeys, config.FieldOrganizationID) {
+		orgID, err := c.ocmClient.GetOrganizationID(cluster.ID())
+		if err != nil {
+			return fmt.Errorf("could not populate filter context organization ID: %w", err)
+		}
+		filterCtx.OrganizationID = orgID
+	}
+
+	// Owner ID and email require subscription + account lookups — only call if a filter needs them.
+	if slices.Contains(requiredKeys, config.FieldOwnerID) || slices.Contains(requiredKeys, config.FieldOwnerEmail) {
+		creator, err := ocm.GetCreatorFromCluster(c.ocmClient.GetConnection(), cluster)
+		if err != nil {
+			return fmt.Errorf("could not populate filter context owner fields: %w", err)
+		}
+		filterCtx.OwnerID = creator.ID()
+		filterCtx.OwnerEmail = creator.Email()
+	}
+
 	return nil
 }
