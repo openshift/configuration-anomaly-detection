@@ -61,6 +61,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 				WithServiceName(sl.ServiceName).
 				Build(),
 		)
+
+		result.Actions = append(
+			result.Actions,
+			executor.Escalate("Banned OCM user, please open a proactive ticket."),
+		)
+
 		return result, nil
 	case err != nil:
 		// Unhandled error; escalate to SRE
