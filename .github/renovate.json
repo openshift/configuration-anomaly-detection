@@ -35,8 +35,7 @@
       "description": "Go module major updates - require manual review",
       "matchManagers": ["gomod"],
       "matchUpdateTypes": ["major"],
-      "addLabels": ["area/dependency", "ok-to-test"],
-      "groupName": "golang-major-dependencies"
+      "addLabels": ["area/dependency", "ok-to-test"]
     }
   ]
 }
