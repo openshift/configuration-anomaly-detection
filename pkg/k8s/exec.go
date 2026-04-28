@@ -63,11 +63,11 @@ func ExecInPod(ctx context.Context, restConfig *rest.Config, pod *corev1.Pod, co
 		Stderr: errorCapture,
 		Tty:    false,
 	})
+	cmdOutput := capture.GetStdOut()
 	if err != nil {
-		return "", fmt.Errorf("failed to execute command in pod: %w", err)
+		return cmdOutput, fmt.Errorf("failed to execute command in pod: %w", err)
 	}
 
-	cmdOutput := capture.GetStdOut()
 	return cmdOutput, nil
 }
 

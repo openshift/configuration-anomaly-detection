@@ -26,6 +26,7 @@ var shortNameToInvestigation = map[string]string{
 	"restart-controlplane":     "restartcontrolplane",
 	"upgrade-config":           "upgradeconfigsyncfailureover4hr",
 	"describe-nodes":           "describenodes",
+	"cluster-health-check":     "clusterhealthcheck",
 }
 
 type ManualController struct {
