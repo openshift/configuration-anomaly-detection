@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const (
