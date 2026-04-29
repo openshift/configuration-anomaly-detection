@@ -593,7 +593,7 @@ func (c *investigationRunner) populateFilterContextFromOCM(filterCtx *types.Filt
 
 	// Owner ID and email require subscription + account lookups — only call if a filter needs them.
 	if slices.Contains(requiredKeys, config.FieldOwnerID) || slices.Contains(requiredKeys, config.FieldOwnerEmail) {
-		creator, err := ocm.GetCreatorFromCluster(c.ocmClient.GetConnection(), cluster)
+		creator, err := c.ocmClient.GetCreatorFromCluster(cluster)
 		if err != nil {
 			return fmt.Errorf("could not populate filter context owner fields: %w", err)
 		}

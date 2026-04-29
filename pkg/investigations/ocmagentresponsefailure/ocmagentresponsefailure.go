@@ -130,7 +130,7 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
 		)
 
-		// Uncomment once informing phase tests are concluded
+		// TODO: Uncomment once informing phase tests are concluded
 		/*
 			sl := ocm.NewOCMBannedUserServiceLog()
 			executor.NewServiceLogAction(sl.Severity, sl.Summary).
