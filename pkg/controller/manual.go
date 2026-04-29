@@ -25,6 +25,7 @@ var shortNameToInvestigation = map[string]string{
 	"insightsoperatordown":     "insightsoperatordown",
 	"machine-health-check":     "machinehealthcheckunterminatedshortcircuitsre",
 	"must-gather":              "mustgather",
+	"ocmagentresponsefailure":  "ocmagentresponsefailure",
 	"restart-controlplane":     "restartcontrolplane",
 	"upgrade-config":           "upgradeconfigsyncfailureover4hr",
 	"describe-nodes":           "describenodes",
