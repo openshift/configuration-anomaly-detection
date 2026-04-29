@@ -1,21 +1,39 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>openshift/boilerplate//.github/renovate.json"],
-  "enabledManagers": ["tekton", "gomod", "dockerfile"],
+  "extends": [
+    "github>openshift/boilerplate//.github/renovate.json"
+  ],
+  "enabledManagers": [
+    "tekton",
+    "gomod",
+    "dockerfile"
+  ],
   "dockerfile": {
     "pinDigests": true
   },
   "packageRules": [
     {
       "description": "Docker updates for /build directory - twice weekly (Monday and Thursday mornings)",
-      "matchManagers": ["dockerfile"],
-      "matchPaths": ["build/**"],
-      "schedule": ["before 4am on monday", "before 4am on thursday"],
-      "addLabels": ["area/dependency", "ok-to-test"]
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchFileNames": [
+        "build/**"
+      ],
+      "schedule": [
+        "before 4am on monday",
+        "before 4am on thursday"
+      ],
+      "addLabels": [
+        "area/dependency",
+        "ok-to-test"
+      ]
     },
     {
       "description": "Ignore boilerplate docker updates",
-      "matchManagers": ["dockerfile"],
+      "matchManagers": [
+        "dockerfile"
+      ],
       "matchPackageNames": [
         "redhat-services-prod/openshift/boilerplate",
         "openshift4/ose-operator-registry"
@@ -24,25 +42,54 @@
     },
     {
       "description": "Go module non-major updates - automerge",
-      "matchManagers": ["gomod"],
-      "schedule": ["before 4am"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "schedule": [
+        "before 4am"
+      ],
       "groupName": "golang-dependencies",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "automerge": true,
-      "addLabels": ["lgtm", "approved", "area/dependency", "ok-to-test"]
+      "addLabels": [
+        "lgtm",
+        "approved",
+        "area/dependency",
+        "ok-to-test"
+      ]
     },
     {
       "description": "Go module major updates - require manual review",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["!indirect"],
-      "addLabels": ["area/dependency", "ok-to-test"]
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchDepTypes": [
+        "!indirect"
+      ],
+      "addLabels": [
+        "area/dependency",
+        "ok-to-test"
+      ]
     },
     {
       "description": "Disable major updates for indirect Go dependencies - they update when their parent dependency updates",
-      "matchManagers": ["gomod"],
-      "matchUpdateTypes": ["major"],
-      "matchDepTypes": ["indirect"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
       "enabled": false
     }
   ]
