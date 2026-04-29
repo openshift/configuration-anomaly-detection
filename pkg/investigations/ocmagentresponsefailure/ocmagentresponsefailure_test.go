@@ -4,6 +4,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -138,9 +139,15 @@ func Test_checkUserBanStatus(t *testing.T) {
 				Notes:     notewriter.New(tt.name, logging.RawLogger),
 			}
 
-			if tt.experimentalEnabled {
-				os.Setenv("CAD_EXPERIMENTAL_ENABLED", "true")
+			if err := os.Setenv("CAD_EXPERIMENTAL_ENABLED", strconv.FormatBool(tt.experimentalEnabled)); err != nil {
+				t.Fatalf("set CAD_EXPERIMENTAL_ENABLED: %v", err)
 			}
+
+			t.Cleanup(func() {
+				if err := os.Unsetenv("CAD_EXPERIMENTAL_ENABLED"); err != nil {
+					t.Errorf("unset CAD_EXPERIMENTAL_ENABLED: %v", err)
+				}
+			})
 
 			got, err := checkUserBanStatus(resources)
 
