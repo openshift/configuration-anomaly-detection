@@ -4,6 +4,8 @@ package ocmagentresponsefailure
 
 import (
 	"errors"
+	"os"
+	"strconv"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -104,6 +106,7 @@ func (i *Investigation) AlertTitle() string {
 // checkUserBanStatus checks if the cluster owner is banned.
 // It returns a set of actions, and a boolean indicating whether the investigation should halt
 func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
+	experimentalEnabled, _ := strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
 	userBannedErr := ocm.UserBannedError{}
 	err := r.OcmClient.CheckIfUserBanned(r.Cluster)
 	actions := []types.Action{}
@@ -130,14 +133,17 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), r.Name)...,
 		)
 
-		// TODO: Uncomment once informing phase tests are concluded
-		/*
+		// Remove this check once informing phase tests are concluded
+		if experimentalEnabled {
 			sl := ocm.NewOCMBannedUserServiceLog()
-			executor.NewServiceLogAction(sl.Severity, sl.Summary).
-				WithDescription(sl.Description).
-				WithServiceName(sl.ServiceName).
-				Build(),
-		*/
+			actions = append(
+				actions,
+				executor.NewServiceLogAction(sl.Severity, sl.Summary).
+					WithDescription(sl.Description).
+					WithServiceName(sl.ServiceName).
+					Build(),
+			)
+		}
 
 		actions = append(
 			actions,

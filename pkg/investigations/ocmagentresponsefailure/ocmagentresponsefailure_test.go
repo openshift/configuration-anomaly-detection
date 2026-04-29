@@ -1,6 +1,7 @@
 package ocmagentresponsefailure
 
 import (
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -29,11 +30,12 @@ type testMocks struct {
 
 func Test_checkUserBanStatus(t *testing.T) {
 	tests := []struct {
-		name       string
-		want       investigation.InvestigationResult
-		wantErr    bool
-		cluster    func() *cmv1.Cluster
-		setupMocks func(*testMocks)
+		name                string
+		want                investigation.InvestigationResult
+		wantErr             bool
+		cluster             func() *cmv1.Cluster
+		setupMocks          func(*testMocks)
+		experimentalEnabled bool
 	}{
 		{
 			// this will eventually send out a Service Log
@@ -53,6 +55,26 @@ func Test_checkUserBanStatus(t *testing.T) {
 						Description: "Some reason",
 					})
 			},
+		},
+		{
+			name: "banned user experimental mode",
+			want: investigation.InvestigationResult{
+				Actions: []types.Action{
+					&executor.BackplaneReportAction{},
+					&executor.PagerDutyNoteAction{},
+					&executor.ServiceLogAction{},
+					&executor.EscalateIncidentAction{},
+				},
+			},
+			setupMocks: func(m *testMocks) {
+				m.ocmClient.EXPECT().
+					CheckIfUserBanned(m.cluster).
+					Return(ocm.UserBannedError{
+						Code:        "some_reason",
+						Description: "Some reason",
+					})
+			},
+			experimentalEnabled: true,
 		},
 		{
 			name: "export control compliance",
@@ -114,6 +136,10 @@ func Test_checkUserBanStatus(t *testing.T) {
 				PdClient:  m.pdClient,
 				AwsClient: m.awsClient,
 				Notes:     notewriter.New(tt.name, logging.RawLogger),
+			}
+
+			if tt.experimentalEnabled {
+				os.Setenv("CAD_EXPERIMENTAL_ENABLED", "true")
 			}
 
 			got, err := checkUserBanStatus(resources)
