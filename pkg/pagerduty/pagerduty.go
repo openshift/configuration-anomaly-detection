@@ -527,6 +527,12 @@ func (c *SdkClient) EscalateIncident() error {
 			logging.Infof("Skipped escalating incident as it is already resolved.")
 			return nil
 		}
+		// Error below can be encountered if the Escalation Policy is misconfigured with only 1 layer
+		// CAD requires 2 layers in its deployment scenario
+		if strings.Contains(err.Error(), "the escalation policy or incident id are invalid") {
+			logging.Warnf("Escalation policy invalid - probably nowhere higher to escalate, skipping escalation")
+			return nil
+		}
 		return fmt.Errorf("could not escalate the incident: %w", err)
 	}
 	return nil
