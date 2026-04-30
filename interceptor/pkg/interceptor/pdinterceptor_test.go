@@ -128,6 +128,89 @@ func TestReassignToOrgEscalationPolicy(t *testing.T) {
 	}
 }
 
+func TestClusterExists(t *testing.T) {
+	tests := []struct {
+		name           string
+		clusterID      string
+		clusterIDErr   error
+		clusterInfoErr error
+		expectContinue *bool                // nil means we expect no response (success)
+		expectErrorKey *ErrorCodeWithReason // nil means no error stat expected
+	}{
+		{
+			name:           "scenario 1: RetrieveClusterID fails — short-circuit Continue:false",
+			clusterIDErr:   errors.New("no cluster ID found"),
+			expectContinue: boolPtr(false),
+			expectErrorKey: &ErrorCodeWithReason{404, "no cluster id in pagerduty"},
+		},
+		{
+			name:           "scenario 2: RetrieveClusterID ok but GetClusterInfo fails — short-circuit Continue:false",
+			clusterID:      "cluster-abc",
+			clusterInfoErr: errors.New("cluster not found in OCM"),
+			expectContinue: boolPtr(false),
+			expectErrorKey: &ErrorCodeWithReason{404, "no cluster in OCM"},
+		},
+		{
+			name:           "scenario 3: both succeed — nil response, clusterID returned",
+			clusterID:      "cluster-abc",
+			expectContinue: nil,
+			expectErrorKey: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockPD := pdmock.NewMockClient(ctrl)
+			mockOCM := ocmmock.NewMockClient(ctrl)
+			stats := CreateInterceptorStats()
+
+			// Setup expectations
+			if tt.clusterIDErr != nil {
+				mockPD.EXPECT().RetrieveClusterID().Return("", tt.clusterIDErr).Times(1)
+			} else {
+				mockPD.EXPECT().RetrieveClusterID().Return(tt.clusterID, nil).Times(1)
+				if tt.clusterInfoErr != nil {
+					mockOCM.EXPECT().GetClusterInfo(tt.clusterID).Return(nil, tt.clusterInfoErr).Times(1)
+				} else {
+					mockOCM.EXPECT().GetClusterInfo(tt.clusterID).Return(nil, nil).Times(1)
+				}
+			}
+
+			// Execute
+			resp := clusterExists(mockPD, mockOCM, stats)
+
+			// Assert response
+			if tt.expectContinue == nil {
+				if resp != nil {
+					t.Errorf("validateCluster() resp = %+v, want nil", resp)
+				}
+			} else {
+				if resp == nil {
+					t.Fatal("validateCluster() resp = nil, want non-nil")
+				}
+				if resp.Continue != *tt.expectContinue {
+					t.Errorf("validateCluster() resp.Continue = %v, want %v", resp.Continue, *tt.expectContinue)
+				}
+			}
+
+			// Assert error stats
+			if tt.expectErrorKey != nil {
+				count, ok := stats.CodeWithReasonToErrorsCount[*tt.expectErrorKey]
+				if !ok || count != 1 {
+					t.Errorf("expected error stat %+v with count 1, got count %d (present=%v)", *tt.expectErrorKey, count, ok)
+				}
+			} else if len(stats.CodeWithReasonToErrorsCount) != 0 {
+				t.Errorf("expected no error stats, got %v", stats.CodeWithReasonToErrorsCount)
+			}
+		})
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && stringContains(s, substr)
 }
