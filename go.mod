@@ -18,7 +18,7 @@ require (
 	github.com/openshift/backplane-api v0.0.0-20260205054653-459856398d59
 	github.com/openshift/backplane-cli v0.7.0
 	github.com/openshift/hive/apis v0.0.0-20250725035156-a29a23859060
-	github.com/openshift/osd-network-verifier v1.6.1
+	github.com/openshift/osd-network-verifier v1.7.0
 	github.com/openshift/osde2e-common v0.0.0-20250804220455-7806b74ec777
 	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.23.2
