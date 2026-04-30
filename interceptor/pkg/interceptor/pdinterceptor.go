@@ -193,6 +193,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 	// If no formal investigation found, check if AI investigation should run
 	if investigation == nil {
+		logging.Warnf("Checking pagerduty incident: %s", pdClient.GetIncidentRef())
 		resp := clusterExists(pdClient, ocmClient, pdi.stats)
 		if resp != nil {
 			return resp
