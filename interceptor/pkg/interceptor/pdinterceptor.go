@@ -194,7 +194,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	// If no formal investigation found, check if AI investigation should run
 	if investigation == nil {
 		logging.Warnf("Checking pagerduty incident: %s", pdClient.GetIncidentRef())
-		resp := clusterExists(pdClient, ocmClient, pdi.stats)
+		resp := clusterExists(pdClient, ocmClient)
 		if resp != nil {
 			return resp
 		}
@@ -221,18 +221,16 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 // clusterExists retrieves the cluster ID from PagerDuty and verifies it
 // exists in OCM. It returns the cluster ID on success, or a short-circuit
 // InterceptorResponse (Continue: false) on failure.
-func clusterExists(pdClient pagerduty.Client, ocmClient ocm.Client, stats *InterceptorStats) *triggersv1.InterceptorResponse {
+func clusterExists(pdClient pagerduty.Client, ocmClient ocm.Client) *triggersv1.InterceptorResponse {
 	clusterID, err := pdClient.RetrieveClusterID()
 	if err != nil {
 		logging.Warnf("Could not retrieve cluster id from PD incident")
-		stats.CodeWithReasonToErrorsCount[ErrorCodeWithReason{404, "no cluster id in pagerduty"}]++
 		return &triggersv1.InterceptorResponse{Continue: false}
 	}
 
 	_, err = ocmClient.GetClusterInfo(clusterID)
 	if err != nil {
 		logging.Warnf("Could not retrieve cluster from OCM: %s", clusterID)
-		stats.CodeWithReasonToErrorsCount[ErrorCodeWithReason{404, "no cluster in OCM"}]++
 		return &triggersv1.InterceptorResponse{Continue: false}
 	}
 

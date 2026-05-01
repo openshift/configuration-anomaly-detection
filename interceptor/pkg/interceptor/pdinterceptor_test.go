@@ -165,7 +165,6 @@ func TestClusterExists(t *testing.T) {
 
 			mockPD := pdmock.NewMockClient(ctrl)
 			mockOCM := ocmmock.NewMockClient(ctrl)
-			stats := CreateInterceptorStats()
 
 			// Setup expectations
 			if tt.clusterIDErr != nil {
@@ -180,7 +179,7 @@ func TestClusterExists(t *testing.T) {
 			}
 
 			// Execute
-			resp := clusterExists(mockPD, mockOCM, stats)
+			resp := clusterExists(mockPD, mockOCM)
 
 			// Assert response
 			if tt.expectContinue == nil {
@@ -194,16 +193,6 @@ func TestClusterExists(t *testing.T) {
 				if resp.Continue != *tt.expectContinue {
 					t.Errorf("validateCluster() resp.Continue = %v, want %v", resp.Continue, *tt.expectContinue)
 				}
-			}
-
-			// Assert error stats
-			if tt.expectErrorKey != nil {
-				count, ok := stats.CodeWithReasonToErrorsCount[*tt.expectErrorKey]
-				if !ok || count != 1 {
-					t.Errorf("expected error stat %+v with count 1, got count %d (present=%v)", *tt.expectErrorKey, count, ok)
-				}
-			} else if len(stats.CodeWithReasonToErrorsCount) != 0 {
-				t.Errorf("expected no error stats, got %v", stats.CodeWithReasonToErrorsCount)
 			}
 		})
 	}
