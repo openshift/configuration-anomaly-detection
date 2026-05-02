@@ -1,0 +1,45 @@
+name: clusterhealthcheck
+rbac:
+  roles:
+    - namespace: "openshift-etcd"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['pods/exec']
+          verbs: ['create']
+    - namespace: "openshift-monitoring"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['pods/exec']
+          verbs: ['create']
+  clusterRoleRules:
+    - apiGroups: ['']
+      resources: ['namespaces']
+      verbs: ['get', 'list', 'watch']
+    - apiGroups: ['']
+      resources: ['nodes', 'events']
+      verbs: ['get', 'list']
+    - apiGroups: ['']
+      resources: ['pods', 'pods/log']
+      verbs: ['get', 'list', 'watch']
+    - apiGroups: ['config.openshift.io']
+      resources: ['clusteroperators', 'clusterversions']
+      verbs: ['get', 'list']
+    - apiGroups: ['machineconfiguration.openshift.io']
+      resources: ['machineconfigpools']
+      verbs: ['get', 'list']
+    - apiGroups: ['certificates.k8s.io']
+      resources: ['certificatesigningrequests']
+      verbs: ['get', 'list']
+    - apiGroups: ['policy']
+      resources: ['poddisruptionbudgets']
+      verbs: ['get', 'list']
+    - apiGroups: ['metrics.k8s.io']
+      resources: ['nodes']
+      verbs: ['get', 'list']
+customerDataAccess: true

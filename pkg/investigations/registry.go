@@ -6,6 +6,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cannotretrieveupdatessre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clusterhealthcheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
@@ -34,6 +35,7 @@ var availableInvestigations = []investigation.Investigation{
 	&cannotretrieveupdatessre.Investigation{},
 	&mustgather.Investigation{},
 	&describenodes.Investigation{},
+	&clusterhealthcheck.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.
