@@ -263,6 +263,14 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
+// formatBool converts boolean to string for metrics labels
+func formatBool(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
 func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, filterCtx *types.FilterContext, params map[string]string) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
@@ -299,6 +307,8 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			}
 		}
 		if err != nil {
+			// Record error completion for manual investigations before handling failure
+			c.recordManualCompletion(inv.Name(), pdClient, "error")
 			handleCADFailure(err, builder, pdClient)
 		}
 	}()
@@ -313,16 +323,19 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			return fmt.Errorf("failed to execute precheck actions: %w", err)
 		}
 		// We stop if the precheck returns any action this mean we do not want to run anything else.
+		c.recordManualCompletion(inv.Name(), pdClient, "precheck_stopped")
 		return nil
 	}
 	if result.StopInvestigations != nil {
 		logging.Errorf("Stopping investigations due to: %w", result.StopInvestigations)
+		c.recordManualCompletion(inv.Name(), pdClient, "stop_investigations")
 		return nil
 	}
 
 	// Evaluate the investigation filter if one is configured for this investigation.
 	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
 	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
+		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
 		return nil
 	}
 
@@ -344,6 +357,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		// be able to proceed. To handle this case we will *only* return when CCAM found something and it's CGHM - handling
 		// non-AWS access is up to following investigations.
 		if inv.AlertTitle() == chgmInv.AlertTitle() {
+			c.recordManualCompletion(inv.Name(), pdClient, "ccam_stopped")
 			return nil
 		}
 	}
@@ -364,7 +378,13 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	result = investigation.InvestigationResult{
 		Actions: []types.Action{&a},
 	}
-	return c.executeActions(builder, &result, inv.Name())
+	if err := c.executeActions(builder, &result, inv.Name()); err != nil {
+		return fmt.Errorf("failed to execute PagerDuty title update: %w", err)
+	}
+
+	// Record successful completion for manual investigations
+	c.recordManualCompletion(inv.Name(), pdClient, "success")
+	return nil
 }
 
 // runInvestigationWithRetry executes an investigation with retry logic for transient errors.
@@ -467,6 +487,16 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 	}
 	if result.EtcdDatabaseAnalysis.Performed {
 		metrics.Inc(metrics.EtcdDatabaseAnalysis, append([]string{investigationName}, result.EtcdDatabaseAnalysis.Labels...)...)
+	}
+}
+
+// recordManualCompletion records manual investigation completion metric
+// Only tracks if this is a manual investigation (pdClient is nil)
+func (c *investigationRunner) recordManualCompletion(invName string, pdClient *pagerduty.SdkClient, status string) {
+	if pdClient == nil {
+		// This is a manual investigation
+		dryRun := formatBool(c.dryRun)
+		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
 	}
 }
 

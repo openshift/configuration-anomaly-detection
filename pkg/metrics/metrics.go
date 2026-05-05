@@ -22,6 +22,8 @@ func Push() {
 		promPusher.Collector(MustGatherPerformed)
 		promPusher.Collector(EtcdDatabaseAnalysis)
 		promPusher.Collector(EtcdSnapshotCleanup)
+		promPusher.Collector(ManualInvestigationStarted)
+		promPusher.Collector(ManualInvestigationCompleted)
 		err := promPusher.Add()
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
@@ -46,6 +48,8 @@ const (
 	alertTypeLabel       = "alert_type"
 	lsSummaryLabel       = "ls_summary"
 	mustgatherLabel      = "product"
+	dryRunLabel          = "dry_run"
+	statusLabel          = "status"
 )
 
 var (
@@ -97,4 +101,18 @@ var (
 			Name: "etcd_snapshot_cleanup_total",
 			Help: "counts etcd snapshot cleanup attempts by alert type and status",
 		}, []string{alertTypeLabel, "status"})
+	// ManualInvestigationStarted tracks when manual investigations are initiated
+	ManualInvestigationStarted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "manual_started_total",
+			Help: "counts manually triggered investigations by investigation name and dry-run mode",
+		}, []string{alertTypeLabel, dryRunLabel})
+	// ManualInvestigationCompleted tracks manual investigation outcomes
+	ManualInvestigationCompleted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "manual_completed_total",
+			Help: "counts manually triggered investigation completions by name, status, and dry-run mode",
+		}, []string{alertTypeLabel, statusLabel, dryRunLabel})
 )
