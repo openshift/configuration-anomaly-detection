@@ -21,20 +21,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
-type InvestigationStep struct {
-	Performed bool
-	Labels    []string
-}
-
 type InvestigationResult struct {
-	// NEW: Actions to execute via reporter (modern approach)
 	Actions []types.Action
-
-	// EXISTING: Legacy fields (deprecated, maintained for backwards compatibility)
-	LimitedSupportSet    InvestigationStep
-	ServiceLogPrepared   InvestigationStep
-	MustGatherPerformed  InvestigationStep
-	EtcdDatabaseAnalysis InvestigationStep
 
 	// If multiple investigations might be run this can indicate a fatal error that makes running additional investigations useless.
 	// If nil, investigations should continue. If not nil, should contain a meaningful error message explaining why investigations must stop.
@@ -72,9 +60,6 @@ type Investigation interface {
 	// Please note that when adding an investigation the name and the directory currently need to be the same,
 	// so that backplane-api can fetch the metadata.yaml
 	Name() string
-	AlertTitle() string
-	Description() string
-	IsExperimental() bool
 }
 
 // Resources holds all resources/tools required for alert investigations

@@ -156,18 +156,6 @@ func (i *Investigation) Name() string {
 	return "Cluster Has Gone Missing (CHGM)"
 }
 
-func (i *Investigation) AlertTitle() string {
-	return "has gone missing"
-}
-
-func (i *Investigation) Description() string {
-	return "Detects reason for clusters that have gone missing"
-}
-
-func (i *Investigation) IsExperimental() bool {
-	return false
-}
-
 // hasRecentlyResumed checks if the cluster was woken up from
 // hibernation within the last 2h. In that case, the internal
 // certificates of the kubelets could have expired and CSRs need to be approved

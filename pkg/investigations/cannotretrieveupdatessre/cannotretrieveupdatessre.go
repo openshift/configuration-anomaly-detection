@@ -7,6 +7,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 
@@ -31,7 +32,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	} else {
 		switch verifierResult {
 		case networkverifier.Failure:
-			result.ServiceLogPrepared = investigation.InvestigationStep{Performed: true, Labels: nil}
+			metrics.Inc(metrics.ServicelogPrepared, c.Name())
 			notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post --cluster-id %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 		case networkverifier.Success:
 			notes.AppendSuccess("Network verifier passed")
@@ -96,16 +97,4 @@ func checkCondition(condition configv1.ClusterOperatorStatusCondition) (string, 
 
 func (i *Investigation) Name() string {
 	return "cannotretrieveupdatessre"
-}
-
-func (i *Investigation) AlertTitle() string {
-	return "CannotRetrieveUpdatesSRE"
-}
-
-func (i *Investigation) Description() string {
-	return fmt.Sprintf("Investigates '%s' alerts by running network verifier and checking ClusterVersion", i.Name())
-}
-
-func (i *Investigation) IsExperimental() bool {
-	return true
 }

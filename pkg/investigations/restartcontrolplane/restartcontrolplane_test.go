@@ -47,21 +47,6 @@ func TestInvestigation_Name(t *testing.T) {
 	assert.Equal(t, "restartcontrolplane", inv.Name())
 }
 
-func TestInvestigation_AlertTitle(t *testing.T) {
-	inv := &Investigation{}
-	assert.Equal(t, "RestartControlPlane", inv.AlertTitle())
-}
-
-func TestInvestigation_Description(t *testing.T) {
-	inv := &Investigation{}
-	assert.Equal(t, "restarts the control plane of an HCP cluster", inv.Description())
-}
-
-func TestInvestigation_IsExperimental(t *testing.T) {
-	inv := &Investigation{}
-	assert.False(t, inv.IsExperimental())
-}
-
 func TestInvestigation_Run_BuildError(t *testing.T) {
 	buildErr := errors.New("build failed")
 	rb := &investigation.ResourceBuilderMock{
