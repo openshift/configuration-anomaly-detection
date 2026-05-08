@@ -60,10 +60,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to determine if cluster is HCP: %v", err)
 		logging.Warnf("failed to check if cluster is HCP: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "hcp_check_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "hcp_check_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to determine cluster type - manual investigation required"),
@@ -97,10 +94,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 		r.Notes.AppendWarning("Failed to take etcd snapshot: %v", err)
 		logging.Errorf("failed to take etcd snapshot: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "snapshot_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "snapshot_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to take etcd snapshot - manual investigation required"),
@@ -129,10 +123,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
 		logging.Errorf("failed to create analysis job: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "analysis_job_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "analysis_job_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to create analysis job - manual investigation required"),
@@ -149,10 +140,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
 		logging.Errorf("analysis job failed: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "analysis_job_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "analysis_job_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Analysis job failed or timed out - manual investigation required"),
@@ -169,10 +157,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 		r.Notes.AppendWarning("Failed to retrieve analysis results: %v", err)
 		logging.Errorf("failed to get job logs: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "parse_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "parse_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to retrieve analysis results - manual investigation required"),
@@ -184,10 +169,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	if err != nil {
 		r.Notes.AppendWarning("Failed to parse analysis results: %v", err)
 		logging.Errorf("failed to parse analysis output: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "parse_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "parse_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to parse analysis results - manual investigation required"),
@@ -206,10 +188,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		Data:      formattedResults,
 	}
 
-	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-		Performed: true,
-		Labels:    []string{"success", "completed"},
-	}
+	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
 	// Add the backplane report action and note/escalation to the result
 	// The report action will append to notes when executed, then note sends them to PagerDuty
@@ -247,10 +226,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		}
 		r.Notes.AppendWarning("Failed to get etcd pod: %v", err)
 		logging.Errorf("failed to get etcd pod: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "etcd_not_found"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "etcd_not_found")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to get etcd pod - manual investigation required"),
@@ -262,10 +238,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	if err != nil {
 		r.Notes.AppendWarning("Etcdctl container image not found")
 		logging.Errorf("Etcdctl container image not found")
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "etcdctl_container_image_not_found"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "etcdctl_container_image_not_found")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to find etcdctl container image - manual investigation required"),
@@ -284,10 +257,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	if err != nil {
 		r.Notes.AppendWarning("Failed to build analysis job: %v", err)
 		logging.Errorf("Failed to build analysis job: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "analysis_job_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "analysis_job_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to build analysis job - manual investigation required"),
@@ -302,10 +272,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		}
 		r.Notes.AppendWarning("Failed to create analysis job: %v", err)
 		logging.Errorf("failed to create analysis job: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "analysis_job_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "analysis_job_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Failed to create analysis job - manual investigation required"),
@@ -334,10 +301,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		}
 		r.Notes.AppendWarning("Analysis job failed or timed out: %v", err)
 		logging.Errorf("analysis job failed: %v", err)
-		result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-			Performed: true,
-			Labels:    []string{"failure", "analysis_job_failed"},
-		}
+		metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "failure", "analysis_job_failed")
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 			executor.Escalate("Analysis job failed or timed out - manual investigation required"),
@@ -345,10 +309,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 		return result, nil
 	}
 
-	result.EtcdDatabaseAnalysis = investigation.InvestigationStep{
-		Performed: true,
-		Labels:    []string{"success", "completed"},
-	}
+	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
@@ -359,18 +320,6 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
-}
-
-func (i *Investigation) AlertTitle() string {
-	return "etcdDatabaseQuotaLowSpace"
-}
-
-func (i *Investigation) Description() string {
-	return "Takes etcd snapshots and performs database analysis for etcd quota issues"
-}
-
-func (i *Investigation) IsExperimental() bool {
-	return false
 }
 
 // isHCPCluster checks if the cluster is a Hosted Control Plane (HCP) cluster

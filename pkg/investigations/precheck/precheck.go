@@ -23,6 +23,7 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		clusterNotFound := &investigation.ClusterNotFoundError{}
 		if errors.As(err, clusterNotFound) {
 			logging.Warnf("Cluster not found. Escalating and exiting: %w", clusterNotFound)
+			result.StopInvestigations = errors.New("cluster not found")
 			result.Actions = []types.Action{
 				executor.Escalate("CAD: Cluster not found."),
 			}
@@ -73,4 +74,8 @@ func (c *ClusterStatePrecheck) Run(rb investigation.ResourceBuilder) (investigat
 		return result, nil
 	}
 	return result, nil
+}
+
+func (c *ClusterStatePrecheck) Name() string {
+	return "precheck"
 }

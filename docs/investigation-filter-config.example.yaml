@@ -1,16 +1,22 @@
-# Investigation Filter Configuration
+# Investigation Chain Configuration
 #
-# This file controls which investigations are allowed to run based on
-# cluster and alert attributes. It is loaded from the file path specified
-# in the CAD_INVESTIGATION_CONFIG_PATH environment variable.
+# This file defines which investigations run for each alert, and
+# optionally filters them based on cluster and alert attributes. It is
+# loaded from the file path specified in the CAD_INVESTIGATION_CONFIG_PATH
+# environment variable.
 #
-# If the environment variable is not set, no filtering is applied and all
-# investigations run unconditionally.
+# If the environment variable is not set, no config is loaded and alerts
+# without a matching chain are escalated to SRE.
 #
 # Structure:
-#   filters:             # Top-level list of per-investigation filters.
-#     - investigation:   # Investigation name (must match a registered name, see below).
-#       when:          # Root of a recursive filter tree. Optional (nil = always run).
+#   investigations:          # List of alert → chain mappings.
+#     - alert_title:         # Substring matched against the PagerDuty incident title.
+#       experimental: false  # Optional. If true, chain only matches when CAD_EXPERIMENTAL_ENABLED=true.
+#       when:                # Optional chain-level filter. If it blocks, the entire chain is skipped
+#                            # and the alert is escalated to PagerDuty.
+#       chain:               # Ordered list of investigations to run.
+#                            # Each entry is either a bare string (investigation name) or an object
+#                            # with `name` and optional `when` filter.
 #
 # Filter Tree:
 #   A filter node is either a branch (AND/OR) or a leaf (comparison/sampling).
@@ -30,15 +36,15 @@
 #     operator: sample   # Probabilistic sampling — no field required.
 #     values: ["0.10"]   # Single value: probability between 0 and 1.
 #
-# Behavior:
-#   - Investigations WITHOUT a filter entry here always run (no restrictions).
-#   - A filter entry with no `when` tree (just the investigation name) always runs.
-#   - An empty filters list (filters: []) means no filtering — all investigations run.
-#   - A node cannot have both `and` and `or`, or be both a branch and a leaf.
-#   - The `aiassisted` investigation is special: it only runs when it has an entry
-#     in this config. Without an entry, AI investigation is disabled entirely.
+# Filtering levels:
+#   - Chain-level `when`: evaluated before any chain entry runs. If blocked, the
+#     entire chain is skipped and the alert is escalated to PagerDuty with a note.
+#   - Entry-level `when`: evaluated per step. If blocked, that step is skipped and
+#     the chain continues with the next entry.
 #
 # Valid investigation names:
+#   - precheck
+#   - ccam
 #   - aiassisted
 #   - Cluster Has Gone Missing (CHGM)
 #   - ClusterProvisioningDelay
@@ -50,6 +56,8 @@
 #   - restartcontrolplane
 #   - cannotretrieveupdatessre
 #   - mustgather
+#   - ocmagentresponsefailure
+#   - describenodes
 #
 # Valid input fields (from FilterContext):
 #
@@ -78,7 +86,7 @@
 # Notes:
 #   - The HCP field is a boolean internally but is compared as a string
 #     ("true" / "false") in filter values.
-#   - Each investigation name may only appear once in the filters list.
+#   - Each alert_title must be unique across all investigation entries.
 #   - Not all FilterContext fields are guaranteed to be populated in every
 #     context. For example, PagerDuty fields are empty when running via the
 #     manual CLI. An empty field will not match any "in" value (except an
@@ -88,7 +96,21 @@
 #
 # This section configures the AgentCore runtime used by the `aiassisted`
 # investigation. All fields except the version metadata are required when
-# AI investigation is enabled.
+# AI investigation is enabled (i.e., when any chain references `aiassisted`).
+#
+# AI investigation guards:
+#   1. The `ai_agent` section must be present — without it, any chain
+#      referencing `aiassisted` is rejected at config validation time.
+#   2. Every `aiassisted` chain entry must have a `when` filter — either
+#      on the chain itself or on the entry. This prevents uncontrolled AI
+#      execution. Configs without a filter are rejected at validation time.
+#   3. The `CAD_EXPERIMENTAL_ENABLED=true` env var must be set for the
+#      AI fallback path (unmatched alerts) to trigger. Chains explicitly
+#      configured for specific alerts do not require this env var unless
+#      they are marked `experimental: true`.
+#   4. At runtime, the `when` filter is evaluated against real cluster data
+#      (org ID, cluster ID, cloud provider, etc.) to decide whether AI
+#      actually runs for a given cluster.
 #
 # ai_agent:
 #   runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/rosasreai_stage-abc123"
@@ -100,85 +122,141 @@
 #   ops_sop_version: "v2.0.0"         # Optional, audit trail only
 #   rosa_plugins_version: "v3.0.0"    # Optional, audit trail only
 
-filters:
-  # Enable AI investigation for specific clusters or organizations.
-  # The presence of this entry enables AI investigation; remove it to disable.
-  # Uses OR logic: the cluster OR the organization must match.
-  # - investigation: aiassisted
-  #   when:
-  #     or:
-  #       - field: ClusterID
-  #         operator: in
-  #         values: ["cluster-id-1", "cluster-id-2"]
-  #       - field: OrganizationID
-  #         operator: in
-  #         values: ["org-id-1", "org-id-2"]
-
-  # Only run the mustgather investigation on AWS clusters that are in "ready" state.
-  # Uses AND logic: both conditions must pass.
-  - investigation: mustgather
+investigations:
+  # Cluster Has Gone Missing (CHGM)
+  # Exclude a specific cluster from the investigation chain.
+  - alert_title: "has gone missing"
     when:
-      and:
-        - field: CloudProvider
-          operator: in
-          values: ["aws"]
-        - field: ClusterState
-          operator: in
-          values: ["ready"]
+      field: ClusterID
+      operator: notin
+      values: ["2pr3e91qrgdje312keq8denphqs70tlr"]
+    chain:
+      - precheck
+      - ccam
+      - "Cluster Has Gone Missing (CHGM)"
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
-  # Only run the etcd investigation on non-HCP (classic) clusters.
-  - investigation: etcddatabasequotalowspace
+  # Cluster Provisioning Delay
+  - alert_title: "ClusterProvisioningDelay -"
+    chain:
+      - precheck
+      - ccam
+      - ClusterProvisioningDelay
+
+  # Etcd Database Quota Low Space
+  # Only run on non-HCP (classic) clusters.
+  - alert_title: "etcdDatabaseQuotaLowSpace"
     when:
       field: HCP
       operator: in
       values: ["false"]
+    chain:
+      - precheck
+      - etcddatabasequotalowspace
 
-  # Exclude a specific organization from the CHGM investigation.
-  - investigation: "Cluster Has Gone Missing (CHGM)"
+  # Cluster Monitoring Error Budget Burn
+  # Example: sample redhat.com emails at 10%, always run for others.
+  # - alert_title: "ClusterMonitoringErrorBudgetBurnSRE"
+  #   chain:
+  #     - precheck
+  #     - ccam
+  #     - name: clustermonitoringerrorbudgetburn
+  #       when:
+  #         or:
+  #           - field: OwnerEmail
+  #             operator: notmatches
+  #             values: [".*@redhat\\.com$"]
+  #           - operator: sample
+  #             values: ["0.10"]
+
+  # Insights Operator Down
+  - alert_title: "InsightsOperatorDown"
+    chain:
+      - precheck
+      - ccam
+      - insightsoperatordown
+
+  # Upgrade Config Sync Failure Over 4hr
+  - alert_title: "UpgradeConfigSyncFailureOver4HrSRE"
+    chain:
+      - precheck
+      - ccam
+      - upgradeconfigsyncfailureover4hr
+
+  # Machine Health Check Unterminated Short Circuit SRE
+  - alert_title: "MachineHealthCheckUnterminatedShortCircuitSRE"
+    chain:
+      - precheck
+      - ccam
+      - machinehealthcheckunterminatedshortcircuitsre
+
+  # Restart Control Plane
+  - alert_title: "RestartControlPlane"
+    chain:
+      - precheck
+      - restartcontrolplane
+
+  # Cannot Retrieve Updates SRE
+  - alert_title: "CannotRetrieveUpdatesSRE"
+    chain:
+      - precheck
+      - ccam
+      - cannotretrieveupdatessre
+
+  # Mustgather (standalone, with AWS-only chain-level filter)
+  - alert_title: "MustGather"
     when:
-      and:
-        - field: ClusterID
-          operator: notin
-          values: ["2pr3e91qrgdje312keq8denphqs70tlr"]
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+    chain:
+      - precheck
+      - mustgather
 
-  # Conditional sampling: sample redhat.com emails at 10%, always run for others.
-  # Logic: NOT(@redhat.com) OR sample(0.10)
-  #   - Non-redhat emails: notmatches passes (true), short-circuits OR → runs
-  #   - Redhat emails: notmatches fails (false), falls through to sample(0.10) → 10% chance
-  # - investigation: clustermonitoringerrorbudgetburn
-  #   when:
-  #     or:
-  #       - field: OwnerEmail
-  #         operator: notmatches
-  #         values: [".*@redhat\\.com$"]
-  #       - operator: sample
-  #         values: ["0.10"]
+  # OCM Agent Response Failure
+  - alert_title: "OCMAgentResponseFailure"
+    chain:
+      - precheck
+      - ccam
+      - ocmagentresponsefailure
 
-  # Combining AND and OR: AWS clusters where the cluster or org is allowlisted.
-  # - investigation: insightsoperatordown
-  #   when:
-  #     and:
-  #       - field: CloudProvider
-  #         operator: in
-  #         values: ["aws"]
-  #       - or:
-  #           - field: ClusterID
-  #             operator: in
-  #             values: ["abc123", "def456"]
+  # Experimental investigation example
+  # Only matched when CAD_EXPERIMENTAL_ENABLED=true.
+  # - alert_title: "SomeNewAlert"
+  #   experimental: true
+  #   chain:
+  #     - precheck
+  #     - somenewcheck
+
+  # AI-assisted investigation example
+  # Requires the ai_agent section above to be configured.
+  # The `when` filter is mandatory for aiassisted — configs without one are
+  # rejected at validation time. The filter controls which clusters/orgs are
+  # eligible for AI investigation (allowlisting, sampling, org-scoping).
+  #
+  # Entry-level filter (filter applies only to the aiassisted step):
+  # - alert_title: "SomeAlert"
+  #   chain:
+  #     - precheck
+  #     - name: aiassisted
+  #       when:
+  #         or:
   #           - field: OrganizationID
   #             operator: in
-  #             values: ["org-abc"]
-
-  # Exclude clusters that are being uninstalled.
-  # - investigation: restartcontrolplane
+  #             values: ["org-id-1"]
+  #           - field: ClusterID
+  #             operator: in
+  #             values: ["cluster-id-1"]
+  #
+  # Chain-level filter (filter applies to the entire chain including aiassisted):
+  # - alert_title: "AnotherAlert"
   #   when:
-  #     field: ClusterState
-  #     operator: notin
-  #     values: ["uninstalling"]
-
-  # Match alert titles with a regex pattern.
-  # - investigation: cannotretrieveupdatessre
-  #   when:
-  #     field: AlertTitle
-  #     operator: matches
-  #     values: [".*CRITICAL.*", ".*WARNING.*"]
+  #     field: CloudProvider
+  #     operator: in
+  #     values: ["aws"]
+  #   chain:
+  #     - precheck
+  #     - aiassisted

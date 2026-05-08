@@ -9,6 +9,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"k8s.io/apimachinery/pkg/fields"
@@ -98,7 +99,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	switch verifierResult {
 	case networkverifier.Failure:
 		logging.Infof("Network verifier reported failure: %s", failureReason)
-		result.ServiceLogPrepared = investigation.InvestigationStep{Performed: true, Labels: nil}
+		metrics.Inc(metrics.ServicelogPrepared, c.Name())
 		notes.AppendWarning("NetworkVerifier found unreachable targets. \n \n Verify and send service log if necessary: \n osdctl servicelog post --cluster-id %s -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/required_network_egresses_are_blocked.json -p URLS=%s", r.Cluster.ID(), failureReason)
 	case networkverifier.Success:
 		notes.AppendSuccess("Network verifier passed")
@@ -124,16 +125,4 @@ func isOCPBUG22226(co *configv1.ClusterOperator) bool {
 
 func (c *Investigation) Name() string {
 	return "insightsoperatordown"
-}
-
-func (c *Investigation) AlertTitle() string {
-	return "InsightsOperatorDown"
-}
-
-func (c *Investigation) Description() string {
-	return "Investigate insights operator down alert"
-}
-
-func (c *Investigation) IsExperimental() bool {
-	return false
 }

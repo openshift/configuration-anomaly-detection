@@ -223,15 +223,3 @@ func newNodeDescriber(k8sClient k8sclient.Client) (nodeDescriber, error) {
 func (i *Investigation) Name() string {
 	return "describenodes"
 }
-
-func (i *Investigation) AlertTitle() string {
-	return ""
-}
-
-func (i *Investigation) Description() string {
-	return "Describe all nodes in the cluster with full details including pod information"
-}
-
-func (i *Investigation) IsExperimental() bool {
-	return true
-}

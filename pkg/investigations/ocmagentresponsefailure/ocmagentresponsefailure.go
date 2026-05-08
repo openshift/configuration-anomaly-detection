@@ -90,19 +90,6 @@ func (i *Investigation) Name() string {
 	return "ocmagentresponsefailure"
 }
 
-func (i *Investigation) Description() string {
-	return "Investigates the OCMAgentResponseFailureServiceLogsSRE alert"
-}
-
-func (i *Investigation) IsExperimental() bool {
-	// TODO: Update to false when graduating to production.
-	return true
-}
-
-func (i *Investigation) AlertTitle() string {
-	return "OCMAgentResponseFailureServiceLogsSRE"
-}
-
 // checkUserBanStatus checks if the cluster owner is banned.
 // It returns a set of actions, and a boolean indicating whether the investigation should halt
 func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {

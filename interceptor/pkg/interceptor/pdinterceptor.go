@@ -53,11 +53,14 @@ type Organization struct {
 }
 
 type interceptorHandler struct {
-	stats *InterceptorStats
+	stats        *InterceptorStats
+	filterConfig *config.Config
+	configErr    error
 }
 
 func CreateInterceptorHandler(stats *InterceptorStats) http.Handler {
-	return &interceptorHandler{stats}
+	cfg, err := config.LoadConfig("", investigations.GetAvailableInvestigationsNames())
+	return &interceptorHandler{stats: stats, filterConfig: cfg, configErr: err}
 }
 
 func (pdi interceptorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -187,35 +190,37 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	}
 
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
-	cadExperimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
+	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
-	investigation := investigations.GetInvestigation(pdClient.GetTitle(), cadExperimentalEnabled)
+	// Check if a chain is configured for this alert (config loaded at handler creation)
+	if pdi.configErr != nil {
+		logging.Warnf("Investigation config load error: %v", pdi.configErr)
+	}
 
-	// If no formal investigation found, check if AI investigation should run
-	if investigation == nil {
-		logging.Warnf("Checking pagerduty incident: %s", pdClient.GetIncidentRef())
+	hasChain := pdi.filterConfig != nil && pdi.filterConfig.GetChain(pdClient.GetTitle(), experimentalEnabled) != nil
+
+	if hasChain {
+		logging.Infof("Incident %s has a configured chain, returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID())
+		return &triggersv1.InterceptorResponse{Continue: true}
+	}
+
+	// AI fallback: if ai_agent is configured, allow the pipeline to run for AI investigation
+	if experimentalEnabled && pdi.filterConfig != nil && pdi.filterConfig.AIAgent != nil {
+		logging.Infof("No chain match, but AI agent configured — checking cluster existence")
 		resp := clusterExists(pdClient, ocmClient)
 		if resp != nil {
 			return resp
 		}
-
-		if shouldRunAIInvestigation() {
-			logging.Infof("Launching AI investigation")
-			return &triggersv1.InterceptorResponse{Continue: true}
-		}
-
-		// No formal investigation and AI not enabled/allowed — escalate to SRE
-		logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
-		if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
-			logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
-		}
-		return &triggersv1.InterceptorResponse{Continue: false}
+		logging.Infof("Launching AI investigation for incident %s", pdClient.GetIncidentID())
+		return &triggersv1.InterceptorResponse{Continue: true}
 	}
 
-	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name())
-	return &triggersv1.InterceptorResponse{
-		Continue: true,
+	// No chain and no AI — escalate to SRE
+	logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
+	if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
+		logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
 	}
+	return &triggersv1.InterceptorResponse{Continue: false}
 }
 
 // clusterExists retrieves the cluster ID from PagerDuty and verifies it
@@ -235,26 +240,6 @@ func clusterExists(pdClient pagerduty.Client, ocmClient ocm.Client) *triggersv1.
 	}
 
 	return nil
-}
-
-// shouldRunAIInvestigation checks whether AI investigation is configured at all.
-// The actual filter evaluation (allowlist, sampling, etc.) is done by the controller.
-func shouldRunAIInvestigation() bool {
-	filterConfig, err := config.LoadConfig("", investigations.GetAvailableInvestigationsNames())
-	if err != nil {
-		logging.Warnf("Failed to load investigation filter config: %v", err)
-		return false
-	}
-
-	if filterConfig.GetAIAgentConfig() == nil {
-		return false
-	}
-
-	if filterConfig.GetFilter("aiassisted") == nil {
-		return false
-	}
-
-	return true
 }
 
 func loadOrgEscalationMapping() (map[string]string, error) {

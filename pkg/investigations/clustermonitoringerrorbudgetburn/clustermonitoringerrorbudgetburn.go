@@ -164,18 +164,6 @@ func (c *Investigation) Name() string {
 	return "clustermonitoringerrorbudgetburn"
 }
 
-func (c *Investigation) AlertTitle() string {
-	return "ClusterMonitoringErrorBudgetBurnSRE"
-}
-
-func (c *Investigation) Description() string {
-	return "Investigation to analyze a ClusterMonitoringErrorBudgetBurnSRE alert"
-}
-
-func (c *Investigation) IsExperimental() bool {
-	return false
-}
-
 // Check if the `Available` status condition reports a broken UWM config
 func isUWMConfigInvalid(monitoringCo *configv1.ClusterOperator) bool {
 	symptomStatusString := `the User Workload Configuration from "config.yaml" key in the "openshift-user-workload-monitoring/user-workload-monitoring-config" ConfigMap could not be parsed`

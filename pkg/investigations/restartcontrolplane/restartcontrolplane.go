@@ -80,13 +80,3 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 func (c *Investigation) Name() string {
 	return "restartcontrolplane"
 }
-
-func (c *Investigation) AlertTitle() string { return "RestartControlPlane" }
-
-func (c *Investigation) Description() string {
-	return "restarts the control plane of an HCP cluster"
-}
-
-func (c *Investigation) IsExperimental() bool {
-	return false
-}
