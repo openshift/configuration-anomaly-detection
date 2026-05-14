@@ -145,7 +145,7 @@ require (
 	github.com/oapi-codegen/runtime v1.4.0 // indirect
 	github.com/oasdiff/yaml v0.1.0 // indirect
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
-	github.com/olekukonko/tablewriter v0.0.5 // indirect
+	github.com/olekukonko/tablewriter v1.1.4 // indirect
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.454 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.454 // indirect
 	github.com/openshift-online/ocm-cli v1.0.14 // indirect
