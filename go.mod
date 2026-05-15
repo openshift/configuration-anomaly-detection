@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16
 	github.com/aws/aws-sdk-go-v2/service/bedrockagentcore v1.25.0
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.55.11
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.302.0
+	github.com/aws/aws-sdk-go-v2/service/ec2 v1.301.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
 	github.com/onsi/gomega v1.40.0
 	github.com/openshift-online/ocm-common v0.0.40
@@ -30,7 +30,7 @@ require (
 	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.51.0
-	google.golang.org/grpc v1.81.1
+	google.golang.org/grpc v1.81.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.36.1
 	k8s.io/apimachinery v0.36.1
@@ -148,7 +148,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.454 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.454 // indirect
-	github.com/openshift-online/ocm-cli v1.0.15 // indirect
+	github.com/openshift-online/ocm-cli v1.0.14 // indirect
 	github.com/openshift/installer v1.14.16-dcf8320c8c4e // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
