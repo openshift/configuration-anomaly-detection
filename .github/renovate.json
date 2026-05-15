@@ -50,7 +50,7 @@
         "dockerfile"
       ],
       "matchPackageNames": [
-        "redhat-services-prod/openshift/boilerplate",
+        "quay.io/redhat-services-prod/openshift/boilerplate",
         "openshift4/ose-operator-registry"
       ],
       "enabled": false
