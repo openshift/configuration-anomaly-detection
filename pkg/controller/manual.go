@@ -10,6 +10,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -64,6 +65,10 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 		investigationList := strings.Join(availableInvestigations, "\n")
 		return fmt.Errorf("unknown investigation: %s - must be one of:\n%s", c.manual.InvestigationName, investigationList)
 	}
+
+	// Track manual investigation start
+	dryRun := formatBool(c.dryRun)
+	metrics.Inc(metrics.ManualInvestigationStarted, alertInvestigation.Name(), dryRun)
 
 	// For AI investigations, create a new instance with the runtime config from the global config.
 	if _, ok := alertInvestigation.(*aiassisted.Investigation); ok {
