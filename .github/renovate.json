@@ -9,6 +9,20 @@
     "gomod",
     "dockerfile"
   ],
+  "gomod": {
+    "packageRules": [
+      {
+        "description": "Disable major updates for indirect Go dependencies - they update when their parent dependency updates",
+        "matchUpdateTypes": [
+          "major"
+        ],
+        "matchDepTypes": [
+          "indirect"
+        ],
+        "enabled": false
+      }
+    ]
+  },
   "dockerfile": {
     "pinDigests": true
   },
@@ -72,26 +86,10 @@
       "matchUpdateTypes": [
         "major"
       ],
-      "matchDepTypes": [
-        "!indirect"
-      ],
       "addLabels": [
         "area/dependency",
         "ok-to-test"
       ]
-    },
-    {
-      "description": "Disable major updates for indirect Go dependencies - they update when their parent dependency updates",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchUpdateTypes": [
-        "major"
-      ],
-      "matchDepTypes": [
-        "indirect"
-      ],
-      "enabled": false
     }
   ]
 }
