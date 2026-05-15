@@ -1,4 +1,4 @@
-FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.3.4 as builder
+FROM quay.io/redhat-services-prod/openshift/boilerplate:image-v8.3.4@sha256:3e6c2d2fb0d680b17188ee2c68b5b3a097fe47877a5bb976209526e6c9cc0f91 as builder
 
 ADD . /opt
 WORKDIR /opt
@@ -7,7 +7,7 @@ RUN make CGO_ENABLED=0 build-cadctl-release
 RUN make CGO_ENABLED=0 build-interceptor-release
 
 
-FROM registry.access.redhat.com/ubi9-minimal:latest as runner
+FROM registry.access.redhat.com/ubi9-minimal:latest@sha256:12db9874bd753eb98b1ab3d840e75de5d6842ac0604fbd68c012adefe97140be as runner
 
 COPY --from=builder /opt/bin/cadctl /bin/cadctl
 COPY --from=builder /opt/bin/interceptor /bin/interceptor
