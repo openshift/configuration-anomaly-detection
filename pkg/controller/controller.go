@@ -263,14 +263,6 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
-// formatBool converts boolean to string for metrics labels
-func formatBool(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
 func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, filterCtx *types.FilterContext, params map[string]string) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
@@ -349,7 +341,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 
 	// Execute ccam actions if any
 	if len(result.Actions) > 0 {
-		if err := c.executeActions(builder, &result, "ccam"); err != nil {
+		if err = c.executeActions(builder, &result, "ccam"); err != nil {
 			return fmt.Errorf("failed to execute ccam actions: %w", err)
 		}
 		chgmInv := chgm.Investigation{}
@@ -369,8 +361,11 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	}
 	updateMetrics(inv.Name(), &result)
 
+	// FIXME: This will work, once all notes are taken using executor note write and not the resources notes.
+	hasFindings := len(result.Actions) > 0
+
 	// Execute investigation actions if any
-	if err := c.executeActions(builder, &result, inv.Name()); err != nil {
+	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
 		return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), err)
 	}
 
@@ -378,12 +373,16 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	result = investigation.InvestigationResult{
 		Actions: []types.Action{&a},
 	}
-	if err := c.executeActions(builder, &result, inv.Name()); err != nil {
+	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
 		return fmt.Errorf("failed to execute PagerDuty title update: %w", err)
 	}
 
-	// Record successful completion for manual investigations
-	c.recordManualCompletion(inv.Name(), pdClient, "success")
+	// Record completion for manual investigations with outcome
+	if hasFindings {
+		c.recordManualCompletion(inv.Name(), pdClient, "success")
+	} else {
+		c.recordManualCompletion(inv.Name(), pdClient, "no_findings")
+	}
 	return nil
 }
 
@@ -495,7 +494,7 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 func (c *investigationRunner) recordManualCompletion(invName string, pdClient *pagerduty.SdkClient, status string) {
 	if pdClient == nil {
 		// This is a manual investigation
-		dryRun := formatBool(c.dryRun)
+		dryRun := strconv.FormatBool(c.dryRun)
 		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
 	}
 }

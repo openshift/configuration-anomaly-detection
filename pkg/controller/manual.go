@@ -66,7 +66,7 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	}
 
 	// Track manual investigation start
-	dryRun := formatBool(c.dryRun)
+	dryRun := strconv.FormatBool(c.dryRun)
 	metrics.Inc(metrics.ManualInvestigationStarted, alertInvestigation.Name(), dryRun)
 
 	// For AI investigations, create a new instance with the runtime config from the global config.
