@@ -299,6 +299,8 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			}
 		}
 		if err != nil {
+			// Record error completion for manual investigations before handling failure
+			c.recordManualCompletion(inv.Name(), pdClient, "error")
 			handleCADFailure(err, builder, pdClient)
 		}
 	}()
@@ -313,16 +315,19 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			return fmt.Errorf("failed to execute precheck actions: %w", err)
 		}
 		// We stop if the precheck returns any action this mean we do not want to run anything else.
+		c.recordManualCompletion(inv.Name(), pdClient, "precheck_stopped")
 		return nil
 	}
 	if result.StopInvestigations != nil {
 		logging.Errorf("Stopping investigations due to: %w", result.StopInvestigations)
+		c.recordManualCompletion(inv.Name(), pdClient, "stop_investigations")
 		return nil
 	}
 
 	// Evaluate the investigation filter if one is configured for this investigation.
 	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
 	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
+		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
 		return nil
 	}
 
@@ -336,7 +341,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 
 	// Execute ccam actions if any
 	if len(result.Actions) > 0 {
-		if err := c.executeActions(builder, &result, "ccam"); err != nil {
+		if err = c.executeActions(builder, &result, "ccam"); err != nil {
 			return fmt.Errorf("failed to execute ccam actions: %w", err)
 		}
 		chgmInv := chgm.Investigation{}
@@ -344,6 +349,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		// be able to proceed. To handle this case we will *only* return when CCAM found something and it's CGHM - handling
 		// non-AWS access is up to following investigations.
 		if inv.AlertTitle() == chgmInv.AlertTitle() {
+			c.recordManualCompletion(inv.Name(), pdClient, "ccam_stopped")
 			return nil
 		}
 	}
@@ -355,8 +361,11 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	}
 	updateMetrics(inv.Name(), &result)
 
+	// FIXME: This will work, once all notes are taken using executor note write and not the resources notes.
+	hasFindings := len(result.Actions) > 0
+
 	// Execute investigation actions if any
-	if err := c.executeActions(builder, &result, inv.Name()); err != nil {
+	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
 		return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), err)
 	}
 
@@ -364,7 +373,17 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	result = investigation.InvestigationResult{
 		Actions: []types.Action{&a},
 	}
-	return c.executeActions(builder, &result, inv.Name())
+	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
+		return fmt.Errorf("failed to execute PagerDuty title update: %w", err)
+	}
+
+	// Record completion for manual investigations with outcome
+	if hasFindings {
+		c.recordManualCompletion(inv.Name(), pdClient, "success")
+	} else {
+		c.recordManualCompletion(inv.Name(), pdClient, "no_findings")
+	}
+	return nil
 }
 
 // runInvestigationWithRetry executes an investigation with retry logic for transient errors.
@@ -467,6 +486,16 @@ func updateMetrics(investigationName string, result *investigation.Investigation
 	}
 	if result.EtcdDatabaseAnalysis.Performed {
 		metrics.Inc(metrics.EtcdDatabaseAnalysis, append([]string{investigationName}, result.EtcdDatabaseAnalysis.Labels...)...)
+	}
+}
+
+// recordManualCompletion records manual investigation completion metric
+// Only tracks if this is a manual investigation (pdClient is nil)
+func (c *investigationRunner) recordManualCompletion(invName string, pdClient *pagerduty.SdkClient, status string) {
+	if pdClient == nil {
+		// This is a manual investigation
+		dryRun := strconv.FormatBool(c.dryRun)
+		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
 	}
 }
 
