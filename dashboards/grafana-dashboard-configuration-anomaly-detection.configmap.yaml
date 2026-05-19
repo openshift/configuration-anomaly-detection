@@ -682,12 +682,14 @@ data:
               },
               "mappings": [
                 {
+                  "type": "special",
                   "options": {
-                    "null": {
-                      "text": "No alerts"
+                    "match": "null",
+                    "result": {
+                      "text": "No alerts",
+                      "index": 0
                     }
-                  },
-                  "type": "special"
+                  }
                 }
               ],
               "thresholds": {
