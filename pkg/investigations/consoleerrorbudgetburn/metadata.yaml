@@ -1,0 +1,40 @@
+name: consoleerrorbudgetburn
+rbac:
+  roles:
+    - namespace: "openshift-ingress-operator"
+      rules:
+        - apiGroups: ['operator.openshift.io']
+          resources: ['ingresscontrollers']
+          verbs: ['get']
+    - namespace: "openshift-ingress"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['events']
+          verbs: ['list']
+    - namespace: "openshift-monitoring"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['pods/exec']
+          verbs: ['create']
+    - namespace: "openshift-console"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['events']
+          verbs: ['list']
+  clusterRoleRules:
+    - apiGroups: ['operator.openshift.io']
+      resources: ['dnses']
+      verbs: ['get']
+    - apiGroups: ['']
+      resources: ['nodes']
+      verbs: ['get']
+customerDataAccess: false
