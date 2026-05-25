@@ -157,14 +157,16 @@ func isPagerDutyAction(action Action) bool {
 // Limited Support, Silence, and SL actions are replaced with an escalation and
 // a PagerDuty note explaining the substitution.
 type InfraClusterExecutor struct {
-	inner  Executor
-	logger *zap.SugaredLogger
+	inner     Executor
+	logger    *zap.SugaredLogger
+	uncertain bool
 }
 
 // NewInfraClusterExecutor creates an executor that intercepts unsuitable actions
-// for infrastructure clusters.
-func NewInfraClusterExecutor(inner Executor, logger *zap.SugaredLogger) Executor {
-	return &InfraClusterExecutor{inner: inner, logger: logger}
+// for infrastructure clusters. When uncertain is true, the infra status could not
+// be confirmed (e.g. OCM API error) and the note will reflect this.
+func NewInfraClusterExecutor(inner Executor, logger *zap.SugaredLogger, uncertain bool) Executor {
+	return &InfraClusterExecutor{inner: inner, logger: logger, uncertain: uncertain}
 }
 
 func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput) error {
@@ -207,14 +209,25 @@ func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput
 	}
 
 	if needsEscalation {
-		noteContent := fmt.Sprintf(
-			"⚠️ Infra cluster detected: the following action(s) were not executed and replaced with escalation: %s. "+
-				"Please investigate and take appropriate action manually.",
-			joinDescriptions(interceptedDescriptions),
-		)
+		var noteContent string
+		if e.uncertain {
+			noteContent = fmt.Sprintf(
+				"⚠️ Unable to determine cluster infrastructure status (OCM API error). "+
+					"Erring on the side of caution, the following action(s) were not executed and replaced with escalation: %s. "+
+					"Please verify whether this is an infrastructure cluster and take appropriate action manually.",
+				joinDescriptions(interceptedDescriptions),
+			)
+		} else {
+			noteContent = fmt.Sprintf(
+				"⚠️ Infra cluster detected: the following action(s) were not executed and replaced with escalation: %s. "+
+					"Please investigate and take appropriate action manually.",
+				joinDescriptions(interceptedDescriptions),
+			)
+		}
 		transformedActions = append(transformedActions, &PagerDutyNoteAction{Content: noteContent})
 		if !hasEscalation {
-			transformedActions = append(transformedActions,
+			transformedActions = append(
+				transformedActions,
 				&EscalateIncidentAction{Reason: "Infra cluster: actions intercepted"},
 			)
 		}
@@ -239,7 +252,8 @@ func joinDescriptions(descriptions []string) string {
 	if len(unique) == 1 {
 		return unique[0]
 	}
-	return fmt.Sprintf("%s and %s",
+	return fmt.Sprintf(
+		"%s and %s",
 		joinWithComma(unique[:len(unique)-1]),
 		unique[len(unique)-1],
 	)

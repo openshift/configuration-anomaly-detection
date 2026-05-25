@@ -33,7 +33,6 @@ type InvestigationResult struct {
 	// EXISTING: Legacy fields (deprecated, maintained for backwards compatibility)
 	LimitedSupportSet    InvestigationStep
 	ServiceLogPrepared   InvestigationStep
-	ServiceLogSent       InvestigationStep
 	MustGatherPerformed  InvestigationStep
 	EtcdDatabaseAnalysis InvestigationStep
 
@@ -80,27 +79,28 @@ type Investigation interface {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Name                          string
-	Cluster                       *cmv1.Cluster
-	ClusterDeployment             *hivev1.ClusterDeployment
-	AwsClient                     aws.Client
-	BpClient                      backplane.Client
-	RestConfig                    *backplane.RestConfig
-	K8sClient                     k8sclient.Client
-	OcmClient                     ocm.Client
-	PdClient                      pagerduty.Client
-	Notes                         *notewriter.NoteWriter
-	OCClient                      oc.Client
-	ManagementRestConfig          *backplane.RestConfig
-	ManagementK8sClient           k8sclient.Client
-	ManagementOCClient            oc.Client
-	HCPNamespace                  string
-	HCNamespace                   string
-	IsHCP                         bool
-	IsInfrastructureCluster       bool
-	ManagementClusterName         string
-	DynatraceManagementClusterURL string
-	Params                        map[string]string
+	Name                             string
+	Cluster                          *cmv1.Cluster
+	ClusterDeployment                *hivev1.ClusterDeployment
+	AwsClient                        aws.Client
+	BpClient                         backplane.Client
+	RestConfig                       *backplane.RestConfig
+	K8sClient                        k8sclient.Client
+	OcmClient                        ocm.Client
+	PdClient                         pagerduty.Client
+	Notes                            *notewriter.NoteWriter
+	OCClient                         oc.Client
+	ManagementRestConfig             *backplane.RestConfig
+	ManagementK8sClient              k8sclient.Client
+	ManagementOCClient               oc.Client
+	HCPNamespace                     string
+	HCNamespace                      string
+	IsHCP                            bool
+	IsInfrastructureCluster          bool
+	IsInfrastructureClusterUncertain bool
+	ManagementClusterName            string
+	DynatraceManagementClusterURL    string
+	Params                           map[string]string
 }
 
 type ResourceBuilder interface {
@@ -231,6 +231,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 		if err != nil {
 			logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
 			r.builtResources.IsInfrastructureCluster = true
+			r.builtResources.IsInfrastructureClusterUncertain = true
 		} else {
 			r.builtResources.IsInfrastructureCluster = isManaging
 			if isManaging {

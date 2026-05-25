@@ -106,7 +106,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	// Check if the UWM configmap is invalid
 	// If it is, send a service log and silence the alert.
 	if isUWMConfigInvalid(&monitoringCo) {
-		notes.AppendAutomation("Customer misconfigured the UWM configmap, sending service log and silencing the alert")
+		notes.AppendWarning("Customer misconfigured the UWM configmap")
 		configMapSL := newUwmConfigMapMisconfiguredSL(monitoringDocLink)
 
 		result.Actions = append(
@@ -121,7 +121,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	}
 
 	if isUWMAlertManagerBroken(&monitoringCo) {
-		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager), sending service log and silencing the alert")
+		notes.AppendWarning("Customer misconfigured the UWM (UpdatingUserWorkloadAlertmanager)")
 		alertManagerSL := newUwmAMMisconfiguredSL(monitoringDocLink)
 
 		result.Actions = append(
@@ -136,7 +136,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 	}
 
 	if isUWMPrometheusBroken(&monitoringCo) {
-		notes.AppendAutomation("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus), sending service log and silencing the alert")
+		notes.AppendWarning("Customer misconfigured the UWM (UpdatingUserWorkloadPrometheus)")
 		genericSL := newUwmGenericMisconfiguredSL(monitoringDocLink)
 
 		result.Actions = append(

@@ -100,11 +100,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 				notes.AppendWarning("subnet %s does not have a default route to 0.0.0.0/0", subnet)
 				byovpcRoutingSL := newBYOVPCRoutingSL(docLink)
 
-				// XXX: metrics.Inc(metrics.ServicelogSent, investigationName)
-				result.ServiceLogSent = investigation.InvestigationStep{Performed: true, Labels: nil}
-
-				notes.AppendAutomation("Sent SL: '%s'", byovpcRoutingSL.Summary)
-
 				result.Actions = append(
 					executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
 					executor.NewServiceLogAction(byovpcRoutingSL.Severity, byovpcRoutingSL.Summary).

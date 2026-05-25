@@ -73,7 +73,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if !res.UserAuthorized {
 		logging.Infof("Instances were stopped by unauthorized user: %s / arn: %s", res.User.UserName, res.User.IssuerUserName)
-		r.Notes.AppendAutomation("Customer stopped instances. Sent LS and silencing alert.")
+		r.Notes.AppendWarning("Customer stopped instances.")
 
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
@@ -113,7 +113,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("Network verifier reported failure: %s", failureReason)
 
 		if strings.Contains(failureReason, "nosnch.in") {
-			r.Notes.AppendAutomation("Egress `nosnch.in` blocked, sent limited support.")
+			r.Notes.AppendWarning("Egress `nosnch.in` blocked.")
 
 			result.Actions = append(
 				executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
@@ -127,7 +127,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		docLink := ocm.DocumentationLink(product, ocm.DocumentationTopicPrivatelinkFirewall)
 		egressSL := createEgressSL(failureReason, docLink)
 
-		r.Notes.AppendWarning("NetworkVerifier found unreachable targets and sent the SL, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
+		r.Notes.AppendWarning("NetworkVerifier found unreachable targets, but deadmanssnitch is not blocked! \n⚠️ Please investigate this cluster.\nUnreachable: \n%s", failureReason)
 
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),

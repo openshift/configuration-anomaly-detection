@@ -472,9 +472,6 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 }
 
 func updateMetrics(investigationName string, result *investigation.InvestigationResult) {
-	if result.ServiceLogSent.Performed {
-		metrics.Inc(metrics.ServicelogSent, append([]string{investigationName}, result.ServiceLogSent.Labels...)...)
-	}
 	if result.ServiceLogPrepared.Performed {
 		metrics.Inc(metrics.ServicelogPrepared, append([]string{investigationName}, result.ServiceLogPrepared.Labels...)...)
 	}
@@ -520,7 +517,7 @@ func (c *investigationRunner) executeActions(
 	exec := c.executor
 	if resources.IsInfrastructureCluster {
 		logging.Infof("Infrastructure cluster detected for %s: wrapping executor to intercept LS/Silence/ServiceLog actions", investigationName)
-		exec = executor.NewInfraClusterExecutor(exec, c.logger)
+		exec = executor.NewInfraClusterExecutor(exec, c.logger, resources.IsInfrastructureClusterUncertain)
 	}
 
 	// Execute actions with default options using controller's executor
