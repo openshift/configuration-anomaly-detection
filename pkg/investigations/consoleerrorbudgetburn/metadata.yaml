@@ -14,6 +14,14 @@ rbac:
         - apiGroups: ['']
           resources: ['events']
           verbs: ['list']
+    - namespace: "openshift-route-monitor-operator"
+      rules:
+        - apiGroups: ['']
+          resources: ['pods']
+          verbs: ['get', 'list']
+        - apiGroups: ['']
+          resources: ['pods/exec']
+          verbs: ['create']
     - namespace: "openshift-monitoring"
       rules:
         - apiGroups: ['']

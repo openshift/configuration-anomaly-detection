@@ -34,11 +34,14 @@ func newFakeClient(objs ...client.Object) client.Client {
 	return fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(objs...).Build()
 }
 
-func newTestCluster(id, machineCIDR string) *cmv1.Cluster {
-	cluster, _ := cmv1.NewCluster().
+func newTestCluster(id, machineCIDR, consoleURL string) *cmv1.Cluster {
+	builder := cmv1.NewCluster().
 		ID(id).
-		Network(cmv1.NewNetwork().MachineCIDR(machineCIDR)).
-		Build()
+		Network(cmv1.NewNetwork().MachineCIDR(machineCIDR))
+	if consoleURL != "" {
+		builder = builder.Console(cmv1.NewClusterConsole().URL(consoleURL))
+	}
+	cluster, _ := builder.Build()
 	return cluster
 }
 
@@ -84,6 +87,135 @@ func testRestConfig() *backplane.RestConfig {
 	return &backplane.RestConfig{Config: rest.Config{Host: "https://test-cluster:6443"}}
 }
 
+// mockBlackboxProber implements blackboxProber for testing.
+type mockBlackboxProber struct {
+	output string
+	err    error
+}
+
+func (m *mockBlackboxProber) runProbe(_ context.Context, _ k8sclient.Client, _ *rest.Config, _ string) (string, error) {
+	return m.output, m.err
+}
+
+func healthyBlackboxProber() *mockBlackboxProber {
+	return &mockBlackboxProber{output: successfulProbeResponse}
+}
+
+const successfulProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolved target address" ip=10.0.1.50
+ts=2024-01-01T00:00:00.003Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Making HTTP request" url=https://10.0.1.50 host=console-openshift-console.apps.test.example.com
+ts=2024-01-01T00:00:00.200Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Received HTTP response" status_code=200
+ts=2024-01-01T00:00:00.201Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe succeeded" duration_seconds=0.198
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 1
+# HELP probe_http_status_code Response HTTP status code
+# TYPE probe_http_status_code gauge
+probe_http_status_code 200
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.198
+`
+
+const dnsFailureProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=error msg="Resolution failed" err="lookup console-openshift-console.apps.test.example.com: no such host"
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=0.001
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.001
+`
+
+const timeoutProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolved target address" ip=10.0.1.50
+ts=2024-01-01T00:02:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=error msg="Error making HTTP request" err="Get \"https://10.0.1.50\": context deadline exceeded"
+ts=2024-01-01T00:02:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=119.999
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 119.999
+`
+
+const tlsErrorProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolved target address" ip=10.0.1.50
+ts=2024-01-01T00:00:00.100Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=error msg="Error making HTTP request" err="Get \"https://10.0.1.50\": x509: certificate signed by unknown authority"
+ts=2024-01-01T00:00:00.101Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=0.099
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.099
+`
+
+const connectionRefusedProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolved target address" ip=10.0.1.50
+ts=2024-01-01T00:00:00.003Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=error msg="Error making HTTP request" err="Get \"https://10.0.1.50\": dial tcp 10.0.1.50:443: connect: connection refused"
+ts=2024-01-01T00:00:00.003Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=0.002
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.002
+`
+
+const serverErrorProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.001Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolving target address" ip_protocol=ip4
+ts=2024-01-01T00:00:00.002Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Resolved target address" ip=10.0.1.50
+ts=2024-01-01T00:00:00.100Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Received HTTP response" status_code=503
+ts=2024-01-01T00:00:00.101Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=0.099
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_http_status_code Response HTTP status code
+# TYPE probe_http_status_code gauge
+probe_http_status_code 503
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.099
+`
+
+const unknownFailureProbeResponse = `Logs for the probe:
+ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
+ts=2024-01-01T00:00:00.100Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Probe failed" duration_seconds=0.099
+
+Metrics that would have been returned:
+# HELP probe_success Displays whether or not the probe was a success
+# TYPE probe_success gauge
+probe_success 0
+# HELP probe_duration_seconds Returns how long the probe took to complete in seconds
+# TYPE probe_duration_seconds gauge
+probe_duration_seconds 0.099
+`
+
 func TestName(t *testing.T) {
 	inv := &Investigation{}
 	if inv.Name() != "consoleerrorbudgetburn" {
@@ -117,7 +249,7 @@ func TestIsExperimental(t *testing.T) {
 func TestCheckAllowedSourceRanges_NotConfigured(t *testing.T) {
 	ic := newDefaultIngressController(nil)
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -139,7 +271,7 @@ func TestCheckAllowedSourceRanges_MachineIncluded(t *testing.T) {
 	// CIDR 10.0.0.0/16 is contained within allowed range 10.0.0.0/8
 	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -161,7 +293,7 @@ func TestCheckAllowedSourceRanges_ExactMatch(t *testing.T) {
 	// Exact match: allowed 10.0.0.0/16 == machine CIDR 10.0.0.0/16
 	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/16"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -183,7 +315,7 @@ func TestCheckAllowedSourceRanges_SmallerRangeDoesNotContain(t *testing.T) {
 	// Allowed 10.0.0.0/24 does NOT contain 10.0.0.0/16
 	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/24"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -205,7 +337,7 @@ func TestCheckAllowedSourceRanges_MachineExcluded(t *testing.T) {
 	// CIDR 10.0.0.0/16 is not covered by 192.168.0.0/16
 	ic := newDefaultIngressController([]operatorv1.CIDR{"192.168.0.0/16"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -227,7 +359,7 @@ func TestCheckAllowedSourceRanges_MultipleRangesOneMatch(t *testing.T) {
 	// First range doesn't match, but second range covers the machine CIDR
 	ic := newDefaultIngressController([]operatorv1.CIDR{"192.168.0.0/16", "10.0.0.0/8"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -249,7 +381,7 @@ func TestCheckAllowedSourceRanges_EmptyMachineCIDR(t *testing.T) {
 	// CIDR empty; cluster info incomplete
 	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "")
+	cluster := newTestCluster("test-cluster", "", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -270,7 +402,7 @@ func TestCheckAllowedSourceRanges_EmptyMachineCIDR(t *testing.T) {
 func TestCheckAllowedSourceRanges_IngressControllerNotFound(t *testing.T) {
 	// No IngressController in the fake client
 	k8sClient := newFakeClient()
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -302,7 +434,7 @@ func TestCheckAllowedSourceRanges_NilLoadBalancer(t *testing.T) {
 		},
 	}
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -324,7 +456,7 @@ func TestCheckAllowedSourceRanges_EmptyAllowedSourceRanges(t *testing.T) {
 	// LoadBalancer exists but AllowedSourceRanges is empty slice
 	ic := newDefaultIngressController([]operatorv1.CIDR{})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	notes := newTestNotes()
 	inv := &Investigation{}
 
@@ -604,7 +736,7 @@ func TestCheckPodHealth_Router_ExcessiveRestarts(t *testing.T) {
 // checkConsoleService unit tests
 
 func TestCheckConsoleService_Healthy(t *testing.T) {
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	k8sClient := newFakeClient()
 	notes := newTestNotes()
 	inv := &Investigation{consoleChecker: &mockConsoleServiceChecker{output: "200"}}
@@ -627,7 +759,7 @@ func TestCheckConsoleService_Healthy(t *testing.T) {
 }
 
 func TestCheckConsoleService_NonOK(t *testing.T) {
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	k8sClient := newFakeClient()
 	notes := newTestNotes()
 	inv := &Investigation{consoleChecker: &mockConsoleServiceChecker{output: "503"}}
@@ -647,7 +779,7 @@ func TestCheckConsoleService_NonOK(t *testing.T) {
 }
 
 func TestCheckConsoleService_ExecError(t *testing.T) {
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
 	k8sClient := newFakeClient()
 	notes := newTestNotes()
 	inv := &Investigation{consoleChecker: &mockConsoleServiceChecker{err: fmt.Errorf("connection refused")}}
@@ -856,7 +988,7 @@ func TestRun_HCP_SkipsAllowedSourceRanges(t *testing.T) {
 	consolePod := newConsolePod("console-abc", "node-1")
 	node := newTestNode("node-1", healthyNodeConditions(), false)
 	k8sClient := newFakeClient(ic, dns, routerPod, consolePod, node)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
@@ -867,7 +999,7 @@ func TestRun_HCP_SkipsAllowedSourceRanges(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -896,17 +1028,18 @@ func TestRun_AllowedSourceRangesMisconfigured(t *testing.T) {
 	// Classic cluster with machine CIDR excluded from allowedSourceRanges
 	ic := newDefaultIngressController([]operatorv1.CIDR{"192.168.0.0/16"})
 	k8sClient := newFakeClient(ic)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
-			Cluster:   cluster,
-			K8sClient: k8sClient,
-			IsHCP:     false,
+			Cluster:    cluster,
+			K8sClient:  k8sClient,
+			IsHCP:      false,
+			RestConfig: testRestConfig(),
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -947,7 +1080,7 @@ func TestRun_AllowedSourceRangesOK(t *testing.T) {
 	consolePod := newConsolePod("console-abc", "node-1")
 	node := newTestNode("node-1", healthyNodeConditions(), false)
 	k8sClient := newFakeClient(ic, dns, routerPod, consolePod, node)
-	cluster := newTestCluster("test-cluster", "10.0.0.0/16")
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
@@ -958,7 +1091,7 @@ func TestRun_AllowedSourceRangesOK(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1008,5 +1141,193 @@ func TestRun_ClusterAccessError(t *testing.T) {
 	}
 	if !hasEscalate {
 		t.Error("expected escalate action for cluster access error")
+	}
+}
+
+// parseProbeResponse unit tests
+
+func TestParseProbeResponse_Success(t *testing.T) {
+	pr := parseProbeResponse(successfulProbeResponse)
+	if !pr.success {
+		t.Error("expected success=true")
+	}
+	if pr.httpStatus != 200 {
+		t.Errorf("expected httpStatus=200, got %d", pr.httpStatus)
+	}
+	if pr.duration < 0.19 || pr.duration > 0.20 {
+		t.Errorf("expected duration≈0.198, got %f", pr.duration)
+	}
+}
+
+func TestParseProbeResponse_DNSError(t *testing.T) {
+	pr := parseProbeResponse(dnsFailureProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "dns" {
+		t.Errorf("expected failureMode='dns', got %q", pr.failureMode)
+	}
+	if !strings.Contains(pr.failureDetail, "no such host") {
+		t.Errorf("expected failureDetail to contain 'no such host', got %q", pr.failureDetail)
+	}
+}
+
+func TestParseProbeResponse_Timeout(t *testing.T) {
+	pr := parseProbeResponse(timeoutProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "timeout" {
+		t.Errorf("expected failureMode='timeout', got %q", pr.failureMode)
+	}
+	if !strings.Contains(pr.failureDetail, "context deadline exceeded") {
+		t.Errorf("expected failureDetail to contain 'context deadline exceeded', got %q", pr.failureDetail)
+	}
+}
+
+func TestParseProbeResponse_TLSError(t *testing.T) {
+	pr := parseProbeResponse(tlsErrorProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "tls" {
+		t.Errorf("expected failureMode='tls', got %q", pr.failureMode)
+	}
+	if !strings.Contains(pr.failureDetail, "x509") {
+		t.Errorf("expected failureDetail to contain 'x509', got %q", pr.failureDetail)
+	}
+}
+
+func TestParseProbeResponse_ConnectionRefused(t *testing.T) {
+	pr := parseProbeResponse(connectionRefusedProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "connection_refused" {
+		t.Errorf("expected failureMode='connection_refused', got %q", pr.failureMode)
+	}
+	if !strings.Contains(pr.failureDetail, "connection refused") {
+		t.Errorf("expected failureDetail to contain 'connection refused', got %q", pr.failureDetail)
+	}
+}
+
+func TestParseProbeResponse_ServerError(t *testing.T) {
+	pr := parseProbeResponse(serverErrorProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "server_error" {
+		t.Errorf("expected failureMode='server_error', got %q", pr.failureMode)
+	}
+	if pr.httpStatus != 503 {
+		t.Errorf("expected httpStatus=503, got %d", pr.httpStatus)
+	}
+}
+
+func TestParseProbeResponse_UnknownFailure(t *testing.T) {
+	pr := parseProbeResponse(unknownFailureProbeResponse)
+	if pr.success {
+		t.Error("expected success=false")
+	}
+	if pr.failureMode != "unknown" {
+		t.Errorf("expected failureMode='unknown', got %q", pr.failureMode)
+	}
+}
+
+func TestParseProbeResponse_EmptyResponse(t *testing.T) {
+	pr := parseProbeResponse("")
+	if pr.success {
+		t.Error("expected success=false for empty response")
+	}
+	if pr.failureMode != "unknown" {
+		t.Errorf("expected failureMode='unknown' for empty response, got %q", pr.failureMode)
+	}
+}
+
+// checkBlackboxProbe unit tests
+
+func TestCheckBlackboxProbe_Success(t *testing.T) {
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
+	k8sClient := newFakeClient()
+	notes := newTestNotes()
+	inv := &Investigation{blackboxProber: healthyBlackboxProber()}
+
+	r := &investigation.Resources{
+		Cluster:    cluster,
+		K8sClient:  k8sClient,
+		RestConfig: testRestConfig(),
+	}
+
+	inv.checkBlackboxProbe(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "probe succeeded") {
+		t.Errorf("expected 'probe succeeded' in notes, got: %s", output)
+	}
+	if !strings.Contains(output, "HTTP 200") {
+		t.Errorf("expected 'HTTP 200' in notes, got: %s", output)
+	}
+}
+
+func TestCheckBlackboxProbe_DNSFailure(t *testing.T) {
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
+	k8sClient := newFakeClient()
+	notes := newTestNotes()
+	inv := &Investigation{blackboxProber: &mockBlackboxProber{output: dnsFailureProbeResponse}}
+
+	r := &investigation.Resources{
+		Cluster:    cluster,
+		K8sClient:  k8sClient,
+		RestConfig: testRestConfig(),
+	}
+
+	inv.checkBlackboxProbe(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "probe FAILED") {
+		t.Errorf("expected 'probe FAILED' in notes, got: %s", output)
+	}
+	if !strings.Contains(output, "dns") {
+		t.Errorf("expected 'dns' in notes, got: %s", output)
+	}
+}
+
+func TestCheckBlackboxProbe_ProberError(t *testing.T) {
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
+	k8sClient := newFakeClient()
+	notes := newTestNotes()
+	inv := &Investigation{blackboxProber: &mockBlackboxProber{err: fmt.Errorf("service not found")}}
+
+	r := &investigation.Resources{
+		Cluster:    cluster,
+		K8sClient:  k8sClient,
+		RestConfig: testRestConfig(),
+	}
+
+	inv.checkBlackboxProbe(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "failed to query blackbox exporter") {
+		t.Errorf("expected 'failed to query blackbox exporter' in notes, got: %s", output)
+	}
+}
+
+func TestCheckBlackboxProbe_EmptyConsoleURL(t *testing.T) {
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
+	k8sClient := newFakeClient()
+	notes := newTestNotes()
+	inv := &Investigation{blackboxProber: healthyBlackboxProber()}
+
+	r := &investigation.Resources{
+		Cluster:    cluster,
+		K8sClient:  k8sClient,
+		RestConfig: testRestConfig(),
+	}
+
+	inv.checkBlackboxProbe(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "unable to determine console URL") {
+		t.Errorf("expected 'unable to determine console URL' in notes, got: %s", output)
 	}
 }

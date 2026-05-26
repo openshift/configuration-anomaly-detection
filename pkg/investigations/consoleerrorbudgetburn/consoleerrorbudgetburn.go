@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"regexp"
+	"strconv"
 	"strings"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -29,13 +31,21 @@ type consoleServiceChecker interface {
 	checkConsoleEndpoint(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) (string, error)
 }
 
+type blackboxProber interface {
+	runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error)
+}
+
 type Investigation struct {
 	consoleChecker consoleServiceChecker
+	blackboxProber blackboxProber
 }
 
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	if i.consoleChecker == nil {
 		i.consoleChecker = &defaultConsoleServiceChecker{}
+	}
+	if i.blackboxProber == nil {
+		i.blackboxProber = &defaultBlackboxProber{}
 	}
 
 	ctx := context.Background()
@@ -55,6 +65,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	notes := notewriter.New(i.Name(), logging.RawLogger)
+
+	// Check blackbox probe
+	// Applies to: Classic + HCP.
+	i.checkBlackboxProbe(ctx, r, notes)
 
 	// Check allowedSourceRanges on the default IngressController.
 	// Applies to: classic
@@ -433,6 +447,172 @@ func (i *Investigation) checkNodeHealth(ctx context.Context, k8sClient k8sclient
 		notes.AppendSuccess("Node Health: all %d node(s) running console pods are healthy", nodeCount)
 	} else {
 		notes.AppendWarning("Node Health: %d issue(s) on nodes running console pods:\n  %s", len(issues), strings.Join(issues, "\n  "))
+	}
+}
+
+// defaultBlackboxProber implements blackboxProber by exec'ing wget into the
+// blackbox-exporter pod in openshift-route-monitor-operator.
+type defaultBlackboxProber struct{}
+
+func (d *defaultBlackboxProber) runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(
+		ctx, podList,
+		client.InNamespace("openshift-route-monitor-operator"),
+		client.MatchingLabels{"app": "blackbox-exporter"},
+	); err != nil {
+		return "", fmt.Errorf("failed to list blackbox-exporter pods: %w", err)
+	}
+
+	var bbPod *corev1.Pod
+	for idx := range podList.Items {
+		if podList.Items[idx].Status.Phase == corev1.PodRunning {
+			bbPod = &podList.Items[idx]
+			break
+		}
+	}
+	if bbPod == nil {
+		return "", fmt.Errorf("no running blackbox-exporter pod found in openshift-route-monitor-operator")
+	}
+
+	probeURL := fmt.Sprintf("http://localhost:9115/probe?target=%s&module=http_2xx&debug=true", consoleURL)
+	output, err := k8sclient.ExecInPod(ctx, restConfig, bbPod, "blackbox-exporter", []string{
+		"wget", "-qO-", probeURL,
+	})
+	if err != nil {
+		return output, fmt.Errorf("exec failed: %w", err)
+	}
+	return strings.TrimSpace(output), nil
+}
+
+type probeResult struct {
+	success       bool
+	httpStatus    int
+	failureMode   string // "dns", "timeout", "tls", "connection_refused", "server_error", "unknown"
+	failureDetail string // human-readable detail extracted from logs
+	duration      float64
+}
+
+var (
+	probeSuccessRe    = regexp.MustCompile(`probe_success\s+([01])`)
+	probeHTTPStatusRe = regexp.MustCompile(`probe_http_status_code\s+(\d+)`)
+	probeDurationRe   = regexp.MustCompile(`probe_duration_seconds\s+([\d.]+)`)
+)
+
+func parseProbeResponse(body string) probeResult {
+	result := probeResult{}
+
+	const metricsSeparator = "Metrics that would have been returned:"
+	logSection := body
+	metricsSection := ""
+	if idx := strings.Index(body, metricsSeparator); idx >= 0 {
+		logSection = body[:idx]
+		metricsSection = body[idx+len(metricsSeparator):]
+	}
+
+	if m := probeSuccessRe.FindStringSubmatch(metricsSection); len(m) > 1 {
+		result.success = m[1] == "1"
+	}
+	if m := probeHTTPStatusRe.FindStringSubmatch(metricsSection); len(m) > 1 {
+		result.httpStatus, _ = strconv.Atoi(m[1])
+	}
+	if m := probeDurationRe.FindStringSubmatch(metricsSection); len(m) > 1 {
+		result.duration, _ = strconv.ParseFloat(m[1], 64)
+	}
+
+	if result.success {
+		return result
+	}
+
+	logLower := strings.ToLower(logSection)
+
+	type pattern struct {
+		needles []string
+		mode    string
+	}
+	patterns := []pattern{
+		{needles: []string{"no such host", "server misbehaving"}, mode: "dns"},
+		{needles: []string{"context deadline exceeded", "i/o timeout"}, mode: "timeout"},
+		{needles: []string{"x509", "certificate"}, mode: "tls"},
+		{needles: []string{"connection refused"}, mode: "connection_refused"},
+	}
+
+	for _, p := range patterns {
+		for _, needle := range p.needles {
+			if strings.Contains(logLower, needle) {
+				result.failureMode = p.mode
+				result.failureDetail = extractDetail(logSection, needle)
+				return result
+			}
+		}
+	}
+
+	// Check for server error (5xx) from the HTTP status code.
+	if result.httpStatus >= 500 && result.httpStatus < 600 {
+		result.failureMode = "server_error"
+		result.failureDetail = fmt.Sprintf("HTTP %d", result.httpStatus)
+		return result
+	}
+
+	result.failureMode = "unknown"
+	result.failureDetail = "probe failed with no recognized error pattern"
+	return result
+}
+
+func extractDetail(logSection, needle string) string {
+	needleLower := strings.ToLower(needle)
+	for _, line := range strings.Split(logSection, "\n") {
+		if strings.Contains(strings.ToLower(line), needleLower) {
+			line = strings.TrimSpace(line)
+
+			// Try to extract just the err= or msg= value for concise detail.
+			for _, prefix := range []string{"err=", "msg="} {
+				if idx := strings.Index(line, prefix); idx >= 0 {
+					snippet := line[idx:]
+					if len(snippet) > 200 {
+						snippet = snippet[:200] + "..."
+					}
+					return snippet
+				}
+			}
+
+			if len(line) > 200 {
+				line = line[:200] + "..."
+			}
+			return line
+		}
+	}
+	return needle
+}
+
+// checkBlackboxProbe queries the blackbox exporter's /probe endpoint by exec'ing
+// into the blackbox-exporter pod and classifies the result.
+//
+// Informational-only check.
+func (i *Investigation) checkBlackboxProbe(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
+	consoleURL := r.Cluster.Console().URL()
+	if consoleURL == "" {
+		notes.AppendWarning("Blackbox Probe: unable to determine console URL from cluster info")
+		return
+	}
+
+	restConfig, err := getRestConfig(r)
+	if err != nil {
+		notes.AppendWarning("Blackbox Probe: unable to get REST config - %v", err)
+		return
+	}
+
+	output, err := i.blackboxProber.runProbe(ctx, r.K8sClient, restConfig, consoleURL)
+	if err != nil {
+		notes.AppendWarning("Blackbox Probe: failed to query blackbox exporter - %v", err)
+		return
+	}
+
+	pr := parseProbeResponse(output)
+	if pr.success {
+		notes.AppendSuccess("Blackbox Probe: probe succeeded (HTTP %d, %.2fs) for %s", pr.httpStatus, pr.duration, consoleURL)
+	} else {
+		notes.AppendWarning("Blackbox Probe: probe FAILED for %s — failure mode: %s — %s", consoleURL, pr.failureMode, pr.failureDetail)
 	}
 }
 
