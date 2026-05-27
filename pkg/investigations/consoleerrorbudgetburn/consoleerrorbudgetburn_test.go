@@ -8,11 +8,16 @@ import (
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
+	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
+	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"go.uber.org/mock/gomock"
 	"gotest.tools/v3/assert"
 
 	corev1 "k8s.io/api/core/v1"
@@ -21,6 +26,14 @@ import (
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+)
+
+const (
+	actionSilence   = "silence_incident"
+	actionEscalate  = "escalate_incident"
+	failModeUnknown = "unknown"
+	lbTypeNLB       = "NLB"
+	lbTypeClassic   = "Classic"
 )
 
 func testScheme() *runtime.Scheme {
@@ -38,6 +51,23 @@ func newTestCluster(id, machineCIDR, consoleURL string) *cmv1.Cluster {
 	builder := cmv1.NewCluster().
 		ID(id).
 		Network(cmv1.NewNetwork().MachineCIDR(machineCIDR))
+	if consoleURL != "" {
+		builder = builder.Console(cmv1.NewClusterConsole().URL(consoleURL))
+	}
+	cluster, _ := builder.Build()
+	return cluster
+}
+
+// newAWSTestClusterWithDNS creates a test cluster with AWS provider, DNS, InfraID, and optional PrivateLink.
+func newAWSTestClusterWithDNS(id, machineCIDR, consoleURL, domainPrefix, baseDomain string, privateLink bool) *cmv1.Cluster {
+	builder := cmv1.NewCluster().
+		ID(id).
+		InfraID(id + "-infra").
+		Network(cmv1.NewNetwork().MachineCIDR(machineCIDR)).
+		CloudProvider(cmv1.NewCloudProvider().ID("aws")).
+		DomainPrefix(domainPrefix).
+		DNS(cmv1.NewDNS().BaseDomain(baseDomain)).
+		AWS(cmv1.NewAWS().PrivateLink(privateLink))
 	if consoleURL != "" {
 		builder = builder.Console(cmv1.NewClusterConsole().URL(consoleURL))
 	}
@@ -1009,10 +1039,10 @@ func TestRun_HCP_SkipsAllowedSourceRanges(t *testing.T) {
 	hasSilence := false
 	hasEscalate := false
 	for _, a := range result.Actions {
-		if a.Type() == "silence_incident" {
+		if a.Type() == actionSilence {
 			hasSilence = true
 		}
-		if a.Type() == "escalate_incident" {
+		if a.Type() == actionEscalate {
 			hasEscalate = true
 		}
 	}
@@ -1053,9 +1083,9 @@ func TestRun_AllowedSourceRangesMisconfigured(t *testing.T) {
 		switch a.Type() {
 		case "service_log":
 			hasServiceLog = true
-		case "silence_incident":
+		case actionSilence:
 			hasSilence = true
-		case "escalate_incident":
+		case actionEscalate:
 			hasEscalate = true
 		}
 	}
@@ -1105,9 +1135,9 @@ func TestRun_AllowedSourceRangesOK(t *testing.T) {
 		switch a.Type() {
 		case "service_log":
 			hasServiceLog = true
-		case "silence_incident":
+		case actionSilence:
 			hasSilence = true
-		case "escalate_incident":
+		case actionEscalate:
 			hasEscalate = true
 		}
 	}
@@ -1135,12 +1165,115 @@ func TestRun_ClusterAccessError(t *testing.T) {
 
 	hasEscalate := false
 	for _, a := range result.Actions {
-		if a.Type() == "escalate_incident" {
+		if a.Type() == actionEscalate {
 			hasEscalate = true
 		}
 	}
 	if !hasEscalate {
 		t.Error("expected escalate action for cluster access error")
+	}
+}
+
+func TestRun_NonAWSCluster_SkipsAWSChecks(t *testing.T) {
+	// Cluster with no CloudProvider set; AWS section should be skipped entirely.
+	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
+	dns := newDefaultDNS([]operatorv1.Upstream{{Type: operatorv1.SystemResolveConfType}})
+	routerPod := newRouterPod("router-default-abc", corev1.PodRunning, []corev1.ContainerStatus{
+		{Name: "router", Ready: true, RestartCount: 0},
+	})
+	consolePod := newConsolePod("console-abc", "node-1")
+	node := newTestNode("node-1", healthyNodeConditions(), false)
+	k8sClient := newFakeClient(ic, dns, routerPod, consolePod, node)
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			Cluster:    cluster,
+			K8sClient:  k8sClient,
+			IsHCP:      false,
+			RestConfig: testRestConfig(),
+		},
+	}
+
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
+	result, err := inv.Run(rb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hasEscalate := false
+	for _, a := range result.Actions {
+		if a.Type() == actionEscalate {
+			hasEscalate = true
+		}
+	}
+	if !hasEscalate {
+		t.Error("expected escalate action")
+	}
+}
+
+func TestRun_AWSCluster_AWSChecksRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	// Route53 check expects: FindHostedZone (private + public), HasResourceRecordSet (private + public)
+	mockAws.EXPECT().FindHostedZone("msaary-test.4t01.s1.devshift.org", true).Return("Z1234PRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("Z1234PRIVATE", "\\052.apps.msaary-test.4t01.s1.devshift.org.", "A").Return(true, nil)
+	mockAws.EXPECT().FindHostedZone("4t01.s1.devshift.org", false).Return("Z5678PUBLIC", nil)
+	mockAws.EXPECT().HasResourceRecordSet("Z5678PUBLIC", "\\052.apps.msaary-test.4t01.s1.devshift.org.", "A").Return(true, nil)
+
+	// DHCP check expects: GetVpcDhcpConfiguration (classic cluster, not HCP)
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+
+	// LB health check expects: FindCLBByDNSName (IC has no ProviderParameters → defaults to Classic)
+	mockAws.EXPECT().FindCLBByDNSName("test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", nil)
+	mockAws.EXPECT().GetCLBInstanceHealth("test-elb").Return([]aws.CLBInstanceHealth{
+		{InstanceID: "i-001", State: "InService"},
+		{InstanceID: "i-002", State: "InService"},
+	}, nil)
+
+	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
+	dns := newDefaultDNS([]operatorv1.Upstream{{Type: operatorv1.SystemResolveConfType}})
+	routerPod := newRouterPod("router-default-abc", corev1.PodRunning, []corev1.ContainerStatus{
+		{Name: "router", Ready: true, RestartCount: 0},
+	})
+	routerSvc := newRouterService("test-elb-123456.us-east-1.elb.amazonaws.com")
+	consolePod := newConsolePod("console-abc", "node-1")
+	node := newTestNode("node-1", healthyNodeConditions(), false)
+	k8sClient := newFakeClient(ic, dns, routerPod, routerSvc, consolePod, node)
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16",
+		"https://console.test.example.com", "msaary-test", "4t01.s1.devshift.org", false)
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			Cluster:           cluster,
+			K8sClient:         k8sClient,
+			AwsClient:         mockAws,
+			IsHCP:             false,
+			RestConfig:        testRestConfig(),
+			ClusterDeployment: &hivev1.ClusterDeployment{},
+		},
+	}
+
+	inv := &Investigation{
+		consoleChecker: healthyConsoleChecker(),
+		blackboxProber: healthyBlackboxProber(),
+		egressVerifier: successEgressVerifier(),
+	}
+	result, err := inv.Run(rb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hasEscalate := false
+	for _, a := range result.Actions {
+		if a.Type() == actionEscalate {
+			hasEscalate = true
+		}
+	}
+	if !hasEscalate {
+		t.Error("expected escalate action")
 	}
 }
 
@@ -1229,7 +1362,7 @@ func TestParseProbeResponse_UnknownFailure(t *testing.T) {
 	if pr.success {
 		t.Error("expected success=false")
 	}
-	if pr.failureMode != "unknown" {
+	if pr.failureMode != failModeUnknown {
 		t.Errorf("expected failureMode='unknown', got %q", pr.failureMode)
 	}
 }
@@ -1239,7 +1372,7 @@ func TestParseProbeResponse_EmptyResponse(t *testing.T) {
 	if pr.success {
 		t.Error("expected success=false for empty response")
 	}
-	if pr.failureMode != "unknown" {
+	if pr.failureMode != failModeUnknown {
 		t.Errorf("expected failureMode='unknown' for empty response, got %q", pr.failureMode)
 	}
 }
@@ -1329,5 +1462,892 @@ func TestCheckBlackboxProbe_EmptyConsoleURL(t *testing.T) {
 	output := notes.String()
 	if !strings.Contains(output, "unable to determine console URL") {
 		t.Errorf("expected 'unable to determine console URL' in notes, got: %s", output)
+	}
+}
+
+// checkRoute53DNS unit tests
+
+func TestCheckRoute53DNS_AllRecordsExist(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("ZPRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPRIVATE", "\\052.apps.myprefix.example.com.", "A").Return(true, nil)
+	mockAws.EXPECT().FindHostedZone("example.com", false).Return("ZPUBLIC", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPUBLIC", "\\052.apps.myprefix.example.com.", "A").Return(true, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if result {
+		t.Error("expected false (no missing records)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "verified in private and public hosted zones") {
+		t.Errorf("expected success message about both zones, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_MissingPrivateRecord(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("ZPRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPRIVATE", "\\052.apps.myprefix.example.com.", "A").Return(false, nil)
+	// Public zone is still checked (both zones are evaluated before reporting).
+	mockAws.EXPECT().FindHostedZone("example.com", false).Return("ZPUBLIC", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPUBLIC", "\\052.apps.myprefix.example.com.", "A").Return(true, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if !result {
+		t.Error("expected true (missing private record)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "missing from private hosted zone") {
+		t.Errorf("expected warning about missing private record, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_MissingPublicRecord(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("ZPRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPRIVATE", "\\052.apps.myprefix.example.com.", "A").Return(true, nil)
+	mockAws.EXPECT().FindHostedZone("example.com", false).Return("ZPUBLIC", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPUBLIC", "\\052.apps.myprefix.example.com.", "A").Return(false, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if !result {
+		t.Error("expected true (missing public record)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "missing from public hosted zone") {
+		t.Errorf("expected warning about missing public record, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_BothMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("ZPRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPRIVATE", "\\052.apps.myprefix.example.com.", "A").Return(false, nil)
+	mockAws.EXPECT().FindHostedZone("example.com", false).Return("ZPUBLIC", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPUBLIC", "\\052.apps.myprefix.example.com.", "A").Return(false, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if !result {
+		t.Error("expected true (both records missing)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "BOTH private and public") {
+		t.Errorf("expected warning about both zones missing, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_PrivateLink_SkipsPublic(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	// Only private zone should be checked... no public zone calls expected.
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("ZPRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("ZPRIVATE", "\\052.apps.myprefix.example.com.", "A").Return(true, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", true)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if result {
+		t.Error("expected false (private record exists, public skipped)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "verified in private hosted zone") {
+		t.Errorf("expected success message about private zone only, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_ZoneNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("", nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if result {
+		t.Error("expected false (zone not found is not a definitive missing-record finding)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "no private hosted zone found") {
+		t.Errorf("expected warning about zone not found, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_APIError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindHostedZone("myprefix.example.com", true).Return("", fmt.Errorf("access denied"))
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if result {
+		t.Error("expected false (API error is not a definitive finding)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "error looking up private hosted zone") {
+		t.Errorf("expected warning about API error, got: %s", output)
+	}
+}
+
+func TestCheckRoute53DNS_EmptyDomain(t *testing.T) {
+	// Cluster with empty DomainPrefix — should warn and return false, no AWS calls.
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster}
+	result := inv.checkRoute53DNS(context.Background(), r, notes)
+
+	if result {
+		t.Error("expected false (empty domain)")
+	}
+	output := notes.String()
+	if !strings.Contains(output, "unable to determine cluster domain") {
+		t.Errorf("expected warning about missing domain info, got: %s", output)
+	}
+}
+
+// checkDHCPOptions unit tests
+
+func TestCheckDHCPOptions_AmazonDNSOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "DHCP: VPC DHCP option set uses AmazonProvidedDNS") {
+		t.Errorf("expected success message, got: %s", output)
+	}
+	if strings.Contains(output, "⚠️") {
+		t.Errorf("expected no warning, got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_CustomDNSOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{"10.0.0.2", "10.0.0.3"}, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "custom DNS servers") {
+		t.Errorf("expected warning about custom DNS servers, got: %s", output)
+	}
+	if !strings.Contains(output, "⚠️") {
+		t.Errorf("expected warning emoji, got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_MixedDNS(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{"AmazonProvidedDNS", "10.0.0.2"}, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "AmazonProvidedDNS alongside custom servers") {
+		t.Errorf("expected success message about mixed DNS, got: %s", output)
+	}
+	if !strings.Contains(output, "✅") {
+		t.Errorf("expected success emoji (AmazonProvidedDNS is present), got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_DefaultDHCPNoServersEntry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{}, nil)
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "AWS default DNS") {
+		t.Errorf("expected success message about AWS default DNS, got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_EmptyInfraID(t *testing.T) {
+	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "")
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "unable to determine cluster infrastructure ID") {
+		t.Errorf("expected warning about missing infra ID, got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_APIError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return(nil, fmt.Errorf("access denied"))
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "unable to check VPC DHCP options") {
+		t.Errorf("expected warning about API error, got: %s", output)
+	}
+	if !strings.Contains(output, "access denied") {
+		t.Errorf("expected error message to include 'access denied', got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_NoVPCFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return(nil, fmt.Errorf("no VPC found with kubernetes.io/cluster/test-cluster-infra tag"))
+
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "unable to check VPC DHCP options") {
+		t.Errorf("expected warning about DHCP check failure, got: %s", output)
+	}
+	if !strings.Contains(output, "no VPC found") {
+		t.Errorf("expected error message about no VPC, got: %s", output)
+	}
+}
+
+// newRouterService creates a router-default Service in openshift-ingress with the given LB hostname.
+func newRouterService(hostname string) *corev1.Service {
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "router-default",
+			Namespace: "openshift-ingress",
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeLoadBalancer,
+		},
+	}
+	if hostname != "" {
+		svc.Status = corev1.ServiceStatus{
+			LoadBalancer: corev1.LoadBalancerStatus{
+				Ingress: []corev1.LoadBalancerIngress{
+					{Hostname: hostname},
+				},
+			},
+		}
+	}
+	return svc
+}
+
+// newNLBIngressController creates an IngressController with NLB type.
+func newNLBIngressController(allowedSourceRanges []operatorv1.CIDR) *operatorv1.IngressController {
+	ic := newDefaultIngressController(allowedSourceRanges)
+	if ic.Spec.EndpointPublishingStrategy == nil {
+		ic.Spec.EndpointPublishingStrategy = &operatorv1.EndpointPublishingStrategy{}
+	}
+	ic.Spec.EndpointPublishingStrategy.LoadBalancer = &operatorv1.LoadBalancerStrategy{
+		ProviderParameters: &operatorv1.ProviderLoadBalancerParameters{
+			Type: operatorv1.AWSLoadBalancerProvider,
+			AWS: &operatorv1.AWSLoadBalancerParameters{
+				Type: operatorv1.AWSNetworkLoadBalancer,
+			},
+		},
+	}
+	if allowedSourceRanges != nil {
+		ic.Spec.EndpointPublishingStrategy.LoadBalancer.AllowedSourceRanges = allowedSourceRanges
+	}
+	return ic
+}
+
+// determineLBType unit tests
+
+func TestDetermineLBType_NLB(t *testing.T) {
+	ic := &operatorv1.IngressController{}
+	ic.Spec.EndpointPublishingStrategy = &operatorv1.EndpointPublishingStrategy{
+		LoadBalancer: &operatorv1.LoadBalancerStrategy{
+			ProviderParameters: &operatorv1.ProviderLoadBalancerParameters{
+				Type: operatorv1.AWSLoadBalancerProvider,
+				AWS: &operatorv1.AWSLoadBalancerParameters{
+					Type: operatorv1.AWSNetworkLoadBalancer,
+				},
+			},
+		},
+	}
+	if determineLBType(ic) != lbTypeNLB {
+		t.Errorf("expected NLB, got %s", determineLBType(ic))
+	}
+}
+
+func TestDetermineLBType_Classic(t *testing.T) {
+	ic := &operatorv1.IngressController{}
+	ic.Spec.EndpointPublishingStrategy = &operatorv1.EndpointPublishingStrategy{
+		LoadBalancer: &operatorv1.LoadBalancerStrategy{
+			ProviderParameters: &operatorv1.ProviderLoadBalancerParameters{
+				Type: operatorv1.AWSLoadBalancerProvider,
+				AWS: &operatorv1.AWSLoadBalancerParameters{
+					Type: operatorv1.AWSClassicLoadBalancer,
+				},
+			},
+		},
+	}
+	if determineLBType(ic) != lbTypeClassic {
+		t.Errorf("expected Classic, got %s", determineLBType(ic))
+	}
+}
+
+func TestDetermineLBType_NilProviderParams(t *testing.T) {
+	ic := newDefaultIngressController(nil)
+	if determineLBType(ic) != lbTypeClassic {
+		t.Errorf("expected Classic (default), got %s", determineLBType(ic))
+	}
+}
+
+func TestDetermineLBType_StatusFallback(t *testing.T) {
+	ic := &operatorv1.IngressController{}
+	ic.Status.EndpointPublishingStrategy = &operatorv1.EndpointPublishingStrategy{
+		LoadBalancer: &operatorv1.LoadBalancerStrategy{
+			ProviderParameters: &operatorv1.ProviderLoadBalancerParameters{
+				Type: operatorv1.AWSLoadBalancerProvider,
+				AWS: &operatorv1.AWSLoadBalancerParameters{
+					Type: operatorv1.AWSNetworkLoadBalancer,
+				},
+			},
+		},
+	}
+	if determineLBType(ic) != lbTypeNLB {
+		t.Errorf("expected NLB from status fallback, got %s", determineLBType(ic))
+	}
+}
+
+// checkLoadBalancerHealth unit tests
+
+func TestCheckLBHealth_NLB_AllHealthy(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName("test-nlb-abc123.elb.us-east-1.amazonaws.com").
+		Return("arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/net/test-nlb/abc", "test-nlb", nil)
+	mockAws.EXPECT().GetNLBTargetHealth("arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/net/test-nlb/abc").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 443, State: "healthy"},
+			{TargetID: "i-002", Port: 443, State: "healthy"},
+		}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb-abc123.elb.us-east-1.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "all 2 target(s) healthy") {
+		t.Errorf("expected all healthy message, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_NLB_UnhealthyTarget(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName("test-nlb-abc123.elb.us-east-1.amazonaws.com").
+		Return("arn:nlb", "test-nlb", nil)
+	mockAws.EXPECT().GetNLBTargetHealth("arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 443, State: "healthy"},
+			{TargetID: "i-002", Port: 443, State: "unhealthy", Reason: "Target.FailedHealthChecks"},
+		}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb-abc123.elb.us-east-1.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "1/2 target(s) unhealthy") {
+		t.Errorf("expected unhealthy target message, got: %s", output)
+	}
+	if !strings.Contains(output, "i-002") {
+		t.Errorf("expected unhealthy target ID, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_CLB_AllInService(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName("test-clb-123456.us-east-1.elb.amazonaws.com").
+		Return("test-clb", nil)
+	mockAws.EXPECT().GetCLBInstanceHealth("test-clb").
+		Return([]aws.CLBInstanceHealth{
+			{InstanceID: "i-001", State: "InService"},
+			{InstanceID: "i-002", State: "InService"},
+		}, nil)
+
+	ic := newDefaultIngressController(nil) // no ProviderParameters → Classic
+	svc := newRouterService("test-clb-123456.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "all 2 instance(s) InService") {
+		t.Errorf("expected all InService message, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_CLB_OutOfService(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName("test-clb-123456.us-east-1.elb.amazonaws.com").
+		Return("test-clb", nil)
+	mockAws.EXPECT().GetCLBInstanceHealth("test-clb").
+		Return([]aws.CLBInstanceHealth{
+			{InstanceID: "i-001", State: "InService"},
+			{InstanceID: "i-002", State: "OutOfService", Description: "Instance has failed health checks"},
+		}, nil)
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("test-clb-123456.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "1/2 instance(s) not InService") {
+		t.Errorf("expected OutOfService message, got: %s", output)
+	}
+	if !strings.Contains(output, "i-002") {
+		t.Errorf("expected unhealthy instance ID, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_NoHostname(t *testing.T) {
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("") // no hostname
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "no LoadBalancer hostname assigned") {
+		t.Errorf("expected no hostname warning, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_LBNotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName("unknown-lb.us-east-1.elb.amazonaws.com").Return("", nil)
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("unknown-lb.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "no CLB found matching DNS name") {
+		t.Errorf("expected LB not found warning, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_APIError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName("test-clb.us-east-1.elb.amazonaws.com").
+		Return("", fmt.Errorf("access denied"))
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("test-clb.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "failed to look up CLB") {
+		t.Errorf("expected API error warning, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_ICNotFound(t *testing.T) {
+	// No IngressController in fake client.
+	svc := newRouterService("test-lb.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "failed to get default IngressController") {
+		t.Errorf("expected IC not found warning, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_NLB_NoTargets(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName("test-nlb.elb.us-east-1.amazonaws.com").
+		Return("arn:nlb", "test-nlb", nil)
+	mockAws.EXPECT().GetNLBTargetHealth("arn:nlb").
+		Return([]aws.NLBTargetHealth{}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb.elb.us-east-1.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "no registered targets") {
+		t.Errorf("expected no targets warning, got: %s", output)
+	}
+}
+
+func TestCheckLBHealth_CLB_DefaultType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	// IC with nil ProviderParameters defaults to Classic — should call CLB APIs.
+	mockAws.EXPECT().FindCLBByDNSName("test-clb.us-east-1.elb.amazonaws.com").
+		Return("test-clb", nil)
+	mockAws.EXPECT().GetCLBInstanceHealth("test-clb").
+		Return([]aws.CLBInstanceHealth{
+			{InstanceID: "i-001", State: "InService"},
+		}, nil)
+
+	ic := newDefaultIngressController(nil) // no ProviderParameters
+	svc := newRouterService("test-clb.us-east-1.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "CLB") {
+		t.Errorf("expected CLB in output (default type), got: %s", output)
+	}
+	if !strings.Contains(output, "all 1 instance(s) InService") {
+		t.Errorf("expected all InService, got: %s", output)
+	}
+}
+
+// mockEgressVerifier is a test mock for the egressVerifier interface.
+type mockEgressVerifier struct {
+	result  networkverifier.VerifierResult
+	failure string
+	err     error
+	called  bool
+}
+
+func (m *mockEgressVerifier) run(r *investigation.Resources) (networkverifier.VerifierResult, string, error) {
+	m.called = true
+	return m.result, m.failure, m.err
+}
+
+func successEgressVerifier() *mockEgressVerifier {
+	return &mockEgressVerifier{result: networkverifier.Success}
+}
+
+// checkVPCEgress unit tests
+
+func TestCheckVPCEgress_Success(t *testing.T) {
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{egressVerifier: successEgressVerifier()}
+
+	r := &investigation.Resources{
+		Cluster:           cluster,
+		ClusterDeployment: &hivev1.ClusterDeployment{},
+	}
+	inv.checkVPCEgress(r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "network verifier passed") {
+		t.Errorf("expected success message, got: %s", output)
+	}
+}
+
+func TestCheckVPCEgress_Failure(t *testing.T) {
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{egressVerifier: &mockEgressVerifier{
+		result:  networkverifier.Failure,
+		failure: "nosnch.in unreachable",
+	}}
+
+	r := &investigation.Resources{
+		Cluster:           cluster,
+		ClusterDeployment: &hivev1.ClusterDeployment{},
+	}
+	inv.checkVPCEgress(r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "blocked egress") {
+		t.Errorf("expected blocked egress warning, got: %s", output)
+	}
+	if !strings.Contains(output, "nosnch.in unreachable") {
+		t.Errorf("expected failure reason, got: %s", output)
+	}
+}
+
+func TestCheckVPCEgress_Error(t *testing.T) {
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{egressVerifier: &mockEgressVerifier{
+		err: fmt.Errorf("failed to initialize validateEgressInput"),
+	}}
+
+	r := &investigation.Resources{
+		Cluster:           cluster,
+		ClusterDeployment: &hivev1.ClusterDeployment{},
+	}
+	inv.checkVPCEgress(r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "network verifier error") {
+		t.Errorf("expected error warning, got: %s", output)
+	}
+	if !strings.Contains(output, "failed to initialize") {
+		t.Errorf("expected error detail, got: %s", output)
+	}
+}
+
+func TestCheckVPCEgress_Undefined(t *testing.T) {
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{egressVerifier: &mockEgressVerifier{
+		result: networkverifier.Undefined,
+	}}
+
+	r := &investigation.Resources{
+		Cluster:           cluster,
+		ClusterDeployment: &hivev1.ClusterDeployment{},
+	}
+	inv.checkVPCEgress(r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "undefined result") {
+		t.Errorf("expected undefined result warning, got: %s", output)
+	}
+}
+
+// Run-level test: PrivateLink cluster skips egress but runs other AWS checks
+
+func TestRun_PrivateLink_SkipsEgress(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	// Route53 check expects: FindHostedZone (private only for PrivateLink), HasResourceRecordSet
+	mockAws.EXPECT().FindHostedZone("msaary-test.4t01.s1.devshift.org", true).Return("Z1234PRIVATE", nil)
+	mockAws.EXPECT().HasResourceRecordSet("Z1234PRIVATE", "\\052.apps.msaary-test.4t01.s1.devshift.org.", "A").Return(true, nil)
+	// No public zone call for PrivateLink clusters.
+
+	// DHCP check expects: GetVpcDhcpConfiguration (classic cluster, not HCP)
+	mockAws.EXPECT().GetVpcDhcpConfiguration("test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+
+	// LB health check expects: FindCLBByDNSName (IC defaults to Classic)
+	mockAws.EXPECT().FindCLBByDNSName("test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", nil)
+	mockAws.EXPECT().GetCLBInstanceHealth("test-elb").Return([]aws.CLBInstanceHealth{
+		{InstanceID: "i-001", State: "InService"},
+		{InstanceID: "i-002", State: "InService"},
+	}, nil)
+
+	// No egress verifier calls expected — PrivateLink clusters skip egress.
+
+	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
+	dns := newDefaultDNS([]operatorv1.Upstream{{Type: operatorv1.SystemResolveConfType}})
+	routerPod := newRouterPod("router-default-abc", corev1.PodRunning, []corev1.ContainerStatus{
+		{Name: "router", Ready: true, RestartCount: 0},
+	})
+	routerSvc := newRouterService("test-elb-123456.us-east-1.elb.amazonaws.com")
+	consolePod := newConsolePod("console-abc", "node-1")
+	node := newTestNode("node-1", healthyNodeConditions(), false)
+	k8sClient := newFakeClient(ic, dns, routerPod, routerSvc, consolePod, node)
+	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16",
+		"https://console.test.example.com", "msaary-test", "4t01.s1.devshift.org", true) // PrivateLink=true
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			Cluster:    cluster,
+			K8sClient:  k8sClient,
+			AwsClient:  mockAws,
+			IsHCP:      false,
+			RestConfig: testRestConfig(),
+		},
+	}
+
+	egressMock := successEgressVerifier()
+	inv := &Investigation{
+		consoleChecker: healthyConsoleChecker(),
+		blackboxProber: healthyBlackboxProber(),
+		egressVerifier: egressMock,
+	}
+	result, err := inv.Run(rb)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify egress was skipped — mock should not have been called.
+	if egressMock.called {
+		t.Error("expected egress check to be skipped for PrivateLink cluster")
+	}
+
+	// Verify escalation still happens (other checks ran).
+	hasEscalate := false
+	for _, a := range result.Actions {
+		if a.Type() == actionEscalate {
+			hasEscalate = true
+		}
+	}
+	if !hasEscalate {
+		t.Error("expected escalate action")
 	}
 }

@@ -9,6 +9,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/bedrockagentcore v1.24.0
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.55.11
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.300.0
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing v1.32.0
+	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.49.0
+	github.com/aws/aws-sdk-go-v2/service/route53 v1.62.7
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
 	github.com/onsi/gomega v1.40.0
 	github.com/openshift-online/ocm-common v0.0.40

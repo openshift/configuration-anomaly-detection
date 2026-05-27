@@ -12,11 +12,13 @@ import (
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	nodeutils "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/networkverifier"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
@@ -35,9 +37,20 @@ type blackboxProber interface {
 	runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error)
 }
 
+type egressVerifier interface {
+	run(r *investigation.Resources) (networkverifier.VerifierResult, string, error)
+}
+
+type defaultEgressVerifier struct{}
+
+func (d *defaultEgressVerifier) run(r *investigation.Resources) (networkverifier.VerifierResult, string, error) {
+	return networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+}
+
 type Investigation struct {
 	consoleChecker consoleServiceChecker
 	blackboxProber blackboxProber
+	egressVerifier egressVerifier
 }
 
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
@@ -46,6 +59,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	if i.blackboxProber == nil {
 		i.blackboxProber = &defaultBlackboxProber{}
+	}
+	if i.egressVerifier == nil {
+		i.egressVerifier = &defaultEgressVerifier{}
 	}
 
 	ctx := context.Background()
@@ -109,6 +125,56 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Check health of nodes running console pods.
 	// Applies to: Classic + HCP.
 	i.checkNodeHealth(ctx, r.K8sClient, notes)
+
+	// AWS-specific checks.
+	// Applies to: AWS clusters only.
+	if r.Cluster.CloudProvider() != nil && r.Cluster.CloudProvider().ID() == "aws" {
+		r, err = rb.WithAwsClient().Build()
+		if err != nil {
+			notes.AppendWarning("AWS: unable to initialize AWS client — %v", err)
+		}
+	}
+
+	if r.AwsClient != nil {
+		// Route53 DNS check (classic + HCP, early return on missing records).
+		if i.checkRoute53DNS(ctx, r, notes) {
+			clusterDomain := r.Cluster.DomainPrefix() + "." + r.Cluster.DNS().BaseDomain()
+			sl := newNetworkMisconfigurationSL(
+				fmt.Sprintf("The *.apps.%s DNS record is missing from Route53 hosted zones", clusterDomain),
+			)
+			notes.AppendAutomation("Sent NetworkMisconfiguration service log and silenced alert")
+			result.Actions = append(
+				executor.NoteAndReportFrom(notes, r.Cluster.ID(), i.Name()),
+				executor.NewServiceLogAction(sl.Severity, sl.Summary).
+					WithDescription(sl.Description).
+					WithServiceName(sl.ServiceName).
+					Build(),
+				executor.Silence("Missing *.apps DNS records in Route53"),
+			)
+			return result, nil
+		}
+		// DHCP option set check (classic only).
+		if !r.IsHCP {
+			i.checkDHCPOptions(ctx, r, notes)
+		}
+		// Load balancer health check (classic only).
+		if !r.IsHCP {
+			i.checkLoadBalancerHealth(ctx, r, notes)
+		}
+		// VPC egress check (classic, public only).
+		// PrivateLink clusters are excluded because the network verifier's probe
+		// methodology (launching an instance to test internet-bound egress) does not
+		// apply to PrivateLink clusters, which use AWS PrivateLink endpoints instead
+		// of public internet egress.
+		if !r.IsHCP && r.Cluster.AWS() != nil && !r.Cluster.AWS().PrivateLink() {
+			r, err = rb.WithClusterDeployment().Build()
+			if err != nil {
+				notes.AppendWarning("VPC Egress: unable to fetch ClusterDeployment — %v", err)
+			} else {
+				i.checkVPCEgress(r, notes)
+			}
+		}
+	}
 
 	// No automated root cause identified — escalate for manual investigation.
 	result.Actions = append(
@@ -181,6 +247,318 @@ func newAllowedSourceRangesSL(machineCIDR string) *ocm.ServiceLog {
 		Summary:      "Action required: Incorrect Default IngressController Configuration",
 		Description:  fmt.Sprintf("Your cluster requires you to take action. Your default ingresscontroller is misconfigured, generating alerts for Red Hat SRE and degrading cluster health. The Machine CIDR for the cluster, '%s', needs to be added to the allowlist.", machineCIDR),
 		InternalOnly: false,
+	}
+}
+
+// newNetworkMisconfigurationSL returns the service log for a network misconfiguration
+func newNetworkMisconfigurationSL(change string) *ocm.ServiceLog {
+	return &ocm.ServiceLog{
+		Severity:     "Critical",
+		ServiceName:  "SREManualAction",
+		Summary:      "Action required: Network misconfiguration",
+		Description:  fmt.Sprintf("Your cluster requires you to take action. SRE has observed that there have been changes made to network configuration which impact normal working of the cluster: %s.", change),
+		InternalOnly: false,
+	}
+}
+
+// checkRoute53DNS verifies that *.apps DNS records exist in the cluster's Route53 hosted zones.
+// For non-PrivateLink, check both private and public hosted zones.
+// For PrivateLink clusters, only the private hosted zone is checked.
+func (i *Investigation) checkRoute53DNS(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) bool {
+	baseDomain := r.Cluster.DNS().BaseDomain()
+	domainPrefix := r.Cluster.DomainPrefix()
+	if baseDomain == "" || domainPrefix == "" {
+		notes.AppendWarning("Route53: unable to determine cluster domain (missing base domain or domain prefix)")
+		return false
+	}
+
+	clusterDomain := domainPrefix + "." + baseDomain
+	appsRecordName := "\\052.apps." + clusterDomain + "."
+
+	privateZoneID, err := r.AwsClient.FindHostedZone(clusterDomain, true)
+	if err != nil {
+		notes.AppendWarning("Route53: error looking up private hosted zone for %s — %v", clusterDomain, err)
+		return false
+	}
+
+	var missingPrivate, missingPublic bool
+
+	if privateZoneID == "" {
+		notes.AppendWarning("Route53: no private hosted zone found for %s", clusterDomain)
+		return false
+	}
+
+	hasPrivateRecord, err := r.AwsClient.HasResourceRecordSet(privateZoneID, appsRecordName, "A")
+	if err != nil {
+		notes.AppendWarning("Route53: error checking *.apps record in private zone for %s — %v", clusterDomain, err)
+		return false
+	}
+	missingPrivate = !hasPrivateRecord
+
+	isPrivateLink := r.Cluster.AWS() != nil && r.Cluster.AWS().PrivateLink()
+	if !isPrivateLink {
+		publicZoneID, err := r.AwsClient.FindHostedZone(baseDomain, false)
+		if err != nil {
+			notes.AppendWarning("Route53: error looking up public hosted zone for %s — %v", baseDomain, err)
+			return false
+		}
+		if publicZoneID == "" {
+			notes.AppendWarning("Route53: no public hosted zone found for %s", baseDomain)
+			return false
+		}
+
+		hasPublicRecord, err := r.AwsClient.HasResourceRecordSet(publicZoneID, appsRecordName, "A")
+		if err != nil {
+			notes.AppendWarning("Route53: error checking *.apps record in public zone for %s — %v", clusterDomain, err)
+			return false
+		}
+		missingPublic = !hasPublicRecord
+	}
+
+	if missingPrivate && missingPublic {
+		notes.AppendWarning("Route53: *.apps DNS record missing from BOTH private and public hosted zones for %s", clusterDomain)
+		return true
+	}
+	if missingPrivate {
+		notes.AppendWarning("Route53: *.apps DNS record missing from private hosted zone for %s", clusterDomain)
+		return true
+	}
+	if missingPublic {
+		notes.AppendWarning("Route53: *.apps DNS record missing from public hosted zone for %s", clusterDomain)
+		return true
+	}
+
+	if isPrivateLink {
+		notes.AppendSuccess("Route53: *.apps DNS record verified in private hosted zone for %s", clusterDomain)
+	} else {
+		notes.AppendSuccess("Route53: *.apps DNS records verified in private and public hosted zones for %s", clusterDomain)
+	}
+	return false
+}
+
+// checkDHCPOptions checks whether the VPC's DHCP option set includes AmazonProvidedDNS.
+//
+// Classic only, informational check.
+func (i *Investigation) checkDHCPOptions(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
+	infraID := r.Cluster.InfraID()
+	if infraID == "" {
+		notes.AppendWarning("DHCP: unable to determine cluster infrastructure ID")
+		return
+	}
+
+	servers, err := r.AwsClient.GetVpcDhcpConfiguration(infraID)
+	if err != nil {
+		notes.AppendWarning("DHCP: unable to check VPC DHCP options — %v", err)
+		return
+	}
+
+	if len(servers) == 0 {
+		notes.AppendSuccess("DHCP: VPC DHCP option set uses AWS default DNS (AmazonProvidedDNS)")
+		return
+	}
+
+	hasAmazonDNS := false
+	for _, s := range servers {
+		if s == "AmazonProvidedDNS" {
+			hasAmazonDNS = true
+			break
+		}
+	}
+
+	if !hasAmazonDNS {
+		notes.AppendWarning("DHCP: VPC DHCP option set uses custom DNS servers %v instead of AmazonProvidedDNS — this may prevent in-VPC DNS resolution", servers)
+		return
+	}
+
+	if len(servers) > 1 {
+		notes.AppendSuccess("DHCP: VPC DHCP option set includes AmazonProvidedDNS alongside custom servers %v", servers)
+		return
+	}
+
+	notes.AppendSuccess("DHCP: VPC DHCP option set uses AmazonProvidedDNS")
+}
+
+// determineLBType extracts the AWS load balancer type from the IngressController.
+// Returns "NLB" or "Classic". Defaults to "Classic" if the provider parameters are not set
+func determineLBType(ic *operatorv1.IngressController) string {
+	// check Spec first, fall back to status
+	for _, eps := range []*operatorv1.EndpointPublishingStrategy{
+		ic.Spec.EndpointPublishingStrategy,
+		ic.Status.EndpointPublishingStrategy,
+	} {
+		if eps != nil &&
+			eps.LoadBalancer != nil &&
+			eps.LoadBalancer.ProviderParameters != nil &&
+			eps.LoadBalancer.ProviderParameters.AWS != nil {
+			if eps.LoadBalancer.ProviderParameters.AWS.Type == operatorv1.AWSNetworkLoadBalancer {
+				return "NLB"
+			}
+			return "Classic"
+		}
+	}
+	return "Classic"
+}
+
+// checkLoadBalancerHealth checks the health of the cluster's ingress load balancer targets.
+// Identifies the LB type (CLB vs NLB) from the IngressController, reads the router-default
+// Service to find the LB hostname, then queries AWS for target health status.
+//
+// Classic only (not applicable to HCP). Informational-only check.
+func (i *Investigation) checkLoadBalancerHealth(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
+	// Get IngressController to determine LB type.
+	ic := &operatorv1.IngressController{}
+	if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{
+		Namespace: "openshift-ingress-operator",
+		Name:      "default",
+	}, ic); err != nil {
+		notes.AppendWarning("LB Health: failed to get default IngressController — %v", err)
+		return
+	}
+	lbType := determineLBType(ic)
+
+	svc := &corev1.Service{}
+	if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{
+		Namespace: "openshift-ingress",
+		Name:      "router-default",
+	}, svc); err != nil {
+		notes.AppendWarning("LB Health: failed to get router-default Service — %v", err)
+		return
+	}
+	if len(svc.Status.LoadBalancer.Ingress) == 0 || svc.Status.LoadBalancer.Ingress[0].Hostname == "" {
+		notes.AppendWarning("LB Health: router-default Service has no LoadBalancer hostname assigned")
+		return
+	}
+	hostname := svc.Status.LoadBalancer.Ingress[0].Hostname
+
+	switch lbType {
+	case "NLB":
+		i.checkNLBHealth(r, hostname, notes)
+	default:
+		i.checkCLBHealth(r, hostname, notes)
+	}
+}
+
+// checkNLBHealth finds an NLB by DNS name and reports target health.
+func (i *Investigation) checkNLBHealth(r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
+	arn, name, err := r.AwsClient.FindNLBByDNSName(hostname)
+	if err != nil {
+		notes.AppendWarning("LB Health: failed to look up NLB — %v", err)
+		return
+	}
+	if arn == "" {
+		notes.AppendWarning("LB Health: no NLB found matching DNS name %s", hostname)
+		return
+	}
+
+	targets, err := r.AwsClient.GetNLBTargetHealth(arn)
+	if err != nil {
+		notes.AppendWarning("LB Health: failed to get NLB target health for %s — %v", name, err)
+		return
+	}
+	if len(targets) == 0 {
+		notes.AppendWarning("LB Health: NLB %s has no registered targets", name)
+		return
+	}
+
+	reportNLBTargetHealth(name, targets, notes)
+}
+
+// reportNLBTargetHealth formats and appends NLB target health to the notewriter.
+func reportNLBTargetHealth(lbName string, targets []aws.NLBTargetHealth, notes *notewriter.NoteWriter) {
+	var unhealthy []aws.NLBTargetHealth
+	for _, t := range targets {
+		if t.State != "healthy" {
+			unhealthy = append(unhealthy, t)
+		}
+	}
+
+	if len(unhealthy) == 0 {
+		notes.AppendSuccess("LB Health: NLB %s — all %d target(s) healthy", lbName, len(targets))
+		return
+	}
+
+	details := make([]string, 0, len(unhealthy))
+	for _, t := range unhealthy {
+		detail := fmt.Sprintf("%s (port %d): %s", t.TargetID, t.Port, t.State)
+		if t.Reason != "" {
+			detail += " — " + t.Reason
+		}
+		details = append(details, detail)
+	}
+	notes.AppendWarning("LB Health: NLB %s — %d/%d target(s) unhealthy:\n  %s",
+		lbName, len(unhealthy), len(targets), strings.Join(details, "\n  "))
+}
+
+// checkCLBHealth finds a CLB by DNS name and reports instance health.
+func (i *Investigation) checkCLBHealth(r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
+	name, err := r.AwsClient.FindCLBByDNSName(hostname)
+	if err != nil {
+		notes.AppendWarning("LB Health: failed to look up CLB — %v", err)
+		return
+	}
+	if name == "" {
+		notes.AppendWarning("LB Health: no CLB found matching DNS name %s", hostname)
+		return
+	}
+
+	instances, err := r.AwsClient.GetCLBInstanceHealth(name)
+	if err != nil {
+		notes.AppendWarning("LB Health: failed to get CLB instance health for %s — %v", name, err)
+		return
+	}
+	if len(instances) == 0 {
+		notes.AppendWarning("LB Health: CLB %s has no registered instances", name)
+		return
+	}
+
+	reportCLBInstanceHealth(name, instances, notes)
+}
+
+// reportCLBInstanceHealth formats and appends CLB instance health to the notewriter.
+func reportCLBInstanceHealth(lbName string, instances []aws.CLBInstanceHealth, notes *notewriter.NoteWriter) {
+	var unhealthy []aws.CLBInstanceHealth
+	for _, inst := range instances {
+		if inst.State != "InService" {
+			unhealthy = append(unhealthy, inst)
+		}
+	}
+
+	if len(unhealthy) == 0 {
+		notes.AppendSuccess("LB Health: CLB %s — all %d instance(s) InService", lbName, len(instances))
+		return
+	}
+
+	details := make([]string, 0, len(unhealthy))
+	for _, inst := range unhealthy {
+		detail := fmt.Sprintf("%s: %s", inst.InstanceID, inst.State)
+		if inst.Description != "" {
+			detail += " — " + inst.Description
+		}
+		details = append(details, detail)
+	}
+	notes.AppendWarning("LB Health: CLB %s — %d/%d instance(s) not InService:\n  %s",
+		lbName, len(unhealthy), len(instances), strings.Join(details, "\n  "))
+}
+
+// checkVPCEgress runs the network verifier to validate VPC egress connectivity.
+// The network verifier launches a temporary t3.micro EC2 instance in a private subnet
+// to test outbound connectivity to required endpoints.
+//
+// Classic only, public only (not PrivateLink). Informational-only check.
+func (i *Investigation) checkVPCEgress(r *investigation.Resources, notes *notewriter.NoteWriter) {
+	verifierResult, failureReason, err := i.egressVerifier.run(r)
+	if err != nil {
+		notes.AppendWarning("VPC Egress: network verifier error — %v", err)
+		return
+	}
+
+	switch verifierResult {
+	case networkverifier.Failure:
+		notes.AppendWarning("VPC Egress: network verifier reported blocked egress — %s", failureReason)
+	case networkverifier.Success:
+		notes.AppendSuccess("VPC Egress: network verifier passed — all egress endpoints reachable")
+	default:
+		notes.AppendWarning("VPC Egress: network verifier returned undefined result")
 	}
 }
 
