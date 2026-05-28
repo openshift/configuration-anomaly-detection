@@ -11,11 +11,7 @@ import (
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
-	awssdk "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
-	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
@@ -69,67 +65,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	config := c.AIConfig
+	aiConfig := c.AIConfig
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
+	ctx, cancel := context.WithTimeout(context.Background(), aiConfig.GetTimeout())
 	defer cancel()
-
-	// Load default AWS config (uses default credential chain)
-	awsCfg, err := awssdk.LoadDefaultConfig(ctx, awssdk.WithRegion(config.Region))
-	if err != nil {
-		notes.AppendWarning("Failed to load AWS config: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to load AWS config"),
-		)
-		return result, nil
-	}
-
-	// Assume the CORA invoker IAM role with permissions to call AgentCore
-	roleArnToAssume := config.InvokerRoleArn
-
-	// Create STS client to assume the role
-	stsClient := sts.NewFromConfig(awsCfg)
-
-	// Get and log the identity of the original caller
-	callerIdentity, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		logging.Warnf("Failed to get original caller identity: %v", err)
-	} else {
-		logging.Infof("Original Caller: %s", *callerIdentity.Arn)
-	}
-
-	// Assume the role
-	assumeRoleOutput, err := stsClient.AssumeRole(ctx, &sts.AssumeRoleInput{
-		RoleArn:         &roleArnToAssume,
-		RoleSessionName: awsconfig.String("CAD-AI-Investigation"),
-		DurationSeconds: awsconfig.Int32(3600), // 1 hour
-	})
-	if err != nil {
-		notes.AppendWarning("Failed to assume IAM role: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to assume IAM role"),
-		)
-		return result, nil
-	}
-
-	// Create new AWS config with the assumed role credentials
-	awsCfg.Credentials = credentials.NewStaticCredentialsProvider(
-		*assumeRoleOutput.Credentials.AccessKeyId,
-		*assumeRoleOutput.Credentials.SecretAccessKey,
-		*assumeRoleOutput.Credentials.SessionToken,
-	)
-
-	// Verify the assumed role identity
-	stsClient2 := sts.NewFromConfig(awsCfg)
-	callerIdentity2, err := stsClient2.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		logging.Warnf("Failed to get assumed role caller identity: %v", err)
-	} else {
-		logging.Infof("AssumedRole Caller: %s", *callerIdentity2.Arn)
-	}
 
 	// Get PagerDuty incident details
 	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
@@ -164,8 +104,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// Create AgentCore client
-	agentClient := aws.NewAgentCoreClient(awsCfg)
+	// Get AI client (handles role assumption and client creation)
+	// Use incident ID as session identifier for audit trail
+	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
+	if err != nil {
+		notes.AppendWarning("Failed to create AI client: %v", err)
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate("Failed to create AI client"),
+		)
+		return result, nil
+	}
 
 	// TODO: Move session ID generation outside of AI investigation so all investigations have unique IDs
 	// This will require adapting this code to use the externally-generated ID instead
@@ -179,10 +128,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
 	input := &bedrockagentcore.InvokeAgentRuntimeInput{
-		AgentRuntimeArn:  &config.RuntimeARN,
+		AgentRuntimeArn:  &aiConfig.RuntimeARN,
 		RuntimeSessionId: &sessionID,
 		Payload:          payloadJSON,
-		RuntimeUserId:    &config.UserID,
+		RuntimeUserId:    &aiConfig.UserID,
 		Accept:           &acceptHeader, // Force streaming response
 	}
 
@@ -206,15 +155,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	var aiResponse strings.Builder
 	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
 	fmt.Fprintf(&aiResponse, "Session ID: %s\n", sessionID)
-	fmt.Fprintf(&aiResponse, "Runtime: %s\n", config.RuntimeARN)
-	if config.Version != "" {
-		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", config.Version)
+	fmt.Fprintf(&aiResponse, "Runtime: %s\n", aiConfig.RuntimeARN)
+	if aiConfig.Version != "" {
+		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", aiConfig.Version)
 	}
-	if config.OpsSopVersion != "" {
-		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", config.OpsSopVersion)
+	if aiConfig.OpsSopVersion != "" {
+		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", aiConfig.OpsSopVersion)
 	}
-	if config.RosaPluginsVersion != "" {
-		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", config.RosaPluginsVersion)
+	if aiConfig.RosaPluginsVersion != "" {
+		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", aiConfig.RosaPluginsVersion)
 	}
 	aiResponse.WriteString("\n")
 

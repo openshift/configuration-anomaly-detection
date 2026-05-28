@@ -262,6 +262,7 @@ ai_agent:
   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/test"
   user_id: "cad-agent"
   region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
   timeout_seconds: 600
   version: "v1.0.0"
   ops_sop_version: "v2.0.0"
@@ -301,6 +302,7 @@ ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
   region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
 filters:
   - investigation: aiassisted
     when:
