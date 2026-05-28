@@ -113,6 +113,16 @@ func GetAIClient(ctx context.Context, roleArn, region, sessionIdentifier string)
 		return nil, fmt.Errorf("failed to assume IAM role: %w", err)
 	}
 
+	// Defensive nil-check for assumed role credentials
+	if assumeRoleOutput.Credentials == nil {
+		return nil, fmt.Errorf("STS AssumeRole returned nil credentials")
+	}
+	if assumeRoleOutput.Credentials.AccessKeyId == nil ||
+		assumeRoleOutput.Credentials.SecretAccessKey == nil ||
+		assumeRoleOutput.Credentials.SessionToken == nil {
+		return nil, fmt.Errorf("STS AssumeRole returned incomplete credentials")
+	}
+
 	// Create new AWS config with the assumed role credentials
 	awsCfg.Credentials = credentialsv2.NewStaticCredentialsProvider(
 		*assumeRoleOutput.Credentials.AccessKeyId,
