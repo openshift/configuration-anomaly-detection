@@ -15,6 +15,7 @@ declare -A alert_mapping=(
     ["etcdDatabaseQuotaLowSpace"]="etcdDatabaseQuotaLowSpace CRITICAL (1)"
     ["console-errorbudgetburn"]="console-errorbudgetburn Critical (1)"
     ["OCMAgentResponseFailureServiceLogsSRE"]="OCMAgentResponseFailureServiceLogsSRE CRITICAL (1)"
+    ["ExpiredCertificates"]="expiredcertificates"
 )
 
 # Function to print help message

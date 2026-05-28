@@ -15,6 +15,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/expiredcertificates"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -351,6 +352,27 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		if inv.AlertTitle() == chgmInv.AlertTitle() {
 			c.recordManualCompletion(inv.Name(), pdClient, "ccam_stopped")
 			return nil
+		}
+	}
+
+	// Skip cert pre-check for investigations that use management cluster access,
+	// because backplane validates all RBAC (including hosted-cluster rules) against
+	// infrastructure cluster restrictions, rejecting secrets access.
+	certPreCheckSkip := []string{"mustgather", "restartcontrolplane", "etcddatabasequotalowspace"}
+	certCheck := &expiredcertificates.Investigation{}
+	if inv.Name() != certCheck.Name() && !slices.Contains(certPreCheckSkip, inv.Name()) {
+		certResult, certErr := certCheck.Run(builder)
+		if certErr != nil {
+			logging.Warnf("Expired certificates pre-check failed: %v", certErr)
+		}
+		if len(certResult.Actions) > 0 {
+			if certErr = c.executeActions(builder, &certResult, certCheck.Name()); certErr != nil {
+				logging.Warnf("Failed to execute expired certificates actions: %v", certErr)
+			}
+		}
+		// Reset notes so cert check findings don't leak into the main investigation's NoteWriter
+		if r, _ := builder.Build(); r != nil {
+			r.Notes = nil
 		}
 	}
 

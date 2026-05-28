@@ -1,4 +1,4 @@
-name: ocmagentresponsefailure
+name: expiredcertificates
 rbac:
   roles:
     - namespace: "openshift-config"
@@ -30,4 +30,4 @@ rbac:
     - apiGroups: ['config.openshift.io']
       resources: ['apiservers', 'ingresses', 'clusteroperators']
       verbs: ['get', 'list']
-customerDataAccess: false
+customerDataAccess: true
