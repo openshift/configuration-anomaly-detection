@@ -111,7 +111,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		notes.AppendWarning("Failed to create AI client: %v", err)
 		result.Actions = append(
 			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to create AI client"),
+			executor.Escalate(fmt.Sprintf("Failed to create AI client: %v", err)),
 		)
 		return result, nil
 	}
