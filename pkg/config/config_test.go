@@ -350,6 +350,17 @@ filters: []
 			wantErr: true,
 		},
 		{
+			name: "ai_agent missing invoker_role_arn",
+			yaml: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "user"
+  region: "us-east-1"
+filters: []
+`,
+			wantErr: true,
+		},
+		{
 			name: "config without ai_agent is valid",
 			yaml: testMustgatherFilterYAML,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
