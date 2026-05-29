@@ -68,7 +68,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	aiConfig := c.AIConfig
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), aiConfig.GetTimeout())
+	ctx, cancel := context.WithTimeout(context.TODO(), aiConfig.GetTimeout())
 	defer cancel()
 
 	// Get PagerDuty incident details
