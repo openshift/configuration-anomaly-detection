@@ -271,6 +271,7 @@ ai_agent:
   runtime_arn: "arn:test"
   user_id: "test"
   region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/test"
 filters:
   - investigation: aiassisted
     when:
@@ -288,6 +289,7 @@ ai_agent:
   runtime_arn: "arn:test"
   user_id: "test"
   region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/test"
 filters:
   - investigation: aiassisted
 `,

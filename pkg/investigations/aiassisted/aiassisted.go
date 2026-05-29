@@ -8,12 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
@@ -68,37 +65,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	config := c.AIConfig
-
-	awsAccessKeyID := os.Getenv("AGENTCORE_AWS_ACCESS_KEY_ID")
-	if awsAccessKeyID == "" {
-		notes.AppendWarning("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID"),
-		)
-		return result, nil
-	}
-	awsSecretAccessKey := os.Getenv("AGENTCORE_AWS_SECRET_ACCESS_KEY")
-	if awsSecretAccessKey == "" {
-		notes.AppendWarning("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY"),
-		)
-		return result, nil
-	}
+	aiConfig := c.AIConfig
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
+	ctx, cancel := context.WithTimeout(context.TODO(), aiConfig.GetTimeout())
 	defer cancel()
-
-	// Create AWS config directly without LoadDefaultConfig
-	// This bypasses all default credential chain logic
-	awsCfg := awsconfig.Config{
-		Region:      config.Region,
-		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, ""),
-	}
 
 	// Get PagerDuty incident details
 	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
@@ -133,8 +104,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// Create AgentCore client
-	agentClient := aws.NewAgentCoreClient(awsCfg)
+	// Get AI client (handles role assumption and client creation)
+	// Use incident ID as session identifier for audit trail
+	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
+	if err != nil {
+		notes.AppendWarning("Failed to create AI client: %v", err)
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate(fmt.Sprintf("Failed to create AI client: %v", err)),
+		)
+		return result, nil
+	}
 
 	// TODO: Move session ID generation outside of AI investigation so all investigations have unique IDs
 	// This will require adapting this code to use the externally-generated ID instead
@@ -148,10 +128,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
 	input := &bedrockagentcore.InvokeAgentRuntimeInput{
-		AgentRuntimeArn:  &config.RuntimeARN,
+		AgentRuntimeArn:  &aiConfig.RuntimeARN,
 		RuntimeSessionId: &sessionID,
 		Payload:          payloadJSON,
-		RuntimeUserId:    &config.UserID,
+		RuntimeUserId:    &aiConfig.UserID,
 		Accept:           &acceptHeader, // Force streaming response
 	}
 
@@ -175,15 +155,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	var aiResponse strings.Builder
 	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
 	fmt.Fprintf(&aiResponse, "Session ID: %s\n", sessionID)
-	fmt.Fprintf(&aiResponse, "Runtime: %s\n", config.RuntimeARN)
-	if config.Version != "" {
-		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", config.Version)
+	fmt.Fprintf(&aiResponse, "Runtime: %s\n", aiConfig.RuntimeARN)
+	if aiConfig.Version != "" {
+		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", aiConfig.Version)
 	}
-	if config.OpsSopVersion != "" {
-		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", config.OpsSopVersion)
+	if aiConfig.OpsSopVersion != "" {
+		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", aiConfig.OpsSopVersion)
 	}
-	if config.RosaPluginsVersion != "" {
-		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", config.RosaPluginsVersion)
+	if aiConfig.RosaPluginsVersion != "" {
+		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", aiConfig.RosaPluginsVersion)
 	}
 	aiResponse.WriteString("\n")
 

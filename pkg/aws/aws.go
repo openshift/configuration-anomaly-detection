@@ -11,6 +11,8 @@ import (
 
 	// V2 SDK
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/config"
+	credentialsv2 "github.com/aws/aws-sdk-go-v2/credentials"
 	bedrockagentcore "github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	cloudtrailv2 "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
@@ -83,6 +85,53 @@ func NewClient(config awsv2.Config) (*SdkClient, error) {
 // runtime lives (not customer account credentials).
 func NewAgentCoreClient(config awsv2.Config) AgentCoreAPI {
 	return bedrockagentcore.NewFromConfig(config)
+}
+
+// GetAIClient creates an AgentCore client by assuming the specified IAM role.
+// This function handles the role assumption and returns a configured AgentCore client.
+// The roleArn parameter is the IAM role to assume for invoking AgentCore.
+// The region parameter specifies the AWS region where the AgentCore runtime is deployed.
+// The sessionIdentifier is included in the session name for audit trail purposes.
+func GetAIClient(ctx context.Context, roleArn, region, sessionIdentifier string) (AgentCoreAPI, error) {
+	// Load default AWS config. CAD's deployment credentials have permission to assume the invoker role.
+	awsCfg, err := awssdk.LoadDefaultConfig(ctx, awssdk.WithRegion(region))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	// Set up STS client for role assumption
+	stsClient := stsv2.NewFromConfig(awsCfg)
+
+	// Include session identifier for audit trail in CloudTrail logs
+	sessionName := fmt.Sprintf("CAD-AI-Investigation-%s", sessionIdentifier)
+	assumeRoleOutput, err := stsClient.AssumeRole(ctx, &stsv2.AssumeRoleInput{
+		RoleArn:         awsv2.String(roleArn),
+		RoleSessionName: awsv2.String(sessionName),
+		DurationSeconds: awsv2.Int32(3600), // 1 hour
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to assume IAM role: %w", err)
+	}
+
+	// Defensive nil-check for assumed role credentials
+	if assumeRoleOutput.Credentials == nil {
+		return nil, fmt.Errorf("STS AssumeRole returned nil credentials")
+	}
+	if assumeRoleOutput.Credentials.AccessKeyId == nil ||
+		assumeRoleOutput.Credentials.SecretAccessKey == nil ||
+		assumeRoleOutput.Credentials.SessionToken == nil {
+		return nil, fmt.Errorf("STS AssumeRole returned incomplete credentials")
+	}
+
+	// Create new AWS config with the assumed role credentials
+	awsCfg.Credentials = credentialsv2.NewStaticCredentialsProvider(
+		*assumeRoleOutput.Credentials.AccessKeyId,
+		*assumeRoleOutput.Credentials.SecretAccessKey,
+		*assumeRoleOutput.Credentials.SessionToken,
+	)
+
+	// Create and return AgentCore client
+	return NewAgentCoreClient(awsCfg), nil
 }
 
 // GetAWSCredentials gets the AWS credentials

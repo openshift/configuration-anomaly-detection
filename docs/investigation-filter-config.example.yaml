@@ -91,18 +91,14 @@
 # AI investigation is enabled.
 #
 # ai_agent:
-#   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
-#   user_id: "cad-agent"
+#   runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/rosasreai_stage-abc123"
+#   user_id: "cad-service-account"
 #   region: "us-east-1"
+#   invoker_role_arn: "arn:aws:iam::123456789012:role/rosasreai_stage-invoker"
 #   timeout_seconds: 900              # Optional, defaults to 900 (15 min)
 #   version: "v1.0.0"                 # Optional, audit trail only
 #   ops_sop_version: "v2.0.0"         # Optional, audit trail only
 #   rosa_plugins_version: "v3.0.0"    # Optional, audit trail only
-# ai_agent:
-#   runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
-#   user_id: "cad-agent"
-#   region: "us-east-1"
-#   timeout_seconds: 900
 
 filters:
   # Enable AI investigation for specific clusters or organizations.

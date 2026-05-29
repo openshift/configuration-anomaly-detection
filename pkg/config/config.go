@@ -23,9 +23,10 @@ const (
 
 // AIAgentConfig holds runtime configuration for AgentCore AI investigations.
 type AIAgentConfig struct {
-	RuntimeARN string `yaml:"runtime_arn"` // AWS ARN of the agent runtime to invoke
-	UserID     string `yaml:"user_id"`     // Used for audit trail only
-	Region     string `yaml:"region"`
+	RuntimeARN     string `yaml:"runtime_arn"`      // AWS ARN of the agent runtime to invoke
+	UserID         string `yaml:"user_id"`          // Used for audit trail only
+	Region         string `yaml:"region"`           // AWS region where AgentCore is deployed
+	InvokerRoleArn string `yaml:"invoker_role_arn"` // IAM role ARN to assume for invoking AgentCore
 
 	// Version Metadata (for audit trail in notes/reports)
 	Version            string `yaml:"version,omitempty"`              // Agent runtime version to validate
@@ -82,6 +83,7 @@ type legacyAIAgentConfig struct {
 	RuntimeARN         string   `json:"runtime_arn"`
 	UserID             string   `json:"user_id"`
 	Region             string   `json:"region"`
+	InvokerRoleArn     string   `json:"invoker_role_arn,omitempty"`
 	Version            string   `json:"version,omitempty"`
 	OpsSopVersion      string   `json:"ops_sop_version,omitempty"`
 	RosaPluginsVersion string   `json:"rosa_plugins_version,omitempty"`
@@ -127,6 +129,7 @@ func loadLegacyAIConfig() (*Config, error) {
 			RuntimeARN:         legacy.RuntimeARN,
 			UserID:             legacy.UserID,
 			Region:             legacy.Region,
+			InvokerRoleArn:     legacy.InvokerRoleArn,
 			Version:            legacy.Version,
 			OpsSopVersion:      legacy.OpsSopVersion,
 			RosaPluginsVersion: legacy.RosaPluginsVersion,
@@ -212,6 +215,9 @@ func (c *Config) Validate(validInvestigations []string) error {
 		}
 		if c.AIAgent.UserID == "" {
 			return fmt.Errorf("ai_agent: user_id must not be empty")
+		}
+		if c.AIAgent.InvokerRoleArn == "" {
+			return fmt.Errorf("ai_agent: invoker_role_arn must not be empty")
 		}
 	}
 
