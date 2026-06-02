@@ -90,12 +90,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Escalate immediately - AI investigations always go to SRE.
 	// Results will be posted async to PD notes for review.
 	if err := r.PdClient.EscalateIncident(); err != nil {
-		// If escalation fails, still continue with investigation and add note about failure
-		notes.AppendWarning("Failed to escalate incident immediately: %v", err)
-		logging.Warnf("Failed to escalate incident for AI investigation: %v", err)
-	} else {
-		logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
+		// Fail pipeline - if there's no incident or issue reaching PD, there's nothing to post results back to
+		logging.Errorf("Failed to escalate incident for AI investigation: %v", err)
+		return result, investigation.WrapInfrastructure(err, "PagerDuty incident escalation failed")
 	}
+	logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
 
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
