@@ -47,7 +47,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result := investigation.InvestigationResult{}
 
 	// Build resources
-	r, err := rb.WithNotes().Build()
+	r, err := rb.WithNotes().WithCluster().Build()
 	if err != nil {
 		return result, err
 	}
@@ -55,6 +55,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes := r.Notes
 
 	clusterID := r.Cluster.ID()
+
+	if r.IsHCP {
+		notes.AppendWarning("HCP cluster - skipping AI investigation")
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate("Cluster is HCP - AI investigation not supported"),
+		)
+		return result, nil
+	}
 
 	if c.AIConfig == nil {
 		notes.AppendWarning("AI agent runtime configuration not set (ai_agent section missing from config)")
@@ -82,6 +91,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
+	// Escalate immediately - AI investigations always go to SRE.
+	// Results will be posted async to PD notes for review.
+	if err := r.PdClient.EscalateIncident(); err != nil {
+		// Fail pipeline - if there's no incident or issue reaching PD, there's nothing to post results back to
+		logging.Errorf("Failed to escalate incident for AI investigation: %v", err)
+		return result, investigation.WrapInfrastructure(err, "PagerDuty incident escalation failed")
+	}
+	logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
+
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
 
@@ -97,10 +115,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	payloadJSON, err := json.Marshal(investigationData)
 	if err != nil {
 		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to create investigation payload"),
-		)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
 
@@ -109,10 +124,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
 	if err != nil {
 		notes.AppendWarning("Failed to create AI client: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate(fmt.Sprintf("Failed to create AI client: %v", err)),
-		)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
 
@@ -138,10 +150,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	output, err := agentClient.InvokeAgentRuntime(ctx, input)
 	if err != nil {
 		notes.AppendWarning("Failed to invoke AgentCore runtime: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to invoke AgentCore"),
-		)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
 	defer func() {
@@ -187,10 +196,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes.AppendAutomation("AI automation completed. Check recent cluster reports for report Summary %s: 'osdctl cluster reports list --cluster-id %s'", incidentID, clusterID)
 
 	// Return actions for executor to handle
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-		executor.Escalate("AI investigation completed - manual review required"),
-	)
+	result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 	return result, nil
 }
 
