@@ -193,10 +193,22 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("AI Output:\n%s", aiResponse.String())
 
 	// Add simple note about AI automation completion
-	notes.AppendAutomation("AI automation completed. Check recent cluster reports for report Summary %s: 'osdctl cluster reports list --cluster-id %s'", incidentID, clusterID)
+	notes.AppendAutomation("AI automation completed. Check recent cluster reports for AI investigation details: 'osdctl cluster reports list --cluster-id %s'", clusterID)
+
+	// Create backplane report action with the AI investigation results
+	backplaneReportAction := &executor.BackplaneReportAction{
+		ClusterID: r.Cluster.ExternalID(),
+		Summary:   fmt.Sprintf("CAD Investigation: AI-Assisted Analysis for %s", alertName),
+		Data:      aiResponse.String(),
+	}
 
 	// Return actions for executor to handle
-	result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+	// The report action will append to notes when executed, then note sends them to PagerDuty
+	result.Actions = append(
+		executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+		backplaneReportAction, // write a second report here, as this contains the formatted AI results
+		executor.Escalate("AI investigation completed - see cluster report for details"),
+	)
 	return result, nil
 }
 
