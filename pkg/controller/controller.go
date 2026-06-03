@@ -29,6 +29,8 @@ import (
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
+var certPreCheckSkip = []string{"mustgather"}
+
 type PagerDutyConfig struct {
 	PayloadPath string
 }
@@ -355,25 +357,9 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		}
 	}
 
-	// Skip cert pre-check for investigations that use management cluster access,
-	// because backplane validates all RBAC (including hosted-cluster rules) against
-	// infrastructure cluster restrictions, rejecting secrets access.
-	certPreCheckSkip := []string{"mustgather", "restartcontrolplane", "etcddatabasequotalowspace"}
 	certCheck := &expiredcertificates.Investigation{}
-	if inv.Name() != certCheck.Name() && !slices.Contains(certPreCheckSkip, inv.Name()) {
-		certResult, certErr := certCheck.Run(builder)
-		if certErr != nil {
-			logging.Warnf("Expired certificates pre-check failed: %v", certErr)
-		}
-		if len(certResult.Actions) > 0 {
-			if certErr = c.executeActions(builder, &certResult, certCheck.Name()); certErr != nil {
-				logging.Warnf("Failed to execute expired certificates actions: %v", certErr)
-			}
-		}
-		// Reset notes so cert check findings don't leak into the main investigation's NoteWriter
-		if r, _ := builder.Build(); r != nil {
-			r.Notes = nil
-		}
+	if pdClient != nil && inv.Name() != certCheck.Name() && !slices.Contains(certPreCheckSkip, inv.Name()) {
+		c.runCertPreCheck(clusterId, pdClient, certCheck)
 	}
 
 	logging.Infof("Starting investigation for %s", inv.Name())
@@ -406,6 +392,30 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 		c.recordManualCompletion(inv.Name(), pdClient, "no_findings")
 	}
 	return nil
+}
+
+func (c *investigationRunner) runCertPreCheck(clusterId string, pdClient *pagerduty.SdkClient, certCheck *expiredcertificates.Investigation) {
+	certBuilder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, certCheck.Name(), c.dependencies.BackplaneURL, nil)
+	if err != nil {
+		logging.Warnf("Expired certificates pre-check: failed to create resource builder: %v", err)
+		return
+	}
+	certBuilder.WithPdClient(pdClient)
+
+	certResult, certErr := certCheck.Run(certBuilder)
+	if certErr != nil {
+		logging.Warnf("Expired certificates pre-check failed: %v", certErr)
+	}
+	if len(certResult.Actions) > 0 {
+		if certErr = c.executeActions(certBuilder, &certResult, certCheck.Name()); certErr != nil {
+			logging.Warnf("Failed to execute expired certificates actions: %v", certErr)
+		}
+	}
+	if certResources, _ := certBuilder.Build(); certResources != nil && certResources.RestConfig != nil {
+		if cleanErr := certResources.RestConfig.Clean(); cleanErr != nil {
+			logging.Warnf("Failed to clean expired certificates rest config: %v", cleanErr)
+		}
+	}
 }
 
 // runInvestigationWithRetry executes an investigation with retry logic for transient errors.
