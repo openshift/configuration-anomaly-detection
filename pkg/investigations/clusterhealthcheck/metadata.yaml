@@ -17,31 +17,6 @@ rbac:
         - apiGroups: ['']
           resources: ['pods/exec']
           verbs: ['create']
-    - namespace: "openshift-config"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-ingress"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-config-managed"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-service-ca"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-ingress-operator"
-      rules:
-        - apiGroups: ['operator.openshift.io']
-          resources: ['ingresscontrollers']
-          verbs: ['get']
   clusterRoleRules:
     - apiGroups: ['']
       resources: ['namespaces']
@@ -53,7 +28,7 @@ rbac:
       resources: ['pods', 'pods/log']
       verbs: ['get', 'list', 'watch']
     - apiGroups: ['config.openshift.io']
-      resources: ['clusteroperators', 'clusterversions', 'apiservers', 'ingresses']
+      resources: ['clusteroperators', 'clusterversions']
       verbs: ['get', 'list']
     - apiGroups: ['machineconfiguration.openshift.io']
       resources: ['machineconfigpools']

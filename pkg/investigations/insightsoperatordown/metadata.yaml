@@ -1,31 +1,6 @@
 name: insightsoperatordown
 rbac:
-  roles:
-    - namespace: "openshift-config"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-ingress"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-config-managed"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-service-ca"
-      rules:
-        - apiGroups: ['']
-          resources: ['secrets']
-          verbs: ['get', 'list']
-    - namespace: "openshift-ingress-operator"
-      rules:
-        - apiGroups: ['operator.openshift.io']
-          resources: ['ingresscontrollers']
-          verbs: ['get']
+  roles: []
   clusterRoleRules:
     - verbs:
         - "get"
@@ -34,6 +9,4 @@ rbac:
         - "config.openshift.io"
       resources:
         - clusteroperators
-        - apiservers
-        - ingresses
 customerDataAccess: false
