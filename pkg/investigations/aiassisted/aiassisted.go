@@ -203,12 +203,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// Return actions for executor to handle
-	// The report action will append to notes when executed, then note sends them to PagerDuty
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-		backplaneReportAction, // write a second report here, as this contains the formatted AI results
+	result.Actions = []executor.Action{
+		executor.NoteFrom(notes), // Send automation message to PagerDuty
+		backplaneReportAction,    // Create cluster report with AI investigation results
 		executor.Escalate("AI investigation completed - see cluster report for details"),
-	)
+	}
 	return result, nil
 }
 
