@@ -16,6 +16,7 @@ func Push() {
 	if pushgateway := os.Getenv("CAD_PROMETHEUS_PUSHGATEWAY"); pushgateway != "" {
 		promPusher = push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
 		promPusher.Collector(Alerts)
+		promPusher.Collector(AlertsFiltered)
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
@@ -80,6 +81,12 @@ var (
 			Namespace: namespace, Subsystem: subsystemInvestigate,
 			Name: "servicelog_sent_total",
 			Help: "counts investigations resulting in a sent servicelog",
+		}, []string{alertTypeLabel})
+	AlertsFiltered = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "alerts_filtered_total",
+			Help: "counts alerts filtered out by investigation filter configuration",
 		}, []string{alertTypeLabel})
 	MustGatherPerformed = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
