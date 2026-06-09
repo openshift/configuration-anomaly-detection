@@ -330,6 +330,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 	// Evaluate the investigation filter if one is configured for this investigation.
 	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
 	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
+		metrics.Inc(metrics.AlertsFiltered, inv.Name())
 		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
 		return nil
 	}
