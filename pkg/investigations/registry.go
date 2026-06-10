@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/etcddatabasequotalowspace"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/expiredcertificates"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
@@ -38,6 +39,7 @@ var availableInvestigations = []investigation.Investigation{
 	&describenodes.Investigation{},
 	&clusterhealthcheck.Investigation{},
 	&consoleerrorbudgetburn.Investigation{},
+	&expiredcertificates.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.

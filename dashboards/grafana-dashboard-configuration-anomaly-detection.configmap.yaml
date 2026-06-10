@@ -740,7 +740,7 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(cad_investigate_must_gather_performed_total{alert_type=\"mustgather\"}[$__range])) / sum(increase(cad_investigate_alerts_total{alert_type=\"mustgather\"}[$__range])) * 100",
+              "expr": "sum(increase(cad_investigate_must_gather_performed_total{alert_type=\"mustgather\"}[$__range])) / (sum(increase(cad_investigate_alerts_total{alert_type=\"mustgather\"}[$__range])) - (sum(increase(cad_investigate_alerts_filtered_total{alert_type=\"mustgather\"}[$__range])) OR on() vector(0))) * 100",
               "hide": false,
               "legendFormat": "__auto",
               "range": true,

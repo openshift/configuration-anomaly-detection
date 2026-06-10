@@ -50,5 +50,9 @@ func initScheme() (*runtime.Scheme, error) {
 		return nil, fmt.Errorf("unable to add policy/v1 scheme: %w", err)
 	}
 
+	if err := operatorv1.Install(scheme); err != nil {
+		return nil, fmt.Errorf("unable to add operator.openshift.io/v1 scheme: %w", err)
+	}
+
 	return scheme, nil
 }

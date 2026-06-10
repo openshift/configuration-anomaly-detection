@@ -8,12 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
@@ -50,7 +47,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result := investigation.InvestigationResult{}
 
 	// Build resources
-	r, err := rb.WithNotes().Build()
+	r, err := rb.WithNotes().WithCluster().Build()
 	if err != nil {
 		return result, err
 	}
@@ -58,6 +55,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes := r.Notes
 
 	clusterID := r.Cluster.ID()
+
+	if r.IsHCP {
+		notes.AppendWarning("HCP cluster - skipping AI investigation")
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate("Cluster is HCP - AI investigation not supported"),
+		)
+		return result, nil
+	}
 
 	if c.AIConfig == nil {
 		notes.AppendWarning("AI agent runtime configuration not set (ai_agent section missing from config)")
@@ -68,37 +74,11 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	config := c.AIConfig
-
-	awsAccessKeyID := os.Getenv("AGENTCORE_AWS_ACCESS_KEY_ID")
-	if awsAccessKeyID == "" {
-		notes.AppendWarning("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to get AGENTCORE_AWS_ACCESS_KEY_ID"),
-		)
-		return result, nil
-	}
-	awsSecretAccessKey := os.Getenv("AGENTCORE_AWS_SECRET_ACCESS_KEY")
-	if awsSecretAccessKey == "" {
-		notes.AppendWarning("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to get AGENTCORE_AWS_SECRET_ACCESS_KEY"),
-		)
-		return result, nil
-	}
+	aiConfig := c.AIConfig
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), config.GetTimeout())
+	ctx, cancel := context.WithTimeout(context.TODO(), aiConfig.GetTimeout())
 	defer cancel()
-
-	// Create AWS config directly without LoadDefaultConfig
-	// This bypasses all default credential chain logic
-	awsCfg := awsconfig.Config{
-		Region:      config.Region,
-		Credentials: credentials.NewStaticCredentialsProvider(awsAccessKeyID, awsSecretAccessKey, ""),
-	}
 
 	// Get PagerDuty incident details
 	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
@@ -110,6 +90,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		)
 		return result, nil
 	}
+
+	// Escalate immediately - AI investigations always go to SRE.
+	// Results will be posted async to PD notes for review.
+	if err := r.PdClient.EscalateIncident(); err != nil {
+		// Fail pipeline - if there's no incident or issue reaching PD, there's nothing to post results back to
+		logging.Errorf("Failed to escalate incident for AI investigation: %v", err)
+		return result, investigation.WrapInfrastructure(err, "PagerDuty incident escalation failed")
+	}
+	logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
 
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
@@ -126,15 +115,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	payloadJSON, err := json.Marshal(investigationData)
 	if err != nil {
 		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to create investigation payload"),
-		)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
 
-	// Create AgentCore client
-	agentClient := aws.NewAgentCoreClient(awsCfg)
+	// Get AI client (handles role assumption and client creation)
+	// Use incident ID as session identifier for audit trail
+	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
+	if err != nil {
+		notes.AppendWarning("Failed to create AI client: %v", err)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		return result, nil
+	}
 
 	// TODO: Move session ID generation outside of AI investigation so all investigations have unique IDs
 	// This will require adapting this code to use the externally-generated ID instead
@@ -148,20 +140,17 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
 	input := &bedrockagentcore.InvokeAgentRuntimeInput{
-		AgentRuntimeArn:  &config.RuntimeARN,
+		AgentRuntimeArn:  &aiConfig.RuntimeARN,
 		RuntimeSessionId: &sessionID,
 		Payload:          payloadJSON,
-		RuntimeUserId:    &config.UserID,
+		RuntimeUserId:    &aiConfig.UserID,
 		Accept:           &acceptHeader, // Force streaming response
 	}
 
 	output, err := agentClient.InvokeAgentRuntime(ctx, input)
 	if err != nil {
 		notes.AppendWarning("Failed to invoke AgentCore runtime: %v", err)
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-			executor.Escalate("Failed to invoke AgentCore"),
-		)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
 	defer func() {
@@ -175,15 +164,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	var aiResponse strings.Builder
 	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
 	fmt.Fprintf(&aiResponse, "Session ID: %s\n", sessionID)
-	fmt.Fprintf(&aiResponse, "Runtime: %s\n", config.RuntimeARN)
-	if config.Version != "" {
-		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", config.Version)
+	fmt.Fprintf(&aiResponse, "Runtime: %s\n", aiConfig.RuntimeARN)
+	if aiConfig.Version != "" {
+		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", aiConfig.Version)
 	}
-	if config.OpsSopVersion != "" {
-		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", config.OpsSopVersion)
+	if aiConfig.OpsSopVersion != "" {
+		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", aiConfig.OpsSopVersion)
 	}
-	if config.RosaPluginsVersion != "" {
-		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", config.RosaPluginsVersion)
+	if aiConfig.RosaPluginsVersion != "" {
+		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", aiConfig.RosaPluginsVersion)
 	}
 	aiResponse.WriteString("\n")
 
@@ -204,13 +193,21 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Infof("AI Output:\n%s", aiResponse.String())
 
 	// Add simple note about AI automation completion
-	notes.AppendAutomation("AI automation completed. Check recent cluster reports for report Summary %s: 'osdctl cluster reports list --cluster-id %s'", incidentID, clusterID)
+	notes.AppendAutomation("AI automation completed. Check recent cluster reports for AI investigation details: 'osdctl cluster reports list --cluster-id %s'", clusterID)
+
+	// Create backplane report action with the AI investigation results
+	backplaneReportAction := &executor.BackplaneReportAction{
+		ClusterID: r.Cluster.ExternalID(),
+		Summary:   fmt.Sprintf("CAD Investigation: AI-Assisted Analysis for %s", alertName),
+		Data:      aiResponse.String(),
+	}
 
 	// Return actions for executor to handle
-	result.Actions = append(
-		executor.NoteAndReportFrom(notes, clusterID, c.Name()),
-		executor.Escalate("AI investigation completed - manual review required"),
-	)
+	result.Actions = []executor.Action{
+		executor.NoteFrom(notes), // Send automation message to PagerDuty
+		backplaneReportAction,    // Create cluster report with AI investigation results
+		executor.Escalate("AI investigation completed - see cluster report for details"),
+	}
 	return result, nil
 }
 
