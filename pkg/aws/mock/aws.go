@@ -540,39 +540,39 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // FindCLBByDNSName mocks base method.
-func (m *MockClient) FindCLBByDNSName(dnsName string) (string, error) {
+func (m *MockClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindCLBByDNSName", dnsName)
+	ret := m.ctrl.Call(m, "FindCLBByDNSName", ctx, dnsName)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindCLBByDNSName indicates an expected call of FindCLBByDNSName.
-func (mr *MockClientMockRecorder) FindCLBByDNSName(dnsName any) *gomock.Call {
+func (mr *MockClientMockRecorder) FindCLBByDNSName(ctx, dnsName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindCLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindCLBByDNSName), dnsName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindCLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindCLBByDNSName), ctx, dnsName)
 }
 
 // FindHostedZone mocks base method.
-func (m *MockClient) FindHostedZone(dnsName string, private bool) (string, error) {
+func (m *MockClient) FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindHostedZone", dnsName, private)
+	ret := m.ctrl.Call(m, "FindHostedZone", ctx, dnsName, private)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // FindHostedZone indicates an expected call of FindHostedZone.
-func (mr *MockClientMockRecorder) FindHostedZone(dnsName, private any) *gomock.Call {
+func (mr *MockClientMockRecorder) FindHostedZone(ctx, dnsName, private any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindHostedZone", reflect.TypeOf((*MockClient)(nil).FindHostedZone), dnsName, private)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindHostedZone", reflect.TypeOf((*MockClient)(nil).FindHostedZone), ctx, dnsName, private)
 }
 
 // FindNLBByDNSName mocks base method.
-func (m *MockClient) FindNLBByDNSName(dnsName string) (string, string, error) {
+func (m *MockClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FindNLBByDNSName", dnsName)
+	ret := m.ctrl.Call(m, "FindNLBByDNSName", ctx, dnsName)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
@@ -580,9 +580,9 @@ func (m *MockClient) FindNLBByDNSName(dnsName string) (string, string, error) {
 }
 
 // FindNLBByDNSName indicates an expected call of FindNLBByDNSName.
-func (mr *MockClientMockRecorder) FindNLBByDNSName(dnsName any) *gomock.Call {
+func (mr *MockClientMockRecorder) FindNLBByDNSName(ctx, dnsName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindNLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindNLBByDNSName), dnsName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindNLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindNLBByDNSName), ctx, dnsName)
 }
 
 // GetBaseConfig mocks base method.
@@ -600,33 +600,33 @@ func (mr *MockClientMockRecorder) GetBaseConfig() *gomock.Call {
 }
 
 // GetCLBInstanceHealth mocks base method.
-func (m *MockClient) GetCLBInstanceHealth(lbName string) ([]aws0.CLBInstanceHealth, error) {
+func (m *MockClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([]aws0.CLBInstanceHealth, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCLBInstanceHealth", lbName)
+	ret := m.ctrl.Call(m, "GetCLBInstanceHealth", ctx, lbName)
 	ret0, _ := ret[0].([]aws0.CLBInstanceHealth)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCLBInstanceHealth indicates an expected call of GetCLBInstanceHealth.
-func (mr *MockClientMockRecorder) GetCLBInstanceHealth(lbName any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetCLBInstanceHealth(ctx, lbName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCLBInstanceHealth", reflect.TypeOf((*MockClient)(nil).GetCLBInstanceHealth), lbName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCLBInstanceHealth", reflect.TypeOf((*MockClient)(nil).GetCLBInstanceHealth), ctx, lbName)
 }
 
 // GetNLBTargetHealth mocks base method.
-func (m *MockClient) GetNLBTargetHealth(lbARN string) ([]aws0.NLBTargetHealth, error) {
+func (m *MockClient) GetNLBTargetHealth(ctx context.Context, lbARN string) ([]aws0.NLBTargetHealth, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNLBTargetHealth", lbARN)
+	ret := m.ctrl.Call(m, "GetNLBTargetHealth", ctx, lbARN)
 	ret0, _ := ret[0].([]aws0.NLBTargetHealth)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNLBTargetHealth indicates an expected call of GetNLBTargetHealth.
-func (mr *MockClientMockRecorder) GetNLBTargetHealth(lbARN any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetNLBTargetHealth(ctx, lbARN any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNLBTargetHealth", reflect.TypeOf((*MockClient)(nil).GetNLBTargetHealth), lbARN)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNLBTargetHealth", reflect.TypeOf((*MockClient)(nil).GetNLBTargetHealth), ctx, lbARN)
 }
 
 // GetRouteTableForSubnet mocks base method.
@@ -675,33 +675,33 @@ func (mr *MockClientMockRecorder) GetSubnetID(infraID any) *gomock.Call {
 }
 
 // GetVpcDhcpConfiguration mocks base method.
-func (m *MockClient) GetVpcDhcpConfiguration(infraID string) ([]string, error) {
+func (m *MockClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVpcDhcpConfiguration", infraID)
+	ret := m.ctrl.Call(m, "GetVpcDhcpConfiguration", ctx, infraID)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVpcDhcpConfiguration indicates an expected call of GetVpcDhcpConfiguration.
-func (mr *MockClientMockRecorder) GetVpcDhcpConfiguration(infraID any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetVpcDhcpConfiguration(ctx, infraID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVpcDhcpConfiguration", reflect.TypeOf((*MockClient)(nil).GetVpcDhcpConfiguration), infraID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVpcDhcpConfiguration", reflect.TypeOf((*MockClient)(nil).GetVpcDhcpConfiguration), ctx, infraID)
 }
 
 // HasResourceRecordSet mocks base method.
-func (m *MockClient) HasResourceRecordSet(hostedZoneID, recordName, recordType string) (bool, error) {
+func (m *MockClient) HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HasResourceRecordSet", hostedZoneID, recordName, recordType)
+	ret := m.ctrl.Call(m, "HasResourceRecordSet", ctx, hostedZoneID, recordName, recordType)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // HasResourceRecordSet indicates an expected call of HasResourceRecordSet.
-func (mr *MockClientMockRecorder) HasResourceRecordSet(hostedZoneID, recordName, recordType any) *gomock.Call {
+func (mr *MockClientMockRecorder) HasResourceRecordSet(ctx, hostedZoneID, recordName, recordType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasResourceRecordSet", reflect.TypeOf((*MockClient)(nil).HasResourceRecordSet), hostedZoneID, recordName, recordType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasResourceRecordSet", reflect.TypeOf((*MockClient)(nil).HasResourceRecordSet), ctx, hostedZoneID, recordName, recordType)
 }
 
 // IsSubnetPrivate mocks base method.

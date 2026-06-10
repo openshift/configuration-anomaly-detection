@@ -98,13 +98,13 @@ type Client interface {
 	GetSubnetID(infraID string) ([]string, error)
 	IsSubnetPrivate(subnet string) (bool, error)
 	GetRouteTableForSubnet(subnetID string) (ec2v2types.RouteTable, error)
-	FindHostedZone(dnsName string, private bool) (string, error)
-	HasResourceRecordSet(hostedZoneID, recordName, recordType string) (bool, error)
-	GetVpcDhcpConfiguration(infraID string) ([]string, error)
-	FindNLBByDNSName(dnsName string) (arn string, name string, err error)
-	FindCLBByDNSName(dnsName string) (name string, err error)
-	GetNLBTargetHealth(lbARN string) ([]NLBTargetHealth, error)
-	GetCLBInstanceHealth(lbName string) ([]CLBInstanceHealth, error)
+	FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error)
+	HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error)
+	GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error)
+	FindNLBByDNSName(ctx context.Context, dnsName string) (arn string, name string, err error)
+	FindCLBByDNSName(ctx context.Context, dnsName string) (name string, err error)
+	GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error)
+	GetCLBInstanceHealth(ctx context.Context, lbName string) ([]CLBInstanceHealth, error)
 }
 
 type SdkClient struct {
@@ -583,13 +583,13 @@ func (c *SdkClient) getRouteTable(routeTableID string) (ec2v2types.RouteTable, e
 
 // FindHostedZone finds a hosted zone by DNS name and returns its ID.
 // If private is true, only private hosted zones are matched; otherwise only public zones.
-func (c *SdkClient) FindHostedZone(dnsName string, private bool) (string, error) {
+func (c *SdkClient) FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error) {
 	normalizedName := dnsName
 	if !strings.HasSuffix(normalizedName, ".") {
 		normalizedName += "."
 	}
 
-	out, err := c.Route53Client.ListHostedZonesByName(context.TODO(), &route53v2.ListHostedZonesByNameInput{
+	out, err := c.Route53Client.ListHostedZonesByName(ctx, &route53v2.ListHostedZonesByNameInput{
 		DNSName: awsv2.String(normalizedName),
 	})
 	if err != nil {
@@ -613,8 +613,8 @@ func (c *SdkClient) FindHostedZone(dnsName string, private bool) (string, error)
 // HasResourceRecordSet checks whether a specific DNS record exists in a hosted zone.
 // recordName should be fully qualified with a trailing dot (e.g., "\\052.apps.example.com.").
 // recordType is the DNS record type (e.g., "A", "CNAME").
-func (c *SdkClient) HasResourceRecordSet(hostedZoneID, recordName, recordType string) (bool, error) {
-	out, err := c.Route53Client.ListResourceRecordSets(context.TODO(), &route53v2.ListResourceRecordSetsInput{
+func (c *SdkClient) HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error) {
+	out, err := c.Route53Client.ListResourceRecordSets(ctx, &route53v2.ListResourceRecordSetsInput{
 		HostedZoneId:    awsv2.String(hostedZoneID),
 		StartRecordName: awsv2.String(recordName),
 		StartRecordType: route53v2types.RRType(recordType),
@@ -634,9 +634,9 @@ func (c *SdkClient) HasResourceRecordSet(hostedZoneID, recordName, recordType st
 
 // GetVpcDhcpConfiguration returns the domain-name-servers values from the DHCP option set
 // associated with the cluster's VPC.
-func (c *SdkClient) GetVpcDhcpConfiguration(infraID string) ([]string, error) {
+func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
 	// Find VPC by infra ID tag
-	vpcOut, err := c.Ec2Client.DescribeVpcs(context.TODO(), &ec2v2.DescribeVpcsInput{
+	vpcOut, err := c.Ec2Client.DescribeVpcs(ctx, &ec2v2.DescribeVpcsInput{
 		Filters: []ec2v2types.Filter{
 			{
 				Name:   awsv2.String("tag-key"),
@@ -656,7 +656,7 @@ func (c *SdkClient) GetVpcDhcpConfiguration(infraID string) ([]string, error) {
 		return nil, fmt.Errorf("VPC %s has no DHCP options set", awsv2.ToString(vpcOut.Vpcs[0].VpcId))
 	}
 
-	dhcpOut, err := c.Ec2Client.DescribeDhcpOptions(context.TODO(), &ec2v2.DescribeDhcpOptionsInput{
+	dhcpOut, err := c.Ec2Client.DescribeDhcpOptions(ctx, &ec2v2.DescribeDhcpOptionsInput{
 		DhcpOptionsIds: []string{dhcpOptionsID},
 	})
 	if err != nil {
@@ -679,10 +679,10 @@ func (c *SdkClient) GetVpcDhcpConfiguration(infraID string) ([]string, error) {
 	return servers, nil
 }
 
-func (c *SdkClient) FindNLBByDNSName(dnsName string) (string, string, error) {
+func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
 	var marker *string
 	for {
-		out, err := c.Elbv2Client.DescribeLoadBalancers(context.TODO(), &elbv2.DescribeLoadBalancersInput{
+		out, err := c.Elbv2Client.DescribeLoadBalancers(ctx, &elbv2.DescribeLoadBalancersInput{
 			Marker: marker,
 		})
 		if err != nil {
@@ -701,10 +701,10 @@ func (c *SdkClient) FindNLBByDNSName(dnsName string) (string, string, error) {
 	return "", "", nil
 }
 
-func (c *SdkClient) FindCLBByDNSName(dnsName string) (string, error) {
+func (c *SdkClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
 	var marker *string
 	for {
-		out, err := c.ElbClient.DescribeLoadBalancers(context.TODO(), &elbv1.DescribeLoadBalancersInput{
+		out, err := c.ElbClient.DescribeLoadBalancers(ctx, &elbv1.DescribeLoadBalancersInput{
 			Marker: marker,
 		})
 		if err != nil {
@@ -723,8 +723,8 @@ func (c *SdkClient) FindCLBByDNSName(dnsName string) (string, error) {
 	return "", nil
 }
 
-func (c *SdkClient) GetNLBTargetHealth(lbARN string) ([]NLBTargetHealth, error) {
-	tgOut, err := c.Elbv2Client.DescribeTargetGroups(context.TODO(), &elbv2.DescribeTargetGroupsInput{
+func (c *SdkClient) GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error) {
+	tgOut, err := c.Elbv2Client.DescribeTargetGroups(ctx, &elbv2.DescribeTargetGroupsInput{
 		LoadBalancerArn: awsv2.String(lbARN),
 	})
 	if err != nil {
@@ -733,7 +733,7 @@ func (c *SdkClient) GetNLBTargetHealth(lbARN string) ([]NLBTargetHealth, error) 
 
 	var results []NLBTargetHealth
 	for _, tg := range tgOut.TargetGroups {
-		thOut, err := c.Elbv2Client.DescribeTargetHealth(context.TODO(), &elbv2.DescribeTargetHealthInput{
+		thOut, err := c.Elbv2Client.DescribeTargetHealth(ctx, &elbv2.DescribeTargetHealthInput{
 			TargetGroupArn: tg.TargetGroupArn,
 		})
 		if err != nil {
@@ -759,8 +759,8 @@ func (c *SdkClient) GetNLBTargetHealth(lbARN string) ([]NLBTargetHealth, error) 
 	return results, nil
 }
 
-func (c *SdkClient) GetCLBInstanceHealth(lbName string) ([]CLBInstanceHealth, error) {
-	out, err := c.ElbClient.DescribeInstanceHealth(context.TODO(), &elbv1.DescribeInstanceHealthInput{
+func (c *SdkClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([]CLBInstanceHealth, error) {
+	out, err := c.ElbClient.DescribeInstanceHealth(ctx, &elbv1.DescribeInstanceHealthInput{
 		LoadBalancerName: awsv2.String(lbName),
 	})
 	if err != nil {

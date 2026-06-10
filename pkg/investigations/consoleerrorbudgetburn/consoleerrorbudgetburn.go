@@ -4,11 +4,14 @@ package consoleerrorbudgetburn
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
 
@@ -24,7 +27,9 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ktypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -112,7 +117,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Check router pod health in openshift-ingress.
 	// Applies to: Classic + HCP.
-	i.checkPodHealth(ctx, r.K8sClient, "openshift-ingress", "Router", notes)
+	i.checkPodHealth(ctx, r.K8sClient, "openshift-ingress", "Router", client.MatchingLabels{"ingresscontroller.operator.openshift.io/deployment-ingresscontroller": "default"}, notes)
 
 	// Check console service reachability from within the cluster.
 	// Applies to: Classic + HCP.
@@ -120,11 +125,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Check console pod health in openshift-console.
 	// Applies to: Classic + HCP.
-	i.checkPodHealth(ctx, r.K8sClient, "openshift-console", "Console", notes)
+	i.checkPodHealth(ctx, r.K8sClient, "openshift-console", "Console", client.MatchingLabels{"app": "console", "component": "ui"}, notes)
 
 	// Check health of nodes running console pods.
 	// Applies to: Classic + HCP.
-	i.checkNodeHealth(ctx, r.K8sClient, notes)
+	i.checkNodeHealth(ctx, r, notes)
 
 	// AWS-specific checks.
 	// Applies to: AWS clusters only.
@@ -275,7 +280,7 @@ func (i *Investigation) checkRoute53DNS(ctx context.Context, r *investigation.Re
 	clusterDomain := domainPrefix + "." + baseDomain
 	appsRecordName := "\\052.apps." + clusterDomain + "."
 
-	privateZoneID, err := r.AwsClient.FindHostedZone(clusterDomain, true)
+	privateZoneID, err := r.AwsClient.FindHostedZone(ctx, clusterDomain, true)
 	if err != nil {
 		notes.AppendWarning("Route53: error looking up private hosted zone for %s — %v", clusterDomain, err)
 		return false
@@ -288,7 +293,7 @@ func (i *Investigation) checkRoute53DNS(ctx context.Context, r *investigation.Re
 		return false
 	}
 
-	hasPrivateRecord, err := r.AwsClient.HasResourceRecordSet(privateZoneID, appsRecordName, "A")
+	hasPrivateRecord, err := r.AwsClient.HasResourceRecordSet(ctx, privateZoneID, appsRecordName, "A")
 	if err != nil {
 		notes.AppendWarning("Route53: error checking *.apps record in private zone for %s — %v", clusterDomain, err)
 		return false
@@ -297,7 +302,7 @@ func (i *Investigation) checkRoute53DNS(ctx context.Context, r *investigation.Re
 
 	isPrivateLink := r.Cluster.AWS() != nil && r.Cluster.AWS().PrivateLink()
 	if !isPrivateLink {
-		publicZoneID, err := r.AwsClient.FindHostedZone(baseDomain, false)
+		publicZoneID, err := r.AwsClient.FindHostedZone(ctx, baseDomain, false)
 		if err != nil {
 			notes.AppendWarning("Route53: error looking up public hosted zone for %s — %v", baseDomain, err)
 			return false
@@ -307,7 +312,7 @@ func (i *Investigation) checkRoute53DNS(ctx context.Context, r *investigation.Re
 			return false
 		}
 
-		hasPublicRecord, err := r.AwsClient.HasResourceRecordSet(publicZoneID, appsRecordName, "A")
+		hasPublicRecord, err := r.AwsClient.HasResourceRecordSet(ctx, publicZoneID, appsRecordName, "A")
 		if err != nil {
 			notes.AppendWarning("Route53: error checking *.apps record in public zone for %s — %v", clusterDomain, err)
 			return false
@@ -346,7 +351,7 @@ func (i *Investigation) checkDHCPOptions(ctx context.Context, r *investigation.R
 		return
 	}
 
-	servers, err := r.AwsClient.GetVpcDhcpConfiguration(infraID)
+	servers, err := r.AwsClient.GetVpcDhcpConfiguration(ctx, infraID)
 	if err != nil {
 		notes.AppendWarning("DHCP: unable to check VPC DHCP options — %v", err)
 		return
@@ -432,15 +437,15 @@ func (i *Investigation) checkLoadBalancerHealth(ctx context.Context, r *investig
 
 	switch lbType {
 	case "NLB":
-		i.checkNLBHealth(r, hostname, notes)
+		i.checkNLBHealth(ctx, r, hostname, notes)
 	default:
-		i.checkCLBHealth(r, hostname, notes)
+		i.checkCLBHealth(ctx, r, hostname, notes)
 	}
 }
 
 // checkNLBHealth finds an NLB by DNS name and reports target health.
-func (i *Investigation) checkNLBHealth(r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
-	arn, name, err := r.AwsClient.FindNLBByDNSName(hostname)
+func (i *Investigation) checkNLBHealth(ctx context.Context, r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
+	arn, name, err := r.AwsClient.FindNLBByDNSName(ctx, hostname)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to look up NLB — %v", err)
 		return
@@ -450,7 +455,7 @@ func (i *Investigation) checkNLBHealth(r *investigation.Resources, hostname stri
 		return
 	}
 
-	targets, err := r.AwsClient.GetNLBTargetHealth(arn)
+	targets, err := r.AwsClient.GetNLBTargetHealth(ctx, arn)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to get NLB target health for %s — %v", name, err)
 		return
@@ -490,8 +495,8 @@ func reportNLBTargetHealth(lbName string, targets []aws.NLBTargetHealth, notes *
 }
 
 // checkCLBHealth finds a CLB by DNS name and reports instance health.
-func (i *Investigation) checkCLBHealth(r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
-	name, err := r.AwsClient.FindCLBByDNSName(hostname)
+func (i *Investigation) checkCLBHealth(ctx context.Context, r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
+	name, err := r.AwsClient.FindCLBByDNSName(ctx, hostname)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to look up CLB — %v", err)
 		return
@@ -501,7 +506,7 @@ func (i *Investigation) checkCLBHealth(r *investigation.Resources, hostname stri
 		return
 	}
 
-	instances, err := r.AwsClient.GetCLBInstanceHealth(name)
+	instances, err := r.AwsClient.GetCLBInstanceHealth(ctx, name)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to get CLB instance health for %s — %v", name, err)
 		return
@@ -593,11 +598,11 @@ func (i *Investigation) checkUpstreamDNS(ctx context.Context, k8sClient k8sclien
 // failed, pending, crashlooping, or not-ready pods as well as warning events.
 //
 // Informational-only check.
-func (i *Investigation) checkPodHealth(ctx context.Context, k8sClient k8sclient.Client, namespace, label string, notes *notewriter.NoteWriter) {
+func (i *Investigation) checkPodHealth(ctx context.Context, k8sClient k8sclient.Client, namespace, label string, matchLabels client.MatchingLabels, notes *notewriter.NoteWriter) {
 	const restartThreshold int32 = 3
 
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace)); err != nil {
+	if err := k8sClient.List(ctx, podList, client.InNamespace(namespace), matchLabels); err != nil {
 		notes.AppendWarning("%s: failed to list pods in %s - %v", label, namespace, err)
 		return
 	}
@@ -654,26 +659,24 @@ func (i *Investigation) checkPodHealth(ctx context.Context, k8sClient k8sclient.
 		}
 	}
 
-	// Check for warning events in the namespace.
-	eventList := &corev1.EventList{}
-	var warningEvents []string
-	if err := k8sClient.List(ctx, eventList, client.InNamespace(namespace)); err != nil {
-		notes.AppendWarning("%s: failed to list events in %s - %v", label, namespace, err)
-	} else {
-		for _, event := range eventList.Items {
-			if event.Type != corev1.EventTypeNormal {
-				msg := event.Message
-				if len(msg) > 120 {
-					msg = msg[:120] + "..."
-				}
-				countStr := ""
-				if event.Count > 1 {
-					countStr = fmt.Sprintf(" (x%d)", event.Count)
-				}
-				warningEvents = append(warningEvents, fmt.Sprintf("  %s/%s: %s%s - %s", event.InvolvedObject.Kind, event.InvolvedObject.Name, event.Reason, countStr, msg))
+	// if all router pods are unhealthy suggest a restart
+	if label == "Router" && len(issues) > 0 {
+		unhealthyPods := make(map[string]bool, len(issues))
+		for _, issue := range issues {
+			unhealthyPods[issue.name] = true
+		}
+		activePods := 0
+		for _, pod := range podList.Items {
+			if pod.Status.Phase != corev1.PodSucceeded {
+				activePods++
 			}
 		}
+		if len(unhealthyPods) >= activePods {
+			notes.AppendWarning("%s: no healthy router pods present; consider restarting: `oc -n openshift-ingress rollout restart deploy/router-default`", label)
+		}
 	}
+
+	warningEvents := collectWarningEvents(ctx, k8sClient, namespace, label, podList.Items, notes)
 
 	if len(issues) == 0 && len(warningEvents) == 0 {
 		notes.AppendSuccess("%s: all %d pod(s) in %s are running and ready", label, len(podList.Items), namespace)
@@ -696,18 +699,58 @@ func (i *Investigation) checkPodHealth(ctx context.Context, k8sClient k8sclient.
 	notes.AppendWarning("%s: %s", label, sb.String())
 }
 
+// collectWarningEvents returns recent warning events for pods matched by the label selector.
+func collectWarningEvents(ctx context.Context, k8sClient k8sclient.Client, namespace, label string, pods []corev1.Pod, notes *notewriter.NoteWriter) []string {
+	podNames := make(map[string]bool, len(pods))
+	for _, pod := range pods {
+		podNames[pod.Name] = true
+	}
+
+	eventList := &corev1.EventList{}
+	if err := k8sClient.List(ctx, eventList, client.InNamespace(namespace)); err != nil {
+		notes.AppendWarning("%s: failed to list events in %s - %v", label, namespace, err)
+		return nil
+	}
+
+	const maxWarningEvents = 5
+	warningEvents := make([]string, 0, maxWarningEvents)
+	recentCutoff := time.Now().Add(-30 * time.Minute)
+	for _, event := range eventList.Items {
+		if event.Type == corev1.EventTypeNormal {
+			continue
+		}
+		if event.InvolvedObject.Kind != "Pod" || !podNames[event.InvolvedObject.Name] {
+			continue
+		}
+		eventTime := event.LastTimestamp.Time
+		if eventTime.IsZero() {
+			eventTime = event.CreationTimestamp.Time
+		}
+		if eventTime.Before(recentCutoff) {
+			continue
+		}
+		msg := event.Message
+		if len(msg) > 120 {
+			msg = msg[:120] + "..."
+		}
+		countStr := ""
+		if event.Count > 1 {
+			countStr = fmt.Sprintf(" (x%d)", event.Count)
+		}
+		warningEvents = append(warningEvents, fmt.Sprintf("  %s/%s: %s%s - %s", event.InvolvedObject.Kind, event.InvolvedObject.Name, event.Reason, countStr, msg))
+		if len(warningEvents) >= maxWarningEvents {
+			break
+		}
+	}
+	return warningEvents
+}
+
 // checkConsoleService tests whether the console service is reachable from within the cluster
 // by exec'ing into a CMO pod and curling the console ClusterIP service.
 //
 // informational-only check.
 func (i *Investigation) checkConsoleService(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
-	restConfig, err := getRestConfig(r)
-	if err != nil {
-		notes.AppendWarning("Console Service: unable to get REST config - %v", err)
-		return
-	}
-
-	output, err := i.consoleChecker.checkConsoleEndpoint(ctx, r.K8sClient, restConfig)
+	output, err := i.consoleChecker.checkConsoleEndpoint(ctx, r.K8sClient, &r.RestConfig.Config)
 	if err != nil {
 		notes.AppendWarning("Console Service: unable to reach console service - %v", err)
 		return
@@ -760,10 +803,10 @@ func (d *defaultConsoleServiceChecker) checkConsoleEndpoint(ctx context.Context,
 // and Unschedulable status.
 //
 // Informational-only check.
-func (i *Investigation) checkNodeHealth(ctx context.Context, k8sClient k8sclient.Client, notes *notewriter.NoteWriter) {
+func (i *Investigation) checkNodeHealth(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
 	// find which nodes run console pods
 	podList := &corev1.PodList{}
-	if err := k8sClient.List(ctx, podList, client.InNamespace("openshift-console")); err != nil {
+	if err := r.K8sClient.List(ctx, podList, client.InNamespace("openshift-console"), client.MatchingLabels{"app": "console", "component": "ui"}); err != nil {
 		notes.AppendWarning("Node Health: failed to list console pods - %v", err)
 		return
 	}
@@ -782,13 +825,15 @@ func (i *Investigation) checkNodeHealth(ctx context.Context, k8sClient k8sclient
 
 	var issues []string
 	nodeCount := 0
+	nodeCapacity := make(map[string]corev1.ResourceList, len(nodeNames))
 	for nodeName := range nodeNames {
 		node := &corev1.Node{}
-		if err := k8sClient.Get(ctx, ktypes.NamespacedName{Name: nodeName}, node); err != nil {
+		if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{Name: nodeName}, node); err != nil {
 			issues = append(issues, fmt.Sprintf("%s: failed to get node - %v", nodeName, err))
 			continue
 		}
 		nodeCount++
+		nodeCapacity[nodeName] = node.Status.Capacity
 
 		// Check NodeReady condition using the utils helper.
 		if readyCond, found := nodeutils.FindReadyCondition(*node); found {
@@ -826,6 +871,92 @@ func (i *Investigation) checkNodeHealth(ctx context.Context, k8sClient k8sclient
 	} else {
 		notes.AppendWarning("Node Health: %d issue(s) on nodes running console pods:\n  %s", len(issues), strings.Join(issues, "\n  "))
 	}
+
+	i.checkNodeUtilization(ctx, r, nodeNames, nodeCapacity, notes)
+}
+
+type nodeMetricsList struct {
+	Items []nodeMetrics `json:"items"`
+}
+
+type nodeMetrics struct {
+	Metadata struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
+	Usage map[string]string `json:"usage"`
+}
+
+// checkNodeUtilization queries for current CPU/mem usage on nodes running console
+// pods. Warn if usage is above 80%
+func (i *Investigation) checkNodeUtilization(ctx context.Context, r *investigation.Resources, nodeNames map[string]struct{}, nodeCapacity map[string]corev1.ResourceList, notes *notewriter.NoteWriter) {
+	clientset, err := kubernetes.NewForConfig(&r.RestConfig.Config)
+	if err != nil {
+		notes.AppendWarning("Node Utilization: unable to create clientset - %v", err)
+		return
+	}
+
+	body, err := clientset.Discovery().RESTClient().Get().AbsPath("/apis/metrics.k8s.io/v1beta1/nodes").DoRaw(ctx)
+	if err != nil {
+		notes.AppendWarning("Node Utilization: unable to query metrics API - %v", err)
+		return
+	}
+
+	var metricsList nodeMetricsList
+	if err := json.Unmarshal(body, &metricsList); err != nil {
+		notes.AppendWarning("Node Utilization: failed to parse metrics response - %v", err)
+		return
+	}
+
+	const utilizationThreshold = 80
+	perNode := make([]string, 0, len(nodeNames))
+	var overThreshold []string
+
+	for _, nm := range metricsList.Items {
+		if _, ok := nodeNames[nm.Metadata.Name]; !ok {
+			continue
+		}
+		capacity, ok := nodeCapacity[nm.Metadata.Name]
+		if !ok {
+			continue
+		}
+
+		cpuUsage, err := resource.ParseQuantity(nm.Usage["cpu"])
+		if err != nil {
+			continue
+		}
+		memUsage, err := resource.ParseQuantity(nm.Usage["memory"])
+		if err != nil {
+			continue
+		}
+		cpuCap := capacity[corev1.ResourceCPU]
+		memCap := capacity[corev1.ResourceMemory]
+
+		cpuPct := 0
+		if cpuCap.MilliValue() > 0 {
+			cpuPct = int(math.Round(float64(cpuUsage.MilliValue()) * 100 / float64(cpuCap.MilliValue())))
+		}
+		memPct := 0
+		if memCap.Value() > 0 {
+			memPct = int(math.Round(float64(memUsage.Value()) * 100 / float64(memCap.Value())))
+		}
+
+		perNode = append(perNode, fmt.Sprintf("%s: CPU %d%%, Memory %d%%", nm.Metadata.Name, cpuPct, memPct))
+		if cpuPct >= utilizationThreshold || memPct >= utilizationThreshold {
+			overThreshold = append(overThreshold, fmt.Sprintf("%s (CPU: %d%%, Memory: %d%%)", nm.Metadata.Name, cpuPct, memPct))
+		}
+	}
+
+	if len(perNode) == 0 {
+		notes.AppendWarning("Node Utilization: no metrics available for console-pod nodes")
+		return
+	}
+
+	if len(overThreshold) > 0 {
+		notes.AppendWarning("Node Utilization: %d node(s) with >=80%% utilization — %s", len(overThreshold), strings.Join(overThreshold, "; "))
+	} else {
+		notes.AppendSuccess("Node Utilization: all console-pod nodes below 80%% CPU and Memory utilization")
+	}
+	notes.AppendSuccess("Node Utilization per-node:\n  %s", strings.Join(perNode, "\n  "))
 }
 
 // defaultBlackboxProber implements blackboxProber by exec'ing wget into the
@@ -857,10 +988,11 @@ func (d *defaultBlackboxProber) runProbe(ctx context.Context, k8sClient k8sclien
 	output, err := k8sclient.ExecInPod(ctx, restConfig, bbPod, "blackbox-exporter", []string{
 		"wget", "-qO-", probeURL,
 	})
+	output = strings.TrimSpace(output)
 	if err != nil {
 		return output, fmt.Errorf("exec failed: %w", err)
 	}
-	return strings.TrimSpace(output), nil
+	return output, nil
 }
 
 type probeResult struct {
@@ -974,13 +1106,7 @@ func (i *Investigation) checkBlackboxProbe(ctx context.Context, r *investigation
 		return
 	}
 
-	restConfig, err := getRestConfig(r)
-	if err != nil {
-		notes.AppendWarning("Blackbox Probe: unable to get REST config - %v", err)
-		return
-	}
-
-	output, err := i.blackboxProber.runProbe(ctx, r.K8sClient, restConfig, consoleURL)
+	output, err := i.blackboxProber.runProbe(ctx, r.K8sClient, &r.RestConfig.Config, consoleURL)
 	if err != nil {
 		notes.AppendWarning("Blackbox Probe: failed to query blackbox exporter - %v", err)
 		return
@@ -992,14 +1118,6 @@ func (i *Investigation) checkBlackboxProbe(ctx context.Context, r *investigation
 	} else {
 		notes.AppendWarning("Blackbox Probe: probe FAILED for %s — failure mode: %s — %s", consoleURL, pr.failureMode, pr.failureDetail)
 	}
-}
-
-// getRestConfig extracts the *rest.Config from the investigation resources.
-func getRestConfig(r *investigation.Resources) (*rest.Config, error) {
-	if r.RestConfig != nil {
-		return &r.RestConfig.Config, nil
-	}
-	return k8sclient.GetRestConfig(r.K8sClient)
 }
 
 func (i *Investigation) Name() string {
