@@ -24,6 +24,8 @@ parameters:
 - name: TEKTON_RESOURCE_PRUNER_IMAGE
   value: quay.io/openshift-pipeline/openshift-pipelines-pipelines-cli-tkn-rhel8
 - name: TEKTON_RESOURCE_PRUNER_SHA
+- name: CAD_SA_ROLE_ARN
+  value: ""
 objects:
 - apiVersion: apps/v1
   kind: Deployment
@@ -60,6 +62,8 @@ objects:
             value: ${CAD_OCTOSQL_IMAGE}
           - name: CAD_INVESTIGATION_CONFIG_PATH
             value: /config/cad-config.yaml
+          - name: CAD_SA_ROLE_ARN
+            value: ${CAD_SA_ROLE_ARN}
           envFrom:
           - secretRef:
               name: cad-pd-token
@@ -299,6 +303,8 @@ objects:
   kind: ServiceAccount
   metadata:
     name: cad-sa
+    annotations:
+      eks.amazonaws.com/role-arn: ${CAD_SA_ROLE_ARN}
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: Role
   metadata:
