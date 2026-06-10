@@ -1,5 +1,4 @@
-// Package aws contains functions related to aws sdk
-package aws
+package aws_test
 
 import (
 	"testing"
@@ -9,10 +8,11 @@ import (
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"go.uber.org/mock/gomock"
 
+	cadaws "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 )
 
-func setupSubnetMock(t *testing.T, gatewayId *string, mapPublicIps bool) EC2API {
+func setupSubnetMock(t *testing.T, gatewayId *string, mapPublicIps bool) cadaws.EC2API {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	rtb := []ec2v2types.Route{
@@ -43,9 +43,9 @@ func setupSubnetMock(t *testing.T, gatewayId *string, mapPublicIps bool) EC2API 
 func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 	type fields struct {
 		Region           string
-		StsClient        StsAPI
-		Ec2Client        EC2API
-		CloudTrailClient CloudTrailAPI
+		StsClient        cadaws.StsAPI
+		Ec2Client        cadaws.EC2API
+		CloudTrailClient cadaws.CloudTrailAPI
 		BaseConfig       awsv2.Config
 	}
 	type args struct {
@@ -106,7 +106,7 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &SdkClient{
+			c := &cadaws.SdkClient{
 				Region:           tt.fields.Region,
 				StsClient:        tt.fields.StsClient,
 				Ec2Client:        tt.fields.Ec2Client,

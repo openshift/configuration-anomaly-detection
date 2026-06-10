@@ -19,7 +19,11 @@ import (
 	types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	types0 "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elasticloadbalancing "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	elasticloadbalancingv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	route53 "github.com/aws/aws-sdk-go-v2/service/route53"
 	sts "github.com/aws/aws-sdk-go-v2/service/sts"
+	aws0 "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -45,6 +49,26 @@ func NewMockEC2API(ctrl *gomock.Controller) *MockEC2API {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEC2API) EXPECT() *MockEC2APIMockRecorder {
 	return m.recorder
+}
+
+// DescribeDhcpOptions mocks base method.
+func (m *MockEC2API) DescribeDhcpOptions(ctx context.Context, in *ec2.DescribeDhcpOptionsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeDhcpOptionsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeDhcpOptions", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeDhcpOptionsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeDhcpOptions indicates an expected call of DescribeDhcpOptions.
+func (mr *MockEC2APIMockRecorder) DescribeDhcpOptions(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDhcpOptions", reflect.TypeOf((*MockEC2API)(nil).DescribeDhcpOptions), varargs...)
 }
 
 // DescribeInstances mocks base method.
@@ -125,6 +149,26 @@ func (mr *MockEC2APIMockRecorder) DescribeSubnets(ctx, in any, optFns ...any) *g
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, optFns...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSubnets", reflect.TypeOf((*MockEC2API)(nil).DescribeSubnets), varargs...)
+}
+
+// DescribeVpcs mocks base method.
+func (m *MockEC2API) DescribeVpcs(ctx context.Context, in *ec2.DescribeVpcsInput, optFns ...func(*ec2.Options)) (*ec2.DescribeVpcsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeVpcs", varargs...)
+	ret0, _ := ret[0].(*ec2.DescribeVpcsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeVpcs indicates an expected call of DescribeVpcs.
+func (mr *MockEC2APIMockRecorder) DescribeVpcs(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeVpcs", reflect.TypeOf((*MockEC2API)(nil).DescribeVpcs), varargs...)
 }
 
 // MockCloudTrailAPI is a mock of CloudTrailAPI interface.
@@ -259,6 +303,218 @@ func (mr *MockAgentCoreAPIMockRecorder) InvokeAgentRuntime(ctx, in any, optFns .
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InvokeAgentRuntime", reflect.TypeOf((*MockAgentCoreAPI)(nil).InvokeAgentRuntime), varargs...)
 }
 
+// MockRoute53API is a mock of Route53API interface.
+type MockRoute53API struct {
+	ctrl     *gomock.Controller
+	recorder *MockRoute53APIMockRecorder
+	isgomock struct{}
+}
+
+// MockRoute53APIMockRecorder is the mock recorder for MockRoute53API.
+type MockRoute53APIMockRecorder struct {
+	mock *MockRoute53API
+}
+
+// NewMockRoute53API creates a new mock instance.
+func NewMockRoute53API(ctrl *gomock.Controller) *MockRoute53API {
+	mock := &MockRoute53API{ctrl: ctrl}
+	mock.recorder = &MockRoute53APIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRoute53API) EXPECT() *MockRoute53APIMockRecorder {
+	return m.recorder
+}
+
+// ListHostedZonesByName mocks base method.
+func (m *MockRoute53API) ListHostedZonesByName(ctx context.Context, in *route53.ListHostedZonesByNameInput, optFns ...func(*route53.Options)) (*route53.ListHostedZonesByNameOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListHostedZonesByName", varargs...)
+	ret0, _ := ret[0].(*route53.ListHostedZonesByNameOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListHostedZonesByName indicates an expected call of ListHostedZonesByName.
+func (mr *MockRoute53APIMockRecorder) ListHostedZonesByName(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHostedZonesByName", reflect.TypeOf((*MockRoute53API)(nil).ListHostedZonesByName), varargs...)
+}
+
+// ListResourceRecordSets mocks base method.
+func (m *MockRoute53API) ListResourceRecordSets(ctx context.Context, in *route53.ListResourceRecordSetsInput, optFns ...func(*route53.Options)) (*route53.ListResourceRecordSetsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListResourceRecordSets", varargs...)
+	ret0, _ := ret[0].(*route53.ListResourceRecordSetsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListResourceRecordSets indicates an expected call of ListResourceRecordSets.
+func (mr *MockRoute53APIMockRecorder) ListResourceRecordSets(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListResourceRecordSets", reflect.TypeOf((*MockRoute53API)(nil).ListResourceRecordSets), varargs...)
+}
+
+// MockELBV2API is a mock of ELBV2API interface.
+type MockELBV2API struct {
+	ctrl     *gomock.Controller
+	recorder *MockELBV2APIMockRecorder
+	isgomock struct{}
+}
+
+// MockELBV2APIMockRecorder is the mock recorder for MockELBV2API.
+type MockELBV2APIMockRecorder struct {
+	mock *MockELBV2API
+}
+
+// NewMockELBV2API creates a new mock instance.
+func NewMockELBV2API(ctrl *gomock.Controller) *MockELBV2API {
+	mock := &MockELBV2API{ctrl: ctrl}
+	mock.recorder = &MockELBV2APIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockELBV2API) EXPECT() *MockELBV2APIMockRecorder {
+	return m.recorder
+}
+
+// DescribeLoadBalancers mocks base method.
+func (m *MockELBV2API) DescribeLoadBalancers(ctx context.Context, in *elasticloadbalancingv2.DescribeLoadBalancersInput, optFns ...func(*elasticloadbalancingv2.Options)) (*elasticloadbalancingv2.DescribeLoadBalancersOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeLoadBalancers", varargs...)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeLoadBalancersOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeLoadBalancers indicates an expected call of DescribeLoadBalancers.
+func (mr *MockELBV2APIMockRecorder) DescribeLoadBalancers(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeLoadBalancers", reflect.TypeOf((*MockELBV2API)(nil).DescribeLoadBalancers), varargs...)
+}
+
+// DescribeTargetGroups mocks base method.
+func (m *MockELBV2API) DescribeTargetGroups(ctx context.Context, in *elasticloadbalancingv2.DescribeTargetGroupsInput, optFns ...func(*elasticloadbalancingv2.Options)) (*elasticloadbalancingv2.DescribeTargetGroupsOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTargetGroups", varargs...)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeTargetGroupsOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTargetGroups indicates an expected call of DescribeTargetGroups.
+func (mr *MockELBV2APIMockRecorder) DescribeTargetGroups(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTargetGroups", reflect.TypeOf((*MockELBV2API)(nil).DescribeTargetGroups), varargs...)
+}
+
+// DescribeTargetHealth mocks base method.
+func (m *MockELBV2API) DescribeTargetHealth(ctx context.Context, in *elasticloadbalancingv2.DescribeTargetHealthInput, optFns ...func(*elasticloadbalancingv2.Options)) (*elasticloadbalancingv2.DescribeTargetHealthOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeTargetHealth", varargs...)
+	ret0, _ := ret[0].(*elasticloadbalancingv2.DescribeTargetHealthOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeTargetHealth indicates an expected call of DescribeTargetHealth.
+func (mr *MockELBV2APIMockRecorder) DescribeTargetHealth(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTargetHealth", reflect.TypeOf((*MockELBV2API)(nil).DescribeTargetHealth), varargs...)
+}
+
+// MockELBAPI is a mock of ELBAPI interface.
+type MockELBAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockELBAPIMockRecorder
+	isgomock struct{}
+}
+
+// MockELBAPIMockRecorder is the mock recorder for MockELBAPI.
+type MockELBAPIMockRecorder struct {
+	mock *MockELBAPI
+}
+
+// NewMockELBAPI creates a new mock instance.
+func NewMockELBAPI(ctrl *gomock.Controller) *MockELBAPI {
+	mock := &MockELBAPI{ctrl: ctrl}
+	mock.recorder = &MockELBAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockELBAPI) EXPECT() *MockELBAPIMockRecorder {
+	return m.recorder
+}
+
+// DescribeInstanceHealth mocks base method.
+func (m *MockELBAPI) DescribeInstanceHealth(ctx context.Context, in *elasticloadbalancing.DescribeInstanceHealthInput, optFns ...func(*elasticloadbalancing.Options)) (*elasticloadbalancing.DescribeInstanceHealthOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeInstanceHealth", varargs...)
+	ret0, _ := ret[0].(*elasticloadbalancing.DescribeInstanceHealthOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeInstanceHealth indicates an expected call of DescribeInstanceHealth.
+func (mr *MockELBAPIMockRecorder) DescribeInstanceHealth(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeInstanceHealth", reflect.TypeOf((*MockELBAPI)(nil).DescribeInstanceHealth), varargs...)
+}
+
+// DescribeLoadBalancers mocks base method.
+func (m *MockELBAPI) DescribeLoadBalancers(ctx context.Context, in *elasticloadbalancing.DescribeLoadBalancersInput, optFns ...func(*elasticloadbalancing.Options)) (*elasticloadbalancing.DescribeLoadBalancersOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeLoadBalancers", varargs...)
+	ret0, _ := ret[0].(*elasticloadbalancing.DescribeLoadBalancersOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeLoadBalancers indicates an expected call of DescribeLoadBalancers.
+func (mr *MockELBAPIMockRecorder) DescribeLoadBalancers(ctx, in any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeLoadBalancers", reflect.TypeOf((*MockELBAPI)(nil).DescribeLoadBalancers), varargs...)
+}
+
 // MockClient is a mock of Client interface.
 type MockClient struct {
 	ctrl     *gomock.Controller
@@ -283,6 +539,52 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
+// FindCLBByDNSName mocks base method.
+func (m *MockClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindCLBByDNSName", ctx, dnsName)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindCLBByDNSName indicates an expected call of FindCLBByDNSName.
+func (mr *MockClientMockRecorder) FindCLBByDNSName(ctx, dnsName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindCLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindCLBByDNSName), ctx, dnsName)
+}
+
+// FindHostedZone mocks base method.
+func (m *MockClient) FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindHostedZone", ctx, dnsName, private)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindHostedZone indicates an expected call of FindHostedZone.
+func (mr *MockClientMockRecorder) FindHostedZone(ctx, dnsName, private any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindHostedZone", reflect.TypeOf((*MockClient)(nil).FindHostedZone), ctx, dnsName, private)
+}
+
+// FindNLBByDNSName mocks base method.
+func (m *MockClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindNLBByDNSName", ctx, dnsName)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// FindNLBByDNSName indicates an expected call of FindNLBByDNSName.
+func (mr *MockClientMockRecorder) FindNLBByDNSName(ctx, dnsName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindNLBByDNSName", reflect.TypeOf((*MockClient)(nil).FindNLBByDNSName), ctx, dnsName)
+}
+
 // GetBaseConfig mocks base method.
 func (m *MockClient) GetBaseConfig() *aws.Config {
 	m.ctrl.T.Helper()
@@ -295,6 +597,36 @@ func (m *MockClient) GetBaseConfig() *aws.Config {
 func (mr *MockClientMockRecorder) GetBaseConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBaseConfig", reflect.TypeOf((*MockClient)(nil).GetBaseConfig))
+}
+
+// GetCLBInstanceHealth mocks base method.
+func (m *MockClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([]aws0.CLBInstanceHealth, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCLBInstanceHealth", ctx, lbName)
+	ret0, _ := ret[0].([]aws0.CLBInstanceHealth)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCLBInstanceHealth indicates an expected call of GetCLBInstanceHealth.
+func (mr *MockClientMockRecorder) GetCLBInstanceHealth(ctx, lbName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCLBInstanceHealth", reflect.TypeOf((*MockClient)(nil).GetCLBInstanceHealth), ctx, lbName)
+}
+
+// GetNLBTargetHealth mocks base method.
+func (m *MockClient) GetNLBTargetHealth(ctx context.Context, lbARN string) ([]aws0.NLBTargetHealth, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetNLBTargetHealth", ctx, lbARN)
+	ret0, _ := ret[0].([]aws0.NLBTargetHealth)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetNLBTargetHealth indicates an expected call of GetNLBTargetHealth.
+func (mr *MockClientMockRecorder) GetNLBTargetHealth(ctx, lbARN any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNLBTargetHealth", reflect.TypeOf((*MockClient)(nil).GetNLBTargetHealth), ctx, lbARN)
 }
 
 // GetRouteTableForSubnet mocks base method.
@@ -340,6 +672,36 @@ func (m *MockClient) GetSubnetID(infraID string) ([]string, error) {
 func (mr *MockClientMockRecorder) GetSubnetID(infraID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnetID", reflect.TypeOf((*MockClient)(nil).GetSubnetID), infraID)
+}
+
+// GetVpcDhcpConfiguration mocks base method.
+func (m *MockClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVpcDhcpConfiguration", ctx, infraID)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVpcDhcpConfiguration indicates an expected call of GetVpcDhcpConfiguration.
+func (mr *MockClientMockRecorder) GetVpcDhcpConfiguration(ctx, infraID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVpcDhcpConfiguration", reflect.TypeOf((*MockClient)(nil).GetVpcDhcpConfiguration), ctx, infraID)
+}
+
+// HasResourceRecordSet mocks base method.
+func (m *MockClient) HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasResourceRecordSet", ctx, hostedZoneID, recordName, recordType)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HasResourceRecordSet indicates an expected call of HasResourceRecordSet.
+func (mr *MockClientMockRecorder) HasResourceRecordSet(ctx, hostedZoneID, recordName, recordType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasResourceRecordSet", reflect.TypeOf((*MockClient)(nil).HasResourceRecordSet), ctx, hostedZoneID, recordName, recordType)
 }
 
 // IsSubnetPrivate mocks base method.

@@ -453,7 +453,7 @@ func (r *ResourceBuilderMock) WithManagementOCClient() ResourceBuilder {
 
 func (r *ResourceBuilderMock) Build() (*Resources, error) {
 	if r.BuildError != nil {
-		return nil, r.BuildError
+		return r.Resources, r.BuildError
 	}
 	return r.Resources, nil
 }

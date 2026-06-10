@@ -38,6 +38,10 @@ func initScheme() (*runtime.Scheme, error) {
 		return nil, fmt.Errorf("unable to add machineconfiguration.openshift.io/v1 scheme: %w", err)
 	}
 
+	if err := operatorv1.Install(scheme); err != nil {
+		return nil, fmt.Errorf("unable to add operator.openshift.io/v1 scheme: %w", err)
+	}
+
 	if err := certsv1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("unable to add certificates.k8s.io/v1 scheme: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clusterhealthcheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/consoleerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/etcddatabasequotalowspace"
@@ -37,6 +38,7 @@ var availableInvestigations = []investigation.Investigation{
 	&mustgather.Investigation{},
 	&describenodes.Investigation{},
 	&clusterhealthcheck.Investigation{},
+	&consoleerrorbudgetburn.Investigation{},
 	&expiredcertificates.Investigation{},
 }
 

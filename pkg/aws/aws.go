@@ -18,6 +18,11 @@ import (
 	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	elbv1 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancing"
+	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
+	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	route53v2 "github.com/aws/aws-sdk-go-v2/service/route53"
+	route53v2types "github.com/aws/aws-sdk-go-v2/service/route53/types"
 	stsv2 "github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -38,6 +43,8 @@ type EC2API interface {
 	DescribeSecurityGroups(ctx context.Context, in *ec2v2.DescribeSecurityGroupsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSecurityGroupsOutput, error)
 	DescribeSubnets(ctx context.Context, in *ec2v2.DescribeSubnetsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeSubnetsOutput, error)
 	DescribeRouteTables(ctx context.Context, in *ec2v2.DescribeRouteTablesInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeRouteTablesOutput, error)
+	DescribeVpcs(ctx context.Context, in *ec2v2.DescribeVpcsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeVpcsOutput, error)
+	DescribeDhcpOptions(ctx context.Context, in *ec2v2.DescribeDhcpOptionsInput, optFns ...func(*ec2v2.Options)) (*ec2v2.DescribeDhcpOptionsOutput, error)
 }
 
 type CloudTrailAPI interface {
@@ -52,6 +59,38 @@ type AgentCoreAPI interface {
 	InvokeAgentRuntime(ctx context.Context, in *bedrockagentcore.InvokeAgentRuntimeInput, optFns ...func(*bedrockagentcore.Options)) (*bedrockagentcore.InvokeAgentRuntimeOutput, error)
 }
 
+type Route53API interface {
+	ListHostedZonesByName(ctx context.Context, in *route53v2.ListHostedZonesByNameInput, optFns ...func(*route53v2.Options)) (*route53v2.ListHostedZonesByNameOutput, error)
+	ListResourceRecordSets(ctx context.Context, in *route53v2.ListResourceRecordSetsInput, optFns ...func(*route53v2.Options)) (*route53v2.ListResourceRecordSetsOutput, error)
+}
+
+type ELBV2API interface {
+	DescribeLoadBalancers(ctx context.Context, in *elbv2.DescribeLoadBalancersInput, optFns ...func(*elbv2.Options)) (*elbv2.DescribeLoadBalancersOutput, error)
+	DescribeTargetGroups(ctx context.Context, in *elbv2.DescribeTargetGroupsInput, optFns ...func(*elbv2.Options)) (*elbv2.DescribeTargetGroupsOutput, error)
+	DescribeTargetHealth(ctx context.Context, in *elbv2.DescribeTargetHealthInput, optFns ...func(*elbv2.Options)) (*elbv2.DescribeTargetHealthOutput, error)
+}
+
+type ELBAPI interface {
+	DescribeLoadBalancers(ctx context.Context, in *elbv1.DescribeLoadBalancersInput, optFns ...func(*elbv1.Options)) (*elbv1.DescribeLoadBalancersOutput, error)
+	DescribeInstanceHealth(ctx context.Context, in *elbv1.DescribeInstanceHealthInput, optFns ...func(*elbv1.Options)) (*elbv1.DescribeInstanceHealthOutput, error)
+}
+
+// NLBTargetHealth represents one target's health in an NLB target group.
+type NLBTargetHealth struct {
+	TargetID string
+	Port     int32
+	State    string // "healthy", "unhealthy", "initial", "draining", etc.
+	Reason   string // empty if healthy
+}
+
+// CLBInstanceHealth represents one instance's health in a CLB.
+type CLBInstanceHealth struct {
+	InstanceID  string
+	State       string // "InService", "OutOfService", "Unknown"
+	Reason      string // "ELB", "Instance", "N/A"
+	Description string
+}
+
 type Client interface {
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
@@ -61,6 +100,13 @@ type Client interface {
 	GetSubnetID(infraID string) ([]string, error)
 	IsSubnetPrivate(subnet string) (bool, error)
 	GetRouteTableForSubnet(subnetID string) (ec2v2types.RouteTable, error)
+	FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error)
+	HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error)
+	GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error)
+	FindNLBByDNSName(ctx context.Context, dnsName string) (arn string, name string, err error)
+	FindCLBByDNSName(ctx context.Context, dnsName string) (name string, err error)
+	GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error)
+	GetCLBInstanceHealth(ctx context.Context, lbName string) ([]CLBInstanceHealth, error)
 }
 
 type SdkClient struct {
@@ -69,6 +115,9 @@ type SdkClient struct {
 	CloudtrailClient CloudTrailAPI
 	Ec2Client        EC2API
 	StsClient        StsAPI
+	Route53Client    Route53API
+	Elbv2Client      ELBV2API
+	ElbClient        ELBAPI
 }
 
 func NewClient(config awsv2.Config) (*SdkClient, error) {
@@ -77,6 +126,9 @@ func NewClient(config awsv2.Config) (*SdkClient, error) {
 		CloudtrailClient: cloudtrailv2.NewFromConfig(config),
 		Ec2Client:        ec2v2.NewFromConfig(config),
 		StsClient:        stsv2.NewFromConfig(config),
+		Route53Client:    route53v2.NewFromConfig(config),
+		Elbv2Client:      elbv2.NewFromConfig(config),
+		ElbClient:        elbv1.NewFromConfig(config),
 	}, nil
 }
 
@@ -181,7 +233,7 @@ func (c *SdkClient) ListNonRunningInstances(infraID string) ([]ec2v2types.Instan
 	filters := []ec2v2types.Filter{
 		{
 			Name:   awsv2.String("tag:kubernetes.io/cluster/" + infraID),
-			Values: []string{("owned")},
+			Values: []string{"owned"},
 		},
 		{
 			Name: awsv2.String("instance-state-name"),
@@ -576,6 +628,205 @@ func (c *SdkClient) getRouteTable(routeTableID string) (ec2v2types.RouteTable, e
 		return ec2v2types.RouteTable{}, fmt.Errorf("no route tables found for route table id %v", routeTableID)
 	}
 	return describeRouteTablesOutput.RouteTables[0], nil
+}
+
+// FindHostedZone finds a hosted zone by DNS name and returns its ID.
+// If private is true, only private hosted zones are matched; otherwise only public zones.
+func (c *SdkClient) FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error) {
+	normalizedName := dnsName
+	if !strings.HasSuffix(normalizedName, ".") {
+		normalizedName += "."
+	}
+
+	out, err := c.Route53Client.ListHostedZonesByName(ctx, &route53v2.ListHostedZonesByNameInput{
+		DNSName: awsv2.String(normalizedName),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list hosted zones for %s: %w", dnsName, err)
+	}
+
+	for _, zone := range out.HostedZones {
+		// Treat nil Config as public (PrivateZone defaults to false).
+		isPrivate := zone.Config != nil && zone.Config.PrivateZone
+		if awsv2.ToString(zone.Name) == normalizedName && isPrivate == private {
+			// Zone IDs come as "/hostedzone/Z1234...", strip the prefix.
+			zoneID := awsv2.ToString(zone.Id)
+			zoneID = strings.TrimPrefix(zoneID, "/hostedzone/")
+			return zoneID, nil
+		}
+	}
+
+	return "", nil
+}
+
+// HasResourceRecordSet checks whether a specific DNS record exists in a hosted zone.
+// recordName should be fully qualified with a trailing dot (e.g., "\\052.apps.example.com.").
+// recordType is the DNS record type (e.g., "A", "CNAME").
+func (c *SdkClient) HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error) {
+	out, err := c.Route53Client.ListResourceRecordSets(ctx, &route53v2.ListResourceRecordSetsInput{
+		HostedZoneId:    awsv2.String(hostedZoneID),
+		StartRecordName: awsv2.String(recordName),
+		StartRecordType: route53v2types.RRType(recordType),
+		MaxItems:        awsv2.Int32(1),
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to list record sets in zone %s: %w", hostedZoneID, err)
+	}
+
+	if len(out.ResourceRecordSets) == 0 {
+		return false, nil
+	}
+
+	rrs := out.ResourceRecordSets[0]
+	return awsv2.ToString(rrs.Name) == recordName && rrs.Type == route53v2types.RRType(recordType), nil
+}
+
+// GetVpcDhcpConfiguration returns the domain-name-servers values from the DHCP option set
+// associated with the cluster's VPC.
+func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
+	// Find VPC by infra ID tag
+	vpcOut, err := c.Ec2Client.DescribeVpcs(ctx, &ec2v2.DescribeVpcsInput{
+		Filters: []ec2v2types.Filter{
+			{
+				Name:   awsv2.String("tag-key"),
+				Values: []string{fmt.Sprintf("kubernetes.io/cluster/%s", infraID)},
+			},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe VPCs for infra ID %s: %w", infraID, err)
+	}
+	if len(vpcOut.Vpcs) == 0 {
+		return nil, fmt.Errorf("no VPC found with kubernetes.io/cluster/%s tag", infraID)
+	}
+
+	dhcpOptionsID := awsv2.ToString(vpcOut.Vpcs[0].DhcpOptionsId)
+	if dhcpOptionsID == "" {
+		return nil, fmt.Errorf("VPC %s has no DHCP options set", awsv2.ToString(vpcOut.Vpcs[0].VpcId))
+	}
+
+	dhcpOut, err := c.Ec2Client.DescribeDhcpOptions(ctx, &ec2v2.DescribeDhcpOptionsInput{
+		DhcpOptionsIds: []string{dhcpOptionsID},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe DHCP options %s: %w", dhcpOptionsID, err)
+	}
+	if len(dhcpOut.DhcpOptions) == 0 {
+		return nil, fmt.Errorf("DHCP options set %s not found", dhcpOptionsID)
+	}
+
+	var servers []string
+	for _, cfg := range dhcpOut.DhcpOptions[0].DhcpConfigurations {
+		if awsv2.ToString(cfg.Key) == "domain-name-servers" {
+			for _, v := range cfg.Values {
+				servers = append(servers, awsv2.ToString(v.Value))
+			}
+			break
+		}
+	}
+
+	return servers, nil
+}
+
+func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
+	var marker *string
+	for {
+		out, err := c.Elbv2Client.DescribeLoadBalancers(ctx, &elbv2.DescribeLoadBalancersInput{
+			Marker: marker,
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("failed to describe NLBs: %w", err)
+		}
+		for _, lb := range out.LoadBalancers {
+			if lb.Type == elbv2types.LoadBalancerTypeEnumNetwork && awsv2.ToString(lb.DNSName) == dnsName {
+				return awsv2.ToString(lb.LoadBalancerArn), awsv2.ToString(lb.LoadBalancerName), nil
+			}
+		}
+		if out.NextMarker == nil {
+			break
+		}
+		marker = out.NextMarker
+	}
+	return "", "", nil
+}
+
+func (c *SdkClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
+	var marker *string
+	for {
+		out, err := c.ElbClient.DescribeLoadBalancers(ctx, &elbv1.DescribeLoadBalancersInput{
+			Marker: marker,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to describe CLBs: %w", err)
+		}
+		for _, lb := range out.LoadBalancerDescriptions {
+			if awsv2.ToString(lb.DNSName) == dnsName {
+				return awsv2.ToString(lb.LoadBalancerName), nil
+			}
+		}
+		if out.NextMarker == nil {
+			break
+		}
+		marker = out.NextMarker
+	}
+	return "", nil
+}
+
+func (c *SdkClient) GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error) {
+	tgOut, err := c.Elbv2Client.DescribeTargetGroups(ctx, &elbv2.DescribeTargetGroupsInput{
+		LoadBalancerArn: awsv2.String(lbARN),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe target groups for %s: %w", lbARN, err)
+	}
+
+	var results []NLBTargetHealth
+	for _, tg := range tgOut.TargetGroups {
+		thOut, err := c.Elbv2Client.DescribeTargetHealth(ctx, &elbv2.DescribeTargetHealthInput{
+			TargetGroupArn: tg.TargetGroupArn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to describe target health for %s: %w", awsv2.ToString(tg.TargetGroupArn), err)
+		}
+		for _, th := range thOut.TargetHealthDescriptions {
+			entry := NLBTargetHealth{
+				State: string(th.TargetHealth.State),
+			}
+			if th.Target != nil {
+				entry.TargetID = awsv2.ToString(th.Target.Id)
+				if th.Target.Port != nil {
+					entry.Port = *th.Target.Port
+				}
+			}
+			if th.TargetHealth.State != elbv2types.TargetHealthStateEnumHealthy {
+				entry.Reason = string(th.TargetHealth.Reason)
+			}
+			results = append(results, entry)
+		}
+	}
+
+	return results, nil
+}
+
+func (c *SdkClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([]CLBInstanceHealth, error) {
+	out, err := c.ElbClient.DescribeInstanceHealth(ctx, &elbv1.DescribeInstanceHealthInput{
+		LoadBalancerName: awsv2.String(lbName),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe instance health for CLB %s: %w", lbName, err)
+	}
+
+	results := make([]CLBInstanceHealth, 0, len(out.InstanceStates))
+	for _, is := range out.InstanceStates {
+		results = append(results, CLBInstanceHealth{
+			InstanceID:  awsv2.ToString(is.InstanceId),
+			State:       awsv2.ToString(is.State),
+			Reason:      awsv2.ToString(is.ReasonCode),
+			Description: awsv2.ToString(is.Description),
+		})
+	}
+
+	return results, nil
 }
 
 func populateStopTime(instances []ec2v2types.Instance) (map[string]time.Time, error) {
