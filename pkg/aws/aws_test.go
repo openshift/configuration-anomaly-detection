@@ -89,6 +89,21 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "A subnet with an internet gateway ID is public even when MapPublicIpOnLaunch is false",
+			fields: fields{
+				Region:           "us-east-1",
+				StsClient:        nil,
+				Ec2Client:        setupSubnetMock(t, awsv2.String("igw-1"), false),
+				CloudTrailClient: nil,
+				BaseConfig:       awsv2.Config{},
+			},
+			args: args{
+				subnet: "subnet-1",
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
 			name: "A subnet with an virtual private gateway ID is considered private",
 			fields: fields{
 				Region:           "us-east-1",

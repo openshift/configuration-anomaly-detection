@@ -385,7 +385,7 @@ func (c *SdkClient) IsSubnetPrivate(subnet string) (bool, error) {
 	for _, route := range rtb.Routes {
 		// GatewayId can contain an internet gateway *or* a virtual private gateway:
 		// "The ID of an internet gateway or virtual private gateway attached to your VPC."
-		if route.DestinationCidrBlock == awsv2.String("0.0.0.0/0") &&
+		if awsv2.ToString(route.DestinationCidrBlock) == "0.0.0.0/0" &&
 			(route.GatewayId != nil && strings.HasPrefix(*route.GatewayId, "igw")) {
 			// This is a public subnet
 			return false, nil
