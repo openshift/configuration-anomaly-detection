@@ -17,6 +17,7 @@ import (
 	v10 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	v11 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	v12 "github.com/openshift/hive/apis/hive/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -205,6 +206,21 @@ func (m *MockClient) GetSupportRoleARN(internalClusterID string) (string, error)
 func (mr *MockClientMockRecorder) GetSupportRoleARN(internalClusterID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSupportRoleARN", reflect.TypeOf((*MockClient)(nil).GetSupportRoleARN), internalClusterID)
+}
+
+// GetSyncSets mocks base method.
+func (m *MockClient) GetSyncSets(internalClusterID string) ([]v12.SyncSet, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSyncSets", internalClusterID)
+	ret0, _ := ret[0].([]v12.SyncSet)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSyncSets indicates an expected call of GetSyncSets.
+func (mr *MockClientMockRecorder) GetSyncSets(internalClusterID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncSets", reflect.TypeOf((*MockClient)(nil).GetSyncSets), internalClusterID)
 }
 
 // IsAccessProtected mocks base method.

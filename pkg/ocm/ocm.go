@@ -58,6 +58,7 @@ type Client interface {
 	GetDynatraceURL(cluster *cmv1.Cluster) (string, error)
 	CheckIfUserBanned(cluster *cmv1.Cluster) error
 	GetCreatorFromCluster(cluster *cmv1.Cluster) (*amv1.Account, error)
+	GetSyncSets(internalClusterID string) ([]hivev1.SyncSet, error)
 }
 
 // SdkClient is the ocm client with which we can run the commands
@@ -450,6 +451,25 @@ func (c *SdkClient) GetDynatraceURL(cluster *cmv1.Cluster) (string, error) {
 	}
 
 	return "", errors.New("dynatrace tenant label not found in subscription")
+}
+
+// GetSyncSets returns all Hive SyncSets for a cluster via the OCM cluster resources API.
+func (c *SdkClient) GetSyncSets(internalClusterID string) ([]hivev1.SyncSet, error) {
+	ssString, err := c.getClusterResource(internalClusterID, "syncsets")
+	if err != nil {
+		return nil, fmt.Errorf("client failed to load SyncSets: %w", err)
+	}
+	if ssString == "" {
+		return nil, nil
+	}
+	var ssList struct {
+		Items []hivev1.SyncSet `json:"items"`
+	}
+	err = json.Unmarshal([]byte(ssString), &ssList)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal SyncSets response: %w", err)
+	}
+	return ssList.Items, nil
 }
 
 func (e UserBannedError) Error() string {

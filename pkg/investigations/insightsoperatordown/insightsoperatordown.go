@@ -89,7 +89,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		notes.AppendSuccess("Ruled out OCPBUGS-22226")
 	}
 
-	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
 		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err.Error())

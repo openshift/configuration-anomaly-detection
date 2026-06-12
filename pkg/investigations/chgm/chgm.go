@@ -100,7 +100,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// 3. Check if the customer blocked egresses
-	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		logging.Error("Network verifier ran into an error: %s", err.Error())
 		r.Notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())

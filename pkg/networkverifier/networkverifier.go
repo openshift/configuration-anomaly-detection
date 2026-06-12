@@ -10,6 +10,7 @@ import (
 	v1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 
 	ocmlog "github.com/openshift-online/ocm-sdk-go/logging"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -29,8 +30,10 @@ const (
 	Success   VerifierResult = 2
 )
 
-// InitializeValidateEgressInput computes the input to pass to the network verifier tool
-func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (*verifier.ValidateEgressInput, error) {
+// InitializeValidateEgressInput computes the input to pass to the network verifier tool.
+// If the cluster has an additional trust bundle configured, additionalTrustBundle should
+// contain the PEM-encoded CA bundle retrieved from Hive.
+func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client, additionalTrustBundle string) (*verifier.ValidateEgressInput, error) {
 	if clusterDeployment == nil {
 		return nil, fmt.Errorf("nil clusterDeployment")
 	}
@@ -74,9 +77,11 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 		proxy.HttpsProxy = cluster.Proxy().HTTPSProxy()
 	}
 
-	// The actual trust bundle is redacted in OCM - we would have to get it from hive once CAD has backplane access
 	if cluster.AdditionalTrustBundle() != "" {
-		return nil, errors.New("cluster has an additional trust bundle configured - this is currently not supported by CAD's network verifier")
+		if additionalTrustBundle == "" {
+			return nil, errors.New("cluster has an additional trust bundle configured but it could not be retrieved - skipping network verifier to avoid false negatives")
+		}
+		proxy.Cacert = additionalTrustBundle
 	}
 
 	return &verifier.ValidateEgressInput{
@@ -93,9 +98,16 @@ func InitializeValidateEgressInput(cluster *v1.Cluster, clusterDeployment *hivev
 	}, nil
 }
 
-// Run runs the network verifier tool to check for network misconfigurations
-func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client) (result VerifierResult, failures string, name error) {
-	validateEgressInput, err := InitializeValidateEgressInput(cluster, clusterDeployment, awsClient)
+// Run runs the network verifier tool to check for network misconfigurations.
+// If the cluster has an additional trust bundle configured, it is automatically
+// retrieved via the OCM cluster resources API.
+func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsClient aws.Client, ocmClient ocm.Client) (result VerifierResult, failures string, name error) {
+	trustBundle, err := GetAdditionalTrustBundle(ocmClient, cluster)
+	if err != nil {
+		return Undefined, "", fmt.Errorf("failed to retrieve additional trust bundle: %w", err)
+	}
+
+	validateEgressInput, err := InitializeValidateEgressInput(cluster, clusterDeployment, awsClient, trustBundle)
 	if err != nil {
 		return Undefined, "", fmt.Errorf("failed to initialize validateEgressInput: %w", err)
 	}
