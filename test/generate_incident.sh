@@ -16,6 +16,7 @@ declare -A alert_mapping=(
     ["console-errorbudgetburn"]="console-errorbudgetburn Critical (1)"
     ["OCMAgentResponseFailureServiceLogsSRE"]="OCMAgentResponseFailureServiceLogsSRE CRITICAL (1)"
     ["ExpiredCertificates"]="expiredcertificates"
+    ["FallbackTestAlert"]="FallbackTestAlert"
 )
 
 # Function to print help message
