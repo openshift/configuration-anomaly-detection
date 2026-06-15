@@ -173,7 +173,7 @@ func checkUserBanStatus(r *investigation.Resources) (checkResult, error) {
 // It returns a set of actions, and a boolean indicating whether the investigation should halt
 func validateEgress(r *investigation.Resources) (checkResult, error) {
 	actions := []types.Action{}
-	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		logging.Errorf("Network verifier ran into an error: %s", err.Error())
 		r.Notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())

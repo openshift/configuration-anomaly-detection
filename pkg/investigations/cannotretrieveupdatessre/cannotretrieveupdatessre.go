@@ -25,7 +25,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	notes := notewriter.New("CannotRetrieveUpdatesSRE", logging.RawLogger)
 
 	// Run network verifier
-	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
 		notes.AppendWarning("NetworkVerifier failed to run:\n\t %s", err.Error())
 	} else {

@@ -49,7 +49,7 @@ type egressVerifier interface {
 type defaultEgressVerifier struct{}
 
 func (d *defaultEgressVerifier) run(r *investigation.Resources) (networkverifier.VerifierResult, string, error) {
-	return networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient)
+	return networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 }
 
 type Investigation struct {
