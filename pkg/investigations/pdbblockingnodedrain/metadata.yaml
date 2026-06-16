@@ -1,0 +1,17 @@
+name: pdbblockingnodedrain
+rbac:
+  roles: []
+  clusterRoleRules:
+    - apiGroups: ['']
+      resources: ['nodes']
+      verbs: ['get', 'list']
+    - apiGroups: ['']
+      resources: ['pods']
+      verbs: ['get', 'list']
+    - apiGroups: ['policy']
+      resources: ['poddisruptionbudgets']
+      verbs: ['get', 'list']
+    - apiGroups: ['apps']
+      resources: ['deployments', 'statefulsets', 'replicasets']
+      verbs: ['get', 'list']
+customerDataAccess: false

@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgather"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ocmagentresponsefailure"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/pdbblockingnodedrain"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/restartcontrolplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradeconfigsyncfailureover4hr"
 )
@@ -40,6 +41,7 @@ var availableInvestigations = []investigation.Investigation{
 	&clusterhealthcheck.Investigation{},
 	&consoleerrorbudgetburn.Investigation{},
 	&expiredcertificates.Investigation{},
+	&pdbblockingnodedrain.Investigation{},
 }
 
 // GetInvestigation returns the first Investigation that applies to the given alert title.

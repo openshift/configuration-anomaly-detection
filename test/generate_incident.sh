@@ -17,6 +17,7 @@ declare -A alert_mapping=(
     ["OCMAgentResponseFailureServiceLogsSRE"]="OCMAgentResponseFailureServiceLogsSRE CRITICAL (1)"
     ["ExpiredCertificates"]="expiredcertificates"
     ["FallbackTestAlert"]="FallbackTestAlert"
+    ["HCPNodepoolUpgradeDelay"]="HCPNodepoolUpgradeDelay"
 )
 
 # Function to print help message
