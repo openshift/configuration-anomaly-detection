@@ -19,7 +19,7 @@ require (
 	github.com/openshift-online/ocm-sdk-go v0.1.503
 	github.com/openshift/api v0.0.0-20260617125622-05673ba6e650
 	github.com/openshift/aws-account-operator/api v0.0.0-20260611202156-0869a2932f4a
-	github.com/openshift/backplane-api v0.0.0-20260408082909-d6466a2ac988
+	github.com/openshift/backplane-api v0.0.0-20260205054653-459856398d59
 	github.com/openshift/backplane-cli v0.10.1
 	github.com/openshift/hive/apis v0.0.0-20260430175100-52fd62d6be80
 	github.com/openshift/osd-network-verifier v1.7.0
@@ -142,7 +142,7 @@ require (
 	github.com/openshift-online/ocm-api-model/clientapi v0.0.457 // indirect
 	github.com/openshift-online/ocm-api-model/model v0.0.457 // indirect
 	github.com/openshift-online/ocm-cli v1.0.15 // indirect
-	github.com/openshift/installer v1.14.16-dcf8320c8c4e // indirect
+	github.com/openshift/installer v1.4.21-pre2.0.20260112230456-1c2444827f23 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
