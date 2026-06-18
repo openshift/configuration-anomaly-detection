@@ -43,7 +43,9 @@ type InvestigationResult struct {
 
 func NewResourceBuilder(
 	ocmClient *ocm.SdkClient,
+	productionOcmClient *ocm.SdkClient,
 	bpClient backplane.Client,
+	productionBpClient backplane.Client,
 	clusterId string,
 	name string,
 	backplaneUrl string,
@@ -53,14 +55,17 @@ func NewResourceBuilder(
 		params = make(map[string]string)
 	}
 	rb := &ResourceBuilderT{
-		clusterId:    clusterId,
-		name:         name,
-		ocmClient:    ocmClient,
-		backplaneUrl: backplaneUrl,
+		clusterId:           clusterId,
+		name:                name,
+		ocmClient:           ocmClient,
+		productionOcmClient: productionOcmClient,
+		backplaneUrl:        backplaneUrl,
 		builtResources: &Resources{
-			BpClient:  bpClient,
-			OcmClient: ocmClient,
-			Params:    params,
+			BpClient:            bpClient,
+			BpProductionClient:  productionBpClient,
+			OcmClient:           ocmClient,
+			OcmProductionClient: productionOcmClient,
+			Params:              params,
 		},
 	}
 
@@ -79,17 +84,19 @@ type Investigation interface {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Name              string
-	Cluster           *cmv1.Cluster
-	ClusterDeployment *hivev1.ClusterDeployment
-	AwsClient         aws.Client
-	BpClient          backplane.Client
-	RestConfig        *backplane.RestConfig
-	K8sClient         k8sclient.Client
-	OcmClient         ocm.Client
-	PdClient          pagerduty.Client
-	Notes             *notewriter.NoteWriter
-	OCClient          oc.Client
+	Name                string
+	Cluster             *cmv1.Cluster
+	ClusterDeployment   *hivev1.ClusterDeployment
+	AwsClient           aws.Client
+	BpClient            backplane.Client
+	BpProductionClient  backplane.Client
+	RestConfig          *backplane.RestConfig
+	K8sClient           k8sclient.Client
+	OcmClient           ocm.Client
+	OcmProductionClient ocm.Client
+	PdClient            pagerduty.Client
+	Notes               *notewriter.NoteWriter
+	OCClient            oc.Client
 	// ManagementRestConfig provides access to either:
 	// - The Hypershift management cluster (for HCP clusters)
 	// - The hive managing this cluster (for classic OSD/ROSA clusters)
@@ -144,7 +151,10 @@ type ResourceBuilderT struct {
 	pipelineName string
 	backplaneUrl string
 
+	// The OCM client of the environment the cluster is in.
 	ocmClient *ocm.SdkClient
+	// The OCM client the shard/management cluster will live in.
+	productionOcmClient *ocm.SdkClient
 
 	// cache
 	builtResources *Resources
@@ -430,7 +440,7 @@ func (r *ResourceBuilderT) buildHiveResources() error {
 	var err error
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
 		logging.Infof("Creating RestConfig for hive")
-		r.builtResources.ManagementRestConfig, err = r.builtResources.BpClient.GetRestConfigWithManagingClusterType(
+		r.builtResources.ManagementRestConfig, err = r.builtResources.BpProductionClient.GetRestConfigWithManagingClusterType(
 			context.Background(),
 			r.builtResources.Cluster.ID(),
 			r.name,

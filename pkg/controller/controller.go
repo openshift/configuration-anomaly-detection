@@ -83,13 +83,15 @@ type ControllerOptions struct {
 }
 
 type Dependencies struct {
-	OCMClient           *ocm.SdkClient
-	BackplaneClient     backplane.Client
-	BackplaneURL        string
-	BackplaneProxy      string
-	AWSProxy            string
-	ExperimentalEnabled bool
-	FilterConfig        *config.Config
+	OCMClient                 *ocm.SdkClient
+	OCMProductionClient       *ocm.SdkClient
+	BackplaneClient           backplane.Client
+	BackplaneProductionClient backplane.Client
+	BackplaneURL              string
+	BackplaneProxy            string
+	AWSProxy                  string
+	ExperimentalEnabled       bool
+	FilterConfig              *config.Config
 }
 
 // Retry configuration for transient infrastructure errors
@@ -146,6 +148,24 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		return nil, fmt.Errorf("missing required environment variable CAD_OCM_URL")
 	}
 
+	// Load production access
+	ocmProdClientID := os.Getenv("CAD_OCM_PRODUCTION_CLIENT_ID")
+	if ocmProdClientID == "" {
+		// TODO: Decide if this is really required
+		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_CLIENT_ID")
+	}
+
+	ocmProdClientSecret := os.Getenv("CAD_OCM_PRODUCTION_CLIENT_SECRET")
+	if ocmProdClientSecret == "" {
+		// TODO: Decide if this is really required
+		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_CLIENT_SECRET")
+	}
+
+	ocmProdURL := os.Getenv("CAD_OCM_PRODUCTION_URL")
+	if ocmProdURL == "" {
+		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_URL")
+	}
+
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
@@ -161,6 +181,11 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		return nil, fmt.Errorf("could not initialize ocm client: %w", err)
 	}
 
+	ocmProductionClient, err := ocm.New(ocmProdClientID, ocmProdClientSecret, ocmProdURL)
+	if err != nil {
+		return nil, fmt.Errorf("could not initialize production ocm client: %w", err)
+	}
+
 	// Create backplane client
 	config := backplane.Config{
 		OcmClient: ocmClient,
@@ -172,14 +197,27 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		return nil, fmt.Errorf("could not construct backplane-client")
 	}
 
+	// Create backplane client
+	prodConfig := backplane.Config{
+		OcmClient: ocmProductionClient,
+		BaseURL:   backplaneURL,
+		ProxyURL:  backplaneProxy,
+	}
+	bpProductionClient, err := backplane.NewClient(prodConfig)
+	if err != nil {
+		return nil, fmt.Errorf("could not construct production backplane-client")
+	}
+
 	return &Dependencies{
-		OCMClient:           ocmClient,
-		BackplaneClient:     bpClient,
-		BackplaneURL:        backplaneURL,
-		BackplaneProxy:      backplaneProxy,
-		AWSProxy:            awsProxy,
-		ExperimentalEnabled: experimentalEnabled,
-		FilterConfig:        filterConfig,
+		OCMClient:                 ocmClient,
+		OCMProductionClient:       ocmProductionClient,
+		BackplaneClient:           bpClient,
+		BackplaneProductionClient: bpProductionClient,
+		BackplaneURL:              backplaneURL,
+		BackplaneProxy:            backplaneProxy,
+		AWSProxy:                  awsProxy,
+		ExperimentalEnabled:       experimentalEnabled,
+		FilterConfig:              filterConfig,
 	}, nil
 }
 
