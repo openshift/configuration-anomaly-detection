@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -42,6 +44,10 @@ type blackboxProber interface {
 	runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error)
 }
 
+type probeHistoryChecker interface {
+	queryProbeHistory(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error)
+}
+
 type egressVerifier interface {
 	run(r *investigation.Resources) (networkverifier.VerifierResult, string, error)
 }
@@ -53,9 +59,10 @@ func (d *defaultEgressVerifier) run(r *investigation.Resources) (networkverifier
 }
 
 type Investigation struct {
-	consoleChecker consoleServiceChecker
-	blackboxProber blackboxProber
-	egressVerifier egressVerifier
+	consoleChecker    consoleServiceChecker
+	blackboxProber    blackboxProber
+	probeHistoryCheck probeHistoryChecker
+	egressVerifier    egressVerifier
 }
 
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
@@ -64,6 +71,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	if i.blackboxProber == nil {
 		i.blackboxProber = &defaultBlackboxProber{}
+	}
+	if i.probeHistoryCheck == nil {
+		i.probeHistoryCheck = &defaultProbeHistoryChecker{}
 	}
 	if i.egressVerifier == nil {
 		i.egressVerifier = &defaultEgressVerifier{}
@@ -241,6 +251,57 @@ func cidrContains(allowedCIDR string, machineIP net.IP, machineNet *net.IPNet) b
 	machineOnes, _ := machineNet.Mask.Size()
 
 	return allowedOnes <= machineOnes && allowedNet.Contains(machineIP)
+}
+
+// sgAllowsTCPInbound checks whether any of the given SGs allow TCP
+// inbound traffic on [fromPort, toPort]
+func sgAllowsTCPInbound(securityGroups []ec2v2types.SecurityGroup, fromPort, toPort int32, machineCIDR string) bool {
+	var machineIP net.IP
+	var machineNet *net.IPNet
+	if machineCIDR != "" {
+		var err error
+		machineIP, machineNet, err = net.ParseCIDR(machineCIDR)
+		if err != nil {
+			logging.Warnf("sgAllowsTCPInbound: failed to parse machine CIDR %q: %v — falling back to 0.0.0.0/0 matching only", machineCIDR, err)
+		}
+	}
+
+	for _, sg := range securityGroups {
+		for _, perm := range sg.IpPermissions {
+			proto := ""
+			if perm.IpProtocol != nil {
+				proto = *perm.IpProtocol
+			}
+			if proto != "tcp" && proto != "-1" {
+				continue
+			}
+			// "-1" means all traffic (all ports).
+			if proto != "-1" {
+				if perm.FromPort == nil || perm.ToPort == nil {
+					continue
+				}
+				if *perm.FromPort > fromPort || *perm.ToPort < toPort {
+					continue
+				}
+			}
+			if machineCIDR == "" {
+				return true
+			}
+			for _, ipRange := range perm.IpRanges {
+				cidr := ""
+				if ipRange.CidrIp != nil {
+					cidr = *ipRange.CidrIp
+				}
+				if cidr == "0.0.0.0/0" {
+					return true
+				}
+				if machineNet != nil && cidrContains(cidr, machineIP, machineNet) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // newAllowedSourceRangesSL returns the service log for an allowedSourceRanges misconfiguration.
@@ -445,7 +506,7 @@ func (i *Investigation) checkLoadBalancerHealth(ctx context.Context, r *investig
 
 // checkNLBHealth finds an NLB by DNS name and reports target health.
 func (i *Investigation) checkNLBHealth(ctx context.Context, r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
-	arn, name, err := r.AwsClient.FindNLBByDNSName(ctx, hostname)
+	arn, name, nlbSecurityGroups, err := r.AwsClient.FindNLBByDNSName(ctx, hostname)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to look up NLB — %v", err)
 		return
@@ -466,6 +527,45 @@ func (i *Investigation) checkNLBHealth(ctx context.Context, r *investigation.Res
 	}
 
 	reportNLBTargetHealth(name, targets, notes)
+
+	if len(nlbSecurityGroups) > 0 {
+		notes.AppendWarning("LB Security: NLB %s has security groups attached (unusual): %v", name, nlbSecurityGroups)
+	}
+
+	i.checkNLBInstanceSecurityGroups(ctx, r.AwsClient, targets, notes)
+}
+
+// checkNLBInstanceSecurityGroups verifies that the security groups on NLB target instances
+// allow inbound TCP traffic on the NodePort range (30000-32767).
+func (i *Investigation) checkNLBInstanceSecurityGroups(ctx context.Context, awsClient aws.Client, targets []aws.NLBTargetHealth, notes *notewriter.NoteWriter) {
+	instanceIDs := make([]string, 0, len(targets))
+	for _, t := range targets {
+		if t.TargetID != "" {
+			instanceIDs = append(instanceIDs, t.TargetID)
+		}
+	}
+	if len(instanceIDs) == 0 {
+		return
+	}
+	sgIDs, err := awsClient.GetInstanceSecurityGroupIDs(ctx, instanceIDs)
+	if err != nil {
+		notes.AppendWarning("LB Security: failed to get infra node security groups — %v", err)
+		return
+	}
+	if len(sgIDs) == 0 {
+		notes.AppendWarning("LB Security: no security groups found on NLB target instances")
+		return
+	}
+	sgs, err := awsClient.GetSecurityGroupRules(ctx, sgIDs)
+	if err != nil {
+		notes.AppendWarning("LB Security: failed to describe infra node security groups — %v", err)
+		return
+	}
+	if sgAllowsTCPInbound(sgs, 30000, 32767, "") {
+		notes.AppendSuccess("LB Security: infra node security groups allow NodePort traffic (30000-32767)")
+	} else {
+		notes.AppendWarning("LB Security: infra node security groups do not allow TCP traffic on NodePort range (30000-32767)")
+	}
 }
 
 // reportNLBTargetHealth formats and appends NLB target health to the notewriter.
@@ -496,7 +596,7 @@ func reportNLBTargetHealth(lbName string, targets []aws.NLBTargetHealth, notes *
 
 // checkCLBHealth finds a CLB by DNS name and reports instance health.
 func (i *Investigation) checkCLBHealth(ctx context.Context, r *investigation.Resources, hostname string, notes *notewriter.NoteWriter) {
-	name, err := r.AwsClient.FindCLBByDNSName(ctx, hostname)
+	name, sgIDs, err := r.AwsClient.FindCLBByDNSName(ctx, hostname)
 	if err != nil {
 		notes.AppendWarning("LB Health: failed to look up CLB — %v", err)
 		return
@@ -517,6 +617,23 @@ func (i *Investigation) checkCLBHealth(ctx context.Context, r *investigation.Res
 	}
 
 	reportCLBInstanceHealth(name, instances, notes)
+
+	// Security group check: verify TCP 443 inbound is allowed.
+	if len(sgIDs) == 0 {
+		notes.AppendWarning("LB Security: CLB %s has no security groups attached", name)
+		return
+	}
+	sgs, err := r.AwsClient.GetSecurityGroupRules(ctx, sgIDs)
+	if err != nil {
+		notes.AppendWarning("LB Security: failed to describe CLB security groups — %v", err)
+		return
+	}
+	machineCIDR := r.Cluster.Network().MachineCIDR()
+	if sgAllowsTCPInbound(sgs, 443, 443, machineCIDR) {
+		notes.AppendSuccess("LB Security: CLB %s security group allows TCP 443 inbound", name)
+	} else {
+		notes.AppendWarning("LB Security: CLB %s security group does not allow TCP 443 inbound from 0.0.0.0/0 or machine CIDR %s", name, machineCIDR)
+	}
 }
 
 // reportCLBInstanceHealth formats and appends CLB instance health to the notewriter.
@@ -763,29 +880,35 @@ func (i *Investigation) checkConsoleService(ctx context.Context, r *investigatio
 	}
 }
 
+// findRunningPod lists pods in the given namespace matching the given labels
+// and returns the first one with phase Running, or an error if none is found.
+func findRunningPod(ctx context.Context, k8sClient k8sclient.Client, namespace string, labels map[string]string, podDesc string) (*corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(
+		ctx, podList,
+		client.InNamespace(namespace),
+		client.MatchingLabels(labels),
+	); err != nil {
+		return nil, fmt.Errorf("failed to list %s pods: %w", podDesc, err)
+	}
+	for idx := range podList.Items {
+		if podList.Items[idx].Status.Phase == corev1.PodRunning {
+			return &podList.Items[idx], nil
+		}
+	}
+	return nil, fmt.Errorf("no running %s pod found in %s", podDesc, namespace)
+}
+
 // defaultConsoleServiceChecker implements consoleServiceChecker by exec'ing curl
 // into a cluster-monitoring-operator pod in openshift-monitoring.
 type defaultConsoleServiceChecker struct{}
 
 func (d *defaultConsoleServiceChecker) checkConsoleEndpoint(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) (string, error) {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(
-		ctx, podList,
-		client.InNamespace("openshift-monitoring"),
-		client.MatchingLabels{"app.kubernetes.io/name": "cluster-monitoring-operator"},
-	); err != nil {
-		return "", fmt.Errorf("failed to list cluster-monitoring-operator pods: %w", err)
-	}
-
-	var cmoPod *corev1.Pod
-	for idx := range podList.Items {
-		if podList.Items[idx].Status.Phase == corev1.PodRunning {
-			cmoPod = &podList.Items[idx]
-			break
-		}
-	}
-	if cmoPod == nil {
-		return "", fmt.Errorf("no running cluster-monitoring-operator pod found in openshift-monitoring")
+	cmoPod, err := findRunningPod(ctx, k8sClient, "openshift-monitoring",
+		map[string]string{"app.kubernetes.io/name": "cluster-monitoring-operator"},
+		"cluster-monitoring-operator")
+	if err != nil {
+		return "", err
 	}
 
 	output, err := k8sclient.ExecInPod(ctx, restConfig, cmoPod, "cluster-monitoring-operator", []string{
@@ -964,24 +1087,11 @@ func (i *Investigation) checkNodeUtilization(ctx context.Context, r *investigati
 type defaultBlackboxProber struct{}
 
 func (d *defaultBlackboxProber) runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error) {
-	podList := &corev1.PodList{}
-	if err := k8sClient.List(
-		ctx, podList,
-		client.InNamespace("openshift-route-monitor-operator"),
-		client.MatchingLabels{"app": "blackbox-exporter"},
-	); err != nil {
-		return "", fmt.Errorf("failed to list blackbox-exporter pods: %w", err)
-	}
-
-	var bbPod *corev1.Pod
-	for idx := range podList.Items {
-		if podList.Items[idx].Status.Phase == corev1.PodRunning {
-			bbPod = &podList.Items[idx]
-			break
-		}
-	}
-	if bbPod == nil {
-		return "", fmt.Errorf("no running blackbox-exporter pod found in openshift-route-monitor-operator")
+	bbPod, err := findRunningPod(ctx, k8sClient, "openshift-route-monitor-operator",
+		map[string]string{"app": "blackbox-exporter"},
+		"blackbox-exporter")
+	if err != nil {
+		return "", err
 	}
 
 	probeURL := fmt.Sprintf("http://localhost:9115/probe?target=%s&module=http_2xx&debug=true", consoleURL)
@@ -1117,6 +1227,106 @@ func (i *Investigation) checkBlackboxProbe(ctx context.Context, r *investigation
 		notes.AppendSuccess("Blackbox Probe: probe succeeded (HTTP %d, %.2fs) for %s", pr.httpStatus, pr.duration, consoleURL)
 	} else {
 		notes.AppendWarning("Blackbox Probe: probe FAILED for %s — failure mode: %s — %s", consoleURL, pr.failureMode, pr.failureDetail)
+	}
+
+	// Query Prometheus for historical probe_success data.
+	// Applies to: Classic only — on HCP, probe_success is forwarded to RHOBS
+	// and is not available in the in-cluster Prometheus.
+	if !r.IsHCP {
+		i.checkProbeHistory(ctx, r, consoleURL, notes)
+	} else {
+		notes.AppendSuccess("Probe History: skipped on HCP — probe_success is forwarded to RHOBS, not available in in-cluster Prometheus")
+	}
+}
+
+// defaultProbeHistoryChecker implements probeHistoryChecker by exec'ing curl
+// into a cluster-monitoring-operator pod to query the in-cluster Prometheus.
+type defaultProbeHistoryChecker struct{}
+
+func (d *defaultProbeHistoryChecker) queryProbeHistory(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error) {
+	cmoPod, err := findRunningPod(ctx, k8sClient, "openshift-monitoring",
+		map[string]string{"app.kubernetes.io/name": "cluster-monitoring-operator"},
+		"cluster-monitoring-operator")
+	if err != nil {
+		return "", err
+	}
+
+	// Build the Prometheus range query URL.
+	parsedURL, err := url.Parse(consoleURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse console URL %q: %w", consoleURL, err)
+	}
+	hostname := regexp.QuoteMeta(parsedURL.Hostname())
+	// 1h matches the critical tier's long window (1h/5m burn rate). For warning-tier
+	// alerts the evaluation window is longer (up to 3d), but 1h gives a useful recent
+	// snapshot in all cases nonetheless.
+	now := time.Now()
+	params := url.Values{}
+	params.Set("query", fmt.Sprintf(`probe_success{probe_url=~".*%s.*"}`, hostname))
+	params.Set("start", fmt.Sprintf("%d", now.Add(-1*time.Hour).Unix()))
+	params.Set("end", fmt.Sprintf("%d", now.Unix()))
+	params.Set("step", "60")
+	queryURL := fmt.Sprintf("https://prometheus-k8s.openshift-monitoring.svc.cluster.local:9091/api/v1/query_range?%s", params.Encode())
+
+	curlCmd := fmt.Sprintf(`curl -sk -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" '%s'`, queryURL)
+	output, err := k8sclient.ExecInPod(ctx, restConfig, cmoPod, "cluster-monitoring-operator", []string{
+		"sh", "-c", curlCmd,
+	})
+	if err != nil {
+		return output, fmt.Errorf("exec failed: %w", err)
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// prometheusRangeResponse mirrors the Prometheus HTTP API range query response structure.
+type prometheusRangeResponse struct {
+	Data struct {
+		Result []struct {
+			Values [][]interface{} `json:"values"`
+		} `json:"result"`
+	} `json:"data"`
+}
+
+// checkProbeHistory queries Prometheus for historical probe_success data and classifies
+// the failure pattern as persistent, intermittent, or recovered.
+//
+// Informational-only check.
+func (i *Investigation) checkProbeHistory(ctx context.Context, r *investigation.Resources, consoleURL string, notes *notewriter.NoteWriter) {
+	output, err := i.probeHistoryCheck.queryProbeHistory(ctx, r.K8sClient, &r.RestConfig.Config, consoleURL)
+	if err != nil {
+		notes.AppendWarning("Probe History: unable to query Prometheus — %v", err)
+		return
+	}
+
+	var resp prometheusRangeResponse
+	if err := json.Unmarshal([]byte(output), &resp); err != nil {
+		notes.AppendWarning("Probe History: failed to parse Prometheus response — %v", err)
+		return
+	}
+
+	if len(resp.Data.Result) == 0 || len(resp.Data.Result[0].Values) == 0 {
+		notes.AppendWarning("Probe History: no probe_success data found in Prometheus for the past 1 hour")
+		return
+	}
+
+	values := resp.Data.Result[0].Values
+	total := len(values)
+	failures := 0
+	for _, v := range values {
+		if len(v) >= 2 {
+			if str, ok := v[1].(string); ok && str == "0" {
+				failures++
+			}
+		}
+	}
+
+	switch failures {
+	case 0:
+		notes.AppendSuccess("Probe History: probe has been succeeding for all %d data points in the past 1 hour — failure may be intermittent or already resolved", total)
+	case total:
+		notes.AppendWarning("Probe History: probe has been consistently failing — all %d data points in the past 1 hour show failure", total)
+	default:
+		notes.AppendWarning("Probe History: probe is intermittently failing — %d/%d data points failed in the past 1 hour", failures, total)
 	}
 }
 

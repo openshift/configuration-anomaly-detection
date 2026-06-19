@@ -103,10 +103,12 @@ type Client interface {
 	FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error)
 	HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error)
 	GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error)
-	FindNLBByDNSName(ctx context.Context, dnsName string) (arn string, name string, err error)
-	FindCLBByDNSName(ctx context.Context, dnsName string) (name string, err error)
+	FindNLBByDNSName(ctx context.Context, dnsName string) (arn string, name string, securityGroups []string, err error)
+	FindCLBByDNSName(ctx context.Context, dnsName string) (name string, securityGroups []string, err error)
 	GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error)
 	GetCLBInstanceHealth(ctx context.Context, lbName string) ([]CLBInstanceHealth, error)
+	GetSecurityGroupRules(ctx context.Context, sgIDs []string) ([]ec2v2types.SecurityGroup, error)
+	GetInstanceSecurityGroupIDs(ctx context.Context, instanceIDs []string) ([]string, error)
 }
 
 type SdkClient struct {
@@ -728,18 +730,18 @@ func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string)
 	return servers, nil
 }
 
-func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
+func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, []string, error) {
 	var marker *string
 	for {
 		out, err := c.Elbv2Client.DescribeLoadBalancers(ctx, &elbv2.DescribeLoadBalancersInput{
 			Marker: marker,
 		})
 		if err != nil {
-			return "", "", fmt.Errorf("failed to describe NLBs: %w", err)
+			return "", "", nil, fmt.Errorf("failed to describe NLBs: %w", err)
 		}
 		for _, lb := range out.LoadBalancers {
 			if lb.Type == elbv2types.LoadBalancerTypeEnumNetwork && awsv2.ToString(lb.DNSName) == dnsName {
-				return awsv2.ToString(lb.LoadBalancerArn), awsv2.ToString(lb.LoadBalancerName), nil
+				return awsv2.ToString(lb.LoadBalancerArn), awsv2.ToString(lb.LoadBalancerName), lb.SecurityGroups, nil
 			}
 		}
 		if out.NextMarker == nil {
@@ -747,21 +749,21 @@ func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (strin
 		}
 		marker = out.NextMarker
 	}
-	return "", "", nil
+	return "", "", nil, nil
 }
 
-func (c *SdkClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
+func (c *SdkClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, []string, error) {
 	var marker *string
 	for {
 		out, err := c.ElbClient.DescribeLoadBalancers(ctx, &elbv1.DescribeLoadBalancersInput{
 			Marker: marker,
 		})
 		if err != nil {
-			return "", fmt.Errorf("failed to describe CLBs: %w", err)
+			return "", nil, fmt.Errorf("failed to describe CLBs: %w", err)
 		}
 		for _, lb := range out.LoadBalancerDescriptions {
 			if awsv2.ToString(lb.DNSName) == dnsName {
-				return awsv2.ToString(lb.LoadBalancerName), nil
+				return awsv2.ToString(lb.LoadBalancerName), lb.SecurityGroups, nil
 			}
 		}
 		if out.NextMarker == nil {
@@ -769,7 +771,7 @@ func (c *SdkClient) FindCLBByDNSName(ctx context.Context, dnsName string) (strin
 		}
 		marker = out.NextMarker
 	}
-	return "", nil
+	return "", nil, nil
 }
 
 func (c *SdkClient) GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error) {
@@ -827,6 +829,39 @@ func (c *SdkClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([]
 	}
 
 	return results, nil
+}
+
+// GetSecurityGroupRules returns full security group objects including their inbound rules
+func (c *SdkClient) GetSecurityGroupRules(ctx context.Context, sgIDs []string) ([]ec2v2types.SecurityGroup, error) {
+	out, err := c.Ec2Client.DescribeSecurityGroups(ctx, &ec2v2.DescribeSecurityGroupsInput{
+		GroupIds: sgIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe security groups: %w", err)
+	}
+	return out.SecurityGroups, nil
+}
+
+func (c *SdkClient) GetInstanceSecurityGroupIDs(ctx context.Context, instanceIDs []string) ([]string, error) {
+	out, err := c.Ec2Client.DescribeInstances(ctx, &ec2v2.DescribeInstancesInput{
+		InstanceIds: instanceIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe instances: %w", err)
+	}
+	sgSet := make(map[string]struct{})
+	for _, res := range out.Reservations {
+		for _, inst := range res.Instances {
+			for _, sg := range inst.SecurityGroups {
+				sgSet[awsv2.ToString(sg.GroupId)] = struct{}{}
+			}
+		}
+	}
+	result := make([]string, 0, len(sgSet))
+	for id := range sgSet {
+		result = append(result, id)
+	}
+	return result, nil
 }
 
 func populateStopTime(instances []ec2v2types.Instance) (map[string]time.Time, error) {

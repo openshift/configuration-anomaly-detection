@@ -540,12 +540,13 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // FindCLBByDNSName mocks base method.
-func (m *MockClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, error) {
+func (m *MockClient) FindCLBByDNSName(ctx context.Context, dnsName string) (string, []string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindCLBByDNSName", ctx, dnsName)
 	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].([]string)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // FindCLBByDNSName indicates an expected call of FindCLBByDNSName.
@@ -570,13 +571,14 @@ func (mr *MockClientMockRecorder) FindHostedZone(ctx, dnsName, private any) *gom
 }
 
 // FindNLBByDNSName mocks base method.
-func (m *MockClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, error) {
+func (m *MockClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, []string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindNLBByDNSName", ctx, dnsName)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(string)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret2, _ := ret[2].([]string)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
 }
 
 // FindNLBByDNSName indicates an expected call of FindNLBByDNSName.
@@ -612,6 +614,21 @@ func (m *MockClient) GetCLBInstanceHealth(ctx context.Context, lbName string) ([
 func (mr *MockClientMockRecorder) GetCLBInstanceHealth(ctx, lbName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCLBInstanceHealth", reflect.TypeOf((*MockClient)(nil).GetCLBInstanceHealth), ctx, lbName)
+}
+
+// GetInstanceSecurityGroupIDs mocks base method.
+func (m *MockClient) GetInstanceSecurityGroupIDs(ctx context.Context, instanceIDs []string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInstanceSecurityGroupIDs", ctx, instanceIDs)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInstanceSecurityGroupIDs indicates an expected call of GetInstanceSecurityGroupIDs.
+func (mr *MockClientMockRecorder) GetInstanceSecurityGroupIDs(ctx, instanceIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstanceSecurityGroupIDs", reflect.TypeOf((*MockClient)(nil).GetInstanceSecurityGroupIDs), ctx, instanceIDs)
 }
 
 // GetNLBTargetHealth mocks base method.
@@ -657,6 +674,21 @@ func (m *MockClient) GetSecurityGroupID(infraID string) (string, error) {
 func (mr *MockClientMockRecorder) GetSecurityGroupID(infraID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupID", reflect.TypeOf((*MockClient)(nil).GetSecurityGroupID), infraID)
+}
+
+// GetSecurityGroupRules mocks base method.
+func (m *MockClient) GetSecurityGroupRules(ctx context.Context, sgIDs []string) ([]types0.SecurityGroup, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSecurityGroupRules", ctx, sgIDs)
+	ret0, _ := ret[0].([]types0.SecurityGroup)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSecurityGroupRules indicates an expected call of GetSecurityGroupRules.
+func (mr *MockClientMockRecorder) GetSecurityGroupRules(ctx, sgIDs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSecurityGroupRules", reflect.TypeOf((*MockClient)(nil).GetSecurityGroupRules), ctx, sgIDs)
 }
 
 // GetSubnetID mocks base method.
