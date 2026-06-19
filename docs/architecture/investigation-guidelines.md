@@ -74,9 +74,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 
     // Perform investigation logic
     if problemDetected {
-        notes.AppendAutomation("Problem detected, sending service log and silencing alert")
+        notes.AppendWarning("Problem detected")
 
         // ✅ DO: Return actions for the executor to handle
+        // The executor will append automation notes after actions are actually executed.
         result.Actions = []types.Action{
             executor.NewServiceLogAction(sl.Severity, sl.Summary).
                 WithDescription(sl.Description).
@@ -271,7 +272,9 @@ Use when the customer has misconfigured something and can fix it themselves.
 
 ```go
 if customerMisconfigurationDetected {
-    notes.AppendAutomation("Customer misconfigured X, sending service log and silencing alert")
+    notes.AppendWarning("Customer misconfigured X")
+    // Note: Do NOT write "sending service log" in the notes here.
+    // The executor appends automation notes after actions are actually executed.
 
     serviceLog := &ocm.ServiceLog{
         Severity:    "Major",
@@ -298,7 +301,9 @@ Use when the customer performed an unsupported action (e.g., stopped instances).
 
 ```go
 if unsupportedActionDetected {
-    notes.AppendAutomation("Customer performed unsupported action, setting limited support")
+    notes.AppendWarning("Customer performed unsupported action")
+    // Note: Do NOT write "setting limited support" in the notes here.
+    // The executor appends automation notes after actions are actually executed.
 
     limitedSupportReason := ocm.LimitedSupportReason{
         Summary: "Cluster is in Limited Support due to unsupported action",

@@ -81,7 +81,17 @@ func (a *ServiceLogAction) Execute(ctx context.Context, execCtx *ExecutionContex
 		}
 	}
 
-	return execCtx.OCMClient.PostServiceLog(execCtx.Cluster, a.ServiceLog)
+	if err := execCtx.OCMClient.PostServiceLog(execCtx.Cluster, a.ServiceLog); err != nil {
+		return err
+	}
+
+	// Append to notes after successful send so the PD note
+	// accurately reflects what happened.
+	if execCtx.Notes != nil {
+		execCtx.Notes.AppendAutomation("Sent SL: '%s'", a.ServiceLog.Summary)
+	}
+
+	return nil
 }
 
 // LimitedSupportAction sets a cluster into limited support
@@ -126,7 +136,15 @@ func (a *LimitedSupportAction) Execute(ctx context.Context, execCtx *ExecutionCo
 		a.Reason.Summary, a.Context)
 
 	// Note: OCM API handles duplicate checking internally
-	return execCtx.OCMClient.PostLimitedSupportReason(execCtx.Cluster, a.Reason)
+	if err := execCtx.OCMClient.PostLimitedSupportReason(execCtx.Cluster, a.Reason); err != nil {
+		return err
+	}
+
+	if execCtx.Notes != nil {
+		execCtx.Notes.AppendAutomation("Sent LS: '%s'", a.Reason.Summary)
+	}
+
+	return nil
 }
 
 // PagerDutyNoteAction adds a note to the current PagerDuty incident

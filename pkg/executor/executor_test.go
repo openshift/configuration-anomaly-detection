@@ -464,7 +464,7 @@ func TestInfraClusterExecutor_InterceptsLimitedSupportAndSilence(t *testing.T) {
 	mockPDClient.EXPECT().EscalateIncident().Return(nil)
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	limitedSupportExecuted := false
 	silenceExecuted := false
@@ -507,7 +507,7 @@ func TestInfraClusterExecutor_InterceptsServiceLog(t *testing.T) {
 	mockPDClient.EXPECT().EscalateIncident().Return(nil)
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	serviceLogExecuted := false
 	pdNoteExecuted := false
@@ -544,7 +544,7 @@ func TestInfraClusterExecutor_PassesThroughNonInterceptedActions(t *testing.T) {
 	logger := zap.NewNop().Sugar()
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	pdNoteExecuted := false
 	escalateExecuted := false
@@ -585,7 +585,7 @@ func TestInfraClusterExecutor_NoActionsToIntercept(t *testing.T) {
 	logger := zap.NewNop().Sugar()
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	escalateExecuted := false
 
@@ -620,7 +620,7 @@ func TestInfraClusterExecutor_NilInput(t *testing.T) {
 	mockBPClient := &bpmock.MockClient{}
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	err := exec.Execute(context.Background(), nil)
 
@@ -641,7 +641,7 @@ func TestInfraClusterExecutor_IntegrationAllIntercepted(t *testing.T) {
 	mockPDClient.EXPECT().EscalateIncident().Return(nil)
 
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
-	exec := NewInfraClusterExecutor(inner, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
 
 	limitedSupportExecuted := false
 	silenceExecuted := false
@@ -672,6 +672,92 @@ func TestInfraClusterExecutor_IntegrationAllIntercepted(t *testing.T) {
 	assert.False(t, serviceLogExecuted, "ServiceLog should be intercepted")
 	assert.False(t, silenceExecuted, "Silence should be intercepted")
 	assert.True(t, backplaneExecuted, "Backplane report should pass through")
+}
+
+func TestInfraClusterExecutor_UncertainUsesAlternateNote(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	var capturedNote string
+	mockPDClient.EXPECT().AddNote(gomock.Any()).DoAndReturn(func(note string) error {
+		capturedNote = note
+		return nil
+	})
+	mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger, true)
+
+	serviceLogExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.False(t, serviceLogExecuted, "ServiceLog should be intercepted")
+	assert.Contains(t, capturedNote, "Unable to determine cluster infrastructure status")
+	assert.NotContains(t, capturedNote, "Infra cluster detected")
+}
+
+func TestInfraClusterExecutor_ConfirmedUsesInfraNote(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	var capturedNote string
+	mockPDClient.EXPECT().AddNote(gomock.Any()).DoAndReturn(func(note string) error {
+		capturedNote = note
+		return nil
+	})
+	mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger, false)
+
+	serviceLogExecuted := false
+
+	actions := []Action{
+		&mockAction{actionType: ActionTypeServiceLog, executed: &serviceLogExecuted},
+	}
+
+	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options: ExecutionOptions{
+			ConcurrentActions: false,
+		},
+	}
+
+	err := exec.Execute(context.Background(), input)
+
+	assert.NoError(t, err)
+	assert.False(t, serviceLogExecuted, "ServiceLog should be intercepted")
+	assert.Contains(t, capturedNote, "Infra cluster detected")
+	assert.NotContains(t, capturedNote, "Unable to determine")
 }
 
 func TestJoinDescriptions(t *testing.T) {
