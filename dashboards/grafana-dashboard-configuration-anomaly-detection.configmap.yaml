@@ -390,6 +390,72 @@ data:
             "type": "prometheus",
             "uid": "${cad_ds}"
           },
+          "description": "Estimated SRE hours saved through triage acceleration by informational investigations. Uses per-investigation manual-time estimates: consoleerrorbudgetburn=25min, expiredcertificates=20min, pdbblockingnodedrain=20min.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 17
+          },
+          "id": 23,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "pluginVersion": "9.3.8",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "((sum(increase(cad_investigate_alerts_total{alert_type=\"consoleerrorbudgetburn\"}[$__range])) OR on() vector(0)) * 25 + (sum(increase(cad_investigate_alerts_total{alert_type=\"expiredcertificates\"}[$__range])) OR on() vector(0)) * 20 + (sum(increase(cad_investigate_alerts_total{alert_type=\"pdbblockingnodedrain\"}[$__range])) OR on() vector(0)) * 20) / 60",
+              "legendFormat": "__auto",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Estimated SRE hours saved (triage acceleration)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -410,7 +476,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 25
           },
           "id": 12,
           "options": {
@@ -482,7 +548,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 17
+            "y": 25
           },
           "id": 18,
           "options": {
@@ -553,7 +619,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 25
+            "y": 33
           },
           "id": 13,
           "options": {
@@ -624,7 +690,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 25
+            "y": 33
           },
           "id": 17,
           "options": {
@@ -717,7 +783,7 @@ data:
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 33
+            "y": 41
           },
           "id": 21,
           "options": {
