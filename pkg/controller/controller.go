@@ -87,6 +87,7 @@ type Dependencies struct {
 	OCMProductionClient       *ocm.SdkClient
 	BackplaneClient           backplane.Client
 	BackplaneProductionClient backplane.Client
+	ManagedCloud              *managedcloud.Client
 	BackplaneURL              string
 	BackplaneProxy            string
 	AWSProxy                  string
@@ -107,32 +108,69 @@ func (d *Dependencies) Cleanup() {
 	// But this provides a hook for future needs
 }
 
-// initializeDependencies loads environment variables and creates shared clients.
-// configPath is an optional path to the investigation filter config file;
-// if empty, the CAD_INVESTIGATION_CONFIG_PATH env var is used instead.
+// resolveConfigOrEnv returns configVal if non-empty, otherwise the value of envVar.
+// This supports a gradual migration where non-secret settings can be provided via
+// the config file (preferred) or the legacy environment variable (fallback).
+func resolveConfigOrEnv(configVal, envVar string) string {
+	if configVal != "" {
+		return configVal
+	}
+	return os.Getenv(envVar)
+}
+
+// initializeDependencies loads configuration and creates shared clients.
+// Non-secret settings are read from the config file when available, with
+// environment variables as a fallback.  Secrets remain env-var-only.
+// configPath is an optional path to the config file; if empty, the
+// CAD_INVESTIGATION_CONFIG_PATH env var is used instead.
 func initializeDependencies(configPath string) (*Dependencies, error) {
-	// Load k8s environment variables
-	backplaneURL := os.Getenv("BACKPLANE_URL")
+	// Load config first so non-secret values can come from the config file.
+	filterConfig, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load investigation config: %w", err)
+	}
+	runtime := filterConfig.GetRuntime()
+
+	// Non-secret settings: config file takes precedence, env var is the fallback.
+	backplaneURL := resolveConfigOrEnv(runtime.Backplane.URL, "BACKPLANE_URL")
 	if backplaneURL == "" {
-		return nil, fmt.Errorf("missing required environment variable BACKPLANE_URL")
+		return nil, fmt.Errorf("missing backplane URL: set runtime.backplane.url in config or BACKPLANE_URL env var")
 	}
 
-	// Load managedcloud environment variables
-	backplaneInitialARN := os.Getenv("BACKPLANE_INITIAL_ARN")
+	// Production backplane URL is only needed in non-production environments where the
+	// staging and production backplane endpoints differ. Falls back to backplaneURL so
+	// production deployments don't need to set this.
+	backplaneProductionURL := resolveConfigOrEnv(runtime.Backplane.ProductionURL, "BACKPLANE_PRODUCTION_URL")
+	if backplaneProductionURL == "" {
+		backplaneProductionURL = backplaneURL
+	}
+
+	backplaneInitialARN := resolveConfigOrEnv(runtime.Backplane.InitialARN, "BACKPLANE_INITIAL_ARN")
 	if backplaneInitialARN == "" {
-		return nil, fmt.Errorf("missing required environment variable BACKPLANE_INITIAL_ARN")
+		return nil, fmt.Errorf("missing backplane initial ARN: set runtime.backplane.initial_arn in config or BACKPLANE_INITIAL_ARN env var")
 	}
 
-	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
-	awsProxy := os.Getenv("AWS_PROXY")
+	backplaneProxy := resolveConfigOrEnv(runtime.Backplane.Proxy, "BACKPLANE_PROXY")
+	awsProxy := resolveConfigOrEnv(runtime.AWSProxy, "AWS_PROXY")
 
-	// Set managedcloud environment configuration for this session
-	managedcloud.SetBackplaneURL(backplaneURL)
-	managedcloud.SetBackplaneInitialARN(backplaneInitialARN)
-	managedcloud.SetBackplaneProxy(backplaneProxy)
-	managedcloud.SetAWSProxy(awsProxy)
+	ocmURL := resolveConfigOrEnv(runtime.OCM.URL, "CAD_OCM_URL")
+	if ocmURL == "" {
+		return nil, fmt.Errorf("missing OCM URL: set runtime.ocm.url in config or CAD_OCM_URL env var")
+	}
 
-	// Load OCM environment variables
+	ocmProdURL := resolveConfigOrEnv(runtime.OCM.ProductionURL, "CAD_OCM_PRODUCTION_URL")
+	if ocmProdURL == "" {
+		return nil, fmt.Errorf("missing production OCM URL: set runtime.ocm.production_url in config or CAD_OCM_PRODUCTION_URL env var")
+	}
+
+	var experimentalEnabled bool
+	if runtime.ExperimentalEnabled != nil {
+		experimentalEnabled = *runtime.ExperimentalEnabled
+	} else {
+		experimentalEnabled, _ = strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
+	}
+
+	// Secrets remain environment-variable-only.
 	ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
 	if ocmClientID == "" {
 		return nil, fmt.Errorf("missing required environment variable CAD_OCM_CLIENT_ID")
@@ -143,36 +181,14 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		return nil, fmt.Errorf("missing required environment variable CAD_OCM_CLIENT_SECRET")
 	}
 
-	ocmURL := os.Getenv("CAD_OCM_URL")
-	if ocmURL == "" {
-		return nil, fmt.Errorf("missing required environment variable CAD_OCM_URL")
-	}
-
-	// Load production access
 	ocmProdClientID := os.Getenv("CAD_OCM_PRODUCTION_CLIENT_ID")
 	if ocmProdClientID == "" {
-		// TODO: Decide if this is really required
 		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_CLIENT_ID")
 	}
 
 	ocmProdClientSecret := os.Getenv("CAD_OCM_PRODUCTION_CLIENT_SECRET")
 	if ocmProdClientSecret == "" {
-		// TODO: Decide if this is really required
 		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_CLIENT_SECRET")
-	}
-
-	ocmProdURL := os.Getenv("CAD_OCM_PRODUCTION_URL")
-	if ocmProdURL == "" {
-		return nil, fmt.Errorf("missing required environment variable CAD_OCM_PRODUCTION_URL")
-	}
-
-	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
-	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
-
-	// Load investigation filter config (optional — nil means no filtering)
-	filterConfig, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load investigation filter config: %w", err)
 	}
 
 	// Create OCM client
@@ -200,7 +216,7 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 	// Create backplane client
 	prodConfig := backplane.Config{
 		OcmClient: ocmProductionClient,
-		BaseURL:   backplaneURL,
+		BaseURL:   backplaneProductionURL,
 		ProxyURL:  backplaneProxy,
 	}
 	bpProductionClient, err := backplane.NewClient(prodConfig)
@@ -213,6 +229,7 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		OCMProductionClient:       ocmProductionClient,
 		BackplaneClient:           bpClient,
 		BackplaneProductionClient: bpProductionClient,
+		ManagedCloud:              managedcloud.NewClient(backplaneURL, backplaneInitialARN, backplaneProxy, awsProxy),
 		BackplaneURL:              backplaneURL,
 		BackplaneProxy:            backplaneProxy,
 		AWSProxy:                  awsProxy,
@@ -307,7 +324,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, filterCtx *types.FilterContext, params map[string]string) error {
 	metrics.Inc(metrics.Alerts, inv.Name())
 
-	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL, params)
+	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.dependencies.OCMProductionClient, c.bpClient, c.dependencies.BackplaneProductionClient, c.dependencies.ManagedCloud, clusterId, inv.Name(), c.dependencies.BackplaneURL, params)
 	if pdClient != nil {
 		builder.WithPdClient(pdClient)
 	}
@@ -434,7 +451,7 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 }
 
 func (c *investigationRunner) runCertPreCheck(clusterId string, pdClient *pagerduty.SdkClient, certCheck *expiredcertificates.Investigation) {
-	certBuilder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, certCheck.Name(), c.dependencies.BackplaneURL, nil)
+	certBuilder, err := investigation.NewResourceBuilder(c.ocmClient, c.dependencies.OCMProductionClient, c.bpClient, c.dependencies.BackplaneProductionClient, c.dependencies.ManagedCloud, clusterId, certCheck.Name(), c.dependencies.BackplaneURL, nil)
 	if err != nil {
 		logging.Warnf("Expired certificates pre-check: failed to create resource builder: %v", err)
 		return
