@@ -46,6 +46,7 @@ func NewResourceBuilder(
 	productionOcmClient *ocm.SdkClient,
 	bpClient backplane.Client,
 	productionBpClient backplane.Client,
+	managedCloud *managedcloud.Client,
 	clusterId string,
 	name string,
 	backplaneUrl string,
@@ -59,6 +60,7 @@ func NewResourceBuilder(
 		name:                name,
 		ocmClient:           ocmClient,
 		productionOcmClient: productionOcmClient,
+		managedCloud:        managedCloud,
 		backplaneUrl:        backplaneUrl,
 		builtResources: &Resources{
 			BpClient:            bpClient,
@@ -155,6 +157,8 @@ type ResourceBuilderT struct {
 	ocmClient *ocm.SdkClient
 	// The OCM client the shard/management cluster will live in.
 	productionOcmClient *ocm.SdkClient
+	// managedCloud provides access to customer AWS accounts via backplane.
+	managedCloud *managedcloud.Client
 
 	// cache
 	builtResources *Resources
@@ -270,7 +274,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	internalClusterId := r.builtResources.Cluster.ID()
 
 	if r.buildAwsClient && r.builtResources.AwsClient == nil {
-		r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
+		r.builtResources.AwsClient, err = r.managedCloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
 		if err != nil {
 			r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr

@@ -13,66 +13,53 @@ import (
 	ocm "github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
-var (
+// Client holds the configuration needed to access cloud environments of managed clusters.
+type Client struct {
 	backplaneURL        string
 	backplaneInitialARN string
 	backplaneProxy      string
 	awsProxy            string
-)
-
-// SetBackplaneURL sets the backplane URL to use for managed cloud connections
-// FIXME: Replace with proper config mechanism when implemented service
-func SetBackplaneURL(url string) {
-	backplaneURL = url
 }
 
-// SetBackplaneInitialARN sets the backplane initial ARN to use for managed cloud connections
-// FIXME: Replace with proper config mechanism when implemented service
-func SetBackplaneInitialARN(arn string) {
-	backplaneInitialARN = arn
-}
-
-// SetBackplaneProxy sets the backplane proxy to use for managed cloud connections
-// FIXME: Replace with proper config mechanism when implemented service
-func SetBackplaneProxy(proxy string) {
-	backplaneProxy = proxy
-}
-
-// SetAWSProxy sets the AWS proxy to use for managed cloud connections
-// FIXME: Replace with proper config mechanism when implemented service
-func SetAWSProxy(proxy string) {
-	awsProxy = proxy
+// NewClient creates a new managedcloud Client with the given backplane and AWS configuration.
+func NewClient(backplaneURL, backplaneInitialARN, backplaneProxy, awsProxy string) *Client {
+	return &Client{
+		backplaneURL:        backplaneURL,
+		backplaneInitialARN: backplaneInitialARN,
+		backplaneProxy:      backplaneProxy,
+		awsProxy:            awsProxy,
+	}
 }
 
 // CreateCustomerAWSClient creates an aws.SdkClient to a cluster's AWS account
-func CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.SdkClient, error) {
-	if backplaneURL == "" {
-		return nil, fmt.Errorf("could not create new aws client: backplane URL not configured, call SetBackplaneURL first")
+func (c *Client) CreateCustomerAWSClient(cluster *cmv1.Cluster, ocmClient ocm.Client) (*aws.SdkClient, error) {
+	if c.backplaneURL == "" {
+		return nil, fmt.Errorf("could not create new aws client: backplane URL not configured")
 	}
 
-	if backplaneInitialARN == "" {
-		return nil, fmt.Errorf("could not create new aws client: backplane initial ARN not configured, call SetBackplaneInitialARN first")
+	if c.backplaneInitialARN == "" {
+		return nil, fmt.Errorf("could not create new aws client: backplane initial ARN not configured")
 	}
 
-	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: backplaneURL, AssumeInitialArn: backplaneInitialARN}, Cluster: cluster}
-	if backplaneProxy != "" {
-		queryConfig.ProxyURL = &backplaneProxy
+	queryConfig := &bpcloud.QueryConfig{OcmConnection: ocmClient.GetConnection(), BackplaneConfiguration: config.BackplaneConfiguration{URL: c.backplaneURL, AssumeInitialArn: c.backplaneInitialARN}, Cluster: cluster}
+	if c.backplaneProxy != "" {
+		queryConfig.ProxyURL = &c.backplaneProxy
 	}
 
-	config, err := queryConfig.GetAWSV2Config()
+	awsConfig, err := queryConfig.GetAWSV2Config()
 	if err != nil {
 		return nil, fmt.Errorf("unable to query aws credentials from backplane: %w", err)
 	}
 
-	if awsProxy != "" {
-		config.HTTPClient = &http.Client{
+	if c.awsProxy != "" {
+		awsConfig.HTTPClient = &http.Client{
 			Transport: &http.Transport{
 				Proxy: func(*http.Request) (*url.URL, error) {
-					return url.Parse(awsProxy)
+					return url.Parse(c.awsProxy)
 				},
 			},
 		}
 	}
 
-	return aws.NewClient(config)
+	return aws.NewClient(awsConfig)
 }
