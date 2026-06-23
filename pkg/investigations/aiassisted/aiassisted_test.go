@@ -91,9 +91,23 @@ var _ = Describe("aiassisted", func() {
 	})
 
 	Describe("Run", func() {
+		Context("when cluster is a management cluster", func() {
+			It("should skip AI investigation and escalate", func() {
+				r.Resources.IsInfrastructureCluster = true
+
+				inv := Investigation{}
+				result, err := inv.Run(r)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Actions).NotTo(BeEmpty())
+				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+				Expect(hasNoteAction(result.Actions)).To(BeTrue())
+			})
+		})
+
 		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
-				inv := Investigation{AIConfig: nil}
+				inv := Investigation{}
 				result, err := inv.Run(r)
 
 				Expect(err).ToNot(HaveOccurred())
