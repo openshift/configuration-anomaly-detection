@@ -65,6 +65,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
+	// Check if this is a management cluster (management cluster, service cluster, or hive shard)
+	isManagingCluster, err := r.OcmClient.IsManagingCluster(clusterID)
+	if err != nil {
+		logging.Warnf("Failed to check if cluster is a management cluster: %v", err)
+		// Continue anyway - if we can't determine, we'll proceed with investigation
+	} else if isManagingCluster {
+		notes.AppendWarning("Management/Service cluster - skipping AI investigation")
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate("Cluster is a management/service cluster - AI investigation not supported"),
+		)
+		return result, nil
+	}
+
 	if c.AIConfig == nil {
 		notes.AppendWarning("AI agent runtime configuration not set (ai_agent section missing from config)")
 		result.Actions = append(
