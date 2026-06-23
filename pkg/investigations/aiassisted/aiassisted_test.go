@@ -93,10 +93,9 @@ var _ = Describe("aiassisted", func() {
 	Describe("Run", func() {
 		Context("when cluster is a management cluster", func() {
 			It("should skip AI investigation and escalate", func() {
-				mockOcmClient := r.Resources.OcmClient.(*ocmmock.MockClient)
-				mockOcmClient.EXPECT().IsManagingCluster(gomock.Any()).Return(true, nil)
+				r.Resources.IsInfrastructureCluster = true
 
-				inv := Investigation{AIConfig: nil}
+				inv := Investigation{}
 				result, err := inv.Run(r)
 
 				Expect(err).ToNot(HaveOccurred())
@@ -108,10 +107,7 @@ var _ = Describe("aiassisted", func() {
 
 		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
-				mockOcmClient := r.Resources.OcmClient.(*ocmmock.MockClient)
-				mockOcmClient.EXPECT().IsManagingCluster(gomock.Any()).Return(false, nil)
-
-				inv := Investigation{AIConfig: nil}
+				inv := Investigation{}
 				result, err := inv.Run(r)
 
 				Expect(err).ToNot(HaveOccurred())
