@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -137,6 +138,27 @@ func (m *mockBlackboxProber) runProbe(_ context.Context, _ k8sclient.Client, _ *
 func healthyBlackboxProber() *mockBlackboxProber {
 	return &mockBlackboxProber{output: successfulProbeResponse}
 }
+
+// mockProbeHistoryChecker implements probeHistoryChecker for testing.
+type mockProbeHistoryChecker struct {
+	output string
+	err    error
+}
+
+func (m *mockProbeHistoryChecker) queryProbeHistory(_ context.Context, _ k8sclient.Client, _ *rest.Config, _ string) (string, error) {
+	return m.output, m.err
+}
+
+func noopProbeHistoryChecker() *mockProbeHistoryChecker {
+	return &mockProbeHistoryChecker{output: allSucceedingHistoryResponse}
+}
+
+const (
+	allSucceedingHistoryResponse       = `{"data":{"result":[{"values":[[1700000000,"1"],[1700000060,"1"],[1700000120,"1"]]}]}}`
+	persistentFailureHistoryResponse   = `{"data":{"result":[{"values":[[1700000000,"0"],[1700000060,"0"],[1700000120,"0"]]}]}}`
+	intermittentFailureHistoryResponse = `{"data":{"result":[{"values":[[1700000000,"1"],[1700000060,"0"],[1700000120,"1"],[1700000180,"0"]]}]}}`
+	emptyHistoryResponse               = `{"data":{"result":[]}}`
+)
 
 const successfulProbeResponse = `Logs for the probe:
 ts=2024-01-01T00:00:00.000Z caller=handler.go:119 module=http_2xx target=https://console-openshift-console.apps.test.example.com level=debug msg="Beginning probe"
@@ -641,6 +663,92 @@ func TestCheckUpstreamDNS_GetError(t *testing.T) {
 	}
 }
 
+// checkProbeHistory unit tests
+
+func TestCheckProbeHistory_Persistent(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{output: persistentFailureHistoryResponse}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "consistently failing") {
+		t.Errorf("expected persistent failure message, got: %s", output)
+	}
+	if !strings.Contains(output, "3 data points") {
+		t.Errorf("expected '3 data points' in notes, got: %s", output)
+	}
+}
+
+func TestCheckProbeHistory_Intermittent(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{output: intermittentFailureHistoryResponse}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "intermittently failing") {
+		t.Errorf("expected intermittent failure message, got: %s", output)
+	}
+	if !strings.Contains(output, "2/4") {
+		t.Errorf("expected '2/4' failure count in notes, got: %s", output)
+	}
+}
+
+func TestCheckProbeHistory_AllSucceeding(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{output: allSucceedingHistoryResponse}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "succeeding for all") {
+		t.Errorf("expected all-succeeding message, got: %s", output)
+	}
+	if !strings.Contains(output, "3 data points") {
+		t.Errorf("expected '3 data points' in notes, got: %s", output)
+	}
+}
+
+func TestCheckProbeHistory_NoData(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{output: emptyHistoryResponse}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	if !strings.Contains(notes.String(), "no probe_success data found") {
+		t.Errorf("expected no-data warning, got: %s", notes.String())
+	}
+}
+
+func TestCheckProbeHistory_QueryFails(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{err: fmt.Errorf("exec timeout")}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	if !strings.Contains(notes.String(), "unable to query Prometheus") {
+		t.Errorf("expected exec error warning, got: %s", notes.String())
+	}
+}
+
+func TestCheckProbeHistory_BadJSON(t *testing.T) {
+	notes := newTestNotes()
+	inv := &Investigation{probeHistoryCheck: &mockProbeHistoryChecker{output: "not json"}}
+	r := &investigation.Resources{RestConfig: testRestConfig(), K8sClient: newFakeClient()}
+
+	inv.checkProbeHistory(context.Background(), r, "https://console.test.example.com", notes)
+
+	if !strings.Contains(notes.String(), "failed to parse Prometheus response") {
+		t.Errorf("expected parse error warning, got: %s", notes.String())
+	}
+}
+
 // checkPodHealth unit tests (Router)
 
 var (
@@ -1110,7 +1218,7 @@ func TestRun_HCP_SkipsAllowedSourceRanges(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1150,7 +1258,7 @@ func TestRun_AllowedSourceRangesMisconfigured(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1202,7 +1310,7 @@ func TestRun_AllowedSourceRangesOK(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1276,7 +1384,7 @@ func TestRun_NonAWSCluster_SkipsAWSChecks(t *testing.T) {
 		},
 	}
 
-	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber()}
+	inv := &Investigation{consoleChecker: healthyConsoleChecker(), blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
 	result, err := inv.Run(rb)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1308,11 +1416,13 @@ func TestRun_AWSCluster_AWSChecksRun(t *testing.T) {
 	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
 
 	// LB health check expects: FindCLBByDNSName (IC has no ProviderParameters → defaults to Classic)
-	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", nil)
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", []string{"sg-clb"}, nil)
 	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-elb").Return([]aws.CLBInstanceHealth{
 		{InstanceID: "i-001", State: "InService"},
 		{InstanceID: "i-002", State: "InService"},
 	}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-clb"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-clb")}, nil)
 
 	ic := newDefaultIngressController([]operatorv1.CIDR{"10.0.0.0/8"})
 	dns := newDefaultDNS([]operatorv1.Upstream{{Type: operatorv1.SystemResolveConfType}})
@@ -1338,9 +1448,10 @@ func TestRun_AWSCluster_AWSChecksRun(t *testing.T) {
 	}
 
 	inv := &Investigation{
-		consoleChecker: healthyConsoleChecker(),
-		blackboxProber: healthyBlackboxProber(),
-		egressVerifier: successEgressVerifier(),
+		consoleChecker:    healthyConsoleChecker(),
+		blackboxProber:    healthyBlackboxProber(),
+		probeHistoryCheck: noopProbeHistoryChecker(),
+		egressVerifier:    successEgressVerifier(),
 	}
 	result, err := inv.Run(rb)
 	if err != nil {
@@ -1464,7 +1575,7 @@ func TestCheckBlackboxProbe_Success(t *testing.T) {
 	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
 	k8sClient := newFakeClient()
 	notes := newTestNotes()
-	inv := &Investigation{blackboxProber: healthyBlackboxProber()}
+	inv := &Investigation{blackboxProber: healthyBlackboxProber(), probeHistoryCheck: noopProbeHistoryChecker()}
 
 	r := &investigation.Resources{
 		Cluster:    cluster,
@@ -1487,7 +1598,7 @@ func TestCheckBlackboxProbe_DNSFailure(t *testing.T) {
 	cluster := newTestCluster("test-cluster", "10.0.0.0/16", "https://console.test.example.com")
 	k8sClient := newFakeClient()
 	notes := newTestNotes()
-	inv := &Investigation{blackboxProber: &mockBlackboxProber{output: dnsFailureProbeResponse}}
+	inv := &Investigation{blackboxProber: &mockBlackboxProber{output: dnsFailureProbeResponse}, probeHistoryCheck: noopProbeHistoryChecker()}
 
 	r := &investigation.Resources{
 		Cluster:    cluster,
@@ -1936,6 +2047,39 @@ func newNLBIngressController(allowedSourceRanges []operatorv1.CIDR) *operatorv1.
 	return ic
 }
 
+// testSGAllowTCP443 creates a SecurityGroup that allows TCP 443 from 0.0.0.0/0.
+func testSGAllowTCP443(sgID string) ec2v2types.SecurityGroup {
+	return ec2v2types.SecurityGroup{
+		GroupId: &sgID,
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("tcp"),
+				FromPort:   int32Ptr(443),
+				ToPort:     int32Ptr(443),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+			},
+		},
+	}
+}
+
+// testSGAllowNodePorts creates a SecurityGroup that allows TCP 30000-32767 from 0.0.0.0/0.
+func testSGAllowNodePorts(sgID string) ec2v2types.SecurityGroup {
+	return ec2v2types.SecurityGroup{
+		GroupId: &sgID,
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("tcp"),
+				FromPort:   int32Ptr(30000),
+				ToPort:     int32Ptr(32767),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+			},
+		},
+	}
+}
+
+func strPtr(s string) *string { return &s }
+func int32Ptr(i int32) *int32 { return &i }
+
 // determineLBType unit tests
 
 func TestDetermineLBType_NLB(t *testing.T) {
@@ -2004,12 +2148,16 @@ func TestCheckLBHealth_NLB_AllHealthy(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb-abc123.elb.us-east-1.amazonaws.com").
-		Return("arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/net/test-nlb/abc", "test-nlb", nil)
+		Return("arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/net/test-nlb/abc", "test-nlb", []string{}, nil)
 	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:aws:elasticloadbalancing:us-east-1:123:loadbalancer/net/test-nlb/abc").
 		Return([]aws.NLBTargetHealth{
 			{TargetID: "i-001", Port: 443, State: "healthy"},
 			{TargetID: "i-002", Port: 443, State: "healthy"},
 		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), gomock.Any()).
+		Return([]string{"sg-aaa"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{testSGAllowNodePorts("sg-aaa")}, nil)
 
 	ic := newNLBIngressController(nil)
 	svc := newRouterService("test-nlb-abc123.elb.us-east-1.amazonaws.com")
@@ -2033,12 +2181,16 @@ func TestCheckLBHealth_NLB_UnhealthyTarget(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb-abc123.elb.us-east-1.amazonaws.com").
-		Return("arn:nlb", "test-nlb", nil)
+		Return("arn:nlb", "test-nlb", []string{}, nil)
 	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
 		Return([]aws.NLBTargetHealth{
 			{TargetID: "i-001", Port: 443, State: "healthy"},
 			{TargetID: "i-002", Port: 443, State: "unhealthy", Reason: "Target.FailedHealthChecks"},
 		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), gomock.Any()).
+		Return([]string{"sg-aaa"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{testSGAllowNodePorts("sg-aaa")}, nil)
 
 	ic := newNLBIngressController(nil)
 	svc := newRouterService("test-nlb-abc123.elb.us-east-1.amazonaws.com")
@@ -2065,12 +2217,14 @@ func TestCheckLBHealth_CLB_AllInService(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb-123456.us-east-1.elb.amazonaws.com").
-		Return("test-clb", nil)
+		Return("test-clb", []string{"sg-clb"}, nil)
 	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").
 		Return([]aws.CLBInstanceHealth{
 			{InstanceID: "i-001", State: "InService"},
 			{InstanceID: "i-002", State: "InService"},
 		}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-clb"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-clb")}, nil)
 
 	ic := newDefaultIngressController(nil) // no ProviderParameters → Classic
 	svc := newRouterService("test-clb-123456.us-east-1.elb.amazonaws.com")
@@ -2094,12 +2248,14 @@ func TestCheckLBHealth_CLB_OutOfService(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb-123456.us-east-1.elb.amazonaws.com").
-		Return("test-clb", nil)
+		Return("test-clb", []string{"sg-clb"}, nil)
 	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").
 		Return([]aws.CLBInstanceHealth{
 			{InstanceID: "i-001", State: "InService"},
 			{InstanceID: "i-002", State: "OutOfService", Description: "Instance has failed health checks"},
 		}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-clb"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-clb")}, nil)
 
 	ic := newDefaultIngressController(nil)
 	svc := newRouterService("test-clb-123456.us-east-1.elb.amazonaws.com")
@@ -2142,7 +2298,7 @@ func TestCheckLBHealth_LBNotFound(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "unknown-lb.us-east-1.elb.amazonaws.com").Return("", nil)
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "unknown-lb.us-east-1.elb.amazonaws.com").Return("", nil, nil)
 
 	ic := newDefaultIngressController(nil)
 	svc := newRouterService("unknown-lb.us-east-1.elb.amazonaws.com")
@@ -2166,7 +2322,7 @@ func TestCheckLBHealth_APIError(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb.us-east-1.elb.amazonaws.com").
-		Return("", fmt.Errorf("access denied"))
+		Return("", nil, fmt.Errorf("access denied"))
 
 	ic := newDefaultIngressController(nil)
 	svc := newRouterService("test-clb.us-east-1.elb.amazonaws.com")
@@ -2207,7 +2363,7 @@ func TestCheckLBHealth_NLB_NoTargets(t *testing.T) {
 	mockAws := awsmock.NewMockClient(ctrl)
 
 	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb.elb.us-east-1.amazonaws.com").
-		Return("arn:nlb", "test-nlb", nil)
+		Return("arn:nlb", "test-nlb", []string{}, nil)
 	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
 		Return([]aws.NLBTargetHealth{}, nil)
 
@@ -2234,11 +2390,13 @@ func TestCheckLBHealth_CLB_DefaultType(t *testing.T) {
 
 	// IC with nil ProviderParameters defaults to Classic — should call CLB APIs.
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb.us-east-1.elb.amazonaws.com").
-		Return("test-clb", nil)
+		Return("test-clb", []string{"sg-clb"}, nil)
 	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").
 		Return([]aws.CLBInstanceHealth{
 			{InstanceID: "i-001", State: "InService"},
 		}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-clb"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-clb")}, nil)
 
 	ic := newDefaultIngressController(nil) // no ProviderParameters
 	svc := newRouterService("test-clb.us-east-1.elb.amazonaws.com")
@@ -2256,6 +2414,317 @@ func TestCheckLBHealth_CLB_DefaultType(t *testing.T) {
 	}
 	if !strings.Contains(output, "all 1 instance(s) InService") {
 		t.Errorf("expected all InService, got: %s", output)
+	}
+}
+
+// Securitygroup check tests
+
+func TestCheckCLBHealth_SGAllowsTCP443(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb.elb.amazonaws.com").Return("test-clb", []string{"sg-123"}, nil)
+	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").Return([]aws.CLBInstanceHealth{
+		{InstanceID: "i-001", State: "InService"},
+	}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-123"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-123")}, nil)
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("test-clb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "security group allows TCP 443 inbound") {
+		t.Errorf("expected SG allows TCP 443 message, got: %s", output)
+	}
+}
+
+func TestCheckCLBHealth_SGMissingTCP443(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb.elb.amazonaws.com").Return("test-clb", []string{"sg-123"}, nil)
+	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").Return([]aws.CLBInstanceHealth{
+		{InstanceID: "i-001", State: "InService"},
+	}, nil)
+	// SG with UDP rule only; no TCP 443.
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-123"}).
+		Return([]ec2v2types.SecurityGroup{{
+			GroupId: strPtr("sg-123"),
+			IpPermissions: []ec2v2types.IpPermission{
+				{
+					IpProtocol: strPtr("udp"),
+					FromPort:   int32Ptr(443),
+					ToPort:     int32Ptr(443),
+					IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+				},
+			},
+		}}, nil)
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("test-clb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "does not allow TCP 443 inbound") {
+		t.Errorf("expected SG missing TCP 443 warning, got: %s", output)
+	}
+}
+
+func TestCheckCLBHealth_NoSecurityGroups(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-clb.elb.amazonaws.com").Return("test-clb", []string{}, nil)
+	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-clb").Return([]aws.CLBInstanceHealth{
+		{InstanceID: "i-001", State: "InService"},
+	}, nil)
+
+	ic := newDefaultIngressController(nil)
+	svc := newRouterService("test-clb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	if !strings.Contains(notes.String(), "no security groups attached") {
+		t.Errorf("expected no SGs warning, got: %s", notes.String())
+	}
+}
+
+func TestCheckNLBHealth_UnexpectedSGs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb.elb.amazonaws.com").
+		Return("arn:nlb", "test-nlb", []string{"sg-unexpected"}, nil)
+	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 443, State: "healthy"},
+		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), gomock.Any()).
+		Return([]string{"sg-node"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{testSGAllowNodePorts("sg-node")}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	if !strings.Contains(notes.String(), "has security groups attached (unusual)") {
+		t.Errorf("expected unexpected SGs warning, got: %s", notes.String())
+	}
+}
+
+func TestCheckNLBHealth_NodeSGAllowsNodePorts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb.elb.amazonaws.com").
+		Return("arn:nlb", "test-nlb", []string{}, nil)
+	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 31174, State: "healthy"},
+		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), []string{"i-001"}).
+		Return([]string{"sg-node"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{testSGAllowNodePorts("sg-node")}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	if !strings.Contains(notes.String(), "infra node security groups allow NodePort traffic") {
+		t.Errorf("expected NodePort allowed message, got: %s", notes.String())
+	}
+}
+
+func TestCheckNLBHealth_NodeSGMissingNodePorts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb.elb.amazonaws.com").
+		Return("arn:nlb", "test-nlb", []string{}, nil)
+	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 31174, State: "healthy"},
+		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), []string{"i-001"}).
+		Return([]string{"sg-node"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{{
+			GroupId: strPtr("sg-node"),
+			IpPermissions: []ec2v2types.IpPermission{
+				{
+					IpProtocol: strPtr("tcp"),
+					FromPort:   int32Ptr(22),
+					ToPort:     int32Ptr(22),
+					IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+				},
+			},
+		}}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	if !strings.Contains(notes.String(), "do not allow TCP traffic on NodePort range") {
+		t.Errorf("expected NodePort blocked warning, got: %s", notes.String())
+	}
+}
+
+func TestCheckNLBHealth_InstanceSGLookupError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb.elb.amazonaws.com").
+		Return("arn:nlb", "test-nlb", []string{}, nil)
+	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 443, State: "healthy"},
+		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), []string{"i-001"}).
+		Return(nil, fmt.Errorf("access denied")) //nolint:err113
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb.elb.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	if !strings.Contains(notes.String(), "failed to get infra node security groups") {
+		t.Errorf("expected SG lookup error warning, got: %s", notes.String())
+	}
+}
+
+// sgAllowsTCPInbound unit tests
+
+func TestSgAllowsTCPInbound_Allows0000(t *testing.T) {
+	sgs := []ec2v2types.SecurityGroup{testSGAllowTCP443("sg-1")}
+	if !sgAllowsTCPInbound(sgs, 443, 443, "10.0.0.0/16") {
+		t.Error("expected true for 0.0.0.0/0 rule")
+	}
+}
+
+func TestSgAllowsTCPInbound_AllowsMachineCIDR(t *testing.T) {
+	sg := ec2v2types.SecurityGroup{
+		GroupId: strPtr("sg-1"),
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("tcp"),
+				FromPort:   int32Ptr(443),
+				ToPort:     int32Ptr(443),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("10.0.0.0/8")}},
+			},
+		},
+	}
+	if !sgAllowsTCPInbound([]ec2v2types.SecurityGroup{sg}, 443, 443, "10.0.0.0/16") {
+		t.Error("expected true — 10.0.0.0/8 covers 10.0.0.0/16")
+	}
+}
+
+func TestSgAllowsTCPInbound_PortMismatch(t *testing.T) {
+	sg := ec2v2types.SecurityGroup{
+		GroupId: strPtr("sg-1"),
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("tcp"),
+				FromPort:   int32Ptr(80),
+				ToPort:     int32Ptr(80),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+			},
+		},
+	}
+	if sgAllowsTCPInbound([]ec2v2types.SecurityGroup{sg}, 443, 443, "10.0.0.0/16") {
+		t.Error("expected false — rule is for port 80, not 443")
+	}
+}
+
+func TestSgAllowsTCPInbound_NoMatchingRules(t *testing.T) {
+	sg := ec2v2types.SecurityGroup{
+		GroupId:       strPtr("sg-1"),
+		IpPermissions: []ec2v2types.IpPermission{},
+	}
+	if sgAllowsTCPInbound([]ec2v2types.SecurityGroup{sg}, 443, 443, "10.0.0.0/16") {
+		t.Error("expected false — no rules at all")
+	}
+}
+
+func TestSgAllowsTCPInbound_AllProtocols(t *testing.T) {
+	sg := ec2v2types.SecurityGroup{
+		GroupId: strPtr("sg-1"),
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("-1"),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("0.0.0.0/0")}},
+			},
+		},
+	}
+	if !sgAllowsTCPInbound([]ec2v2types.SecurityGroup{sg}, 443, 443, "10.0.0.0/16") {
+		t.Error("expected true — protocol -1 allows all traffic")
+	}
+}
+
+func TestSgAllowsTCPInbound_EmptyCIDR(t *testing.T) {
+	sg := ec2v2types.SecurityGroup{
+		GroupId: strPtr("sg-1"),
+		IpPermissions: []ec2v2types.IpPermission{
+			{
+				IpProtocol: strPtr("tcp"),
+				FromPort:   int32Ptr(30000),
+				ToPort:     int32Ptr(32767),
+				IpRanges:   []ec2v2types.IpRange{{CidrIp: strPtr("10.0.0.0/8")}},
+			},
+		},
+	}
+	if !sgAllowsTCPInbound([]ec2v2types.SecurityGroup{sg}, 30000, 32767, "") {
+		t.Error("expected true — empty CIDR means any source is OK")
 	}
 }
 
@@ -2375,11 +2844,13 @@ func TestRun_PrivateLink_SkipsEgress(t *testing.T) {
 	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
 
 	// LB health check expects: FindCLBByDNSName (IC defaults to Classic)
-	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", nil)
+	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", []string{"sg-clb"}, nil)
 	mockAws.EXPECT().GetCLBInstanceHealth(gomock.Any(), "test-elb").Return([]aws.CLBInstanceHealth{
 		{InstanceID: "i-001", State: "InService"},
 		{InstanceID: "i-002", State: "InService"},
 	}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), []string{"sg-clb"}).
+		Return([]ec2v2types.SecurityGroup{testSGAllowTCP443("sg-clb")}, nil)
 
 	// No egress verifier calls expected — PrivateLink clusters skip egress.
 
@@ -2407,9 +2878,10 @@ func TestRun_PrivateLink_SkipsEgress(t *testing.T) {
 
 	egressMock := successEgressVerifier()
 	inv := &Investigation{
-		consoleChecker: healthyConsoleChecker(),
-		blackboxProber: healthyBlackboxProber(),
-		egressVerifier: egressMock,
+		consoleChecker:    healthyConsoleChecker(),
+		blackboxProber:    healthyBlackboxProber(),
+		probeHistoryCheck: noopProbeHistoryChecker(),
+		egressVerifier:    egressMock,
 	}
 	result, err := inv.Run(rb)
 	if err != nil {
