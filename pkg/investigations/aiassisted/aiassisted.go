@@ -58,19 +58,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if r.IsHCP {
 		notes.AppendWarning("HCP cluster - skipping AI investigation")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+		result.Actions = []executor.Action{
+			executor.NoteFrom(notes),
 			executor.Escalate("Cluster is HCP - AI investigation not supported"),
-		)
+		}
 		return result, nil
 	}
 
 	if r.IsInfrastructureCluster {
 		notes.AppendWarning("Management/Service cluster - skipping AI investigation")
-		result.Actions = append(
-			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+		result.Actions = []executor.Action{
+			executor.NoteFrom(notes),
 			executor.Escalate("Cluster is a management/service cluster - AI investigation not supported"),
-		)
+		}
 		return result, nil
 	}
 
@@ -215,7 +215,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result.Actions = []executor.Action{
 		executor.NoteFrom(notes), // Send automation message to PagerDuty
 		backplaneReportAction,    // Create cluster report with AI investigation results
-		executor.Escalate("AI investigation completed - see cluster report for details"),
 	}
 	return result, nil
 }
