@@ -215,7 +215,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result.Actions = []executor.Action{
 		executor.NoteFrom(notes), // Send automation message to PagerDuty
 		backplaneReportAction,    // Create cluster report with AI investigation results
-		executor.Escalate("AI investigation completed - see cluster report for details"),
 	}
 	return result, nil
 }
