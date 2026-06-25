@@ -420,18 +420,14 @@ filters:
       field: CloudProvider
       operator: in
       values: ["aws"]
-  - investigation: aiassisted
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
 					t.Fatal("expected ai_agent config, got nil")
 				}
 				f := cfg.GetFilter("aiassisted")
-				if f == nil {
-					t.Fatal("expected aiassisted filter entry, got nil")
-				}
-				if f.Filter != nil {
-					t.Errorf("expected nil filter tree (no filtering), got %+v", f.Filter)
+				if f != nil {
+					t.Errorf("expected nil filter for absent aiassisted entry, got %+v", f)
 				}
 			},
 		},
