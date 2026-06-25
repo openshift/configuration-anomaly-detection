@@ -283,7 +283,7 @@ filters:
 			expectResult: true,
 		},
 		{
-			name: "aiassisted with no filter tree — AI disabled (filter required)",
+			name: "aiassisted with no filter tree — AI enabled (no filtering)",
 			filterYAML: `
 ai_agent:
   runtime_arn: "arn:test"
@@ -293,7 +293,7 @@ ai_agent:
 filters:
   - investigation: aiassisted
 `,
-			expectResult: false,
+			expectResult: true,
 		},
 	}
 
