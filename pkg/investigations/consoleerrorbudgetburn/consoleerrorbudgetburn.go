@@ -1133,5 +1133,5 @@ func (i *Investigation) Description() string {
 }
 
 func (i *Investigation) IsExperimental() bool {
-	return true
+	return false
 }

@@ -276,8 +276,8 @@ func TestDescription(t *testing.T) {
 
 func TestIsExperimental(t *testing.T) {
 	inv := &Investigation{}
-	if !inv.IsExperimental() {
-		t.Error("expected IsExperimental to be true")
+	if inv.IsExperimental() {
+		t.Error("expected IsExperimental to be false")
 	}
 }
 
