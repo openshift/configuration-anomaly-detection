@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+const (
+	testBpURL     = "https://bp.example.com"
+	testBpProdURL = "https://bp-prod.example.com"
+	testOcmURL    = "https://ocm.example.com"
+)
+
 const testMustgatherFilterYAML = `
 filters:
   - investigation: mustgather
@@ -496,6 +502,125 @@ filters:
 				}
 			},
 		},
+		// --- runtime config tests ---
+		{
+			name: "runtime config is parsed correctly",
+			yaml: `
+runtime:
+  backplane:
+    url: "https://bp.example.com"
+    production_url: "https://bp-prod.example.com"
+    initial_arn: "arn:aws:iam::123:role/init"
+    proxy: "http://proxy:8080"
+  ocm:
+    url: "https://ocm.example.com"
+    production_url: "https://ocm-prod.example.com"
+  aws_proxy: "http://aws-proxy:9090"
+  experimental_enabled: true
+filters: []
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if cfg.Runtime == nil {
+					t.Fatal("expected runtime config, got nil")
+				}
+				rt := cfg.GetRuntime()
+				if rt.Backplane.URL != testBpURL {
+					t.Errorf("Backplane.URL = %q", rt.Backplane.URL)
+				}
+				if rt.Backplane.ProductionURL != testBpProdURL {
+					t.Errorf("Backplane.ProductionURL = %q", rt.Backplane.ProductionURL)
+				}
+				if rt.Backplane.InitialARN != "arn:aws:iam::123:role/init" {
+					t.Errorf("Backplane.InitialARN = %q", rt.Backplane.InitialARN)
+				}
+				if rt.Backplane.Proxy != "http://proxy:8080" {
+					t.Errorf("Backplane.Proxy = %q", rt.Backplane.Proxy)
+				}
+				if rt.OCM.URL != testOcmURL {
+					t.Errorf("OCM.URL = %q", rt.OCM.URL)
+				}
+				if rt.OCM.ProductionURL != "https://ocm-prod.example.com" {
+					t.Errorf("OCM.ProductionURL = %q", rt.OCM.ProductionURL)
+				}
+				if rt.AWSProxy != "http://aws-proxy:9090" {
+					t.Errorf("AWSProxy = %q", rt.AWSProxy)
+				}
+				if rt.ExperimentalEnabled == nil || !*rt.ExperimentalEnabled {
+					t.Errorf("ExperimentalEnabled = %v, want true", rt.ExperimentalEnabled)
+				}
+			},
+		},
+		{
+			name: "partial runtime config leaves unset fields empty",
+			yaml: `
+runtime:
+  backplane:
+    url: "https://bp.example.com"
+  ocm:
+    url: "https://ocm.example.com"
+filters: []
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if cfg.Runtime == nil {
+					t.Fatal("expected runtime config, got nil")
+				}
+				rt := cfg.GetRuntime()
+				if rt.Backplane.URL != testBpURL {
+					t.Errorf("Backplane.URL = %q", rt.Backplane.URL)
+				}
+				if rt.Backplane.ProductionURL != "" {
+					t.Errorf("Backplane.ProductionURL = %q, want empty", rt.Backplane.ProductionURL)
+				}
+				if rt.Backplane.InitialARN != "" {
+					t.Errorf("Backplane.InitialARN = %q, want empty", rt.Backplane.InitialARN)
+				}
+				if rt.Backplane.Proxy != "" {
+					t.Errorf("Backplane.Proxy = %q, want empty", rt.Backplane.Proxy)
+				}
+				if rt.OCM.ProductionURL != "" {
+					t.Errorf("OCM.ProductionURL = %q, want empty", rt.OCM.ProductionURL)
+				}
+				if rt.AWSProxy != "" {
+					t.Errorf("AWSProxy = %q, want empty", rt.AWSProxy)
+				}
+				if rt.ExperimentalEnabled != nil {
+					t.Errorf("ExperimentalEnabled = %v, want nil", rt.ExperimentalEnabled)
+				}
+			},
+		},
+		{
+			name: "no runtime section leaves Runtime nil",
+			yaml: `
+filters: []
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if cfg.Runtime != nil {
+					t.Errorf("expected nil Runtime, got %+v", cfg.Runtime)
+				}
+				// GetRuntime should still return a safe zero-value
+				rt := cfg.GetRuntime()
+				if rt.Backplane.URL != "" {
+					t.Errorf("expected empty Backplane.URL from GetRuntime on nil Runtime")
+				}
+			},
+		},
+		{
+			name: "experimental_enabled false is distinct from unset",
+			yaml: `
+runtime:
+  experimental_enabled: false
+filters: []
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				rt := cfg.GetRuntime()
+				if rt.ExperimentalEnabled == nil {
+					t.Fatal("expected ExperimentalEnabled to be non-nil (explicitly false)")
+				}
+				if *rt.ExperimentalEnabled {
+					t.Errorf("ExperimentalEnabled = true, want false")
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -562,6 +687,69 @@ func TestGetAIAgentConfig(t *testing.T) {
 	if got == nil || got.RuntimeARN != "arn:test" {
 		t.Fatalf("expected ai_agent config, got %v", got)
 	}
+}
+
+func TestGetRuntime(t *testing.T) {
+	t.Run("nil config returns zero-value RuntimeConfig", func(t *testing.T) {
+		var nilCfg *Config
+		rt := nilCfg.GetRuntime()
+		if rt.Backplane.URL != "" || rt.OCM.URL != "" || rt.AWSProxy != "" || rt.ExperimentalEnabled != nil {
+			t.Fatalf("expected zero-value RuntimeConfig, got %+v", rt)
+		}
+	})
+
+	t.Run("config with nil Runtime returns zero-value RuntimeConfig", func(t *testing.T) {
+		cfg := &Config{}
+		rt := cfg.GetRuntime()
+		if rt.Backplane.URL != "" || rt.OCM.URL != "" {
+			t.Fatalf("expected zero-value RuntimeConfig, got %+v", rt)
+		}
+	})
+
+	t.Run("config with populated Runtime returns it", func(t *testing.T) {
+		exp := true
+		cfg := &Config{
+			Runtime: &RuntimeConfig{
+				Backplane: BackplaneConfig{
+					URL:           testBpURL,
+					ProductionURL: testBpProdURL,
+					InitialARN:    "arn:aws:iam::123:role/init",
+					Proxy:         "http://proxy:8080",
+				},
+				OCM: OCMConfig{
+					URL:           testOcmURL,
+					ProductionURL: "https://ocm-prod.example.com",
+				},
+				AWSProxy:            "http://aws-proxy:9090",
+				ExperimentalEnabled: &exp,
+			},
+		}
+		rt := cfg.GetRuntime()
+		if rt.Backplane.URL != testBpURL {
+			t.Errorf("Backplane.URL = %q, want %q", rt.Backplane.URL, testBpURL)
+		}
+		if rt.Backplane.ProductionURL != testBpProdURL {
+			t.Errorf("Backplane.ProductionURL = %q, want %q", rt.Backplane.ProductionURL, testBpProdURL)
+		}
+		if rt.Backplane.InitialARN != "arn:aws:iam::123:role/init" {
+			t.Errorf("Backplane.InitialARN = %q", rt.Backplane.InitialARN)
+		}
+		if rt.Backplane.Proxy != "http://proxy:8080" {
+			t.Errorf("Backplane.Proxy = %q", rt.Backplane.Proxy)
+		}
+		if rt.OCM.URL != testOcmURL {
+			t.Errorf("OCM.URL = %q", rt.OCM.URL)
+		}
+		if rt.OCM.ProductionURL != "https://ocm-prod.example.com" {
+			t.Errorf("OCM.ProductionURL = %q", rt.OCM.ProductionURL)
+		}
+		if rt.AWSProxy != "http://aws-proxy:9090" {
+			t.Errorf("AWSProxy = %q", rt.AWSProxy)
+		}
+		if rt.ExperimentalEnabled == nil || !*rt.ExperimentalEnabled {
+			t.Errorf("ExperimentalEnabled = %v, want true", rt.ExperimentalEnabled)
+		}
+	})
 }
 
 func TestAIAgentConfigGetTimeout(t *testing.T) {
@@ -661,6 +849,52 @@ filters:
 		}
 		if cfg == nil || len(cfg.Filters) != 1 {
 			t.Fatal("expected config with 1 filter from env var path")
+		}
+	})
+
+	t.Run("file with runtime config loads successfully", func(t *testing.T) {
+		content := `
+runtime:
+  backplane:
+    url: "https://bp.example.com"
+    production_url: "https://bp-prod.example.com"
+    initial_arn: "arn:aws:iam::123:role/init"
+  ocm:
+    url: "https://ocm.example.com"
+    production_url: "https://ocm-prod.example.com"
+  aws_proxy: "http://aws-proxy:9090"
+  experimental_enabled: true
+filters:
+  - investigation: mustgather
+`
+		path := filepath.Join(t.TempDir(), "runtime-config.yaml")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(ConfigEnvVar, path)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil {
+			t.Fatal("expected non-nil config")
+		}
+		if cfg.Runtime == nil {
+			t.Fatal("expected runtime config, got nil")
+		}
+		rt := cfg.GetRuntime()
+		if rt.Backplane.URL != testBpURL {
+			t.Errorf("Backplane.URL = %q", rt.Backplane.URL)
+		}
+		if rt.Backplane.ProductionURL != testBpProdURL {
+			t.Errorf("Backplane.ProductionURL = %q", rt.Backplane.ProductionURL)
+		}
+		if rt.OCM.URL != testOcmURL {
+			t.Errorf("OCM.URL = %q", rt.OCM.URL)
+		}
+		if rt.ExperimentalEnabled == nil || !*rt.ExperimentalEnabled {
+			t.Errorf("ExperimentalEnabled = %v, want true", rt.ExperimentalEnabled)
 		}
 	})
 

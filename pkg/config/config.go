@@ -21,6 +21,30 @@ const (
 	LegacyAIConfigEnvVar = "CAD_AI_AGENT_CONFIG"
 )
 
+// BackplaneConfig holds non-secret backplane connection settings.
+type BackplaneConfig struct {
+	URL           string `yaml:"url"`
+	ProductionURL string `yaml:"production_url,omitempty"`
+	InitialARN    string `yaml:"initial_arn"`
+	Proxy         string `yaml:"proxy,omitempty"`
+}
+
+// OCMConfig holds non-secret OCM connection settings.
+type OCMConfig struct {
+	URL           string `yaml:"url"`
+	ProductionURL string `yaml:"production_url"`
+}
+
+// RuntimeConfig holds non-secret operational settings that can be provided via
+// the config file instead of environment variables.  Any field left empty here
+// falls back to the corresponding environment variable in initializeDependencies.
+type RuntimeConfig struct {
+	Backplane           BackplaneConfig `yaml:"backplane"`
+	OCM                 OCMConfig       `yaml:"ocm"`
+	AWSProxy            string          `yaml:"aws_proxy,omitempty"`
+	ExperimentalEnabled *bool           `yaml:"experimental_enabled,omitempty"`
+}
+
 // AIAgentConfig holds runtime configuration for AgentCore AI investigations.
 type AIAgentConfig struct {
 	RuntimeARN     string `yaml:"runtime_arn"`      // AWS ARN of the agent runtime to invoke
@@ -43,8 +67,18 @@ func (c *AIAgentConfig) GetTimeout() time.Duration {
 
 // Config holds the complete investigation filter configuration.
 type Config struct {
+	Runtime *RuntimeConfig        `yaml:"runtime,omitempty"`
 	AIAgent *AIAgentConfig        `yaml:"ai_agent,omitempty"`
 	Filters []InvestigationFilter `yaml:"filters"`
+}
+
+// GetRuntime returns the RuntimeConfig, or a zero-value struct if not set.
+// Safe to call on a nil *Config.
+func (c *Config) GetRuntime() RuntimeConfig {
+	if c == nil || c.Runtime == nil {
+		return RuntimeConfig{}
+	}
+	return *c.Runtime
 }
 
 // LoadConfig reads and parses the investigation filter configuration.

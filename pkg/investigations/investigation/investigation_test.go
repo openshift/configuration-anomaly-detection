@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	mock_backplane "github.com/openshift/configuration-anomaly-detection/pkg/backplane/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
 )
 
@@ -540,6 +542,100 @@ func TestResourceBuilder_HCPFields_CanBeSet(t *testing.T) {
 	// Verify fields can be set
 	assert.Equal(t, "clusters-hcp-456", resources.HCPNamespace)
 	assert.True(t, resources.IsHCP)
+}
+
+// TestNewResourceBuilder_StoresProductionClients verifies that NewResourceBuilder
+// correctly stores the production OCM/backplane clients and managedCloud in the built resources.
+func TestNewResourceBuilder_StoresProductionClients(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockBpClient := mock_backplane.NewMockClient(ctrl)
+	mockBpProdClient := mock_backplane.NewMockClient(ctrl)
+
+	managedCloud := &managedcloud.Client{}
+
+	rb, err := NewResourceBuilder(
+		nil,              // ocmClient (staging)
+		nil,              // productionOcmClient
+		mockBpClient,     // bpClient (staging)
+		mockBpProdClient, // productionBpClient
+		managedCloud,     // managedCloud
+		"test-cluster",
+		"test-investigation",
+		"https://bp.example.com",
+		nil,
+	)
+	assert.NoError(t, err)
+	assert.NotNil(t, rb)
+
+	// Build without requesting any resources — should succeed and return the pre-initialized resources
+	resources, err := rb.Build()
+	assert.NoError(t, err)
+	assert.NotNil(t, resources)
+
+	// Verify production clients are stored
+	assert.Equal(t, mockBpClient, resources.BpClient, "BpClient should be the staging backplane client")
+	assert.Equal(t, mockBpProdClient, resources.BpProductionClient, "BpProductionClient should be the production backplane client")
+
+	// OcmClient and OcmProductionClient are set from the ocmClient/productionOcmClient parameters (both nil here)
+	assert.Nil(t, resources.OcmClient, "OcmClient should be nil when nil ocmClient passed")
+	assert.Nil(t, resources.OcmProductionClient, "OcmProductionClient should be nil when nil productionOcmClient passed")
+}
+
+// TestNewResourceBuilder_NilParams verifies that passing nil params creates an empty map
+func TestNewResourceBuilder_NilParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockBpClient := mock_backplane.NewMockClient(ctrl)
+
+	rb, err := NewResourceBuilder(nil, nil, mockBpClient, nil, nil, "cluster-1", "inv-1", "https://bp.example.com", nil)
+	assert.NoError(t, err)
+
+	resources, err := rb.Build()
+	assert.NoError(t, err)
+	assert.NotNil(t, resources.Params, "Params should not be nil when nil was passed")
+	assert.Empty(t, resources.Params, "Params should be empty map")
+}
+
+// TestNewResourceBuilder_WithParams verifies that params are passed through
+func TestNewResourceBuilder_WithParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockBpClient := mock_backplane.NewMockClient(ctrl)
+	params := map[string]string{"key1": "val1", "key2": "val2"}
+
+	rb, err := NewResourceBuilder(nil, nil, mockBpClient, nil, nil, "cluster-1", "inv-1", "https://bp.example.com", params)
+	assert.NoError(t, err)
+
+	resources, err := rb.Build()
+	assert.NoError(t, err)
+	assert.Equal(t, "val1", resources.Params["key1"])
+	assert.Equal(t, "val2", resources.Params["key2"])
+}
+
+// TestWithManagementK8sClient_SetsFlags verifies the builder method sets correct flags
+func TestWithManagementK8sClient_SetsFlags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPDClient := pdmock.NewMockClient(ctrl)
+
+	rb := &ResourceBuilderT{
+		clusterId: "test-cluster",
+		name:      "test-investigation",
+		builtResources: &Resources{
+			PdClient: mockPDClient,
+		},
+	}
+
+	result := rb.WithManagementK8sClient()
+	assert.Equal(t, rb, result)
+	assert.True(t, rb.buildManagementK8sClient, "buildManagementK8sClient should be true")
+	assert.True(t, rb.buildManagementRestConfig, "buildManagementRestConfig should be true (dependency)")
+	assert.True(t, rb.buildCluster, "buildCluster should be true (transitive dependency)")
 }
 
 // TestResourceBuilderMock_SupportsManagementClusterMethods verifies the mock implements the interface
