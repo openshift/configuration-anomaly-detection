@@ -201,14 +201,25 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Info("🤖 AI investigation complete")
 	logging.Infof("AI Output:\n%s", aiResponse.String())
 
+	// Parse JSON response from Cora
+	var investigationResult CoraInvestigationResult
+	if err := json.Unmarshal([]byte(aiResponse.String()), &investigationResult); err != nil {
+		notes.AppendWarning("Failed to parse Cora JSON response: %v", err)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		return result, nil
+	}
+
+	// Format to human-readable markdown
+	formattedReport := formatInvestigationReport(&investigationResult)
+
 	// Add simple note about AI automation completion
 	notes.AppendAutomation("AI automation completed. Check recent cluster reports for AI investigation details: 'osdctl cluster reports list --cluster-id %s'", clusterID)
 
-	// Create backplane report action with the AI investigation results
+	// Create backplane report action with formatted output
 	backplaneReportAction := &executor.BackplaneReportAction{
 		ClusterID: r.Cluster.ExternalID(),
 		Summary:   fmt.Sprintf("CAD Investigation: AI-Assisted Analysis for %s", alertName),
-		Data:      aiResponse.String(),
+		Data:      formattedReport,
 	}
 
 	// Return actions for executor to handle
