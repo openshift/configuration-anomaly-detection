@@ -118,6 +118,7 @@ var _ = Describe("aiassisted", func() {
 		})
 	})
 
+	// Happy Path to Test Investigation Report Format
 	Describe("formatInvestigationReport", func() {
 		Context("when formatting a complete investigation result", func() {
 			It("should create human-readable markdown with all fields", func() {
@@ -153,6 +154,37 @@ var _ = Describe("aiassisted", func() {
 				Expect(output).To(ContainSubstring("Restore default ImageStreams"))
 				Expect(output).To(ContainSubstring("oc apply -f fix.yaml"))
 				Expect(output).To(ContainSubstring("⚠️ ESCALATE"))
+			})
+		})
+
+		// Edge Cases Test
+		Context("when handling null command", func() {
+			It("should skip code block when command is nil", func() {
+				result := &CoraInvestigationResult{
+					ClusterID: "test-cluster",
+					AlertName: "TestAlert",
+					RootCause: RootCause{
+						Summary:         "Issue found",
+						Confidence:      "high",
+						ConfidenceScore: 0.9,
+					},
+					Remediation: Remediation{
+						Steps: []RemediationStep{
+							{
+								Action:  "Manually verify the configuration in console",
+								Command: nil,
+							},
+						},
+					},
+					Escalation: Escalation{
+						Recommended: false,
+					},
+				}
+
+				output := formatInvestigationReport(result)
+
+				Expect(output).To(ContainSubstring("Manually verify the configuration"))
+				Expect(output).ToNot(ContainSubstring("```bash"))
 			})
 		})
 	})
