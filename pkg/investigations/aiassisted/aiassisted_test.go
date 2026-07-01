@@ -1,6 +1,7 @@
 package aiassisted
 
 import (
+	"encoding/json"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -210,6 +211,59 @@ var _ = Describe("aiassisted", func() {
 				output := formatInvestigationReport(result)
 
 				Expect(output).To(ContainSubstring("No action steps available"))
+			})
+		})
+
+		// Tests JSON parsing with real Cora output
+		Context("when parsing real Cora JSON output", func() {
+			It("should correctly unmarshal JSON into structs", func() {
+				jsonInput := `{
+					"investigation_id": "Q1RNC3P1LLTK2V",
+					"cluster_id": "2r68ajgq9vtsej9shsd9pvdcpjdr9rt1",
+					"alert_name": "FallbackTestAlert",
+					"timestamp": "2026-06-26T20:18:40.228368Z",
+					"duration_seconds": 103.949,
+					"status": "completed",
+					"root_cause": {
+						"summary": "Test alert for validation",
+						"category": "other",
+						"confidence": "high",
+						"confidence_score": 0.95,
+						"reasoning": "High confidence assessment"
+					},
+					"remediation": {
+						"steps": [
+							{
+								"action": "Verify this is a test alert",
+								"command": null,
+								"risk_level": "low",
+								"requires_elevation": false
+							}
+						],
+						"requires_elevation": false,
+						"estimated_impact": "no_downtime",
+						"automation_ready": true
+					},
+					"evidence": [],
+					"escalation": {
+						"recommended": false,
+						"reason": "none",
+						"urgency": "none",
+						"target_team": null
+					}
+				}`
+
+				var result CoraInvestigationResult
+				err := json.Unmarshal([]byte(jsonInput), &result)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.ClusterID).To(Equal("2r68ajgq9vtsej9shsd9pvdcpjdr9rt1"))
+				Expect(result.AlertName).To(Equal("FallbackTestAlert"))
+				Expect(result.RootCause.Confidence).To(Equal("high"))
+				Expect(result.RootCause.ConfidenceScore).To(Equal(0.95))
+				Expect(result.Remediation.Steps).To(HaveLen(1))
+				Expect(result.Remediation.Steps[0].Command).To(BeNil())
+				Expect(result.Escalation.Recommended).To(BeFalse())
 			})
 		})
 	})
