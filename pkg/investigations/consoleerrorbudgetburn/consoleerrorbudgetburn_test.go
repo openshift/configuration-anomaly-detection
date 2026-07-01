@@ -284,8 +284,8 @@ func TestName(t *testing.T) {
 
 func TestAlertTitle(t *testing.T) {
 	inv := &Investigation{}
-	if inv.AlertTitle() != "console-errorbudgetburn" {
-		t.Errorf("expected 'console-errorbudgetburn', got %q", inv.AlertTitle())
+	if inv.AlertTitle() != "console-ErrorBudgetBurn" {
+		t.Errorf("expected 'console-ErrorBudgetBurn', got %q", inv.AlertTitle())
 	}
 }
 
@@ -298,8 +298,8 @@ func TestDescription(t *testing.T) {
 
 func TestIsExperimental(t *testing.T) {
 	inv := &Investigation{}
-	if !inv.IsExperimental() {
-		t.Error("expected IsExperimental to be true")
+	if inv.IsExperimental() {
+		t.Error("expected IsExperimental to be false")
 	}
 }
 
@@ -2170,12 +2170,14 @@ func TestCheckLBHealth_NLB_AllHealthy(t *testing.T) {
 	inv.checkLoadBalancerHealth(context.Background(), r, notes)
 
 	output := notes.String()
-	if !strings.Contains(output, "all 2 target(s) healthy") {
+	if !strings.Contains(output, "all target groups have healthy targets") {
 		t.Errorf("expected all healthy message, got: %s", output)
 	}
 }
 
-func TestCheckLBHealth_NLB_UnhealthyTarget(t *testing.T) {
+func TestCheckLBHealth_NLB_SomeUnhealthyButGroupStillUp(t *testing.T) {
+	// One healthy + one unhealthy in the same target group: the group can still
+	// route traffic, so we expect a success (not a warning).
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
@@ -2203,11 +2205,46 @@ func TestCheckLBHealth_NLB_UnhealthyTarget(t *testing.T) {
 	inv.checkLoadBalancerHealth(context.Background(), r, notes)
 
 	output := notes.String()
-	if !strings.Contains(output, "1/2 target(s) unhealthy") {
-		t.Errorf("expected unhealthy target message, got: %s", output)
+	if !strings.Contains(output, "all target groups have healthy targets") {
+		t.Errorf("expected healthy groups message, got: %s", output)
 	}
-	if !strings.Contains(output, "i-002") {
-		t.Errorf("expected unhealthy target ID, got: %s", output)
+}
+
+func TestCheckLBHealth_NLB_EntireGroupDown(t *testing.T) {
+	// All targets in a target group are unhealthy: the LB cannot route traffic
+	// for that port, so we expect a warning.
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	mockAws.EXPECT().FindNLBByDNSName(gomock.Any(), "test-nlb-abc123.elb.us-east-1.amazonaws.com").
+		Return("arn:nlb", "test-nlb", []string{}, nil)
+	mockAws.EXPECT().GetNLBTargetHealth(gomock.Any(), "arn:nlb").
+		Return([]aws.NLBTargetHealth{
+			{TargetID: "i-001", Port: 443, State: "unhealthy", Reason: "Target.FailedHealthChecks"},
+			{TargetID: "i-002", Port: 443, State: "unhealthy", Reason: "Target.FailedHealthChecks"},
+		}, nil)
+	mockAws.EXPECT().GetInstanceSecurityGroupIDs(gomock.Any(), gomock.Any()).
+		Return([]string{"sg-aaa"}, nil)
+	mockAws.EXPECT().GetSecurityGroupRules(gomock.Any(), gomock.Any()).
+		Return([]ec2v2types.SecurityGroup{testSGAllowNodePorts("sg-aaa")}, nil)
+
+	ic := newNLBIngressController(nil)
+	svc := newRouterService("test-nlb-abc123.elb.us-east-1.amazonaws.com")
+	k8sClient := newFakeClient(ic, svc)
+	cluster := newAWSTestClusterWithDNS("test", "10.0.0.0/16", "", "p", "e.com", false)
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, K8sClient: k8sClient, AwsClient: mockAws}
+	inv.checkLoadBalancerHealth(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "target group(s) with no healthy targets") {
+		t.Errorf("expected dead group warning, got: %s", output)
+	}
+	if !strings.Contains(output, "i-001") || !strings.Contains(output, "i-002") {
+		t.Errorf("expected unhealthy instance IDs in output, got: %s", output)
 	}
 }
 
