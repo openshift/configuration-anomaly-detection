@@ -157,7 +157,7 @@ var _ = Describe("aiassisted", func() {
 			})
 		})
 
-		// Edge Cases Test
+		// Tests whether Go handles "null" command case correctly
 		Context("when handling null command", func() {
 			It("should skip code block when command is nil", func() {
 				result := &CoraInvestigationResult{
@@ -185,6 +185,31 @@ var _ = Describe("aiassisted", func() {
 
 				Expect(output).To(ContainSubstring("Manually verify the configuration"))
 				Expect(output).ToNot(ContainSubstring("```bash"))
+			})
+		})
+
+		// Tests empty steps array
+		Context("when remediation has no steps", func() {
+			It("should show no action steps available message", func() {
+				result := &CoraInvestigationResult{
+					ClusterID: "test-cluster",
+					AlertName: "TestAlert",
+					RootCause: RootCause{
+						Summary:         "Self-healing succeeded",
+						Confidence:      "high",
+						ConfidenceScore: 0.95,
+					},
+					Remediation: Remediation{
+						Steps: []RemediationStep{},
+					},
+					Escalation: Escalation{
+						Recommended: false,
+					},
+				}
+
+				output := formatInvestigationReport(result)
+
+				Expect(output).To(ContainSubstring("No action steps available"))
 			})
 		})
 	})
