@@ -117,4 +117,43 @@ var _ = Describe("aiassisted", func() {
 			})
 		})
 	})
+
+	Describe("formatInvestigationReport", func() {
+		Context("when formatting a complete investigation result", func() {
+			It("should create human-readable markdown with all fields", func() {
+				command := "oc apply -f fix.yaml"
+
+				result := &CoraInvestigationResult{
+					ClusterID: "test-cluster-abc",
+					AlertName: "ClusterOperatorDegraded",
+					RootCause: RootCause{
+						Summary:         "The cluster-samples-operator is degraded due to missing ImageStreams",
+						Confidence:      "high",
+						ConfidenceScore: 0.92,
+					},
+					Remediation: Remediation{
+						Steps: []RemediationStep{
+							{
+								Action:  "Restore default ImageStreams",
+								Command: &command,
+							},
+						},
+					},
+					Escalation: Escalation{
+						Recommended: true,
+					},
+				}
+
+				output := formatInvestigationReport(result)
+
+				Expect(output).To(ContainSubstring("test-cluster-abc"))
+				Expect(output).To(ContainSubstring("ClusterOperatorDegraded"))
+				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"))
+				Expect(output).To(ContainSubstring("HIGH (92%)"))
+				Expect(output).To(ContainSubstring("Restore default ImageStreams"))
+				Expect(output).To(ContainSubstring("oc apply -f fix.yaml"))
+				Expect(output).To(ContainSubstring("⚠️ ESCALATE"))
+			})
+		})
+	})
 })
