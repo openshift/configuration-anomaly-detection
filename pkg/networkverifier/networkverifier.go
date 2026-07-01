@@ -139,7 +139,14 @@ func Run(cluster *v1.Cluster, clusterDeployment *hivev1.ClusterDeployment, awsCl
 		if len(verifierErrors) > 0 {
 			errorsSummary = verifierErrors[0].Error()
 		}
-		return Undefined, "", fmt.Errorf(exceptionsSummary, errorsSummary)
+		msg := exceptionsSummary
+		if errorsSummary != "" {
+			if msg != "" {
+				msg += ": "
+			}
+			msg += errorsSummary
+		}
+		return Undefined, "", fmt.Errorf("%s", msg)
 	}
 
 	if !out.IsSuccessful() {
