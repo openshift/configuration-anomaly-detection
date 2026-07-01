@@ -89,7 +89,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// 2. Check if the cluster was hibernated and has recently resumed.
 	hibernationPeriods, err := getHibernationStatusForCluster(r.OcmClient, r.Cluster)
 	if err != nil {
-		logging.Warnf("could not check hibernation status of cluster: %w", err)
+		logging.Warnf("could not check hibernation status of cluster: %v", err)
 	}
 
 	if hasRecentlyResumed(hibernationPeriods, time.Now()) {
@@ -102,7 +102,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// 3. Check if the customer blocked egresses
 	verifierResult, failureReason, err := networkverifier.Run(r.Cluster, r.ClusterDeployment, r.AwsClient, r.OcmClient)
 	if err != nil {
-		logging.Error("Network verifier ran into an error: %s", err.Error())
+		logging.Errorf("Network verifier ran into an error: %s", err.Error())
 		r.Notes.AppendWarning("NetworkVerifier failed to run:\n %s", err.Error())
 	}
 
