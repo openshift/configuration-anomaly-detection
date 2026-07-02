@@ -85,6 +85,7 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 
 	chainConfig := &config.InvestigationConfig{
 		AlertTitle: inv.Name(),
+		Name:       inv.Name(),
 		Chain:      chain,
 	}
 

@@ -269,6 +269,8 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 }
 
 // runChain executes a config-defined chain of investigations.
+// Each investigation gets its own ResourceBuilder so the backplane remediation
+// name matches the investigation's metadata.yaml RBAC definition.
 func (c *investigationRunner) runChain(
 	ctx context.Context,
 	clusterId string,
@@ -277,54 +279,28 @@ func (c *investigationRunner) runChain(
 	filterCtx *types.FilterContext,
 	params map[string]string,
 ) (err error) {
-	// Use the first investigation name for the alert metric if we have a chain
 	if len(chainConfig.Chain) > 0 {
 		metrics.Inc(metrics.Alerts, chainConfig.AlertTitle)
 	}
 
-	var builder investigation.ResourceBuilder
-	builder, err = investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, chainConfig.AlertTitle, c.dependencies.BackplaneURL, params)
-	if pdClient != nil {
-		builder.WithPdClient(pdClient)
-	}
-	if err != nil {
-		return fmt.Errorf("failed to create resource builder: %w", err)
-	}
-
+	var latestBuilder investigation.ResourceBuilder
 	defer func() {
-		// The builder caches resources, so we can access them here even if a later step failed.
-		// We ignore the error here because we just want to get any resources that were created.
-		resources, _ := builder.Build()
-
-		// Cleanup rest config if it exists
-		if resources != nil && resources.RestConfig != nil {
-			// Failing the rest config cleanup call is not critical
-			// There is garbage collection for the RBAC within MCC https://issues.redhat.com/browse/OSD-27692
-			// We only log the error for now but could add it to the investigation notes or handle differently
-			logging.Info("Cleaning cluster api access")
-			deferErr := resources.RestConfig.Clean()
-			if deferErr != nil {
-				logging.Error(deferErr)
-			}
-		}
-
-		if resources != nil && resources.OCClient != nil {
-			logging.Info("Cleaning oc kubeconfig file access")
-			deferErr := resources.OCClient.Clean()
-			if deferErr != nil {
-				logging.Error(deferErr)
-			}
-		}
-		if err != nil {
-			handleCADFailure(err, builder, pdClient)
+		if err != nil && latestBuilder != nil {
+			handleCADFailure(err, latestBuilder, pdClient)
 		}
 	}()
 
-	// Chain-level filter: evaluated before running any entry.
+	// Chain-level filter: evaluated once before running any entry.
 	if filterCtx != nil && chainConfig.When != nil {
+		filterBuilder, fErr := investigation.NewResourceBuilder(
+			c.ocmClient, c.bpClient, clusterId, chainConfig.GetName(),
+			c.dependencies.BackplaneURL, params)
+		if fErr != nil {
+			return fmt.Errorf("failed to create filter builder: %w", fErr)
+		}
 		var requiredKeys []string
 		chainConfig.When.Keys(&requiredKeys)
-		if populateErr := c.populateFilterContextFromOCM(filterCtx, builder, clusterId, requiredKeys); populateErr != nil {
+		if populateErr := c.populateFilterContextFromOCM(filterCtx, filterBuilder, clusterId, requiredKeys); populateErr != nil {
 			logging.Errorf("Could not populate filter context, skipping chain: %v", populateErr)
 			return nil
 		}
@@ -355,20 +331,34 @@ func (c *investigationRunner) runChain(
 			inv = &aiassisted.Investigation{AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig()}
 		}
 
+		builder, bErr := investigation.NewResourceBuilder(
+			c.ocmClient, c.bpClient, clusterId, inv.Name(),
+			c.dependencies.BackplaneURL, params)
+		if bErr != nil {
+			return fmt.Errorf("failed to create builder for %q: %w", inv.Name(), bErr)
+		}
+		if pdClient != nil {
+			builder.WithPdClient(pdClient)
+		}
+		latestBuilder = builder
+
 		// Per-entry filter evaluation
 		if entry.When != nil && filterCtx != nil {
 			requiredKeys := entry.Keys()
 			if populateErr := c.populateFilterContextFromOCM(filterCtx, builder, clusterId, requiredKeys); populateErr != nil {
 				logging.Errorf("Could not populate filter context for %q, skipping entry: %v", entry.Name, populateErr)
+				cleanupBuilder(builder)
 				continue
 			}
 			pass, reason, filterErr := entry.ShouldRun(filterCtx)
 			if filterErr != nil {
 				logging.Errorf("Entry-level filter error for %q: %v", entry.Name, filterErr)
+				cleanupBuilder(builder)
 				continue
 			}
 			if !pass {
 				logging.Infof("Entry %q filtered out: %s", entry.Name, reason)
+				cleanupBuilder(builder)
 				continue
 			}
 		}
@@ -376,17 +366,19 @@ func (c *investigationRunner) runChain(
 		logging.Infof("Running investigation %q", inv.Name())
 		result, attempts, runErr := runInvestigationWithRetry(inv, builder)
 		if runErr != nil {
+			cleanupBuilder(builder)
 			return fmt.Errorf("investigation %q failed after %d attempt(s): %w", inv.Name(), attempts, runErr)
 		}
 
-		// Execute actions immediately
 		if len(result.Actions) > 0 {
 			if execErr := c.executeActions(builder, &result, inv.Name()); execErr != nil {
+				cleanupBuilder(builder)
 				return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), execErr)
 			}
 		}
 
-		// StopInvestigations halts the chain
+		cleanupBuilder(builder)
+
 		if result.StopInvestigations != nil {
 			logging.Infof("Stopping investigation chain due to %q: %v", inv.Name(), result.StopInvestigations)
 			return nil
@@ -394,14 +386,46 @@ func (c *investigationRunner) runChain(
 	}
 
 	// Post-chain: title update (PD mode only)
-	if pdClient != nil {
+	if pdClient != nil && latestBuilder != nil {
 		a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
 		titleResult := investigation.InvestigationResult{
 			Actions: []types.Action{&a},
 		}
-		return c.executeActions(builder, &titleResult, chainConfig.AlertTitle)
+		return c.executeActions(latestBuilder, &titleResult, chainConfig.AlertTitle)
 	}
 	return nil
+}
+
+// cleanupBuilder cleans up all resources on the builder that have Clean() methods.
+func cleanupBuilder(builder investigation.ResourceBuilder) {
+	resources, _ := builder.Build()
+	if resources == nil {
+		return
+	}
+	if resources.RestConfig != nil {
+		logging.Info("Cleaning cluster api access")
+		if err := resources.RestConfig.Clean(); err != nil {
+			logging.Error(err)
+		}
+	}
+	if resources.OCClient != nil {
+		logging.Info("Cleaning oc kubeconfig file access")
+		if err := resources.OCClient.Clean(); err != nil {
+			logging.Error(err)
+		}
+	}
+	if resources.ManagementRestConfig != nil {
+		logging.Info("Cleaning management cluster api access")
+		if err := resources.ManagementRestConfig.Clean(); err != nil {
+			logging.Error(err)
+		}
+	}
+	if resources.ManagementOCClient != nil {
+		logging.Info("Cleaning management oc kubeconfig file access")
+		if err := resources.ManagementOCClient.Clean(); err != nil {
+			logging.Error(err)
+		}
+	}
 }
 
 // runInvestigationWithRetry executes an investigation with retry logic for transient errors.

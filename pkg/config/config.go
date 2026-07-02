@@ -44,9 +44,20 @@ type Config struct {
 // InvestigationConfig defines which chain of investigations to run for a given alert.
 type InvestigationConfig struct {
 	AlertTitle   string       `yaml:"alert_title"`
+	Name         string       `yaml:"name,omitempty"`
 	Experimental bool         `yaml:"experimental,omitempty"`
 	When         *FilterNode  `yaml:"when,omitempty"`
 	Chain        []ChainEntry `yaml:"chain"`
+}
+
+// GetName returns the chain's investigation name, falling back to AlertTitle
+// when Name is not set. This preserves backward compatibility with configs
+// that predate the name field.
+func (ic *InvestigationConfig) GetName() string {
+	if ic.Name != "" {
+		return ic.Name
+	}
+	return ic.AlertTitle
 }
 
 // ChainEntry is a single step in an investigation chain.
