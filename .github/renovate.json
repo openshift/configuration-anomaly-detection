@@ -56,7 +56,7 @@
       "enabled": false
     },
     {
-      "description": "Go module non-major updates - automerge",
+      "description": "Go module non-major updates — pre-label lgtm/approved; Tide merges after Prow + Konflux",
       "matchManagers": [
         "gomod"
       ],
@@ -70,12 +70,31 @@
         "pin",
         "digest"
       ],
-      "automerge": true,
+      "automerge": false,
+      "platformAutomerge": false,
       "addLabels": [
         "lgtm",
         "approved",
         "area/dependency",
         "ok-to-test"
+      ]
+    },
+    {
+      "description": "Tekton patch/minor — pre-label lgtm/approved; Tide merges after Prow + Konflux",
+      "matchManagers": [
+        "tekton"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "automerge": false,
+      "platformAutomerge": false,
+      "addLabels": [
+        "lgtm",
+        "approved"
       ]
     },
     {
