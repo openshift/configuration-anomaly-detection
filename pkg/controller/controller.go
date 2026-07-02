@@ -276,13 +276,14 @@ func (c *investigationRunner) runChain(
 	pdClient *pagerduty.SdkClient,
 	filterCtx *types.FilterContext,
 	params map[string]string,
-) error {
+) (err error) {
 	// Use the first investigation name for the alert metric if we have a chain
 	if len(chainConfig.Chain) > 0 {
 		metrics.Inc(metrics.Alerts, chainConfig.AlertTitle)
 	}
 
-	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, chainConfig.AlertTitle, c.dependencies.BackplaneURL, params)
+	var builder investigation.ResourceBuilder
+	builder, err = investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, chainConfig.AlertTitle, c.dependencies.BackplaneURL, params)
 	if pdClient != nil {
 		builder.WithPdClient(pdClient)
 	}

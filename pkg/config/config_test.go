@@ -605,14 +605,11 @@ func TestAIAgentConfigGetTimeout(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	t.Run("env var not set returns nil", func(t *testing.T) {
+	t.Run("env var not set returns error", func(t *testing.T) {
 		t.Setenv(ConfigEnvVar, "")
-		cfg, err := LoadConfig("", testInvestigations)
-		if err != nil {
-			t.Fatalf("LoadConfig() error = %v", err)
-		}
-		if cfg != nil {
-			t.Fatal("expected nil config when env var is not set")
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error when config path is not provided")
 		}
 	})
 
@@ -632,14 +629,11 @@ func TestLoadConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("nonexistent file returns nil config", func(t *testing.T) {
+	t.Run("nonexistent file returns error", func(t *testing.T) {
 		t.Setenv(ConfigEnvVar, "/nonexistent/path.yaml")
-		cfg, err := LoadConfig("", testInvestigations)
-		if err != nil {
-			t.Fatalf("expected no error for nonexistent file, got: %v", err)
-		}
-		if cfg != nil {
-			t.Fatal("expected nil config for nonexistent file")
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error for nonexistent file")
 		}
 	})
 

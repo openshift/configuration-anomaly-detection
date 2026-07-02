@@ -1,14 +1,12 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"slices"
 	"strings"
 	"time"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"gopkg.in/yaml.v3"
 )
 
@@ -71,7 +69,7 @@ func (e *ChainEntry) UnmarshalYAML(value *yaml.Node) error {
 // LoadConfig reads and parses the investigation configuration.
 // If pathOverride is non-empty, it is used as the config file path.
 // Otherwise, the path is read from the CAD_INVESTIGATION_CONFIG_PATH environment variable.
-// Returns nil if no config file is found (optional ConfigMap mount).
+// Returns an error if no config path is provided or the file cannot be read.
 // The validInvestigations parameter is the list of known investigation names used to
 // validate that each chain entry references a real investigation.
 func LoadConfig(pathOverride string, validInvestigations []string) (*Config, error) {
@@ -80,17 +78,11 @@ func LoadConfig(pathOverride string, validInvestigations []string) (*Config, err
 		path = os.Getenv(ConfigEnvVar)
 	}
 	if path == "" {
-		return nil, nil //nolint:nilnil // no config path means "no config"
+		return nil, fmt.Errorf("investigation config path not provided: set %s or pass a path override", ConfigEnvVar)
 	}
 
 	data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			// The config file is optional (e.g. mounted from an optional ConfigMap).
-			// Treat a missing file the same as "no config".
-			logging.Infof("Config file %q not found, continuing without config", path)
-			return nil, nil //nolint:nilnil // no config means "no filtering configured"
-		}
 		return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
 	}
 	return ParseConfig(data, validInvestigations)
