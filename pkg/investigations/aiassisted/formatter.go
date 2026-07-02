@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// formatInvestigationReport converts CoraInvestigationResult into human-readable markdown
-func formatInvestigationReport(result *CoraInvestigationResult) string {
+// FormatInvestigationReport converts CoraInvestigationResult into human-readable markdown
+func FormatInvestigationReport(result *CoraInvestigationResult) string {
 	var sb strings.Builder
 
 	// Cluster ID

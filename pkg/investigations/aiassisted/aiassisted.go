@@ -210,7 +210,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	// Format to human-readable markdown
-	formattedReport := formatInvestigationReport(&investigationResult)
+	formattedReport := FormatInvestigationReport(&investigationResult)
 
 	// Add simple note about AI automation completion
 	notes.AppendAutomation("AI automation completed. Check recent cluster reports for AI investigation details: 'osdctl cluster reports list --cluster-id %s'", clusterID)

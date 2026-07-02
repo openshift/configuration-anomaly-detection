@@ -214,7 +214,9 @@ var _ = Describe("aiassisted", func() {
 			})
 		})
 
-		// Tests JSON parsing with real Cora output
+		// Tests JSON parsing with real Cora output.
+		// If only err = nil --> parsing worked.
+		// If error != nil --> parsing failed
 		Context("when parsing real Cora JSON output", func() {
 			It("should correctly unmarshal JSON into structs", func() {
 				jsonInput := `{
