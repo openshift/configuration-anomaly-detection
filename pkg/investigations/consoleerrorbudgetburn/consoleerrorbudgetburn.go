@@ -569,29 +569,64 @@ func (i *Investigation) checkNLBInstanceSecurityGroups(ctx context.Context, awsC
 }
 
 // reportNLBTargetHealth formats and appends NLB target health to the notewriter.
+//
+// An NLB typically has multiple target groups (one per listener port), so the same
+// instance appears once per target group. We group by port and warn only when an
+// entire target group has no healthy targets — that is the condition under which
+// the LB cannot route traffic for that port.
 func reportNLBTargetHealth(lbName string, targets []aws.NLBTargetHealth, notes *notewriter.NoteWriter) {
-	var unhealthy []aws.NLBTargetHealth
+	// Group targets by port (proxy for target group).
+	type portStats struct {
+		total     int
+		healthy   int
+		unhealthy []aws.NLBTargetHealth
+	}
+	byPort := map[int32]*portStats{}
 	for _, t := range targets {
-		if t.State != "healthy" {
-			unhealthy = append(unhealthy, t)
+		if byPort[t.Port] == nil {
+			byPort[t.Port] = &portStats{}
+		}
+		byPort[t.Port].total++
+		if t.State == "healthy" {
+			byPort[t.Port].healthy++
+		} else {
+			byPort[t.Port].unhealthy = append(byPort[t.Port].unhealthy, t)
 		}
 	}
 
-	if len(unhealthy) == 0 {
-		notes.AppendSuccess("LB Health: NLB %s — all %d target(s) healthy", lbName, len(targets))
+	var deadPorts []int32
+	for port, stats := range byPort {
+		if stats.healthy == 0 {
+			deadPorts = append(deadPorts, port)
+		}
+	}
+
+	if len(deadPorts) == 0 {
+		// Summarise per port so the note is still informative without being noisy.
+		portSummaries := make([]string, 0, len(byPort))
+		for port, stats := range byPort {
+			portSummaries = append(portSummaries, fmt.Sprintf("port %d: %d/%d healthy", port, stats.healthy, stats.total))
+		}
+		notes.AppendSuccess("LB Health: NLB %s — all target groups have healthy targets (%s)", lbName, strings.Join(portSummaries, ", "))
 		return
 	}
 
-	details := make([]string, 0, len(unhealthy))
-	for _, t := range unhealthy {
-		detail := fmt.Sprintf("%s (port %d): %s", t.TargetID, t.Port, t.State)
-		if t.Reason != "" {
-			detail += " — " + t.Reason
+	// One or more target groups are completely down.
+	details := make([]string, 0, len(deadPorts))
+	for _, port := range deadPorts {
+		stats := byPort[port]
+		instanceDetails := make([]string, 0, len(stats.unhealthy))
+		for _, t := range stats.unhealthy {
+			d := fmt.Sprintf("%s: %s", t.TargetID, t.State)
+			if t.Reason != "" {
+				d += " — " + t.Reason
+			}
+			instanceDetails = append(instanceDetails, d)
 		}
-		details = append(details, detail)
+		details = append(details, fmt.Sprintf("port %d: 0/%d healthy — %s", port, stats.total, strings.Join(instanceDetails, ", ")))
 	}
-	notes.AppendWarning("LB Health: NLB %s — %d/%d target(s) unhealthy:\n  %s",
-		lbName, len(unhealthy), len(targets), strings.Join(details, "\n  "))
+	notes.AppendWarning("LB Health: NLB %s — %d target group(s) with no healthy targets:\n  %s",
+		lbName, len(deadPorts), strings.Join(details, "\n  "))
 }
 
 // checkCLBHealth finds a CLB by DNS name and reports instance health.
@@ -1256,7 +1291,11 @@ func (d *defaultProbeHistoryChecker) queryProbeHistory(ctx context.Context, k8sC
 	if err != nil {
 		return "", fmt.Errorf("failed to parse console URL %q: %w", consoleURL, err)
 	}
-	hostname := regexp.QuoteMeta(parsedURL.Hostname())
+	// Use the hostname as-is in the regex. This Prometheus version's RE2 parser
+	// rejects all backslash escape sequences (including \. and \-), so no escaping
+	// is possible. Unescaped dots match any character, but false matches on console
+	// hostnames are not a practical concern.
+	hostname := parsedURL.Hostname()
 	// 1h matches the critical tier's long window (1h/5m burn rate). For warning-tier
 	// alerts the evaluation window is longer (up to 3d), but 1h gives a useful recent
 	// snapshot in all cases nonetheless.
@@ -1335,7 +1374,7 @@ func (i *Investigation) Name() string {
 }
 
 func (i *Investigation) AlertTitle() string {
-	return "console-errorbudgetburn"
+	return "console-ErrorBudgetBurn"
 }
 
 func (i *Investigation) Description() string {
@@ -1343,5 +1382,5 @@ func (i *Investigation) Description() string {
 }
 
 func (i *Investigation) IsExperimental() bool {
-	return true
+	return false
 }
