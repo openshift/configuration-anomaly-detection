@@ -17,7 +17,7 @@ type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.Build()
+	r, err := rb.WithCluster().Build()
 	if err != nil {
 		return result, err
 	}

@@ -36,7 +36,7 @@ type Investigation struct{}
 // Run runs the investigation for a triggered chgm pagerduty event
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithClusterDeployment().Build()
+	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
 	if err != nil {
 		return result, err
 	}
