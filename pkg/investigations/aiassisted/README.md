@@ -8,7 +8,7 @@ The aiassisted investigation serves as a **fallback handler** for alerts that do
 
 **Trigger**: Any alert without an explicit CAD investigation handler (fallback)
 **Clusters**: Allowlist-controlled via investigation filter config (configured clusters and organizations only)
-**Status**: Experimental (`IsExperimental() = true`)
+**Status**: Promoted (`IsExperimental() = false`)
 
 ## How It Works
 
@@ -206,7 +206,7 @@ Testing requires:
 
 ## Future Enhancements
 
-Potential improvements when graduating from experimental:
+Potential improvements:
 
 - **Enhanced Payload** - Populate `investigation_payload` with comprehensive alert details from PagerDuty (descriptions, severities, runbook links)
 - **Field Naming** - Rename `alert_name` to `incident_title` for clarity
