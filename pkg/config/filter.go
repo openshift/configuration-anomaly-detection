@@ -87,36 +87,38 @@ type FilterNode struct {
 	Values   []string `yaml:"values,omitempty"`
 }
 
-// InvestigationFilter associates a filter tree with an investigation by name.
-// A nil Filter means the investigation always runs (no restrictions).
-type InvestigationFilter struct {
-	// Investigation is the investigation name, matching Investigation.Name() or a short name
-	// from the manual controller's shortNameToInvestigation map.
-	Investigation string `yaml:"investigation"`
-	// Filter is the root of the filter tree. nil means always run.
-	Filter *FilterNode `yaml:"when,omitempty"`
+// ShouldRun evaluates the chain-level filter for an investigation config.
+// Returns (result, reason, error). A nil When always returns true.
+// A nil FilterContext always returns true (manual mode bypass).
+func (ic *InvestigationConfig) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
+	if ic.When == nil {
+		return true, "no chain-level filter configured", nil
+	}
+	if ctx == nil {
+		return true, "no filter context (manual mode)", nil
+	}
+	return ic.When.evaluate(ctx)
 }
 
-// Evaluate checks the filter tree for an investigation.
-// Returns (result, reason, error) where reason describes which leaf determined the outcome.
-// A nil InvestigationFilter or nil Filter always returns true.
+// ShouldRun evaluates the entry-level filter for a chain entry.
+// Returns (result, reason, error). A nil When always returns true.
 // A nil FilterContext always returns true (manual mode bypass).
-func (f *InvestigationFilter) Evaluate(ctx *types.FilterContext) (bool, string, error) {
-	if f == nil || f.Filter == nil {
+func (e *ChainEntry) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
+	if e.When == nil {
 		return true, "no filter configured", nil
 	}
 	if ctx == nil {
 		return true, "no filter context (manual mode)", nil
 	}
-	return f.Filter.evaluate(ctx)
+	return e.When.evaluate(ctx)
 }
 
 // Keys returns all field names referenced by leaf nodes in the filter tree.
 // Used to determine which FilterContext fields need to be populated.
-func (f InvestigationFilter) Keys() []string {
+func (e *ChainEntry) Keys() []string {
 	keys := make([]string, 0)
-	if f.Filter != nil {
-		f.Filter.keys(&keys)
+	if e.When != nil {
+		e.When.Keys(&keys)
 	}
 	return keys
 }
@@ -235,17 +237,17 @@ func passOrReject(passed bool) string {
 	return "reject"
 }
 
-// keys recursively collects all field names referenced by leaf nodes.
-func (n *FilterNode) keys(out *[]string) {
+// Keys recursively collects all field names referenced by leaf nodes.
+func (n *FilterNode) Keys(out *[]string) {
 	if len(n.And) > 0 {
 		for i := range n.And {
-			n.And[i].keys(out)
+			n.And[i].Keys(out)
 		}
 		return
 	}
 	if len(n.Or) > 0 {
 		for i := range n.Or {
-			n.Or[i].keys(out)
+			n.Or[i].Keys(out)
 		}
 		return
 	}

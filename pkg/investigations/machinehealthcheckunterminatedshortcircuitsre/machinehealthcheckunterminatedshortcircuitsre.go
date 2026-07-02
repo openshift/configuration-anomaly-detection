@@ -318,15 +318,3 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 func (i *Investigation) Name() string {
 	return strings.ToLower(alertname)
 }
-
-func (i *Investigation) AlertTitle() string {
-	return alertname
-}
-
-func (i *Investigation) Description() string {
-	return fmt.Sprintf("Investigates '%s' alerts", alertname)
-}
-
-func (i *Investigation) IsExperimental() bool {
-	return false
-}

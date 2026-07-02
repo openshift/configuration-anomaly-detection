@@ -13,11 +13,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ccam"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/chgm"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/expiredcertificates"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -28,8 +25,6 @@ import (
 )
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
-
-var certPreCheckSkip = []string{"mustgather"}
 
 type PagerDutyConfig struct {
 	PayloadPath string
@@ -266,10 +261,21 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
-func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId string, inv investigation.Investigation, pdClient *pagerduty.SdkClient, filterCtx *types.FilterContext, params map[string]string) error {
-	metrics.Inc(metrics.Alerts, inv.Name())
+// runChain executes a config-defined chain of investigations.
+func (c *investigationRunner) runChain(
+	ctx context.Context,
+	clusterId string,
+	chainConfig *config.InvestigationConfig,
+	pdClient *pagerduty.SdkClient,
+	filterCtx *types.FilterContext,
+	params map[string]string,
+) error {
+	// Use the first investigation name for the alert metric if we have a chain
+	if len(chainConfig.Chain) > 0 {
+		metrics.Inc(metrics.Alerts, chainConfig.AlertTitle)
+	}
 
-	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, inv.Name(), c.dependencies.BackplaneURL, params)
+	builder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, chainConfig.AlertTitle, c.dependencies.BackplaneURL, params)
 	if pdClient != nil {
 		builder.WithPdClient(pdClient)
 	}
@@ -302,121 +308,92 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			}
 		}
 		if err != nil {
-			// Record error completion for manual investigations before handling failure
-			c.recordManualCompletion(inv.Name(), pdClient, "error")
 			handleCADFailure(err, builder, pdClient)
 		}
 	}()
 
-	preCheck := precheck.ClusterStatePrecheck{}
-	result, err := preCheck.Run(builder)
-	if err != nil {
-		return err
-	}
-	if len(result.Actions) > 0 {
-		if err = c.executeActions(builder, &result, "precheck"); err != nil {
-			return fmt.Errorf("failed to execute precheck actions: %w", err)
+	// Chain-level filter: evaluated before running any entry.
+	if filterCtx != nil && chainConfig.When != nil {
+		var requiredKeys []string
+		chainConfig.When.Keys(&requiredKeys)
+		if populateErr := c.populateFilterContextFromOCM(filterCtx, builder, clusterId, requiredKeys); populateErr != nil {
+			logging.Errorf("Could not populate filter context, skipping chain: %v", populateErr)
+			return nil
 		}
-		// We stop if the precheck returns any action this mean we do not want to run anything else.
-		c.recordManualCompletion(inv.Name(), pdClient, "precheck_stopped")
-		return nil
-	}
-	if result.StopInvestigations != nil {
-		logging.Errorf("Stopping investigations due to: %w", result.StopInvestigations)
-		c.recordManualCompletion(inv.Name(), pdClient, "stop_investigations")
-		return nil
-	}
-
-	// Evaluate the investigation filter if one is configured for this investigation.
-	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
-	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
-		metrics.Inc(metrics.AlertsFiltered, inv.Name())
-		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
-		return nil
-	}
-
-	ccamInvestigation := ccam.CloudCredentialsCheck{}
-	result, err = ccamInvestigation.Run(builder)
-	if err != nil {
-		return err
-	}
-	// FIXME: Once all migrations are converted this can be removed.
-	updateMetrics(inv.Name(), &result)
-
-	// Execute ccam actions if any
-	if len(result.Actions) > 0 {
-		if err = c.executeActions(builder, &result, "ccam"); err != nil {
-			return fmt.Errorf("failed to execute ccam actions: %w", err)
+		pass, reason, filterErr := chainConfig.ShouldRun(filterCtx)
+		if filterErr != nil {
+			logging.Errorf("Chain-level filter error for %q: %v", chainConfig.AlertTitle, filterErr)
+			return nil
 		}
-		chgmInv := chgm.Investigation{}
-		// In case of a CHGM there is no need to investigate further now, other investigations that don't need AWS might
-		// be able to proceed. To handle this case we will *only* return when CCAM found something and it's CGHM - handling
-		// non-AWS access is up to following investigations.
-		if inv.AlertTitle() == chgmInv.AlertTitle() {
-			c.recordManualCompletion(inv.Name(), pdClient, "ccam_stopped")
+		if !pass {
+			logging.Infof("Chain %q filtered out: %s", chainConfig.AlertTitle, reason)
+			if pdClient != nil {
+				if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation chain %q was filtered: %s. Escalating to SRE. 🤖", chainConfig.AlertTitle, reason)); escErr != nil {
+					logging.Errorf("Failed to escalate filtered chain: %v", escErr)
+				}
+			}
 			return nil
 		}
 	}
 
-	certCheck := &expiredcertificates.Investigation{}
-	if pdClient != nil && inv.Name() != certCheck.Name() && !slices.Contains(certPreCheckSkip, inv.Name()) {
-		c.runCertPreCheck(clusterId, pdClient, certCheck)
+	for _, entry := range chainConfig.Chain {
+		inv := investigations.GetInvestigationByName(entry.Name)
+		if inv == nil {
+			return fmt.Errorf("unknown investigation %q in chain for %q", entry.Name, chainConfig.AlertTitle)
+		}
+
+		// Create a fresh aiassisted instance with the runtime config to avoid mutating the registry singleton.
+		if _, ok := inv.(*aiassisted.Investigation); ok && c.dependencies.FilterConfig != nil {
+			inv = &aiassisted.Investigation{AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig()}
+		}
+
+		// Per-entry filter evaluation
+		if entry.When != nil && filterCtx != nil {
+			requiredKeys := entry.Keys()
+			if populateErr := c.populateFilterContextFromOCM(filterCtx, builder, clusterId, requiredKeys); populateErr != nil {
+				logging.Errorf("Could not populate filter context for %q, skipping entry: %v", entry.Name, populateErr)
+				continue
+			}
+			pass, reason, filterErr := entry.ShouldRun(filterCtx)
+			if filterErr != nil {
+				logging.Errorf("Entry-level filter error for %q: %v", entry.Name, filterErr)
+				continue
+			}
+			if !pass {
+				logging.Infof("Entry %q filtered out: %s", entry.Name, reason)
+				continue
+			}
+		}
+
+		logging.Infof("Running investigation %q", inv.Name())
+		result, attempts, runErr := runInvestigationWithRetry(inv, builder)
+		if runErr != nil {
+			return fmt.Errorf("investigation %q failed after %d attempt(s): %w", inv.Name(), attempts, runErr)
+		}
+
+		// Execute actions immediately
+		if len(result.Actions) > 0 {
+			if execErr := c.executeActions(builder, &result, inv.Name()); execErr != nil {
+				return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), execErr)
+			}
+		}
+
+		// StopInvestigations halts the chain
+		if result.StopInvestigations != nil {
+			logging.Infof("Stopping investigation chain due to %q: %v", inv.Name(), result.StopInvestigations)
+			return nil
+		}
 	}
 
-	logging.Infof("Starting investigation for %s", inv.Name())
-	result, attempts, err := runInvestigationWithRetry(inv, builder)
-	if err != nil {
-		return fmt.Errorf("investigation failed after %d attempt(s): %w", attempts, err)
-	}
-	updateMetrics(inv.Name(), &result)
-
-	// FIXME: This will work, once all notes are taken using executor note write and not the resources notes.
-	hasFindings := len(result.Actions) > 0
-
-	// Execute investigation actions if any
-	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
-		return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), err)
-	}
-
-	a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
-	result = investigation.InvestigationResult{
-		Actions: []types.Action{&a},
-	}
-	if err = c.executeActions(builder, &result, inv.Name()); err != nil {
-		return fmt.Errorf("failed to execute PagerDuty title update: %w", err)
-	}
-
-	// Record completion for manual investigations with outcome
-	if hasFindings {
-		c.recordManualCompletion(inv.Name(), pdClient, "success")
-	} else {
-		c.recordManualCompletion(inv.Name(), pdClient, "no_findings")
+	// Post-chain: title update (PD mode only)
+	if pdClient != nil {
+		a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
+		titleResult := investigation.InvestigationResult{
+			Actions: []types.Action{&a},
+		}
+		return c.executeActions(builder, &titleResult, chainConfig.AlertTitle)
 	}
 	return nil
-}
-
-func (c *investigationRunner) runCertPreCheck(clusterId string, pdClient *pagerduty.SdkClient, certCheck *expiredcertificates.Investigation) {
-	certBuilder, err := investigation.NewResourceBuilder(c.ocmClient, c.bpClient, clusterId, certCheck.Name(), c.dependencies.BackplaneURL, nil)
-	if err != nil {
-		logging.Warnf("Expired certificates pre-check: failed to create resource builder: %v", err)
-		return
-	}
-	certBuilder.WithPdClient(pdClient)
-
-	certResult, certErr := certCheck.Run(certBuilder)
-	if certErr != nil {
-		logging.Warnf("Expired certificates pre-check failed: %v", certErr)
-	}
-	if len(certResult.Actions) > 0 {
-		if certErr = c.executeActions(certBuilder, &certResult, certCheck.Name()); certErr != nil {
-			logging.Warnf("Failed to execute expired certificates actions: %v", certErr)
-		}
-	}
-	if certResources, _ := certBuilder.Build(); certResources != nil && certResources.RestConfig != nil {
-		if cleanErr := certResources.RestConfig.Clean(); cleanErr != nil {
-			logging.Warnf("Failed to clean expired certificates rest config: %v", cleanErr)
-		}
-	}
 }
 
 // runInvestigationWithRetry executes an investigation with retry logic for transient errors.
@@ -504,21 +481,6 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 	}
 }
 
-func updateMetrics(investigationName string, result *investigation.InvestigationResult) {
-	if result.ServiceLogPrepared.Performed {
-		metrics.Inc(metrics.ServicelogPrepared, append([]string{investigationName}, result.ServiceLogPrepared.Labels...)...)
-	}
-	if result.LimitedSupportSet.Performed {
-		metrics.Inc(metrics.LimitedSupportSet, append([]string{investigationName}, result.LimitedSupportSet.Labels...)...)
-	}
-	if result.MustGatherPerformed.Performed {
-		metrics.Inc(metrics.MustGatherPerformed, append([]string{investigationName}, result.MustGatherPerformed.Labels...)...)
-	}
-	if result.EtcdDatabaseAnalysis.Performed {
-		metrics.Inc(metrics.EtcdDatabaseAnalysis, append([]string{investigationName}, result.EtcdDatabaseAnalysis.Labels...)...)
-	}
-}
-
 // recordManualCompletion records manual investigation completion metric
 // Only tracks if this is a manual investigation (pdClient is nil)
 func (c *investigationRunner) recordManualCompletion(invName string, pdClient *pagerduty.SdkClient, status string) {
@@ -579,49 +541,11 @@ func (c *investigationRunner) executeActions(
 	return nil
 }
 
-// evaluateFilter checks whether the investigation should be filtered out.
-// Returns true if the investigation was filtered (should not run), false otherwise.
-func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string, pdClient *pagerduty.SdkClient) bool {
-	if c.dependencies.FilterConfig == nil || filterCtx == nil {
-		return false
-	}
-
-	invFilter := c.dependencies.FilterConfig.GetFilter(invName)
-	if invFilter == nil {
-		return false
-	}
-	requiredKeys := invFilter.Keys()
-
-	if err := c.populateFilterContextFromOCM(filterCtx, builder, clusterID, requiredKeys); err != nil {
-		logging.Errorf("Could not fill context with required fields %s, skipping investigation: %v", invName, err)
-		return true
-	}
-
-	pass, reason, filterErr := invFilter.Evaluate(filterCtx)
-	switch {
-	case filterErr != nil:
-		logging.Errorf("Filter evaluation error for %s, skipping investigation: %v", invName, filterErr)
-	case pass:
-		logging.Infof("Filter passed for %s: %s", invName, reason)
-		return false
-	default:
-		logging.Infof("Investigation %s filtered out for cluster %s: %s", invName, clusterID, reason)
-	}
-
-	if pdClient != nil {
-		if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", invName)); escErr != nil {
-			logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
-		}
-	}
-
-	return true
-}
-
 // populateFilterContextFromOCM enriches the filter context with OCM cluster fields.
-// This is called after precheck so the cluster object is available from the builder cache.
+// This is called before filter evaluation so the cluster object is available from the builder cache.
 // Failures to populate individual fields are logged as warnings but do not fail the investigation.
 func (c *investigationRunner) populateFilterContextFromOCM(filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string, requiredKeys []string) error {
-	resources, err := builder.Build()
+	resources, err := builder.WithCluster().Build()
 	if err != nil {
 		logging.Warnf("Could not populate filter context: builder error: %v", err)
 		return err

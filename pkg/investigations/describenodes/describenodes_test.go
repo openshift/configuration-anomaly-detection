@@ -98,20 +98,6 @@ func TestName(t *testing.T) {
 	}
 }
 
-func TestAlertTitle(t *testing.T) {
-	inv := &Investigation{}
-	if inv.AlertTitle() != "" {
-		t.Errorf("expected empty alert title, got %q", inv.AlertTitle())
-	}
-}
-
-func TestIsExperimental(t *testing.T) {
-	inv := &Investigation{}
-	if !inv.IsExperimental() {
-		t.Error("expected IsExperimental to return true")
-	}
-}
-
 // --- Run tests ---
 
 func TestRun_DefaultDescribesAllNodes(t *testing.T) {
