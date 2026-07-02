@@ -121,9 +121,6 @@ export AGENTCORE_AWS_SECRET_ACCESS_KEY="YOUR_SECRET_ACCESS_KEY"
 
 # Point to your config file (see step 2 in Prerequisites)
 export CAD_INVESTIGATION_CONFIG_PATH="./test-config.yaml"
-
-# Enable experimental investigations
-export CAD_EXPERIMENTAL_ENABLED=true
 ```
 
 ### Step 4: Run the Investigation
@@ -242,7 +239,7 @@ No manual cleanup is required.
 
 ## Notes
 
-- AI investigation is currently **experimental** (`IsExperimental() = true`)
+- AI investigation has been promoted to prod (`IsExperimental() = false`)
 - Only runs for alerts **without explicit investigation handlers** (fallback behavior)
 - Requires filter config with `aiassisted` entry (cluster ID or organization ID)
 - Timeout defaults to **15 minutes** (900 seconds), configurable via `timeout_seconds`
