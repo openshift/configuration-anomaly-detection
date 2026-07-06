@@ -609,7 +609,7 @@ func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.Fi
 	}
 
 	if pdClient != nil {
-		if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", invName)); escErr != nil {
+		if escErr := pdClient.EscalateIncident(); escErr != nil {
 			logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
 		}
 	}
