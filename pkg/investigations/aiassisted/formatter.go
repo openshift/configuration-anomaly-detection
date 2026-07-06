@@ -32,7 +32,7 @@ func FormatInvestigationReport(result *CoraInvestigationResult) string {
 		for i, step := range result.Remediation.Steps {
 			fmt.Fprintf(&sb, "%d. %s\n", i+1, step.Action)
 			if step.Command != nil && *step.Command != "" {
-				fmt.Fprintf(&sb, "   ```bash\n   %s\n   ```\n", *step.Command)
+				fmt.Fprintf(&sb, "   ````bash\n   %s\n   ````\n", *step.Command)
 			}
 		}
 		sb.WriteString("\n")

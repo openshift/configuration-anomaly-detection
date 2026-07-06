@@ -144,7 +144,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Log AI invocation
 	logging.Infof("🤖 Invoking AI agent for incident %s", incidentID)
-	logging.Infof("Payload: %s", string(payloadJSON))
 
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
@@ -199,7 +198,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	logging.Info("🤖 AI investigation complete")
-	logging.Infof("AI Output:\n%s", aiResponse.String())
 
 	// Parse JSON response from Cora
 	var investigationResult CoraInvestigationResult

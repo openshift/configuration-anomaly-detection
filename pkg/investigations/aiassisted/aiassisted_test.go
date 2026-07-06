@@ -120,7 +120,7 @@ var _ = Describe("aiassisted", func() {
 	})
 
 	// Happy Path to Test Investigation Report Format
-	Describe("formatInvestigationReport", func() {
+	Describe("FormatInvestigationReport", func() {
 		Context("when formatting a complete investigation result", func() {
 			It("should create human-readable markdown with all fields", func() {
 				command := "oc apply -f fix.yaml"
@@ -146,7 +146,7 @@ var _ = Describe("aiassisted", func() {
 					},
 				}
 
-				output := formatInvestigationReport(result)
+				output := FormatInvestigationReport(result)
 
 				Expect(output).To(ContainSubstring("test-cluster-abc"))
 				Expect(output).To(ContainSubstring("ClusterOperatorDegraded"))
@@ -182,7 +182,7 @@ var _ = Describe("aiassisted", func() {
 					},
 				}
 
-				output := formatInvestigationReport(result)
+				output := FormatInvestigationReport(result)
 
 				Expect(output).To(ContainSubstring("Manually verify the configuration"))
 				Expect(output).ToNot(ContainSubstring("```bash"))
@@ -208,7 +208,7 @@ var _ = Describe("aiassisted", func() {
 					},
 				}
 
-				output := formatInvestigationReport(result)
+				output := FormatInvestigationReport(result)
 
 				Expect(output).To(ContainSubstring("No action steps available"))
 			})
