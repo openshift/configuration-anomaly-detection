@@ -17,6 +17,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgather"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgathercritical"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/ocmagentresponsefailure"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/pdbblockingnodedrain"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/restartcontrolplane"
@@ -36,6 +37,7 @@ var availableInvestigations = []investigation.Investigation{
 	&ocmagentresponsefailure.Investigation{},
 	&restartcontrolplane.Investigation{},
 	&cannotretrieveupdatessre.Investigation{},
+	&mustgathercritical.Investigation{},
 	&mustgather.Investigation{},
 	&describenodes.Investigation{},
 	&clusterhealthcheck.Investigation{},

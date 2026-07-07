@@ -29,7 +29,7 @@ import (
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
-var certPreCheckSkip = []string{"mustgather"}
+var certPreCheckSkip = []string{"mustgather", "mustgathercritical"}
 
 type PagerDutyConfig struct {
 	PayloadPath string
