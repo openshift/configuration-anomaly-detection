@@ -71,6 +71,7 @@ type investigationRunner struct {
 	logger       *zap.SugaredLogger
 	dependencies *Dependencies
 	dryRun       bool
+	notifier     incidentNotifier
 }
 
 type ControllerOptions struct {
@@ -239,6 +240,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 				executor:     executor.NewWebhookExecutor(deps.OCMClient, pdClient, deps.BackplaneClient, logger),
 				logger:       logger,
 				dependencies: deps,
+				notifier:     newPDIncidentNotifier(pdClient),
 			},
 		}, nil
 	}
@@ -261,6 +263,7 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 				logger:       logger,
 				dependencies: deps,
 				dryRun:       opts.Manual.DryRun,
+				notifier:     newNoopIncidentNotifier(),
 			},
 		}, nil
 	}
@@ -275,7 +278,6 @@ func (c *investigationRunner) runChain(
 	ctx context.Context,
 	clusterId string,
 	alertConfig *config.AlertConfig,
-	pdClient *pagerduty.SdkClient,
 	filterCtx *types.FilterContext,
 	params map[string]string,
 ) (err error) {
@@ -286,7 +288,7 @@ func (c *investigationRunner) runChain(
 	var latestBuilder investigation.ResourceBuilder
 	defer func() {
 		if err != nil && latestBuilder != nil {
-			handleCADFailure(err, latestBuilder, pdClient)
+			handleCADFailure(err, latestBuilder, c.notifier)
 		}
 	}()
 
@@ -311,10 +313,8 @@ func (c *investigationRunner) runChain(
 		}
 		if !pass {
 			logging.Infof("Alert %q filtered out: %s", alertConfig.AlertTitle, reason)
-			if pdClient != nil {
-				if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigations for alert %q were filtered: %s. Escalating to SRE. 🤖", alertConfig.AlertTitle, reason)); escErr != nil {
-					logging.Errorf("Failed to escalate filtered alert: %v", escErr)
-				}
+			if escErr := c.notifier.EscalateWithNote(fmt.Sprintf("🤖 Investigations for alert %q were filtered: %s. Escalating to SRE. 🤖", alertConfig.AlertTitle, reason)); escErr != nil {
+				logging.Errorf("Failed to escalate filtered alert: %v", escErr)
 			}
 			return nil
 		}
@@ -337,9 +337,7 @@ func (c *investigationRunner) runChain(
 		if bErr != nil {
 			return fmt.Errorf("failed to create builder for %q: %w", inv.Name(), bErr)
 		}
-		if pdClient != nil {
-			builder.WithPdClient(pdClient)
-		}
+		c.notifier.AttachToBuilder(builder)
 		latestBuilder = builder
 
 		// Per-entry filter evaluation
@@ -386,7 +384,7 @@ func (c *investigationRunner) runChain(
 	}
 
 	// Post-chain: title update (PD mode only)
-	if pdClient != nil && latestBuilder != nil {
+	if c.notifier.IsActive() && latestBuilder != nil {
 		a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
 		titleResult := investigation.InvestigationResult{
 			Actions: []types.Action{&a},
@@ -480,7 +478,7 @@ func calculateBackoff(attempt int) time.Duration {
 	return backoff
 }
 
-func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pagerduty.SdkClient) {
+func handleCADFailure(err error, rb investigation.ResourceBuilder, notifier incidentNotifier) {
 	logging.Errorf("CAD investigation failed: %v", err)
 	resources, err := rb.Build()
 	if err != nil {
@@ -489,7 +487,7 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 
 	var docErr *ocm.DocumentationMismatchError
 	if errors.As(err, &docErr) {
-		escalateDocumentationMismatch(docErr, resources, pdClient)
+		escalateDocumentationMismatch(docErr, resources, notifier)
 		return
 	}
 
@@ -501,25 +499,10 @@ func handleCADFailure(err error, rb investigation.ResourceBuilder, pdClient *pag
 		notes = "🚨 CAD investigation failed prior to resource initialization, CAD team has been notified. Please investigate manually. 🚨"
 	}
 
-	if pdClient != nil {
-		pdErr := pdClient.EscalateIncidentWithNote(notes)
-		if pdErr != nil {
-			logging.Errorf("Failed to escalate notes to PagerDuty: %v", pdErr)
-		} else {
-			logging.Info("CAD failure & incident notes added to PagerDuty")
-		}
+	if escErr := notifier.EscalateWithNote(notes); escErr != nil {
+		logging.Errorf("Failed to escalate notes to PagerDuty: %v", escErr)
 	} else {
-		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate CAD failure to PagerDuty notes.")
-	}
-}
-
-// recordManualCompletion records manual investigation completion metric
-// Only tracks if this is a manual investigation (pdClient is nil)
-func (c *investigationRunner) recordManualCompletion(invName string, pdClient *pagerduty.SdkClient, status string) {
-	if pdClient == nil {
-		// This is a manual investigation
-		dryRun := strconv.FormatBool(c.dryRun)
-		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
+		logging.Info("CAD failure & incident notes added to PagerDuty")
 	}
 }
 

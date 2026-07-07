@@ -67,10 +67,10 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		ServiceName: c.pdClient.GetServiceName(),
 	}
 
-	return c.runChain(ctx, clusterID, alertConfig, c.pdClient, filterCtx, nil)
+	return c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
 }
 
-func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, notifier incidentNotifier) {
 	message := docErr.EscalationMessage()
 
 	if resources != nil && resources.Notes != nil {
@@ -78,12 +78,7 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 		message = resources.Notes.String()
 	}
 
-	if pdClient == nil {
-		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate documentation mismatch to PagerDuty notes.")
-		return
-	}
-
-	if err := pdClient.EscalateIncidentWithNote(message); err != nil {
+	if err := notifier.EscalateWithNote(message); err != nil {
 		logging.Errorf("Failed to escalate documentation mismatch notes to PagerDuty: %v", err)
 		return
 	}

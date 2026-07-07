@@ -98,6 +98,5 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 		}
 	}
 
-	// No PD client for manual runs.
-	return c.runChain(ctx, c.manual.ClusterId, alertConfig, nil, filterCtx, c.manual.Params)
+	return c.runChain(ctx, c.manual.ClusterId, alertConfig, filterCtx, c.manual.Params)
 }
