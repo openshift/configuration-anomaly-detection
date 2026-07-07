@@ -46,8 +46,8 @@
 #   - precheck
 #   - ccam
 #   - aiassisted
-#   - Cluster Has Gone Missing (CHGM)
-#   - ClusterProvisioningDelay
+#   - chgm
+#   - cpd
 #   - clustermonitoringerrorbudgetburn
 #   - etcddatabasequotalowspace
 #   - insightsoperatordown
@@ -133,7 +133,7 @@ alerts:
     investigations:
       - precheck
       - ccam
-      - "Cluster Has Gone Missing (CHGM)"
+      - chgm
       - name: mustgather
         when:
           operator: sample
@@ -144,7 +144,7 @@ alerts:
     investigations:
       - precheck
       - ccam
-      - ClusterProvisioningDelay
+      - cpd
 
   # Etcd Database Quota Low Space
   # Only run on non-HCP (classic) clusters.

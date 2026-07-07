@@ -105,7 +105,7 @@ Exclude a specific cluster:
 
 ```yaml
 alerts:
-  - investigation: "Cluster Has Gone Missing (CHGM)"
+  - investigation: chgm
     when:
       field: ClusterID
       operator: notin

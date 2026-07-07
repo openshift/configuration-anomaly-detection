@@ -141,7 +141,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 func (c *Investigation) Name() string {
-	return "ClusterProvisioningDelay"
+	return "cpd"
 }
 
 func isSubnetRouteValid(awsClient aws.Client, subnetID string) (bool, error) {

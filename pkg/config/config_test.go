@@ -18,9 +18,9 @@ var testInvestigations = []string{
 	"precheck",
 	"ccam",
 	"aiassisted",
-	"Cluster Has Gone Missing (CHGM)",
+	"chgm",
 	"clustermonitoringerrorbudgetburn",
-	"ClusterProvisioningDelay",
+	"cpd",
 	"etcddatabasequotalowspace",
 	"insightsoperatordown",
 	"upgradeconfigsyncfailureover4hr",
@@ -65,7 +65,7 @@ alerts:
     investigations:
       - precheck
       - ccam
-      - "Cluster Has Gone Missing (CHGM)"
+      - "chgm"
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if len(cfg.Alerts[0].Investigations) != 3 {
@@ -74,7 +74,7 @@ alerts:
 				if cfg.Alerts[0].Investigations[0].Name != "precheck" {
 					t.Errorf("chain[0] = %q, want precheck", cfg.Alerts[0].Investigations[0].Name)
 				}
-				if cfg.Alerts[0].Investigations[2].Name != "Cluster Has Gone Missing (CHGM)" {
+				if cfg.Alerts[0].Investigations[2].Name != "chgm" {
 					t.Errorf("chain[2] = %q", cfg.Alerts[0].Investigations[2].Name)
 				}
 			},
@@ -116,7 +116,7 @@ alerts:
     investigations:
       - precheck
       - ccam
-      - ClusterProvisioningDelay
+      - cpd
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				ic := cfg.Alerts[0]
@@ -530,7 +530,7 @@ alerts:
     investigations:
       - precheck
       - ccam
-      - "Cluster Has Gone Missing (CHGM)"
+      - "chgm"
   - alert_title: "ExperimentalAlert"
     experimental: true
     investigations:

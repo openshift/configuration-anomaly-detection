@@ -153,7 +153,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 func (i *Investigation) Name() string {
-	return "Cluster Has Gone Missing (CHGM)"
+	return "chgm"
 }
 
 // hasRecentlyResumed checks if the cluster was woken up from

@@ -18,9 +18,9 @@ import (
 var shortNameToInvestigation = map[string]string{
 	"ai":                       "aiassisted",
 	"can-not-retrieve-updates": "cannotretrieveupdatessre",
-	"chgm":                     "Cluster Has Gone Missing (CHGM)",
+	"chgm":                     "chgm",
 	"cmbb":                     "clustermonitoringerrorbudgetburn",
-	"cpd":                      "ClusterProvisioningDelay",
+	"cpd":                      "cpd",
 	"etcd-quota-low":           "etcddatabasequotalowspace",
 	"insightsoperatordown":     "insightsoperatordown",
 	"machine-health-check":     "machinehealthcheckunterminatedshortcircuitsre",
