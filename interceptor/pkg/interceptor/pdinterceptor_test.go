@@ -227,7 +227,10 @@ func TestOversizedRequestBodyIsRejected(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
 
-	handler := CreateInterceptorHandler([]string{"TEST"})
+	handler, err := CreateInterceptorHandler([]string{"TEST"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -349,7 +352,12 @@ func TestSignatureVerification(t *testing.T) {
 			req := makeSignedRequest(t, innerBody, tt.signingSecret)
 			rec := httptest.NewRecorder()
 
-			CreateInterceptorHandler(tt.tokens).ServeHTTP(rec, req)
+			handler, err := CreateInterceptorHandler(tt.tokens)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			handler.ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())

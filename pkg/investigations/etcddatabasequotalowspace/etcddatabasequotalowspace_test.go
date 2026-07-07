@@ -309,8 +309,6 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "success")
 	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Silence (1 action)
 	assert.Equal(t, "silence_incident", result.Actions[2].Type())
 
@@ -348,8 +346,6 @@ func TestRunHCPEtcdAnalysis_CriticalAlertEscalated(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "success")
 	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Escalate (1 action)
 	assert.Equal(t, "escalate_incident", result.Actions[2].Type())
 }

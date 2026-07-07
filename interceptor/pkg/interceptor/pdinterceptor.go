@@ -59,12 +59,14 @@ type Organization struct {
 type interceptorHandler struct {
 	PDTokens     []string
 	filterConfig *config.Config
-	configErr    error
 }
 
-func CreateInterceptorHandler(pdTokens []string) http.Handler {
+func CreateInterceptorHandler(pdTokens []string) (http.Handler, error) {
 	cfg, err := config.LoadConfig("", investigations.GetAvailableInvestigationsNames())
-	return &interceptorHandler{PDTokens: pdTokens, filterConfig: cfg, configErr: err}
+	if err != nil {
+		return nil, fmt.Errorf("loading investigation config: %w", err)
+	}
+	return &interceptorHandler{PDTokens: pdTokens, filterConfig: cfg}, nil
 }
 
 func (pdi interceptorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -207,10 +209,6 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
 	// Check if an alert config exists for this alert (config loaded at handler creation)
-	if pdi.configErr != nil {
-		logging.Warnf("Investigation config load error: %v", pdi.configErr)
-	}
-
 	hasAlert := pdi.filterConfig != nil && pdi.filterConfig.GetAlert(pdClient.GetTitle(), experimentalEnabled) != nil
 
 	if hasAlert {

@@ -48,7 +48,11 @@ func main() {
 	ctx := signals.NewContext()
 
 	mux := http.NewServeMux()
-	mux.Handle("/", interceptor.CreateInterceptorHandler(signatures))
+	handler, err := interceptor.CreateInterceptorHandler(signatures)
+	if err != nil {
+		logger.Fatalf("failed to create interceptor handler: %v", err)
+	}
+	mux.Handle("/", handler)
 	mux.HandleFunc("/ready", readinessHandler)
 	mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{Registry: metrics.Registry}))
 
