@@ -198,13 +198,6 @@ func (c *Config) Validate(validInvestigations []string) error {
 
 			if entry.Name == "aiassisted" {
 				hasAIAssisted = true
-				// aiassisted must always be gated by a filter to prevent uncontrolled
-				// AI execution. Either an alert-level or entry-level when clause satisfies this.
-				if ac.When == nil && entry.When == nil {
-					return fmt.Errorf(
-						"alerts[%d].investigations[%d]: aiassisted requires a 'when' filter "+
-							"(on the alert or entry level) to control execution", i, j)
-				}
 			}
 
 			// Validate entry-level when clause

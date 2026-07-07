@@ -392,7 +392,7 @@ alerts:
 		},
 		// --- aiassisted filter requirement ---
 		{
-			name: "aiassisted without any when filter is invalid",
+			name: "aiassisted without when filter is valid",
 			yaml: `
 ai_agent:
   runtime_arn: "arn:test"
@@ -405,7 +405,11 @@ alerts:
       - precheck
       - aiassisted
 `,
-			wantErr: true,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if len(cfg.Alerts[0].Investigations) != 2 {
+					t.Fatalf("expected 2 investigations, got %d", len(cfg.Alerts[0].Investigations))
+				}
+			},
 		},
 		{
 			name: "aiassisted with chain-level when is valid",
