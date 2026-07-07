@@ -36,19 +36,19 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	cfg := c.dependencies.FilterConfig
 	alertTitle := c.pdClient.GetTitle()
 
-	var chainConfig *config.InvestigationConfig
+	var alertConfig *config.AlertConfig
 
-	// Look up chain from config
+	// Look up alert config
 	if cfg != nil {
-		chainConfig = cfg.GetChain(alertTitle, experimentalEnabled)
+		alertConfig = cfg.GetAlert(alertTitle, experimentalEnabled)
 	}
 
-	// AI fallback: if no chain matches and ai_agent is configured, build an ad-hoc chain
-	if chainConfig == nil {
+	// AI fallback: if no alert matches and ai_agent is configured, build an ad-hoc config
+	if alertConfig == nil {
 		if experimentalEnabled && cfg != nil && cfg.AIAgent != nil {
-			chainConfig = &config.InvestigationConfig{
+			alertConfig = &config.AlertConfig{
 				AlertTitle: "aiassisted-fallback",
-				Chain: []config.ChainEntry{
+				Investigations: []config.InvestigationEntry{
 					{Name: "precheck"},
 					{Name: "aiassisted"},
 				},
@@ -62,12 +62,12 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	}
 
 	filterCtx := &types.FilterContext{
-		AlertName:   chainConfig.AlertTitle,
+		AlertName:   alertConfig.AlertTitle,
 		AlertTitle:  alertTitle,
 		ServiceName: c.pdClient.GetServiceName(),
 	}
 
-	return c.runChain(ctx, clusterID, chainConfig, c.pdClient, filterCtx, nil)
+	return c.runChain(ctx, clusterID, alertConfig, c.pdClient, filterCtx, nil)
 }
 
 func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
@@ -90,4 +90,3 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 
 	logging.Info("Escalated documentation mismatch to PagerDuty")
 }
-

@@ -74,19 +74,19 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 		}
 	}
 
-	chain := []config.ChainEntry{}
+	invEntries := []config.InvestigationEntry{}
 	if inv.Name() != "precheck" {
-		chain = append(chain, config.ChainEntry{Name: "precheck"})
+		invEntries = append(invEntries, config.InvestigationEntry{Name: "precheck"})
 	}
 	if inv.Name() != "ccam" && inv.Name() != "precheck" {
-		chain = append(chain, config.ChainEntry{Name: "ccam"})
+		invEntries = append(invEntries, config.InvestigationEntry{Name: "ccam"})
 	}
-	chain = append(chain, config.ChainEntry{Name: inv.Name()})
+	invEntries = append(invEntries, config.InvestigationEntry{Name: inv.Name()})
 
-	chainConfig := &config.InvestigationConfig{
-		AlertTitle: inv.Name(),
-		Name:       inv.Name(),
-		Chain:      chain,
+	alertConfig := &config.AlertConfig{
+		AlertTitle:     inv.Name(),
+		Name:           inv.Name(),
+		Investigations: invEntries,
 	}
 
 	// When --with-filtering is set, create a filter context so filters are evaluated.
@@ -99,5 +99,5 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	}
 
 	// No PD client for manual runs.
-	return c.runChain(ctx, c.manual.ClusterId, chainConfig, nil, filterCtx, c.manual.Params)
+	return c.runChain(ctx, c.manual.ClusterId, alertConfig, nil, filterCtx, c.manual.Params)
 }

@@ -8,9 +8,9 @@ import (
 )
 
 const testMustgatherChainYAML = `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - mustgather
 `
 
@@ -43,48 +43,48 @@ func TestParseConfig(t *testing.T) { //nolint:maintidx,gocyclo // table-driven t
 			name: "valid config with one chain",
 			yaml: testMustgatherChainYAML,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Investigations) != 1 {
-					t.Fatalf("expected 1 investigation, got %d", len(cfg.Investigations))
+				if len(cfg.Alerts) != 1 {
+					t.Fatalf("expected 1 investigation, got %d", len(cfg.Alerts))
 				}
-				if cfg.Investigations[0].AlertTitle != "TestAlert" {
-					t.Errorf("expected alert_title TestAlert, got %q", cfg.Investigations[0].AlertTitle)
+				if cfg.Alerts[0].AlertTitle != "TestAlert" {
+					t.Errorf("expected alert_title TestAlert, got %q", cfg.Alerts[0].AlertTitle)
 				}
-				if len(cfg.Investigations[0].Chain) != 1 {
-					t.Fatalf("expected 1 chain entry, got %d", len(cfg.Investigations[0].Chain))
+				if len(cfg.Alerts[0].Investigations) != 1 {
+					t.Fatalf("expected 1 chain entry, got %d", len(cfg.Alerts[0].Investigations))
 				}
-				if cfg.Investigations[0].Chain[0].Name != "mustgather" {
-					t.Errorf("expected chain entry mustgather, got %q", cfg.Investigations[0].Chain[0].Name)
+				if cfg.Alerts[0].Investigations[0].Name != "mustgather" {
+					t.Errorf("expected chain entry mustgather, got %q", cfg.Alerts[0].Investigations[0].Name)
 				}
 			},
 		},
 		{
 			name: "valid config with multiple chain entries and bare strings",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "has gone missing"
-    chain:
+    investigations:
       - precheck
       - ccam
       - "Cluster Has Gone Missing (CHGM)"
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Investigations[0].Chain) != 3 {
-					t.Fatalf("expected 3 chain entries, got %d", len(cfg.Investigations[0].Chain))
+				if len(cfg.Alerts[0].Investigations) != 3 {
+					t.Fatalf("expected 3 chain entries, got %d", len(cfg.Alerts[0].Investigations))
 				}
-				if cfg.Investigations[0].Chain[0].Name != "precheck" {
-					t.Errorf("chain[0] = %q, want precheck", cfg.Investigations[0].Chain[0].Name)
+				if cfg.Alerts[0].Investigations[0].Name != "precheck" {
+					t.Errorf("chain[0] = %q, want precheck", cfg.Alerts[0].Investigations[0].Name)
 				}
-				if cfg.Investigations[0].Chain[2].Name != "Cluster Has Gone Missing (CHGM)" {
-					t.Errorf("chain[2] = %q", cfg.Investigations[0].Chain[2].Name)
+				if cfg.Alerts[0].Investigations[2].Name != "Cluster Has Gone Missing (CHGM)" {
+					t.Errorf("chain[2] = %q", cfg.Alerts[0].Investigations[2].Name)
 				}
 			},
 		},
 		{
 			name: "chain entry with when filter (object form)",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "has gone missing"
-    chain:
+    investigations:
       - precheck
       - name: mustgather
         when:
@@ -92,7 +92,7 @@ investigations:
           values: ["0.10"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Investigations[0].Chain[1]
+				entry := cfg.Alerts[0].Investigations[1]
 				if entry.Name != "mustgather" {
 					t.Errorf("entry name = %q, want mustgather", entry.Name)
 				}
@@ -107,19 +107,19 @@ investigations:
 		{
 			name: "chain-level when filter",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "ClusterProvisioningDelay -"
     when:
       field: OrganizationID
       operator: notin
       values: ["org-exclude"]
-    chain:
+    investigations:
       - precheck
       - ccam
       - ClusterProvisioningDelay
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				ic := cfg.Investigations[0]
+				ic := cfg.Alerts[0]
 				if ic.When == nil {
 					t.Fatal("expected chain-level when filter")
 				}
@@ -134,14 +134,14 @@ investigations:
 		{
 			name: "experimental flag",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestExperimental"
     experimental: true
-    chain:
+    investigations:
       - mustgather
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if !cfg.Investigations[0].Experimental {
+				if !cfg.Alerts[0].Experimental {
 					t.Error("expected experimental=true")
 				}
 			},
@@ -149,29 +149,29 @@ investigations:
 		{
 			name: "empty investigations list is valid",
 			yaml: `
-investigations: []
+alerts: []
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Investigations) != 0 {
-					t.Fatalf("expected 0 investigations, got %d", len(cfg.Investigations))
+				if len(cfg.Alerts) != 0 {
+					t.Fatalf("expected 0 investigations, got %d", len(cfg.Alerts))
 				}
 			},
 		},
 		{
 			name: "empty chain is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain: []
+    investigations: []
 `,
 			wantErr: true,
 		},
 		{
 			name: "empty alert_title is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: ""
-    chain:
+    investigations:
       - mustgather
 `,
 			wantErr: true,
@@ -179,12 +179,12 @@ investigations:
 		{
 			name: "duplicate alert_title is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - mustgather
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - precheck
 `,
 			wantErr: true,
@@ -192,9 +192,9 @@ investigations:
 		{
 			name: "unknown investigation name in chain is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - nonexistent
 `,
 			wantErr: true,
@@ -202,9 +202,9 @@ investigations:
 		{
 			name: "empty chain entry name is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - name: ""
 `,
 			wantErr: true,
@@ -212,9 +212,9 @@ investigations:
 		{
 			name: "invalid when filter field is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - name: mustgather
         when:
           field: BadField
@@ -226,13 +226,13 @@ investigations:
 		{
 			name: "invalid chain-level when filter is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
     when:
       field: BadField
       operator: in
       values: ["x"]
-    chain:
+    investigations:
       - mustgather
 `,
 			wantErr: true,
@@ -255,13 +255,13 @@ ai_agent:
   version: "v1.0.0"
   ops_sop_version: "v2.0.0"
   rosa_plugins_version: "v3.0.0"
-investigations:
+alerts:
   - alert_title: "TestAI"
     when:
       field: ClusterID
       operator: in
       values: ["cluster-1"]
-    chain:
+    investigations:
       - aiassisted
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
@@ -293,13 +293,13 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-investigations:
+alerts:
   - alert_title: "TestAI"
     when:
       field: ClusterID
       operator: in
       values: ["cluster-1"]
-    chain:
+    investigations:
       - aiassisted
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
@@ -317,7 +317,7 @@ investigations:
 ai_agent:
   user_id: "user"
   region: "us-east-1"
-investigations: []
+alerts: []
 `,
 			wantErr: true,
 		},
@@ -327,7 +327,7 @@ investigations: []
 ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
-investigations: []
+alerts: []
 `,
 			wantErr: true,
 		},
@@ -337,7 +337,7 @@ investigations: []
 ai_agent:
   runtime_arn: "arn:test"
   region: "us-east-1"
-investigations: []
+alerts: []
 `,
 			wantErr: true,
 		},
@@ -364,9 +364,9 @@ filters: []
 		{
 			name: "aiassisted in chain without ai_agent is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAI"
-    chain:
+    investigations:
       - aiassisted
 `,
 			wantErr: true,
@@ -379,9 +379,9 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - mustgather
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
@@ -399,9 +399,9 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-investigations:
+alerts:
   - alert_title: "TestAI"
-    chain:
+    investigations:
       - precheck
       - aiassisted
 `,
@@ -415,18 +415,18 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-investigations:
+alerts:
   - alert_title: "TestAI"
     when:
       field: OrganizationID
       operator: in
       values: ["org-1"]
-    chain:
+    investigations:
       - precheck
       - aiassisted
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if cfg.Investigations[0].When == nil {
+				if cfg.Alerts[0].When == nil {
 					t.Fatal("expected chain-level when filter")
 				}
 			},
@@ -439,9 +439,9 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-investigations:
+alerts:
   - alert_title: "TestAI"
-    chain:
+    investigations:
       - precheck
       - name: aiassisted
         when:
@@ -450,7 +450,7 @@ investigations:
           values: ["cluster-1"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Investigations[0].Chain[1]
+				entry := cfg.Alerts[0].Investigations[1]
 				if entry.When == nil {
 					t.Fatal("expected entry-level when filter on aiassisted")
 				}
@@ -460,16 +460,16 @@ investigations:
 		{
 			name: "valid sample operator in chain entry",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - name: mustgather
         when:
           operator: sample
           values: ["0.10"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Investigations[0].Chain[0]
+				entry := cfg.Alerts[0].Investigations[0]
 				if entry.When == nil {
 					t.Fatal("expected when filter")
 				}
@@ -481,9 +481,9 @@ investigations:
 		{
 			name: "sample rate negative is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - name: mustgather
         when:
           operator: sample
@@ -494,9 +494,9 @@ investigations:
 		{
 			name: "sample rate greater than 1 is invalid",
 			yaml: `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - name: mustgather
         when:
           operator: sample
@@ -519,17 +519,17 @@ investigations:
 	}
 }
 
-func TestGetChain(t *testing.T) {
+func TestGetAlert(t *testing.T) {
 	cfg, err := ParseConfig([]byte(`
-investigations:
+alerts:
   - alert_title: "has gone missing"
-    chain:
+    investigations:
       - precheck
       - ccam
       - "Cluster Has Gone Missing (CHGM)"
   - alert_title: "ExperimentalAlert"
     experimental: true
-    chain:
+    investigations:
       - mustgather
 `), testInvestigations)
 	if err != nil {
@@ -537,38 +537,38 @@ investigations:
 	}
 
 	// Matching alert title returns the chain.
-	ic := cfg.GetChain("Cluster xyz has gone missing", false)
+	ic := cfg.GetAlert("Cluster xyz has gone missing", false)
 	if ic == nil {
 		t.Fatal("expected chain for 'has gone missing'")
 	}
 	if ic.AlertTitle != "has gone missing" {
 		t.Errorf("AlertTitle = %q", ic.AlertTitle)
 	}
-	if len(ic.Chain) != 3 {
-		t.Fatalf("expected 3 chain entries, got %d", len(ic.Chain))
+	if len(ic.Investigations) != 3 {
+		t.Fatalf("expected 3 chain entries, got %d", len(ic.Investigations))
 	}
 
 	// No match returns nil.
-	ic = cfg.GetChain("UnknownAlert", false)
+	ic = cfg.GetAlert("UnknownAlert", false)
 	if ic != nil {
 		t.Fatalf("expected nil for unmatched alert, got %+v", ic)
 	}
 
 	// Experimental chain is hidden when experimentalEnabled=false.
-	ic = cfg.GetChain("ExperimentalAlert fired", false)
+	ic = cfg.GetAlert("ExperimentalAlert fired", false)
 	if ic != nil {
 		t.Fatal("expected nil for experimental chain with experimental=false")
 	}
 
 	// Experimental chain is visible when experimentalEnabled=true.
-	ic = cfg.GetChain("ExperimentalAlert fired", true)
+	ic = cfg.GetAlert("ExperimentalAlert fired", true)
 	if ic == nil {
 		t.Fatal("expected chain for experimental alert with experimental=true")
 	}
 
 	// Nil config returns nil.
 	var nilCfg *Config
-	ic = nilCfg.GetChain("has gone missing", false)
+	ic = nilCfg.GetAlert("has gone missing", false)
 	if ic != nil {
 		t.Fatalf("expected nil from nil config, got %+v", ic)
 	}
@@ -624,7 +624,7 @@ func TestLoadConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
-		if cfg == nil || len(cfg.Investigations) != 1 {
+		if cfg == nil || len(cfg.Alerts) != 1 {
 			t.Fatal("expected config with 1 investigation")
 		}
 	})
@@ -639,7 +639,7 @@ func TestLoadConfig(t *testing.T) {
 
 	t.Run("invalid content returns error", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "bad.yaml")
-		if err := os.WriteFile(path, []byte(`investigations: [{alert_title: "X", chain: [{name: fake}]}]`), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(`alerts: [{alert_title: "X", investigations: [{name: fake}]}]`), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		t.Setenv(ConfigEnvVar, path)
@@ -662,16 +662,16 @@ func TestLoadConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
-		if cfg == nil || len(cfg.Investigations) != 1 {
+		if cfg == nil || len(cfg.Alerts) != 1 {
 			t.Fatal("expected config with 1 investigation from override path")
 		}
 	})
 
 	t.Run("empty override falls back to env var", func(t *testing.T) {
 		content := `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - mustgather
 `
 		path := filepath.Join(t.TempDir(), "envvar.yaml")
@@ -684,17 +684,17 @@ investigations:
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
-		if cfg == nil || len(cfg.Investigations) != 1 {
+		if cfg == nil || len(cfg.Alerts) != 1 {
 			t.Fatal("expected config with 1 investigation from env var path")
 		}
 	})
 }
 
-func TestChainEntryUnmarshal(t *testing.T) {
+func TestInvestigationEntryUnmarshal(t *testing.T) {
 	yaml := `
-investigations:
+alerts:
   - alert_title: "TestAlert"
-    chain:
+    investigations:
       - precheck
       - name: mustgather
         when:
@@ -705,26 +705,26 @@ investigations:
 	if err != nil {
 		t.Fatalf("ParseConfig() error = %v", err)
 	}
-	if len(cfg.Investigations[0].Chain) != 2 {
-		t.Fatalf("expected 2 chain entries, got %d", len(cfg.Investigations[0].Chain))
+	if len(cfg.Alerts[0].Investigations) != 2 {
+		t.Fatalf("expected 2 chain entries, got %d", len(cfg.Alerts[0].Investigations))
 	}
 
 	// First entry: bare string
-	if cfg.Investigations[0].Chain[0].Name != "precheck" {
-		t.Errorf("chain[0].Name = %q, want precheck", cfg.Investigations[0].Chain[0].Name)
+	if cfg.Alerts[0].Investigations[0].Name != "precheck" {
+		t.Errorf("chain[0].Name = %q, want precheck", cfg.Alerts[0].Investigations[0].Name)
 	}
-	if cfg.Investigations[0].Chain[0].When != nil {
+	if cfg.Alerts[0].Investigations[0].When != nil {
 		t.Error("chain[0].When should be nil for bare string entry")
 	}
 
 	// Second entry: object with when
-	if cfg.Investigations[0].Chain[1].Name != "mustgather" {
-		t.Errorf("chain[1].Name = %q, want mustgather", cfg.Investigations[0].Chain[1].Name)
+	if cfg.Alerts[0].Investigations[1].Name != "mustgather" {
+		t.Errorf("chain[1].Name = %q, want mustgather", cfg.Alerts[0].Investigations[1].Name)
 	}
-	if cfg.Investigations[0].Chain[1].When == nil {
+	if cfg.Alerts[0].Investigations[1].When == nil {
 		t.Fatal("chain[1].When should not be nil")
 	}
-	if cfg.Investigations[0].Chain[1].When.Operator != OperatorSample {
-		t.Errorf("chain[1].When.Operator = %q, want sample", cfg.Investigations[0].Chain[1].When.Operator)
+	if cfg.Alerts[0].Investigations[1].When.Operator != OperatorSample {
+		t.Errorf("chain[1].When.Operator = %q, want sample", cfg.Alerts[0].Investigations[1].When.Operator)
 	}
 }

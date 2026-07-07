@@ -16,7 +16,7 @@ If the variable is not set, no filtering is applied and all investigations run u
 
 Each investigation can have an optional **filter tree** — a boolean expression evaluated against the current alert and cluster context. If the filter passes, the investigation runs; if it fails, it is skipped.
 
-Investigations that have **no entry** in the config always run. An investigation entry with no `when` key also always runs.
+Investigations that have **no entry** in the config always run. An alert entry with no `when` key also always runs.
 
 The one exception is `aiassisted`: it only runs if it has an entry in the config. Without an entry, the AI investigation is entirely disabled.
 
@@ -89,7 +89,7 @@ Note: Not all fields are guaranteed to be populated in every context. PagerDuty 
 Only run an investigation on AWS clusters in `ready` state:
 
 ```yaml
-filters:
+alerts:
   - investigation: mustgather
     when:
       and:
@@ -104,7 +104,7 @@ filters:
 Exclude a specific cluster:
 
 ```yaml
-filters:
+alerts:
   - investigation: "Cluster Has Gone Missing (CHGM)"
     when:
       field: ClusterID
@@ -115,7 +115,7 @@ filters:
 Sample 10% of internal (`@redhat.com`) traffic, always run for external customers:
 
 ```yaml
-filters:
+alerts:
   - investigation: clustermonitoringerrorbudgetburn
     when:
       or:
@@ -138,7 +138,7 @@ ai_agent:
   timeout_seconds: 900   # optional, defaults to 900
 ```
 
-The `aiassisted` investigation must also have an entry in `filters`. Without it, AI investigation is disabled even if `ai_agent` is configured.
+The `aiassisted` investigation must also have an entry in `alerts`. Without it, AI investigation is disabled even if `ai_agent` is configured.
 
 ## Full reference
 

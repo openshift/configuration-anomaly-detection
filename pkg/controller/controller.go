@@ -268,19 +268,19 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 	return nil, fmt.Errorf("no valid controller configuration provided")
 }
 
-// runChain executes a config-defined chain of investigations.
+// runChain executes a config-defined list of investigations for an alert.
 // Each investigation gets its own ResourceBuilder so the backplane remediation
 // name matches the investigation's metadata.yaml RBAC definition.
 func (c *investigationRunner) runChain(
 	ctx context.Context,
 	clusterId string,
-	chainConfig *config.InvestigationConfig,
+	alertConfig *config.AlertConfig,
 	pdClient *pagerduty.SdkClient,
 	filterCtx *types.FilterContext,
 	params map[string]string,
 ) (err error) {
-	if len(chainConfig.Chain) > 0 {
-		metrics.Inc(metrics.Alerts, chainConfig.AlertTitle)
+	if len(alertConfig.Investigations) > 0 {
+		metrics.Inc(metrics.Alerts, alertConfig.AlertTitle)
 	}
 
 	var latestBuilder investigation.ResourceBuilder
@@ -290,40 +290,40 @@ func (c *investigationRunner) runChain(
 		}
 	}()
 
-	// Chain-level filter: evaluated once before running any entry.
-	if filterCtx != nil && chainConfig.When != nil {
+	// Alert-level filter: evaluated once before running any investigation.
+	if filterCtx != nil && alertConfig.When != nil {
 		filterBuilder, fErr := investigation.NewResourceBuilder(
-			c.ocmClient, c.bpClient, clusterId, chainConfig.GetName(),
+			c.ocmClient, c.bpClient, clusterId, alertConfig.GetName(),
 			c.dependencies.BackplaneURL, params)
 		if fErr != nil {
 			return fmt.Errorf("failed to create filter builder: %w", fErr)
 		}
 		var requiredKeys []string
-		chainConfig.When.Keys(&requiredKeys)
+		alertConfig.When.Keys(&requiredKeys)
 		if populateErr := c.populateFilterContextFromOCM(filterCtx, filterBuilder, clusterId, requiredKeys); populateErr != nil {
-			logging.Errorf("Could not populate filter context, skipping chain: %v", populateErr)
+			logging.Errorf("Could not populate filter context, skipping alert: %v", populateErr)
 			return nil
 		}
-		pass, reason, filterErr := chainConfig.ShouldRun(filterCtx)
+		pass, reason, filterErr := alertConfig.ShouldRun(filterCtx)
 		if filterErr != nil {
-			logging.Errorf("Chain-level filter error for %q: %v", chainConfig.AlertTitle, filterErr)
+			logging.Errorf("Alert-level filter error for %q: %v", alertConfig.AlertTitle, filterErr)
 			return nil
 		}
 		if !pass {
-			logging.Infof("Chain %q filtered out: %s", chainConfig.AlertTitle, reason)
+			logging.Infof("Alert %q filtered out: %s", alertConfig.AlertTitle, reason)
 			if pdClient != nil {
-				if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation chain %q was filtered: %s. Escalating to SRE. 🤖", chainConfig.AlertTitle, reason)); escErr != nil {
-					logging.Errorf("Failed to escalate filtered chain: %v", escErr)
+				if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigations for alert %q were filtered: %s. Escalating to SRE. 🤖", alertConfig.AlertTitle, reason)); escErr != nil {
+					logging.Errorf("Failed to escalate filtered alert: %v", escErr)
 				}
 			}
 			return nil
 		}
 	}
 
-	for _, entry := range chainConfig.Chain {
+	for _, entry := range alertConfig.Investigations {
 		inv := investigations.GetInvestigationByName(entry.Name)
 		if inv == nil {
-			return fmt.Errorf("unknown investigation %q in chain for %q", entry.Name, chainConfig.AlertTitle)
+			return fmt.Errorf("unknown investigation %q for alert %q", entry.Name, alertConfig.AlertTitle)
 		}
 
 		// Create a fresh aiassisted instance with the runtime config to avoid mutating the registry singleton.
@@ -380,7 +380,7 @@ func (c *investigationRunner) runChain(
 		cleanupBuilder(builder)
 
 		if result.StopInvestigations != nil {
-			logging.Infof("Stopping investigation chain due to %q: %v", inv.Name(), result.StopInvestigations)
+			logging.Infof("Stopping investigations due to %q: %v", inv.Name(), result.StopInvestigations)
 			return nil
 		}
 	}
@@ -391,7 +391,7 @@ func (c *investigationRunner) runChain(
 		titleResult := investigation.InvestigationResult{
 			Actions: []types.Action{&a},
 		}
-		return c.executeActions(latestBuilder, &titleResult, chainConfig.AlertTitle)
+		return c.executeActions(latestBuilder, &titleResult, alertConfig.AlertTitle)
 	}
 	return nil
 }

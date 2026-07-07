@@ -87,23 +87,23 @@ type FilterNode struct {
 	Values   []string `yaml:"values,omitempty"`
 }
 
-// ShouldRun evaluates the chain-level filter for an investigation config.
+// ShouldRun evaluates the alert-level filter for an alert config.
 // Returns (result, reason, error). A nil When always returns true.
 // A nil FilterContext always returns true (manual mode bypass).
-func (ic *InvestigationConfig) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
-	if ic.When == nil {
-		return true, "no chain-level filter configured", nil
+func (ac *AlertConfig) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
+	if ac.When == nil {
+		return true, "no alert-level filter configured", nil
 	}
 	if ctx == nil {
 		return true, "no filter context (manual mode)", nil
 	}
-	return ic.When.evaluate(ctx)
+	return ac.When.evaluate(ctx)
 }
 
-// ShouldRun evaluates the entry-level filter for a chain entry.
+// ShouldRun evaluates the entry-level filter for an investigation entry.
 // Returns (result, reason, error). A nil When always returns true.
 // A nil FilterContext always returns true (manual mode bypass).
-func (e *ChainEntry) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
+func (e *InvestigationEntry) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
 	if e.When == nil {
 		return true, "no filter configured", nil
 	}
@@ -115,7 +115,7 @@ func (e *ChainEntry) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
 
 // Keys returns all field names referenced by leaf nodes in the filter tree.
 // Used to determine which FilterContext fields need to be populated.
-func (e *ChainEntry) Keys() []string {
+func (e *InvestigationEntry) Keys() []string {
 	keys := make([]string, 0)
 	if e.When != nil {
 		e.When.Keys(&keys)

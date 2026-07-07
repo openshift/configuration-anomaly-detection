@@ -206,21 +206,21 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
-	// Check if a chain is configured for this alert (config loaded at handler creation)
+	// Check if an alert config exists for this alert (config loaded at handler creation)
 	if pdi.configErr != nil {
 		logging.Warnf("Investigation config load error: %v", pdi.configErr)
 	}
 
-	hasChain := pdi.filterConfig != nil && pdi.filterConfig.GetChain(pdClient.GetTitle(), experimentalEnabled) != nil
+	hasAlert := pdi.filterConfig != nil && pdi.filterConfig.GetAlert(pdClient.GetTitle(), experimentalEnabled) != nil
 
-	if hasChain {
-		logging.Infof("Incident %s has a configured chain, returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID())
+	if hasAlert {
+		logging.Infof("Incident %s has a configured alert, returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID())
 		return &triggersv1.InterceptorResponse{Continue: true}
 	}
 
 	// AI fallback: if ai_agent is configured, allow the pipeline to run for AI investigation
 	if experimentalEnabled && pdi.filterConfig != nil && pdi.filterConfig.AIAgent != nil {
-		logging.Infof("No chain match, but AI agent configured — checking cluster existence")
+		logging.Infof("No alert match, but AI agent configured — checking cluster existence")
 		resp := clusterExists(pdClient, ocmClient)
 		if resp != nil {
 			return resp

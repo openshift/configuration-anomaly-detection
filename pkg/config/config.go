@@ -37,43 +37,43 @@ func (c *AIAgentConfig) GetTimeout() time.Duration {
 
 // Config holds the complete investigation configuration.
 type Config struct {
-	AIAgent        *AIAgentConfig        `yaml:"ai_agent,omitempty"`
-	Investigations []InvestigationConfig `yaml:"investigations"`
+	AIAgent *AIAgentConfig `yaml:"ai_agent,omitempty"`
+	Alerts  []AlertConfig  `yaml:"alerts"`
 }
 
-// InvestigationConfig defines which chain of investigations to run for a given alert.
-type InvestigationConfig struct {
-	AlertTitle   string       `yaml:"alert_title"`
-	Name         string       `yaml:"name,omitempty"`
-	Experimental bool         `yaml:"experimental,omitempty"`
-	When         *FilterNode  `yaml:"when,omitempty"`
-	Chain        []ChainEntry `yaml:"chain"`
+// AlertConfig defines which investigations to run for a given alert.
+type AlertConfig struct {
+	AlertTitle     string               `yaml:"alert_title"`
+	Name           string               `yaml:"name,omitempty"`
+	Experimental   bool                 `yaml:"experimental,omitempty"`
+	When           *FilterNode          `yaml:"when,omitempty"`
+	Investigations []InvestigationEntry `yaml:"investigations"`
 }
 
-// GetName returns the chain's investigation name, falling back to AlertTitle
+// GetName returns the alert's investigation name, falling back to AlertTitle
 // when Name is not set. This preserves backward compatibility with configs
 // that predate the name field.
-func (ic *InvestigationConfig) GetName() string {
-	if ic.Name != "" {
-		return ic.Name
+func (ac *AlertConfig) GetName() string {
+	if ac.Name != "" {
+		return ac.Name
 	}
-	return ic.AlertTitle
+	return ac.AlertTitle
 }
 
-// ChainEntry is a single step in an investigation chain.
+// InvestigationEntry is a single investigation step within an alert's investigation list.
 // In YAML it can be a bare string (investigation name) or an object with name + optional when filter.
-type ChainEntry struct {
+type InvestigationEntry struct {
 	Name string      `yaml:"name"`
 	When *FilterNode `yaml:"when,omitempty"`
 }
 
-// UnmarshalYAML allows ChainEntry to be specified as either a bare string or a mapping.
-func (e *ChainEntry) UnmarshalYAML(value *yaml.Node) error {
+// UnmarshalYAML allows InvestigationEntry to be specified as either a bare string or a mapping.
+func (e *InvestigationEntry) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.ScalarNode {
 		e.Name = value.Value
 		return nil
 	}
-	type raw ChainEntry
+	type raw InvestigationEntry
 	return value.Decode((*raw)(e))
 }
 
@@ -120,18 +120,18 @@ func ParseConfig(data []byte, validInvestigations []string) (*Config, error) {
 	return &cfg, nil
 }
 
-// GetChain returns the first InvestigationConfig whose AlertTitle is contained in the given alert title.
-// Chains marked experimental are only returned when experimentalEnabled is true.
-func (c *Config) GetChain(alertTitle string, experimentalEnabled bool) *InvestigationConfig {
+// GetAlert returns the first AlertConfig whose AlertTitle is contained in the given alert title.
+// Alerts marked experimental are only returned when experimentalEnabled is true.
+func (c *Config) GetAlert(alertTitle string, experimentalEnabled bool) *AlertConfig {
 	if c == nil {
 		return nil
 	}
-	for i := range c.Investigations {
-		if strings.Contains(alertTitle, c.Investigations[i].AlertTitle) {
-			if c.Investigations[i].Experimental && !experimentalEnabled {
+	for i := range c.Alerts {
+		if strings.Contains(alertTitle, c.Alerts[i].AlertTitle) {
+			if c.Alerts[i].Experimental && !experimentalEnabled {
 				continue
 			}
-			return &c.Investigations[i]
+			return &c.Alerts[i]
 		}
 	}
 	return nil
@@ -166,51 +166,51 @@ func (c *Config) Validate(validInvestigations []string) error {
 	seen := make(map[string]bool)
 	hasAIAssisted := false
 
-	for i, ic := range c.Investigations {
-		if ic.AlertTitle == "" {
-			return fmt.Errorf("investigations[%d]: alert_title must not be empty", i)
+	for i, ac := range c.Alerts {
+		if ac.AlertTitle == "" {
+			return fmt.Errorf("alerts[%d]: alert_title must not be empty", i)
 		}
 
-		if seen[ic.AlertTitle] {
-			return fmt.Errorf("investigations[%d]: duplicate alert_title %q", i, ic.AlertTitle)
+		if seen[ac.AlertTitle] {
+			return fmt.Errorf("alerts[%d]: duplicate alert_title %q", i, ac.AlertTitle)
 		}
-		seen[ic.AlertTitle] = true
+		seen[ac.AlertTitle] = true
 
-		if len(ic.Chain) == 0 {
-			return fmt.Errorf("investigations[%d] (alert_title %q): chain must not be empty", i, ic.AlertTitle)
+		if len(ac.Investigations) == 0 {
+			return fmt.Errorf("alerts[%d] (alert_title %q): investigations must not be empty", i, ac.AlertTitle)
 		}
 
-		// Validate chain-level when clause
-		if ic.When != nil {
-			if err := ic.When.validate(fmt.Sprintf("investigations[%d].when", i)); err != nil {
-				return fmt.Errorf("investigations[%d] (alert_title %q): %w", i, ic.AlertTitle, err)
+		// Validate alert-level when clause
+		if ac.When != nil {
+			if err := ac.When.validate(fmt.Sprintf("alerts[%d].when", i)); err != nil {
+				return fmt.Errorf("alerts[%d] (alert_title %q): %w", i, ac.AlertTitle, err)
 			}
 		}
 
-		for j, entry := range ic.Chain {
+		for j, entry := range ac.Investigations {
 			if entry.Name == "" {
-				return fmt.Errorf("investigations[%d].chain[%d]: name must not be empty", i, j)
+				return fmt.Errorf("alerts[%d].investigations[%d]: name must not be empty", i, j)
 			}
 
 			if !isValidInvestigation(entry.Name, validInvestigations) {
-				return fmt.Errorf("investigations[%d].chain[%d]: unknown investigation %q; valid investigations: %v", i, j, entry.Name, validInvestigations)
+				return fmt.Errorf("alerts[%d].investigations[%d]: unknown investigation %q; valid investigations: %v", i, j, entry.Name, validInvestigations)
 			}
 
 			if entry.Name == "aiassisted" {
 				hasAIAssisted = true
 				// aiassisted must always be gated by a filter to prevent uncontrolled
-				// AI execution. Either a chain-level or entry-level when clause satisfies this.
-				if ic.When == nil && entry.When == nil {
+				// AI execution. Either an alert-level or entry-level when clause satisfies this.
+				if ac.When == nil && entry.When == nil {
 					return fmt.Errorf(
-						"investigations[%d].chain[%d]: aiassisted requires a 'when' filter "+
-							"(on the chain or entry level) to control execution", i, j)
+						"alerts[%d].investigations[%d]: aiassisted requires a 'when' filter "+
+							"(on the alert or entry level) to control execution", i, j)
 				}
 			}
 
 			// Validate entry-level when clause
 			if entry.When != nil {
-				if err := entry.When.validate(fmt.Sprintf("investigations[%d].chain[%d].when", i, j)); err != nil {
-					return fmt.Errorf("investigations[%d].chain[%d] (investigation %q): %w", i, j, entry.Name, err)
+				if err := entry.When.validate(fmt.Sprintf("alerts[%d].investigations[%d].when", i, j)); err != nil {
+					return fmt.Errorf("alerts[%d].investigations[%d] (investigation %q): %w", i, j, entry.Name, err)
 				}
 			}
 		}

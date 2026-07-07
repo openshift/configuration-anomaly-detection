@@ -6,7 +6,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
-func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven test with many cases
+func TestInvestigationEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven test with many cases
 	baseCtx := &types.FilterContext{
 		ClusterID:      "abc-123",
 		ClusterName:    "my-cluster",
@@ -23,7 +23,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 
 	tests := []struct {
 		name    string
-		entry   *ChainEntry
+		entry   *InvestigationEntry
 		ctx     *types.FilterContext
 		want    bool
 		wantErr bool
@@ -31,19 +31,19 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- nil / empty ---
 		{
 			name:  "nil when passes",
-			entry: &ChainEntry{Name: "test"},
+			entry: &InvestigationEntry{Name: "test"},
 			ctx:   baseCtx,
 			want:  true,
 		},
 		{
 			name:  "nil when with nil filter node passes",
-			entry: &ChainEntry{Name: "test", When: nil},
+			entry: &InvestigationEntry{Name: "test", When: nil},
 			ctx:   baseCtx,
 			want:  true,
 		},
 		{
 			name: "nil context passes",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldAlertName, Operator: OperatorIn, Values: []string{"chgm"}},
 			},
@@ -53,7 +53,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- single leaf: in ---
 		{
 			name: "in operator matches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws", "gcp"}},
 			},
@@ -62,7 +62,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "in operator does not match",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"gcp", "azure"}},
 			},
@@ -72,7 +72,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- single leaf: notin ---
 		{
 			name: "notin operator matches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorNotIn, Values: []string{"gcp"}},
 			},
@@ -81,7 +81,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "notin operator does not match",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorNotIn, Values: []string{"aws"}},
 			},
@@ -91,7 +91,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- single leaf: matches ---
 		{
 			name: "matches operator matches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorMatches, Values: []string{".*@redhat\\.com$"}},
 			},
@@ -100,7 +100,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "matches operator does not match",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorMatches, Values: []string{".*@ibm\\.com$"}},
 			},
@@ -109,7 +109,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "matches with multiple patterns matches second",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorMatches, Values: []string{".*@ibm\\.com$", ".*@redhat\\.com$"}},
 			},
@@ -119,7 +119,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- single leaf: notmatches ---
 		{
 			name: "notmatches operator matches (no regex match = true)",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorNotMatches, Values: []string{".*@ibm\\.com$"}},
 			},
@@ -128,7 +128,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "notmatches operator does not match (regex matches = false)",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorNotMatches, Values: []string{".*@redhat\\.com$"}},
 			},
@@ -138,7 +138,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- AND branch ---
 		{
 			name: "AND all pass",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -153,7 +153,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "AND one fails",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -168,7 +168,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- OR branch ---
 		{
 			name: "OR one matches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -182,7 +182,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "OR none match",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -196,7 +196,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "OR second matches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -211,7 +211,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- nested AND + OR ---
 		{
 			name: "AND+OR both pass",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -227,7 +227,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "AND+OR AND fails",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -243,7 +243,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "AND+OR OR fails",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -260,7 +260,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- deeply nested (3 levels) ---
 		{
 			name: "3-level nesting",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -281,7 +281,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- field types ---
 		{
 			name: "HCP bool field false",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldHCP, Operator: OperatorIn, Values: []string{"false"}},
 			},
@@ -290,7 +290,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "HCP bool field true",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldHCP, Operator: OperatorIn, Values: []string{"true"}},
 			},
@@ -299,7 +299,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "OwnerEmail field",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorIn, Values: []string{"user@redhat.com"}},
 			},
@@ -308,7 +308,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "OrganizationID field",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOrganizationID, Operator: OperatorIn, Values: []string{"org-456"}},
 			},
@@ -317,7 +317,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "ServiceName field",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldServiceName, Operator: OperatorIn, Values: []string{"prod-osd"}},
 			},
@@ -326,7 +326,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "empty context field does not match in",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorIn, Values: []string{"user@redhat.com"}},
 			},
@@ -335,7 +335,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "empty context field matches notin",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldOwnerEmail, Operator: OperatorNotIn, Values: []string{"user@redhat.com"}},
 			},
@@ -345,7 +345,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- sample operator ---
 		{
 			name: "sample 1.0 always passes",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Operator: OperatorSample, Values: []string{"1.0"}},
 			},
@@ -354,7 +354,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "sample 0 always fails",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Operator: OperatorSample, Values: []string{"0"}},
 			},
@@ -364,7 +364,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- sample with exemption pattern ---
 		{
 			name: "sample exemption: redhat email bypasses sampling",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -378,7 +378,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "sample exemption: non-redhat email passes via notmatches",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -392,7 +392,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "sample exemption: redhat email with sample 0 fails",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -407,7 +407,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		// --- error cases ---
 		{
 			name: "unknown field returns error",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: "UnknownField", Operator: OperatorIn, Values: []string{"x"}},
 			},
@@ -416,7 +416,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "unsupported operator returns error",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{Field: FieldCloudProvider, Operator: "equals", Values: []string{"aws"}},
 			},
@@ -425,7 +425,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "error in AND child propagates",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					And: []FilterNode{
@@ -438,7 +438,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 		},
 		{
 			name: "error in OR child propagates",
-			entry: &ChainEntry{
+			entry: &InvestigationEntry{
 				Name: "test",
 				When: &FilterNode{
 					Or: []FilterNode{
@@ -465,7 +465,7 @@ func TestChainEntryShouldRun(t *testing.T) { //nolint:maintidx // table-driven t
 	}
 }
 
-func TestInvestigationConfigShouldRun(t *testing.T) {
+func TestAlertConfigShouldRun(t *testing.T) {
 	baseCtx := &types.FilterContext{
 		ClusterID:      "abc-123",
 		OrganizationID: "org-456",
@@ -474,20 +474,20 @@ func TestInvestigationConfigShouldRun(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		ic      *InvestigationConfig
+		ac      *AlertConfig
 		ctx     *types.FilterContext
 		want    bool
 		wantErr bool
 	}{
 		{
 			name: "nil when passes",
-			ic:   &InvestigationConfig{AlertTitle: "Test", When: nil},
+			ac:   &AlertConfig{AlertTitle: "Test", When: nil},
 			ctx:  baseCtx,
 			want: true,
 		},
 		{
 			name: "nil context passes",
-			ic: &InvestigationConfig{
+			ac: &AlertConfig{
 				AlertTitle: "Test",
 				When:       &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"gcp"}},
 			},
@@ -495,8 +495,8 @@ func TestInvestigationConfigShouldRun(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "chain-level filter passes",
-			ic: &InvestigationConfig{
+			name: "alert-level filter passes",
+			ac: &AlertConfig{
 				AlertTitle: "Test",
 				When:       &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws"}},
 			},
@@ -504,8 +504,8 @@ func TestInvestigationConfigShouldRun(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "chain-level filter blocks",
-			ic: &InvestigationConfig{
+			name: "alert-level filter blocks",
+			ac: &AlertConfig{
 				AlertTitle: "Test",
 				When:       &FilterNode{Field: FieldOrganizationID, Operator: OperatorNotIn, Values: []string{"org-456"}},
 			},
@@ -513,8 +513,8 @@ func TestInvestigationConfigShouldRun(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "chain-level filter error propagates",
-			ic: &InvestigationConfig{
+			name: "alert-level filter error propagates",
+			ac: &AlertConfig{
 				AlertTitle: "Test",
 				When:       &FilterNode{Field: "BadField", Operator: OperatorIn, Values: []string{"x"}},
 			},
@@ -525,7 +525,7 @@ func TestInvestigationConfigShouldRun(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, reason, err := tt.ic.ShouldRun(tt.ctx)
+			got, reason, err := tt.ac.ShouldRun(tt.ctx)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ShouldRun() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -717,30 +717,30 @@ func TestFilterNodeValidate(t *testing.T) {
 	}
 }
 
-func TestChainEntryKeys(t *testing.T) {
+func TestInvestigationEntryKeys(t *testing.T) {
 	tests := []struct {
 		name  string
-		entry ChainEntry
+		entry InvestigationEntry
 		want  []string
 	}{
 		{
 			name:  "nil when",
-			entry: ChainEntry{Name: "test"},
+			entry: InvestigationEntry{Name: "test"},
 			want:  []string{},
 		},
 		{
 			name:  "single leaf",
-			entry: ChainEntry{Name: "test", When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws"}}},
+			entry: InvestigationEntry{Name: "test", When: &FilterNode{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws"}}},
 			want:  []string{FieldCloudProvider},
 		},
 		{
 			name:  "sample leaf has no keys",
-			entry: ChainEntry{Name: "test", When: &FilterNode{Operator: OperatorSample, Values: []string{"0.5"}}},
+			entry: InvestigationEntry{Name: "test", When: &FilterNode{Operator: OperatorSample, Values: []string{"0.5"}}},
 			want:  []string{},
 		},
 		{
 			name: "and branch collects all keys",
-			entry: ChainEntry{Name: "test", When: &FilterNode{
+			entry: InvestigationEntry{Name: "test", When: &FilterNode{
 				And: []FilterNode{
 					{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws"}},
 					{Field: FieldClusterState, Operator: OperatorIn, Values: []string{"ready"}},
@@ -750,7 +750,7 @@ func TestChainEntryKeys(t *testing.T) {
 		},
 		{
 			name: "nested tree collects all keys",
-			entry: ChainEntry{Name: "test", When: &FilterNode{
+			entry: InvestigationEntry{Name: "test", When: &FilterNode{
 				And: []FilterNode{
 					{Field: FieldCloudProvider, Operator: OperatorIn, Values: []string{"aws"}},
 					{Or: []FilterNode{
