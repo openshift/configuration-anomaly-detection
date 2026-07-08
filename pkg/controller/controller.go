@@ -287,8 +287,11 @@ func (c *investigationRunner) runChain(
 
 	var latestBuilder investigation.ResourceBuilder
 	defer func() {
-		if err != nil && latestBuilder != nil {
-			handleCADFailure(err, latestBuilder, c.notifier)
+		if err != nil {
+			c.recordManualCompletion(alertConfig.AlertTitle, "error")
+			if latestBuilder != nil {
+				handleCADFailure(err, latestBuilder, c.notifier)
+			}
 		}
 	}()
 
@@ -316,10 +319,12 @@ func (c *investigationRunner) runChain(
 			if escErr := c.notifier.EscalateWithNote(fmt.Sprintf("🤖 Investigations for alert %q were filtered: %s. Escalating to SRE. 🤖", alertConfig.AlertTitle, reason)); escErr != nil {
 				logging.Errorf("Failed to escalate filtered alert: %v", escErr)
 			}
+			c.recordManualCompletion(alertConfig.AlertTitle, "filtered")
 			return nil
 		}
 	}
 
+	hasFindings := false
 	for _, entry := range alertConfig.Investigations {
 		inv := investigations.GetInvestigationByName(entry.Name)
 		if inv == nil {
@@ -369,6 +374,7 @@ func (c *investigationRunner) runChain(
 		}
 
 		if len(result.Actions) > 0 {
+			hasFindings = true
 			if execErr := c.executeActions(builder, &result, inv.Name()); execErr != nil {
 				cleanupBuilder(builder)
 				return fmt.Errorf("failed to execute %s actions: %w", inv.Name(), execErr)
@@ -379,8 +385,15 @@ func (c *investigationRunner) runChain(
 
 		if result.StopInvestigations != nil {
 			logging.Infof("Stopping investigations due to %q: %v", inv.Name(), result.StopInvestigations)
+			c.recordManualCompletion(alertConfig.AlertTitle, "stopped")
 			return nil
 		}
+	}
+
+	if hasFindings {
+		c.recordManualCompletion(alertConfig.AlertTitle, "success")
+	} else {
+		c.recordManualCompletion(alertConfig.AlertTitle, "no_findings")
 	}
 
 	// Post-chain: title update (PD mode only)
@@ -476,6 +489,15 @@ func calculateBackoff(attempt int) time.Duration {
 		backoff = maxRetryBackoff
 	}
 	return backoff
+}
+
+// recordManualCompletion records manual investigation completion metric.
+// Only tracks if this is a manual investigation (notifier is inactive).
+func (c *investigationRunner) recordManualCompletion(invName string, status string) {
+	if !c.notifier.IsActive() {
+		dryRun := strconv.FormatBool(c.dryRun)
+		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
+	}
 }
 
 func handleCADFailure(err error, rb investigation.ResourceBuilder, notifier incidentNotifier) {
