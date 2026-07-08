@@ -45,7 +45,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 
 	// AI fallback: if no alert matches and ai_agent is configured, build an ad-hoc config
 	if alertConfig == nil {
-		if experimentalEnabled && cfg != nil && cfg.AIAgent != nil {
+		if cfg != nil && cfg.AIAgent != nil {
 			alertConfig = &config.AlertConfig{
 				AlertTitle: "aiassisted-fallback",
 				Investigations: []config.InvestigationEntry{

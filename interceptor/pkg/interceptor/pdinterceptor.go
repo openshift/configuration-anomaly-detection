@@ -217,7 +217,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	}
 
 	// AI fallback: if ai_agent is configured, allow the pipeline to run for AI investigation
-	if experimentalEnabled && pdi.cfg != nil && pdi.cfg.AIAgent != nil {
+	if pdi.cfg != nil && pdi.cfg.AIAgent != nil {
 		logging.Infof("No alert match, but AI agent configured — checking cluster existence")
 		resp := clusterExists(pdClient, ocmClient)
 		if resp != nil {
