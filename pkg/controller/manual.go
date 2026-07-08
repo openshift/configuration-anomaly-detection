@@ -70,7 +70,7 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	// For AI investigations, create a new instance with the runtime config from the global config.
 	if _, ok := inv.(*aiassisted.Investigation); ok {
 		inv = &aiassisted.Investigation{
-			AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig(),
+			AIConfig: c.dependencies.Cfg.GetAIAgentConfig(),
 		}
 	}
 

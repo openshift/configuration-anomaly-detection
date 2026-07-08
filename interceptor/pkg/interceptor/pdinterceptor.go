@@ -58,7 +58,7 @@ type Organization struct {
 
 type interceptorHandler struct {
 	PDTokens     []string
-	filterConfig *config.Config
+	cfg   *config.Config
 }
 
 func CreateInterceptorHandler(pdTokens []string) (http.Handler, error) {
@@ -66,7 +66,7 @@ func CreateInterceptorHandler(pdTokens []string) (http.Handler, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading investigation config: %w", err)
 	}
-	return &interceptorHandler{PDTokens: pdTokens, filterConfig: cfg}, nil
+	return &interceptorHandler{PDTokens: pdTokens, cfg: cfg}, nil
 }
 
 func (pdi interceptorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +209,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
 	// Check if an alert config exists for this alert (config loaded at handler creation)
-	hasAlert := pdi.filterConfig != nil && pdi.filterConfig.GetAlert(pdClient.GetTitle(), experimentalEnabled) != nil
+	hasAlert := pdi.cfg != nil && pdi.cfg.GetAlert(pdClient.GetTitle(), experimentalEnabled) != nil
 
 	if hasAlert {
 		logging.Infof("Incident %s has a configured alert, returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID())
@@ -217,7 +217,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	}
 
 	// AI fallback: if ai_agent is configured, allow the pipeline to run for AI investigation
-	if experimentalEnabled && pdi.filterConfig != nil && pdi.filterConfig.AIAgent != nil {
+	if experimentalEnabled && pdi.cfg != nil && pdi.cfg.AIAgent != nil {
 		logging.Infof("No alert match, but AI agent configured — checking cluster existence")
 		resp := clusterExists(pdClient, ocmClient)
 		if resp != nil {

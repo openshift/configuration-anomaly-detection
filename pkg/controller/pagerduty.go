@@ -33,7 +33,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 
 	experimentalEnabled, _ := strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
 
-	cfg := c.dependencies.FilterConfig
+	cfg := c.dependencies.Cfg
 	alertTitle := c.pdClient.GetTitle()
 
 	var alertConfig *config.AlertConfig

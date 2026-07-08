@@ -87,7 +87,7 @@ type Dependencies struct {
 	BackplaneProxy      string
 	AWSProxy            string
 	ExperimentalEnabled bool
-	FilterConfig        *config.Config
+	Cfg                 *config.Config
 }
 
 // Retry configuration for transient infrastructure errors
@@ -147,10 +147,10 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
-	// Load investigation filter config (optional — nil means no filtering)
-	filterConfig, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
+	// Load investigation config
+	cfg, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load investigation filter config: %w", err)
+		return nil, fmt.Errorf("failed to load investigation config: %w", err)
 	}
 
 	// Create OCM client
@@ -177,7 +177,7 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 		BackplaneProxy:      backplaneProxy,
 		AWSProxy:            awsProxy,
 		ExperimentalEnabled: experimentalEnabled,
-		FilterConfig:        filterConfig,
+		Cfg:                 cfg,
 	}, nil
 }
 
@@ -332,8 +332,8 @@ func (c *investigationRunner) runChain(
 		}
 
 		// Create a fresh aiassisted instance with the runtime config to avoid mutating the registry singleton.
-		if _, ok := inv.(*aiassisted.Investigation); ok && c.dependencies.FilterConfig != nil {
-			inv = &aiassisted.Investigation{AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig()}
+		if _, ok := inv.(*aiassisted.Investigation); ok && c.dependencies.Cfg != nil {
+			inv = &aiassisted.Investigation{AIConfig: c.dependencies.Cfg.GetAIAgentConfig()}
 		}
 
 		builder, bErr := investigation.NewResourceBuilder(
