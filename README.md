@@ -95,6 +95,7 @@ To add a new alert investigation:
   ```
 - The returned `Resources` struct contains initialized clients and cluster objects. See [Integrations](#integrations) for a full list of available resources.
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
+- Add an entry for the new investigation to `test/e2e/e2e-investigation-config.yaml` so the e2e tests cover it. This file is embedded into the e2e test binary and defines which alert titles are triggered during end-to-end testing.
 
 ### Graduating an investigation
 
