@@ -15,21 +15,28 @@ func FormatInvestigationReport(result *CoraInvestigationResult) string {
 	// Alert Name
 	fmt.Fprintf(&sb, "**Alert Name**: %s\n\n", result.AlertName)
 
-	// Root Cause Summary
-	sb.WriteString("## Root Cause Summary\n\n")
-	fmt.Fprintf(&sb, "%s\n\n", result.RootCause.Summary)
+	// Summary
+	sb.WriteString("## Summary\n\n")
+	fmt.Fprintf(&sb, "%s\n\n", result.Summary)
 
-	// Root Cause Confidence
-	fmt.Fprintf(&sb, "**Confidence**: %s (%.0f%%)\n\n",
-		strings.ToUpper(result.RootCause.Confidence),
-		result.RootCause.ConfidenceScore*100)
+	// Confidence
+	fmt.Fprintf(&sb, "**Confidence**: %s\n\n",
+		strings.ToUpper(result.Confidence))
+
+	// Reasoning
+	sb.WriteString("**Reasoning**: ")
+	fmt.Fprintf(&sb, "%s\n\n", result.Reasoning)
+
+	// Evidence
+	sb.WriteString("## Evidence\n\n")
+	fmt.Fprintf(&sb, "%s\n\n", result.Evidence)
 
 	// Action Steps
 	sb.WriteString("## Action Steps\n\n")
-	if len(result.Remediation.Steps) == 0 {
+	if len(result.RemediationSteps) == 0 {
 		sb.WriteString("No action steps available.\n\n")
 	} else {
-		for i, step := range result.Remediation.Steps {
+		for i, step := range result.RemediationSteps {
 			fmt.Fprintf(&sb, "%d. %s\n", i+1, step.Action)
 			if step.Command != nil && *step.Command != "" {
 				fmt.Fprintf(&sb, "   ````bash\n   %s\n   ````\n", *step.Command)
@@ -40,7 +47,7 @@ func FormatInvestigationReport(result *CoraInvestigationResult) string {
 
 	// Escalation Decision
 	sb.WriteString("## Escalation Decision\n\n")
-	if result.Escalation.Recommended {
+	if result.NeedsEscalation {
 		sb.WriteString("⚠️ ESCALATE\n")
 	} else {
 		sb.WriteString("✅ No escalation needed\n")

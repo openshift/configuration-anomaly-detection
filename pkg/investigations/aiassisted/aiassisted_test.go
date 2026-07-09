@@ -126,24 +126,19 @@ var _ = Describe("aiassisted", func() {
 				command := "oc apply -f fix.yaml"
 
 				result := &CoraInvestigationResult{
-					ClusterID: "test-cluster-abc",
-					AlertName: "ClusterOperatorDegraded",
-					RootCause: RootCause{
-						Summary:         "The cluster-samples-operator is degraded due to missing ImageStreams",
-						Confidence:      "high",
-						ConfidenceScore: 0.92,
-					},
-					Remediation: Remediation{
-						Steps: []RemediationStep{
-							{
-								Action:  "Restore default ImageStreams",
-								Command: &command,
-							},
+					ClusterID:    "test-cluster-abc",
+					AlertName:    "ClusterOperatorDegraded",
+					Summary:      "The cluster-samples-operator is degraded due to missing ImageStreams",
+					Confidence:   "high",
+					Reasoning:    "Root cause analysis shows the operator cannot find required ImageStreams",
+					Evidence:     "Checked cluster-samples-operator logs and found missing ImageStream errors",
+					RemediationSteps: []RemediationStep{
+						{
+							Action:  "Restore default ImageStreams",
+							Command: &command,
 						},
 					},
-					Escalation: Escalation{
-						Recommended: true,
-					},
+					NeedsEscalation: true,
 				}
 
 				output := FormatInvestigationReport(result)
@@ -151,7 +146,7 @@ var _ = Describe("aiassisted", func() {
 				Expect(output).To(ContainSubstring("test-cluster-abc"))
 				Expect(output).To(ContainSubstring("ClusterOperatorDegraded"))
 				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"))
-				Expect(output).To(ContainSubstring("HIGH (92%)"))
+				Expect(output).To(ContainSubstring("HIGH"))
 				Expect(output).To(ContainSubstring("Restore default ImageStreams"))
 				Expect(output).To(ContainSubstring("oc apply -f fix.yaml"))
 				Expect(output).To(ContainSubstring("⚠️ ESCALATE"))
@@ -162,24 +157,19 @@ var _ = Describe("aiassisted", func() {
 		Context("when handling null command", func() {
 			It("should skip code block when command is nil", func() {
 				result := &CoraInvestigationResult{
-					ClusterID: "test-cluster",
-					AlertName: "TestAlert",
-					RootCause: RootCause{
-						Summary:         "Issue found",
-						Confidence:      "high",
-						ConfidenceScore: 0.9,
-					},
-					Remediation: Remediation{
-						Steps: []RemediationStep{
-							{
-								Action:  "Manually verify the configuration in console",
-								Command: nil,
-							},
+					ClusterID:    "test-cluster",
+					AlertName:    "TestAlert",
+					Summary:      "Issue found",
+					Confidence:   "high",
+					Reasoning:    "Manual verification required",
+					Evidence:     "System logs inconclusive",
+					RemediationSteps: []RemediationStep{
+						{
+							Action:  "Manually verify the configuration in console",
+							Command: nil,
 						},
 					},
-					Escalation: Escalation{
-						Recommended: false,
-					},
+					NeedsEscalation: false,
 				}
 
 				output := FormatInvestigationReport(result)
@@ -193,19 +183,14 @@ var _ = Describe("aiassisted", func() {
 		Context("when remediation has no steps", func() {
 			It("should show no action steps available message", func() {
 				result := &CoraInvestigationResult{
-					ClusterID: "test-cluster",
-					AlertName: "TestAlert",
-					RootCause: RootCause{
-						Summary:         "Self-healing succeeded",
-						Confidence:      "high",
-						ConfidenceScore: 0.95,
-					},
-					Remediation: Remediation{
-						Steps: []RemediationStep{},
-					},
-					Escalation: Escalation{
-						Recommended: false,
-					},
+					ClusterID:        "test-cluster",
+					AlertName:        "TestAlert",
+					Summary:          "Self-healing succeeded",
+					Confidence:       "high",
+					Reasoning:        "System automatically resolved the issue",
+					Evidence:         "Cluster operators returned to healthy state",
+					RemediationSteps: []RemediationStep{},
+					NeedsEscalation:  false,
 				}
 
 				output := FormatInvestigationReport(result)
@@ -220,52 +205,36 @@ var _ = Describe("aiassisted", func() {
 		Context("when parsing real Cora JSON output", func() {
 			It("should correctly unmarshal JSON into structs", func() {
 				jsonInput := `{
-					"investigation_id": "Q1RNC3P1LLTK2V",
-					"cluster_id": "2r68ajgq9vtsej9shsd9pvdcpjdr9rt1",
-					"alert_name": "FallbackTestAlert",
-					"timestamp": "2026-06-26T20:18:40.228368Z",
-					"duration_seconds": 103.949,
-					"status": "completed",
-					"root_cause": {
-						"summary": "Test alert for validation",
-						"category": "other",
-						"confidence": "high",
-						"confidence_score": 0.95,
-						"reasoning": "High confidence assessment"
-					},
-					"remediation": {
-						"steps": [
-							{
-								"action": "Verify this is a test alert",
-								"command": null,
-								"risk_level": "low",
-								"requires_elevation": false
-							}
-						],
-						"requires_elevation": false,
-						"estimated_impact": "no_downtime",
-						"automation_ready": true
-					},
-					"evidence": [],
-					"escalation": {
-						"recommended": false,
-						"reason": "none",
-						"urgency": "none",
-						"target_team": null
-					}
+					"investigation_id": "inv-quick-schema-test",
+					"cluster_id": "test-cluster",
+					"alert_name": "QuickSchemaTest",
+					"timestamp": "2026-07-06T20:11:38.578390Z",
+					"duration_seconds": 22.301245596,
+					"summary": "Test investigation completed successfully",
+					"confidence": "high",
+					"reasoning": "This investigation was explicitly marked as a quick schema test",
+					"evidence": "Investigation request received with the following parameters",
+					"remediation_steps": [
+						{
+							"action": "No remediation required - this was a test investigation to validate the schema",
+							"command": null
+						}
+					],
+					"needs_escalation": false,
+					"escalation_reason": null
 				}`
 
 				var result CoraInvestigationResult
 				err := json.Unmarshal([]byte(jsonInput), &result)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.ClusterID).To(Equal("2r68ajgq9vtsej9shsd9pvdcpjdr9rt1"))
-				Expect(result.AlertName).To(Equal("FallbackTestAlert"))
-				Expect(result.RootCause.Confidence).To(Equal("high"))
-				Expect(result.RootCause.ConfidenceScore).To(Equal(0.95))
-				Expect(result.Remediation.Steps).To(HaveLen(1))
-				Expect(result.Remediation.Steps[0].Command).To(BeNil())
-				Expect(result.Escalation.Recommended).To(BeFalse())
+				Expect(result.ClusterID).To(Equal("test-cluster"))
+				Expect(result.AlertName).To(Equal("QuickSchemaTest"))
+				Expect(result.Summary).To(Equal("Test investigation completed successfully"))
+				Expect(result.Confidence).To(Equal("high"))
+				Expect(result.RemediationSteps).To(HaveLen(1))
+				Expect(result.RemediationSteps[0].Command).To(BeNil())
+				Expect(result.NeedsEscalation).To(BeFalse())
 			})
 		})
 	})
