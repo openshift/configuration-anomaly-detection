@@ -28,6 +28,11 @@ import (
 
 const pagerdutyTitlePrefix = "[CAD Investigated]"
 
+// errAlertFiltered is returned by runChain when the alert-level When filter
+// rejects the alert. The caller uses this to fall through to AI/escalation
+// instead of treating it as a hard failure.
+var errAlertFiltered = errors.New("alert filtered by when clause")
+
 type PagerDutyConfig struct {
 	PayloadPath string
 }
@@ -287,7 +292,7 @@ func (c *investigationRunner) runChain(
 
 	var latestBuilder investigation.ResourceBuilder
 	defer func() {
-		if err != nil {
+		if err != nil && !errors.Is(err, errAlertFiltered) {
 			c.recordManualCompletion(alertConfig.AlertTitle, "error")
 			if latestBuilder != nil {
 				handleCADFailure(err, latestBuilder, c.notifier)
@@ -316,11 +321,8 @@ func (c *investigationRunner) runChain(
 		}
 		if !pass {
 			logging.Infof("Alert %q filtered out: %s", alertConfig.AlertTitle, reason)
-			if escErr := c.notifier.EscalateWithNote(fmt.Sprintf("🤖 Investigations for alert %q were filtered: %s. Escalating to SRE. 🤖", alertConfig.AlertTitle, reason)); escErr != nil {
-				logging.Errorf("Failed to escalate filtered alert: %v", escErr)
-			}
 			c.recordManualCompletion(alertConfig.AlertTitle, "filtered")
-			return nil
+			return fmt.Errorf("%w: %s", errAlertFiltered, reason)
 		}
 	}
 

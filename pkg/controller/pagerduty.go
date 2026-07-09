@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -43,31 +44,42 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		alertConfig = cfg.GetAlert(alertTitle, experimentalEnabled)
 	}
 
-	// AI fallback: if no alert matches and ai_agent is configured, build an ad-hoc config
-	if alertConfig == nil {
-		if cfg != nil && cfg.AIAgent != nil {
-			alertConfig = &config.AlertConfig{
-				AlertTitle: "aiassisted-fallback",
-				Investigations: []config.InvestigationEntry{
-					{Name: "precheck"},
-					{Name: "aiassisted"},
-				},
-			}
-		} else {
-			if escErr := c.pdClient.EscalateIncident(); escErr != nil {
-				return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
-			}
-			return nil
+	// If we matched a config, try running its chain. If the alert-level When
+	// filter rejects, fall through to AI/escalation instead of stopping.
+	if alertConfig != nil {
+		filterCtx := &types.FilterContext{
+			AlertName:   alertConfig.AlertTitle,
+			AlertTitle:  alertTitle,
+			ServiceName: c.pdClient.GetServiceName(),
 		}
+		err := c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
+		if !errors.Is(err, errAlertFiltered) {
+			return err
+		}
+		logging.Infof("Alert %q filtered out, falling through to AI/escalation", alertConfig.AlertTitle)
 	}
 
-	filterCtx := &types.FilterContext{
-		AlertName:   alertConfig.AlertTitle,
-		AlertTitle:  alertTitle,
-		ServiceName: c.pdClient.GetServiceName(),
+	// AI fallback: no title match, or title matched but when-clause filtered
+	if cfg != nil && cfg.AIAgent != nil {
+		alertConfig = &config.AlertConfig{
+			AlertTitle: "aiassisted-fallback",
+			Investigations: []config.InvestigationEntry{
+				{Name: "precheck"},
+				{Name: "aiassisted"},
+			},
+		}
+		filterCtx := &types.FilterContext{
+			AlertName:   alertConfig.AlertTitle,
+			AlertTitle:  alertTitle,
+			ServiceName: c.pdClient.GetServiceName(),
+		}
+		return c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
 	}
 
-	return c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
+	if escErr := c.pdClient.EscalateIncident(); escErr != nil {
+		return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
+	}
+	return nil
 }
 
 func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, notifier incidentNotifier) {

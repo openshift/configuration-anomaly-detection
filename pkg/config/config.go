@@ -167,7 +167,7 @@ func (c *Config) Validate(validInvestigations []string) error {
 	hasAIAssisted := false
 
 	for i, ac := range c.Alerts {
-		if ac.AlertTitle == "" {
+		if strings.TrimSpace(ac.AlertTitle) == "" {
 			return fmt.Errorf("alerts[%d]: alert_title must not be empty", i)
 		}
 
