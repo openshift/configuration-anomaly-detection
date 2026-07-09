@@ -126,12 +126,12 @@ var _ = Describe("aiassisted", func() {
 				command := "oc apply -f fix.yaml"
 
 				result := &CoraInvestigationResult{
-					ClusterID:    "test-cluster-abc",
-					AlertName:    "ClusterOperatorDegraded",
-					Summary:      "The cluster-samples-operator is degraded due to missing ImageStreams",
-					Confidence:   "high",
-					Reasoning:    "Root cause analysis shows the operator cannot find required ImageStreams",
-					Evidence:     "Checked cluster-samples-operator logs and found missing ImageStream errors",
+					ClusterID:  "test-cluster-abc",
+					AlertName:  "ClusterOperatorDegraded",
+					Summary:    "The cluster-samples-operator is degraded due to missing ImageStreams",
+					Confidence: "high",
+					Reasoning:  "Root cause analysis shows the operator cannot find required ImageStreams",
+					Evidence:   "Checked cluster-samples-operator logs and found missing ImageStream errors",
 					RemediationSteps: []RemediationStep{
 						{
 							Action:  "Restore default ImageStreams",
@@ -157,12 +157,12 @@ var _ = Describe("aiassisted", func() {
 		Context("when handling null command", func() {
 			It("should skip code block when command is nil", func() {
 				result := &CoraInvestigationResult{
-					ClusterID:    "test-cluster",
-					AlertName:    "TestAlert",
-					Summary:      "Issue found",
-					Confidence:   "high",
-					Reasoning:    "Manual verification required",
-					Evidence:     "System logs inconclusive",
+					ClusterID:  "test-cluster",
+					AlertName:  "TestAlert",
+					Summary:    "Issue found",
+					Confidence: "high",
+					Reasoning:  "Manual verification required",
+					Evidence:   "System logs inconclusive",
 					RemediationSteps: []RemediationStep{
 						{
 							Action:  "Manually verify the configuration in console",
