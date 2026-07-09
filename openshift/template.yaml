@@ -150,7 +150,7 @@ objects:
   spec:
     params:
     - name: payload
-      value: $(body)
+      value: $(extensions.payload_base64)
 - apiVersion: triggers.tekton.dev/v1beta1
   kind: TriggerTemplate
   metadata:
@@ -314,11 +314,22 @@ objects:
     - ""
     resources:
     - configmaps
-    - secrets
     verbs:
     - get
     - list
     - watch
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    resourceNames:
+    - srep-ai-sa-token
+    - cad-ai-agent-aws-credentials
+    - cad-ocm-client-secret
+    - cad-pd-token
+    - cad-backplane-secret
+    verbs:
+    - get
   - apiGroups:
     - tekton.dev
     resources:
@@ -368,10 +379,10 @@ objects:
     steps:
     - args:
       - |-
-        # save the payload to a file
+        # save the base64-encoded payload to a file
         folder=$(mktemp -d)
-        file=${folder}/payload.json
-        cat << EOF > $file
+        file=${folder}/payload.b64
+        cat << 'EOF' > $file
         $(params.payload)
         EOF
         # run the cadctl command

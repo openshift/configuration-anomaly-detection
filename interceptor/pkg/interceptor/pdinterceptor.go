@@ -3,6 +3,7 @@ package interceptor
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -201,7 +202,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 		if shouldRunAIInvestigation() {
 			logging.Infof("Launching AI investigation")
-			return &triggersv1.InterceptorResponse{Continue: true}
+			return continueWithEncodedPayload(r.Body)
 		}
 
 		// No formal investigation and AI not enabled/allowed — escalate to SRE
@@ -213,8 +214,18 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	}
 
 	logging.Infof("Incident %s is mapped to investigation '%s', returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID(), investigation.Name())
+	return continueWithEncodedPayload(r.Body)
+}
+
+// continueWithEncodedPayload returns a Continue response with the webhook payload
+// base64-encoded as an extension. The TriggerBinding references this extension so
+// the payload reaches the Tekton task without shell metacharacter issues.
+func continueWithEncodedPayload(body string) *triggersv1.InterceptorResponse {
 	return &triggersv1.InterceptorResponse{
 		Continue: true,
+		Extensions: map[string]interface{}{
+			"payload_base64": base64.StdEncoding.EncodeToString([]byte(body)),
+		},
 	}
 }
 

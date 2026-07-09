@@ -247,14 +247,7 @@ func (c *Config) Validate(validInvestigations []string) error {
 			if c.AIAgent == nil {
 				return fmt.Errorf("filters[%d]: investigation %q requires ai_agent configuration", i, f.Investigation)
 			}
-			if f.Filter == nil {
-				return fmt.Errorf("filters[%d]: investigation %q requires filters for now", i, f.Investigation)
-			}
 		}
-	}
-
-	if _, ok := seen["aiassisted"]; !ok && c.AIAgent != nil {
-		return fmt.Errorf("aiassisted investigation *must* specify valid filters for now: either add filtering or remove 'ai_agent' config")
 	}
 
 	return nil

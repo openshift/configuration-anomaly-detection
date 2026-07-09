@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"os"
@@ -213,10 +215,15 @@ func NewController(opts ControllerOptions, deps *Dependencies) (Controller, erro
 			return nil, fmt.Errorf("invalid webhook config: %w", err)
 		}
 
-		// Load and parse PagerDuty payload
-		payload, err := os.ReadFile(opts.Pd.PayloadPath)
+		// Load and parse PagerDuty payload (base64-encoded by the interceptor)
+		raw, err := os.ReadFile(opts.Pd.PayloadPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read webhook payload: %w", err)
+		}
+
+		payload, err := base64.StdEncoding.DecodeString(string(bytes.TrimSpace(raw)))
+		if err != nil {
+			return nil, fmt.Errorf("failed to base64-decode webhook payload: %w", err)
 		}
 
 		pdClient, err := pagerduty.GetPDClient(payload)

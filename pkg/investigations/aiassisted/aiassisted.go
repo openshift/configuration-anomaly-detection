@@ -242,6 +242,5 @@ func (c *Investigation) Description() string {
 }
 
 func (c *Investigation) IsExperimental() bool {
-	// TODO: Update to false when graduating to production
-	return true
+	return false
 }

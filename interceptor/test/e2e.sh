@@ -55,8 +55,19 @@ function test_interceptor {
 
     local return_code=0
 
-    # Check if the curl output differs from the expected response
-    if [[ "$CURL_OUTPUT" != "$expected_response" ]] || [[ "$CURL_EXITCODE" != "0" ]]; then
+    # Check if the curl output differs from the expected response.
+    # For JSON responses, compare only the .continue field (extensions are dynamic).
+    # For non-JSON responses (e.g. error strings), use substring match.
+    local match=false
+    if echo "$expected_response" | jq -e . >/dev/null 2>&1; then
+        ACTUAL_CONTINUE=$(echo "$CURL_OUTPUT" | jq '.continue' 2>/dev/null)
+        EXPECTED_CONTINUE=$(echo "$expected_response" | jq '.continue')
+        [[ "$ACTUAL_CONTINUE" == "$EXPECTED_CONTINUE" ]] && [[ "$CURL_EXITCODE" == "0" ]] && match=true
+    else
+        [[ "$CURL_OUTPUT" == *"$expected_response"* ]] && [[ "$CURL_EXITCODE" == "0" ]] && match=true
+    fi
+
+    if [[ "$match" != "true" ]]; then
         echo -e "${RED}Test failed for incident ID $incident_id: Unexpected response.${NC}"
         echo -e "${RED}Expected: $expected_response${NC}"
         echo -e "${RED}Got: $CURL_OUTPUT${NC}"

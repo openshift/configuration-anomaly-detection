@@ -40,7 +40,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	// AI is considered enabled when experimental mode is on and the filter config
 	// has an entry for "aiassisted". The actual cluster/org-level filtering happens
 	// later in runInvestigation via the filter evaluation.
-	if alertInvestigation == nil && experimentalEnabled {
+	if alertInvestigation == nil {
 		alertInvestigation = handleUnsupportedAlertWithAI(c.dependencies)
 		if alertInvestigation == nil {
 			err := c.pdClient.EscalateIncident()
