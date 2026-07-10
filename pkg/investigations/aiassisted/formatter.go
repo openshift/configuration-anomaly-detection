@@ -10,7 +10,11 @@ func extractJSON(response string) (string, error) {
 	if jsonStart == -1 {
 		return "", fmt.Errorf("no JSON found in response")
 	}
-	return response[jsonStart:], nil
+	jsonEnd := strings.LastIndex(response, "}")
+	if jsonEnd == -1 {
+		return "", fmt.Errorf("no closing bracket found in response")
+	}
+	return response[jsonStart : jsonEnd+1], nil
 }
 
 // FormatInvestigationReport converts CoraInvestigationResult into human-readable markdown

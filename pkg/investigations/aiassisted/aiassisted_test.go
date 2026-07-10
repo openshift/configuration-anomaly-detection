@@ -238,7 +238,7 @@ var _ = Describe("aiassisted", func() {
 			})
 		})
 
-		// Checks whether formatter successfully skips over headers and only focuses on JSON
+		// Checks whether formatter successfully skips over headers and finds the first '{'
 		Context("when response has headers before JSON", func() {
 			It("should extract JSON from response with prefix text", func() {
 				response := "🤖 AI Investigation Results 🤖\nSession ID: cad-123\nRuntime: arn:aws:something\n\nThis investigation is being performed by an AI agent.\n\n" + `{
@@ -264,6 +264,15 @@ var _ = Describe("aiassisted", func() {
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.ClusterID).To(Equal("test-cluster"))
 				Expect(result.Summary).To(Equal("Test summary"))
+			})
+
+			It("should start with { and end with }", func() {
+				response := "some header text\n\n" + `{"cluster_id": "test"}` + "\n\nsome trailing text"
+
+				jsonStr, err := extractJSON(response)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(jsonStr[0]).To(Equal(byte('{')))
+				Expect(jsonStr[len(jsonStr)-1]).To(Equal(byte('}')))
 			})
 
 			It("should return error when no JSON is present", func() {
