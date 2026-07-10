@@ -266,13 +266,31 @@ var _ = Describe("aiassisted", func() {
 				Expect(result.Summary).To(Equal("Test summary"))
 			})
 
-			It("should start with { and end with }", func() {
-				response := "some header text\n\n" + `{"cluster_id": "test"}` + "\n\nsome trailing text"
+
+			It("should skip curly brackets in headers and find the real JSON", func() {
+				response := "Runtime: arn:aws {some-resource}\nStatus: {healthy}\n\n" + `{
+					"investigation_id": "inv-test",
+					"cluster_id": "test-cluster",
+					"alert_name": "TestAlert",
+					"timestamp": "2026-07-10T20:00:00Z",
+					"duration_seconds": 10.5,
+					"summary": "Test summary",
+					"confidence": "high",
+					"reasoning": "Test reasoning",
+					"evidence": "Test evidence",
+					"remediation_steps": [],
+					"needs_escalation": false,
+					"escalation_reason": null
+				}`
 
 				jsonStr, err := extractJSON(response)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(jsonStr[0]).To(Equal(byte('{')))
-				Expect(jsonStr[len(jsonStr)-1]).To(Equal(byte('}')))
+
+				var result CoraInvestigationResult
+				err = json.Unmarshal([]byte(jsonStr), &result)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.ClusterID).To(Equal("test-cluster"))
+				Expect(result.Summary).To(Equal("Test summary"))
 			})
 
 			It("should return error when no JSON is present", func() {

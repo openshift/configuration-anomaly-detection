@@ -200,8 +200,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Info("🤖 AI investigation complete")
 
 	// Parse JSON response from Cora
+	jsonText, err := extractJSON(aiResponse.String())
+	if err != nil {
+		notes.AppendWarning("Failed to extract JSON from Cora response: %v", err)
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		return result, nil
+	}
+
 	var investigationResult CoraInvestigationResult
-	if err := json.Unmarshal([]byte(aiResponse.String()), &investigationResult); err != nil {
+	if err := json.Unmarshal([]byte(jsonText), &investigationResult); err != nil {
 		notes.AppendWarning("Failed to parse Cora JSON response: %v", err)
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
