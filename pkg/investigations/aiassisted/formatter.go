@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+func extractJSON(response string) (string, error) {
+	jsonStart := strings.Index(response, "{")
+	if jsonStart == -1 {
+		return "", fmt.Errorf("no JSON found in response")
+	}
+	return response[jsonStart:], nil
+}
+
 // FormatInvestigationReport converts CoraInvestigationResult into human-readable markdown
 func FormatInvestigationReport(result *CoraInvestigationResult) string {
 	var sb strings.Builder

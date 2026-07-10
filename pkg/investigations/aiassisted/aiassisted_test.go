@@ -237,5 +237,41 @@ var _ = Describe("aiassisted", func() {
 				Expect(result.NeedsEscalation).To(BeFalse())
 			})
 		})
+
+		// Checks whether formatter successfully skips over headers and only focuses on JSON
+		Context("when response has headers before JSON", func() {
+			It("should extract JSON from response with prefix text", func() {
+				response := "🤖 AI Investigation Results 🤖\nSession ID: cad-123\nRuntime: arn:aws:something\n\nThis investigation is being performed by an AI agent.\n\n" + `{
+					"investigation_id": "inv-test",
+					"cluster_id": "test-cluster",
+					"alert_name": "TestAlert",
+					"timestamp": "2026-07-10T20:00:00Z",
+					"duration_seconds": 10.5,
+					"summary": "Test summary",
+					"confidence": "high",
+					"reasoning": "Test reasoning",
+					"evidence": "Test evidence",
+					"remediation_steps": [],
+					"needs_escalation": false,
+					"escalation_reason": null
+				}`
+
+				jsonStr, err := extractJSON(response)
+				Expect(err).ToNot(HaveOccurred())
+
+				var result CoraInvestigationResult
+				err = json.Unmarshal([]byte(jsonStr), &result)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.ClusterID).To(Equal("test-cluster"))
+				Expect(result.Summary).To(Equal("Test summary"))
+			})
+
+			It("should return error when no JSON is present", func() {
+				response := "🤖 AI Investigation Results 🤖\nNo JSON here at all"
+
+				_, err := extractJSON(response)
+				Expect(err).To(HaveOccurred())
+			})
+		})
 	})
 })
