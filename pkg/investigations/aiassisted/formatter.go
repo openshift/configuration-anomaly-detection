@@ -1,33 +1,9 @@
 package aiassisted
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
-
-func extractJSON(response string) (string, error) {
-	jsonEnd := strings.LastIndex(response, "}")
-	if jsonEnd == -1 {
-		return "", fmt.Errorf("no JSON found in response")
-	}
-
-	searchFrom := 0
-	for {
-		jsonStart := strings.Index(response[searchFrom:], "{")
-		if jsonStart == -1 {
-			break
-		}
-		jsonStart += searchFrom
-		candidate := response[jsonStart : jsonEnd+1]
-		if json.Unmarshal([]byte(candidate), &json.RawMessage{}) == nil {
-			return candidate, nil
-		}
-		searchFrom = jsonStart + 1
-	}
-
-	return "", fmt.Errorf("no valid JSON found in response")
-}
 
 // FormatInvestigationReport converts CoraInvestigationResult into human-readable markdown
 func FormatInvestigationReport(result *CoraInvestigationResult) string {

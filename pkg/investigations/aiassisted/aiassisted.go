@@ -169,20 +169,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Read and collect streaming response
 	logging.Info("🤖 Receiving AI response...")
-	var aiResponse strings.Builder
-	aiResponse.WriteString("🤖 AI Investigation Results 🤖\n")
-	fmt.Fprintf(&aiResponse, "Session ID: %s\n", sessionID)
-	fmt.Fprintf(&aiResponse, "Runtime: %s\n", aiConfig.RuntimeARN)
+	logging.Infof("🤖 AI Investigation Results")
+	logging.Infof("Session ID: %s", sessionID)
+	logging.Infof("Runtime: %s", aiConfig.RuntimeARN)
 	if aiConfig.Version != "" {
-		fmt.Fprintf(&aiResponse, "Agent Version: %s\n", aiConfig.Version)
+		logging.Infof("Agent Version: %s", aiConfig.Version)
 	}
 	if aiConfig.OpsSopVersion != "" {
-		fmt.Fprintf(&aiResponse, "ops-sop Version: %s\n", aiConfig.OpsSopVersion)
+		logging.Infof("ops-sop Version: %s", aiConfig.OpsSopVersion)
 	}
 	if aiConfig.RosaPluginsVersion != "" {
-		fmt.Fprintf(&aiResponse, "rosa-plugins Version: %s\n", aiConfig.RosaPluginsVersion)
+		logging.Infof("rosa-plugins Version: %s", aiConfig.RosaPluginsVersion)
 	}
-	aiResponse.WriteString("\n")
+
+	var aiResponse strings.Builder
 
 	scanner := bufio.NewScanner(output.Response)
 	for scanner.Scan() {
@@ -200,15 +200,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	logging.Info("🤖 AI investigation complete")
 
 	// Parse JSON response from Cora
-	jsonText, err := extractJSON(aiResponse.String())
-	if err != nil {
-		notes.AppendWarning("Failed to extract JSON from Cora response: %v", err)
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
-		return result, nil
-	}
-
 	var investigationResult CoraInvestigationResult
-	if err := json.Unmarshal([]byte(jsonText), &investigationResult); err != nil {
+	if err := json.Unmarshal([]byte(aiResponse.String()), &investigationResult); err != nil {
 		notes.AppendWarning("Failed to parse Cora JSON response: %v", err)
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
