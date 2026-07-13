@@ -202,7 +202,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Parse JSON response from Cora
 	var investigationResult CoraInvestigationResult
 	if err := json.Unmarshal([]byte(aiResponse.String()), &investigationResult); err != nil {
-		notes.AppendWarning("Failed to parse Cora JSON response: %v", err)
+		notes.AppendWarning("Failed to parse Cora JSON response: %v\n\nRaw output:\n%s", err, aiResponse.String())
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
