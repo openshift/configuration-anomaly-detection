@@ -49,6 +49,9 @@ func FormatInvestigationReport(result *CoraInvestigationResult) string {
 	sb.WriteString("## Escalation Decision\n\n")
 	if result.NeedsEscalation {
 		sb.WriteString("⚠️ ESCALATE\n")
+		if result.EscalationReason != nil && *result.EscalationReason != "" {
+			fmt.Fprintf(&sb, "**Reason**: %s\n", *result.EscalationReason)
+		}
 	} else {
 		sb.WriteString("✅ No escalation needed\n")
 	}
