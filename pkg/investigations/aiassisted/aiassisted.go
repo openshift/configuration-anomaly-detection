@@ -26,10 +26,10 @@ type Investigation struct {
 
 // InvestigationPayload represents the payload sent to the AgentCore agent
 type InvestigationPayload struct {
-	InvestigationID      string `json:"investigation_id"`
-	InvestigationPayload string `json:"investigation_payload"` // TODO: Implement - should contain alert details/context
-	AlertName            string `json:"alert_name"`
-	ClusterID            string `json:"cluster_id"`
+	InvestigationID      string                 `json:"investigation_id"`
+	InvestigationPayload map[string]interface{} `json:"investigation_payload"` // Alert details and context
+	AlertName            string                 `json:"alert_name"`
+	ClusterID            string                 `json:"cluster_id"`
 }
 
 // generateSessionID generates a unique session ID for this investigation
@@ -112,10 +112,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
 
-	// Build investigation payload using typed structure
+	// Extract alert details from PagerDuty
+	alertDetails, err := extractAlertDetails(pdClient)
+	if err != nil {
+		logging.Warnf("Failed to extract alert details: %v", err)
+	}
+
+	// Build investigation payload with alert context
+	payloadData := buildInvestigationPayload(alertDetails, pdClient.GetIncidentRef())
+
 	investigationData := &InvestigationPayload{
 		InvestigationID:      incidentID,
-		InvestigationPayload: "{}", // TODO: Populate with alert details when implemented
+		InvestigationPayload: payloadData,
 		AlertName:            alertName,
 		ClusterID:            clusterID,
 	}
