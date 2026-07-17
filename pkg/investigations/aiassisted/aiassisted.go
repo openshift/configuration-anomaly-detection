@@ -194,15 +194,34 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if err := scanner.Err(); err != nil {
 		logging.Errorf("Error reading AI response stream: %v", err)
-		notes.AppendWarning("Error reading AI response stream: %v", err)
+		notes.AppendWarning("Error reading AI response stream: %v\n\nRaw output:\n%s", err, aiResponse.String())
+		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		return result, nil
 	}
 
 	logging.Info("🤖 AI investigation complete")
 
+	// Unwrap double-encoded JSON from BedrockAgentCore SDK.
+	// The SDK wraps Cora's JSON in another JSON string, so we receive:
+	//   "{\"investigation_id\": ...}" instead of {"investigation_id": ...}
+	// Unmarshal into a string to strip outer quotes and unescape.
+	responseStr := strings.TrimSpace(aiResponse.String())
+	var unquoted string
+	if err := json.Unmarshal([]byte(responseStr), &unquoted); err == nil {
+		responseStr = unquoted
+	}
+
+	// Log raw response for recoverability
+	logging.Infof("Raw AI response length: %d chars", len(responseStr))
+
 	// Parse JSON response from Cora
 	var investigationResult CoraInvestigationResult
-	if err := json.Unmarshal([]byte(aiResponse.String()), &investigationResult); err != nil {
-		notes.AppendWarning("Failed to parse Cora JSON response: %v\n\nRaw output:\n%s", err, aiResponse.String())
+	if err := json.Unmarshal([]byte(responseStr), &investigationResult); err != nil {
+		rawOutput := responseStr
+		if len(rawOutput) > 60000 {
+			rawOutput = rawOutput[:60000] + "\n... [truncated]"
+		}
+		notes.AppendWarning("Failed to parse Cora JSON response: %v\n\nRaw output:\n%s", err, rawOutput)
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
