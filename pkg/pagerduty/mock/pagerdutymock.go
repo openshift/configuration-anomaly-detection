@@ -12,6 +12,7 @@ package pdmock
 import (
 	reflect "reflect"
 
+	pagerduty "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -19,6 +20,7 @@ import (
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
@@ -78,6 +80,22 @@ func (m *MockClient) EscalateIncidentWithNote(notes string) error {
 func (mr *MockClientMockRecorder) EscalateIncidentWithNote(notes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateIncidentWithNote", reflect.TypeOf((*MockClient)(nil).EscalateIncidentWithNote), notes)
+}
+
+// GetAlertContext mocks base method.
+func (m *MockClient) GetAlertContext(incidentID string) (pagerduty.AlertCustomDetails, *pagerduty.FiringAlertsResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAlertContext", incidentID)
+	ret0, _ := ret[0].(pagerduty.AlertCustomDetails)
+	ret1, _ := ret[1].(*pagerduty.FiringAlertsResult)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetAlertContext indicates an expected call of GetAlertContext.
+func (mr *MockClientMockRecorder) GetAlertContext(incidentID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAlertContext", reflect.TypeOf((*MockClient)(nil).GetAlertContext), incidentID)
 }
 
 // GetServiceID mocks base method.

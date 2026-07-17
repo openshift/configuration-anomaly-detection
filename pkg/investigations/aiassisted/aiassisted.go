@@ -112,14 +112,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
 
-	// Extract alert details from PagerDuty
-	alertDetails, err := extractAlertDetails(pdClient)
+	alertDetails, firingResult, err := r.PdClient.GetAlertContext(incidentID)
 	if err != nil {
-		logging.Warnf("Failed to extract alert details: %v", err)
+		logging.Warnf("Failed to extract alert context: %v", err)
 	}
 
-	// Build investigation payload with alert context
-	payloadData := buildInvestigationPayload(alertDetails, pdClient.GetIncidentRef())
+	payloadData := buildInvestigationPayload(firingResult, &alertDetails, pdClient.GetIncidentRef())
 
 	investigationData := &InvestigationPayload{
 		InvestigationID:      incidentID,

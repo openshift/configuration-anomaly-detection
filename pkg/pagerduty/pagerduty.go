@@ -34,6 +34,7 @@ type Client interface {
 	AddNote(notes string) error
 	EscalateIncident() error
 	EscalateIncidentWithNote(notes string) error
+	GetAlertContext(incidentID string) (AlertCustomDetails, *FiringAlertsResult, error)
 	GetServiceID() string
 	GetTitle() string
 	MoveToEscalationPolicy(escalationPolicyID string) error
@@ -463,6 +464,97 @@ func extractAlertDetails(sdkAlert sdk.IncidentAlert) (AlertDetails, error) {
 		ClusterID: clusterID,
 	}
 	return alertDetails, nil
+}
+
+// getRawAlertDetails returns the raw Body["details"] maps from all alerts of an incident.
+func (c *SdkClient) getRawAlertDetails(incidentID string) ([]map[string]interface{}, error) {
+	alerts, err := c.GetAlertsForIncident(incidentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get alerts for incident: %w", err)
+	}
+
+	if alerts == nil || len(*alerts) == 0 {
+		return nil, fmt.Errorf("no alerts found for incident %s", incidentID)
+	}
+
+	allDetails := make([]map[string]interface{}, 0, len(*alerts))
+	for i, alert := range *alerts {
+		if alert.Body == nil {
+			logging.Warnf("Alert %d/%d has nil body, skipping", i+1, len(*alerts))
+			continue
+		}
+		details, ok := alert.Body["details"].(map[string]interface{})
+		if !ok {
+			logging.Warnf("Alert %d/%d body has no details field, skipping", i+1, len(*alerts))
+			continue
+		}
+		allDetails = append(allDetails, details)
+	}
+
+	if len(allDetails) == 0 {
+		return nil, fmt.Errorf("no alerts with valid details found for incident %s", incidentID)
+	}
+
+	return allDetails, nil
+}
+
+func stringFromDetails(details map[string]interface{}, key string) string {
+	val, _ := details[key].(string)
+	return val
+}
+
+// GetAlertContext fetches all PD alerts for an incident once and returns both
+// the typed custom details (from the first alert) and parsed firing alerts (from all alerts).
+func (c *SdkClient) GetAlertContext(incidentID string) (AlertCustomDetails, *FiringAlertsResult, error) {
+	rawDetails, err := c.getRawAlertDetails(incidentID)
+	if err != nil {
+		return AlertCustomDetails{}, nil, err
+	}
+
+	first := rawDetails[0]
+	customDetails := AlertCustomDetails{
+		Link:        stringFromDetails(first, "link"),
+		NumFiring:   stringFromDetails(first, "num_firing"),
+		NumResolved: stringFromDetails(first, "num_resolved"),
+		OCMLink:     stringFromDetails(first, "ocm_link"),
+		Region:      stringFromDetails(first, "region"),
+		Dashboard:   stringFromDetails(first, "dashboard"),
+	}
+
+	firingResult := &FiringAlertsResult{}
+	for _, details := range rawDetails {
+		firingJSON, ok := details["firing_json"].(string)
+		if !ok || firingJSON == "" {
+			continue
+		}
+		parsed, err := ParseFiringJSON(firingJSON)
+		if err != nil {
+			logging.Warnf("firing_json could not be parsed — saving raw string as fallback: %v", err)
+			firingResult.RawFallbacks = append(firingResult.RawFallbacks, firingJSON)
+			continue
+		}
+		firingResult.Alerts = append(firingResult.Alerts, parsed...)
+	}
+
+	if len(firingResult.RawFallbacks) > 0 && len(firingResult.Alerts) > 0 {
+		firingResult.Partial = true
+	}
+
+	return customDetails, firingResult, nil
+}
+
+// ParseFiringJSON parses the firing_json custom detail field into structured FiringAlert objects.
+func ParseFiringJSON(firingJSON string) ([]FiringAlert, error) {
+	if firingJSON == "" {
+		return []FiringAlert{}, nil
+	}
+
+	var alerts []FiringAlert
+	if err := json.Unmarshal([]byte(firingJSON), &alerts); err != nil {
+		return nil, fmt.Errorf("failed to parse firing_json: %w", err)
+	}
+
+	return alerts, nil
 }
 
 // commonErrorHandling will take a sdk.APIError and check it on common known errors.

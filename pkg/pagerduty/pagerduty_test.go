@@ -1,9 +1,11 @@
 package pagerduty
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -366,6 +368,69 @@ var _ = Describe("Pagerduty", func() {
 		})
 	})
 })
+
+func TestParseFiringJSON(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedCount int
+		expectErr     bool
+	}{
+		{
+			name:          "single alert",
+			input:         mustMarshal([]FiringAlert{{Labels: map[string]string{"alertname": "KubePersistentVolumeFillingUp", "namespace": "openshift-monitoring", "severity": "critical"}}}),
+			expectedCount: 1,
+		},
+		{
+			name:          "empty string",
+			input:         "",
+			expectedCount: 0,
+		},
+		{
+			name:      "invalid JSON",
+			input:     "not json",
+			expectErr: true,
+		},
+		{
+			name:          "empty array",
+			input:         "[]",
+			expectedCount: 0,
+		},
+		{
+			name:          "multiple firing alerts",
+			input:         mustMarshal([]FiringAlert{{Labels: map[string]string{"alertname": "Alert1", "namespace": "ns1"}}, {Labels: map[string]string{"alertname": "Alert2", "namespace": "ns2"}}}),
+			expectedCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseFiringJSON(tt.input)
+
+			if tt.expectErr {
+				if err == nil {
+					t.Error("Expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+			if len(result) != tt.expectedCount {
+				t.Errorf("Expected %d alerts, got %d", tt.expectedCount, len(result))
+			}
+		})
+	}
+}
+
+func mustMarshal(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
 
 /*
 these were pulled from https://github.com/PagerDuty/go-pagerduty/blob/c6785b92c2c4e24a0009298ad2b9bc457e6df1e7/client.go, if you need the other functions feel free to re-import them

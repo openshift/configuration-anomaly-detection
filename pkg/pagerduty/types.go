@@ -20,3 +20,28 @@ type NewAlert struct {
 	Description string
 	Details     NewAlertCustomDetails
 }
+
+// FiringAlert represents a single firing alert from the firing_json PagerDuty custom detail field.
+type FiringAlert struct {
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations"`
+	StartsAt    string            `json:"startsAt"`
+	EndsAt      string            `json:"endsAt"`
+}
+
+// FiringAlertsResult holds the result of parsing firing_json from all PD alerts.
+type FiringAlertsResult struct {
+	Alerts       []FiringAlert
+	RawFallbacks []string
+	Partial      bool
+}
+
+// AlertCustomDetails holds the known custom detail fields from a PD alert's Body["details"].
+type AlertCustomDetails struct {
+	Link        string
+	NumFiring   string
+	NumResolved string
+	OCMLink     string
+	Region      string
+	Dashboard   string
+}
