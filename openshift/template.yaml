@@ -31,6 +31,7 @@ objects:
   kind: NetworkPolicy
   metadata:
     name: cad-interceptor-network-policy
+    namespace: ${NAMESPACE_NAME}
   spec:
     podSelector:
       matchLabels:
