@@ -499,8 +499,14 @@ func (c *SdkClient) getRawAlertDetails(incidentID string) ([]map[string]interfac
 }
 
 func stringFromDetails(details map[string]interface{}, key string) string {
-	val, _ := details[key].(string)
-	return val
+	raw := details[key]
+	if raw == nil {
+		return ""
+	}
+	if s, ok := raw.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", raw)
 }
 
 // GetAlertContext fetches all PD alerts for an incident once and returns both
@@ -523,14 +529,34 @@ func (c *SdkClient) GetAlertContext(incidentID string) (AlertCustomDetails, *Fir
 
 	firingResult := &FiringAlertsResult{}
 	for _, details := range rawDetails {
-		firingJSON, ok := details["firing_json"].(string)
-		if !ok || firingJSON == "" {
+		raw := details["firing_json"]
+		if raw == nil {
 			continue
 		}
-		parsed, err := ParseFiringJSON(firingJSON)
+
+		var jsonBytes []byte
+		switch v := raw.(type) {
+		case string:
+			if v == "" {
+				continue
+			}
+			jsonBytes = []byte(v)
+		default:
+			// PD deserializes JSON bodies, so firing_json arrives as []interface{} not a string.
+			// Re-marshal to JSON so ParseFiringJSON can unmarshal into typed structs.
+			var marshalErr error
+			jsonBytes, marshalErr = json.Marshal(v)
+			if marshalErr != nil {
+				logging.Warnf("firing_json could not be re-marshaled: %v", marshalErr)
+				firingResult.RawFallbacks = append(firingResult.RawFallbacks, fmt.Sprintf("%v", v))
+				continue
+			}
+		}
+
+		parsed, err := ParseFiringJSON(string(jsonBytes))
 		if err != nil {
 			logging.Warnf("firing_json could not be parsed — saving raw string as fallback: %v", err)
-			firingResult.RawFallbacks = append(firingResult.RawFallbacks, firingJSON)
+			firingResult.RawFallbacks = append(firingResult.RawFallbacks, string(jsonBytes))
 			continue
 		}
 		firingResult.Alerts = append(firingResult.Alerts, parsed...)
