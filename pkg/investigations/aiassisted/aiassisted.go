@@ -118,6 +118,9 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	payloadData := buildInvestigationPayload(firingResult, &alertDetails, pdClient.GetIncidentRef())
+	if err != nil {
+		payloadData["alert_context_error"] = err.Error()
+	}
 
 	investigationData := &InvestigationPayload{
 		InvestigationID:      incidentID,
