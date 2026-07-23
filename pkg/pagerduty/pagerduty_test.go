@@ -424,6 +424,215 @@ func TestParseFiringJSON(t *testing.T) {
 	}
 }
 
+// TestParseFiringJSONFromRealPDResponse simulates how PagerDuty's API actually
+// delivers firing_json — as deserialized JSON ([]interface{}) not a string.
+// Test data is from a real ConfigureAlertmanagerOperatorOfflineSRE alert with
+// sensitive fields scrubbed.
+func TestParseFiringJSONFromRealPDResponse(t *testing.T) {
+	// This is what Go's encoding/json produces when it deserializes the PD alert
+	// body — firing_json is []interface{}, num_firing is float64, not strings.
+	scrubbedPDAlertBody := `{
+		"alert_name": "ConfigureAlertmanagerOperatorOfflineSRE",
+		"cluster_id": "test-cluster-id-0000-0000-000000000000",
+		"firing": [
+			{
+				"annotations": {},
+				"endsAt": "0001-01-01T00:00:00Z",
+				"fingerprint": "abc123",
+				"labels": {
+					"alertname": "ConfigureAlertmanagerOperatorOfflineSRE",
+					"namespace": "openshift-monitoring",
+					"openshift_io_alert_source": "platform",
+					"prometheus": "openshift-monitoring/k8s",
+					"service": "configure-alertmanager-operator",
+					"severity": "critical"
+				},
+				"startsAt": "2026-07-23T20:19:08.743Z",
+				"status": "firing"
+			}
+		],
+		"firing_json": [
+			{
+				"annotations": {},
+				"endsAt": "0001-01-01T00:00:00Z",
+				"fingerprint": "abc123",
+				"labels": {
+					"alertname": "ConfigureAlertmanagerOperatorOfflineSRE",
+					"namespace": "openshift-monitoring",
+					"openshift_io_alert_source": "platform",
+					"prometheus": "openshift-monitoring/k8s",
+					"service": "configure-alertmanager-operator",
+					"severity": "critical"
+				},
+				"startsAt": "2026-07-23T20:19:08.743Z",
+				"status": "firing"
+			}
+		],
+		"link": "https://github.com/openshift/ops-sop/tree/master/v4/alerts/ConfigureAlertmanagerOperatorOfflineSRE.md",
+		"num_firing": 1,
+		"num_resolved": 0,
+		"ocm_link": "https://console.redhat.com/openshift/details/test-cluster-id",
+		"region": "us-east-1",
+		"resolved": null
+	}`
+
+	// Deserialize the same way Go's PD SDK does — into map[string]interface{}
+	var details map[string]interface{}
+	if err := json.Unmarshal([]byte(scrubbedPDAlertBody), &details); err != nil {
+		t.Fatalf("Failed to unmarshal test data: %v", err)
+	}
+
+	// Verify firing_json is []interface{}, not string — this is the bug we caught
+	if _, ok := details["firing_json"].(string); ok {
+		t.Fatal("firing_json should be []interface{} after JSON deserialization, not string")
+	}
+	if _, ok := details["firing_json"].([]interface{}); !ok {
+		t.Fatalf("firing_json should be []interface{}, got %T", details["firing_json"])
+	}
+
+	// Verify num_firing is float64, not string
+	if _, ok := details["num_firing"].(string); ok {
+		t.Fatal("num_firing should be float64 after JSON deserialization, not string")
+	}
+
+	// Test stringFromDetails handles numeric values
+	numFiring := stringFromDetails(details, "num_firing")
+	if numFiring != "1" {
+		t.Errorf("stringFromDetails(num_firing) = %q, want \"1\"", numFiring)
+	}
+	numResolved := stringFromDetails(details, "num_resolved")
+	if numResolved != "0" {
+		t.Errorf("stringFromDetails(num_resolved) = %q, want \"0\"", numResolved)
+	}
+
+	// Test stringFromDetails still works for actual strings
+	link := stringFromDetails(details, "link")
+	if link != "https://github.com/openshift/ops-sop/tree/master/v4/alerts/ConfigureAlertmanagerOperatorOfflineSRE.md" {
+		t.Errorf("stringFromDetails(link) = %q, want SOP URL", link)
+	}
+
+	// Test the firing_json extraction path — re-marshal []interface{} then parse
+	raw := details["firing_json"]
+	jsonBytes, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("Failed to re-marshal firing_json: %v", err)
+	}
+
+	alerts, err := ParseFiringJSON(string(jsonBytes))
+	if err != nil {
+		t.Fatalf("ParseFiringJSON failed: %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("Expected 1 alert, got %d", len(alerts))
+	}
+
+	alert := alerts[0]
+	if alert.Labels["alertname"] != "ConfigureAlertmanagerOperatorOfflineSRE" {
+		t.Errorf("alertname = %q, want ConfigureAlertmanagerOperatorOfflineSRE", alert.Labels["alertname"])
+	}
+	if alert.Labels["namespace"] != "openshift-monitoring" {
+		t.Errorf("namespace = %q, want openshift-monitoring", alert.Labels["namespace"])
+	}
+	if alert.Labels["severity"] != "critical" {
+		t.Errorf("severity = %q, want critical", alert.Labels["severity"])
+	}
+	if alert.StartsAt != "2026-07-23T20:19:08.743Z" {
+		t.Errorf("startsAt = %q, want 2026-07-23T20:19:08.743Z", alert.StartsAt)
+	}
+}
+
+// TestParseFiringJSONMultiAlertIncident verifies parsing when a single PD
+// incident contains multiple firing alerts with different alertnames — a
+// real-world scenario where alerts group into one incident.
+func TestParseFiringJSONMultiAlertIncident(t *testing.T) {
+	multiAlertDetails := `{
+		"firing_json": [
+			{
+				"labels": {
+					"alertname": "KubePersistentVolumeFillingUp",
+					"namespace": "openshift-monitoring",
+					"persistentvolumeclaim": "prometheus-data-prometheus-k8s-0",
+					"severity": "critical"
+				},
+				"annotations": {
+					"summary": "PersistentVolume is filling up.",
+					"runbook_url": "https://github.com/openshift/ops-sop/blob/master/v4/alerts/KubePersistentVolumeFillingUp.md"
+				},
+				"startsAt": "2026-07-23T10:00:00.000Z",
+				"status": "firing"
+			},
+			{
+				"labels": {
+					"alertname": "KubePersistentVolumeFillingUp",
+					"namespace": "openshift-monitoring",
+					"persistentvolumeclaim": "prometheus-data-prometheus-k8s-1",
+					"severity": "critical"
+				},
+				"annotations": {
+					"summary": "PersistentVolume is filling up.",
+					"runbook_url": "https://github.com/openshift/ops-sop/blob/master/v4/alerts/KubePersistentVolumeFillingUp.md"
+				},
+				"startsAt": "2026-07-23T10:01:00.000Z",
+				"status": "firing"
+			},
+			{
+				"labels": {
+					"alertname": "PrometheusRemoteWriteBehind",
+					"namespace": "openshift-monitoring",
+					"severity": "warning"
+				},
+				"annotations": {
+					"summary": "Prometheus remote write is behind.",
+					"runbook_url": "https://github.com/openshift/ops-sop/blob/master/v4/alerts/PrometheusRemoteWriteBehind.md"
+				},
+				"startsAt": "2026-07-23T10:05:00.000Z",
+				"status": "firing"
+			}
+		],
+		"num_firing": 3
+	}`
+
+	var details map[string]interface{}
+	if err := json.Unmarshal([]byte(multiAlertDetails), &details); err != nil {
+		t.Fatalf("Failed to unmarshal test data: %v", err)
+	}
+
+	// Re-marshal the []interface{} back to JSON (simulating the extraction path)
+	jsonBytes, err := json.Marshal(details["firing_json"])
+	if err != nil {
+		t.Fatalf("Failed to re-marshal firing_json: %v", err)
+	}
+
+	alerts, err := ParseFiringJSON(string(jsonBytes))
+	if err != nil {
+		t.Fatalf("ParseFiringJSON failed: %v", err)
+	}
+
+	if len(alerts) != 3 {
+		t.Fatalf("Expected 3 alerts, got %d", len(alerts))
+	}
+
+	// Verify different alertnames are preserved
+	alertNames := map[string]int{}
+	for _, a := range alerts {
+		alertNames[a.Labels["alertname"]]++
+	}
+	if alertNames["KubePersistentVolumeFillingUp"] != 2 {
+		t.Errorf("Expected 2 KubePersistentVolumeFillingUp alerts, got %d", alertNames["KubePersistentVolumeFillingUp"])
+	}
+	if alertNames["PrometheusRemoteWriteBehind"] != 1 {
+		t.Errorf("Expected 1 PrometheusRemoteWriteBehind alert, got %d", alertNames["PrometheusRemoteWriteBehind"])
+	}
+
+	// Verify annotations (including runbook_url) are preserved
+	if alerts[0].Annotations["runbook_url"] != "https://github.com/openshift/ops-sop/blob/master/v4/alerts/KubePersistentVolumeFillingUp.md" {
+		t.Errorf("runbook_url not preserved on first alert")
+	}
+	if alerts[2].Annotations["runbook_url"] != "https://github.com/openshift/ops-sop/blob/master/v4/alerts/PrometheusRemoteWriteBehind.md" {
+		t.Errorf("runbook_url not preserved on third alert")
+	}
+}
+
 func mustMarshal(v interface{}) string {
 	b, err := json.Marshal(v)
 	if err != nil {
