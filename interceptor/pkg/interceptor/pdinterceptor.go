@@ -57,8 +57,8 @@ type Organization struct {
 }
 
 type interceptorHandler struct {
-	PDTokens     []string
-	cfg   *config.Config
+	PDTokens []string
+	cfg      *config.Config
 }
 
 func CreateInterceptorHandler(pdTokens []string) (http.Handler, error) {
@@ -230,7 +230,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 	// No chain and no AI — escalate to SRE
 	logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
 	if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
-		logging.Errorf("failed to escalate incident '%s': %w", pdClient.GetIncidentID(), err)
+		logging.Errorf("failed to escalate incident '%s': %v", pdClient.GetIncidentID(), err)
 	}
 	return &triggersv1.InterceptorResponse{Continue: false}
 }

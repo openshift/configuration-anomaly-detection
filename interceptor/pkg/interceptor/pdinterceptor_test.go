@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -225,7 +226,7 @@ func TestOversizedRequestBodyIsRejected(t *testing.T) {
 	t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "testdata/minimal-config.yaml")
 
 	oversizedBody := bytes.Repeat([]byte("A"), 10*1024*1024) // 10 MiB
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oversizedBody))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
 
 	handler, err := CreateInterceptorHandler([]string{"TEST"})
@@ -288,6 +289,8 @@ func makeSignedRequest(t *testing.T, innerBody, signingSecret string) *http.Requ
 // Note: webhookv3.VerifySignature restores r.Body after reading it, so
 // iterating the same extractedRequest over multiple tokens is safe.
 func TestSignatureVerification(t *testing.T) {
+	t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "testdata/minimal-config.yaml")
+
 	const (
 		secret1   = "signing-secret-one"
 		secret2   = "signing-secret-two"
