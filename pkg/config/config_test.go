@@ -14,6 +14,8 @@ alerts:
       - mustgather
 `
 
+const alertName = "mustgather"
+
 var testInvestigations = []string{
 	"precheck",
 	"ccam",
@@ -52,7 +54,7 @@ func TestParseConfig(t *testing.T) { //nolint:maintidx,gocyclo // table-driven t
 				if len(cfg.Alerts[0].Investigations) != 1 {
 					t.Fatalf("expected 1 chain entry, got %d", len(cfg.Alerts[0].Investigations))
 				}
-				if cfg.Alerts[0].Investigations[0].Name != "mustgather" {
+				if cfg.Alerts[0].Investigations[0].Name != alertName {
 					t.Errorf("expected chain entry mustgather, got %q", cfg.Alerts[0].Investigations[0].Name)
 				}
 			},
@@ -93,7 +95,7 @@ alerts:
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				entry := cfg.Alerts[0].Investigations[1]
-				if entry.Name != "mustgather" {
+				if entry.Name != alertName {
 					t.Errorf("entry name = %q, want mustgather", entry.Name)
 				}
 				if entry.When == nil {
@@ -722,7 +724,7 @@ alerts:
 	}
 
 	// Second entry: object with when
-	if cfg.Alerts[0].Investigations[1].Name != "mustgather" {
+	if cfg.Alerts[0].Investigations[1].Name != alertName {
 		t.Errorf("chain[1].Name = %q, want mustgather", cfg.Alerts[0].Investigations[1].Name)
 	}
 	if cfg.Alerts[0].Investigations[1].When == nil {
