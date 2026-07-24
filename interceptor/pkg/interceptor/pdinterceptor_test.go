@@ -9,7 +9,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-
 	"testing"
 
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
@@ -223,6 +222,8 @@ func stringContains(s, substr string) bool {
 }
 
 func TestOversizedRequestBodyIsRejected(t *testing.T) {
+	t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "testdata/minimal-config.yaml")
+
 	oversizedBody := bytes.Repeat([]byte("A"), 10*1024*1024) // 10 MiB
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
