@@ -424,11 +424,11 @@ func TestParseFiringJSON(t *testing.T) {
 	}
 }
 
-// TestParseFiringJSONFromRealPDResponse simulates how PagerDuty's API actually
+// TestParseFiringJSONFromPDResponse simulates how PagerDuty's API actually
 // delivers firing_json — as deserialized JSON ([]interface{}) not a string.
-// Test data is from a real ConfigureAlertmanagerOperatorOfflineSRE alert with
-// sensitive fields scrubbed.
-func TestParseFiringJSONFromRealPDResponse(t *testing.T) {
+// Test data is modeled after a ConfigureAlertmanagerOperatorOfflineSRE alert
+// with sensitive fields scrubbed.
+func TestParseFiringJSONFromPDResponse(t *testing.T) {
 	// This is what Go's encoding/json produces when it deserializes the PD alert
 	// body — firing_json is []interface{}, num_firing is float64, not strings.
 	scrubbedPDAlertBody := `{

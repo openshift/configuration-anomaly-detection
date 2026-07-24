@@ -137,6 +137,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
+	logging.Infof("Payload: %s", string(payloadJSON))
+
 	// Get AI client (handles role assumption and client creation)
 	// Use incident ID as session identifier for audit trail
 	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
@@ -153,7 +155,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Log AI invocation
 	logging.Infof("🤖 Invoking AI agent for incident %s", incidentID)
-	logging.Infof("Payload: %s", string(payloadJSON))
 
 	// Request streaming response format
 	acceptHeader := "text/event-stream"
