@@ -1,0 +1,39 @@
+# Local Testing Configuration for CAD
+#
+# This file is used for local development and testing. Set CAD_INVESTIGATION_CONFIG_PATH
+# to point to this file when running cadctl locally.
+#
+# Usage:
+#   export CAD_INVESTIGATION_CONFIG_PATH="./test/local-config.yaml"
+#   ./bin/cadctl investigate --payload-path payload
+
+# AI Agent Runtime Configuration
+# Configure these values based on your test environment (stage/prod)
+ai_agent:
+  runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/rosasreai_stage-abc123"
+  user_id: "cad-local-testing"
+  region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/rosasreai_stage-invoker"
+  timeout_seconds: 900              # 15 minutes
+  version: "local-dev"              # Optional, for audit trail
+  ops_sop_version: "local"          # Optional, for audit trail
+  rosa_plugins_version: "local"     # Optional, for audit trail
+
+filters:
+  # Enable AI investigation for local testing
+  # By default, enable for all clusters (no filter = always run)
+  - investigation: aiassisted
+
+  # Uncomment to restrict AI investigation to specific clusters/orgs:
+  # - investigation: aiassisted
+  #   when:
+  #     or:
+  #       - field: ClusterID
+  #         operator: in
+  #         values: ["your-test-cluster-id"]
+  #       - field: OrganizationID
+  #         operator: in
+  #         values: ["your-test-org-id"]
+
+  # Other investigations run unconditionally for local testing
+  # Add filters here if you want to restrict specific investigations

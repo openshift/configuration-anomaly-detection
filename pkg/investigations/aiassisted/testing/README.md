@@ -22,35 +22,13 @@ You need a deployed AWS Bedrock AgentCore agent with:
 
 ### 2. Investigation Config File
 
-Create a YAML config file with the AI agent runtime settings and filter rules:
-
-```yaml
-# test-config.yaml
-ai_agent:
-  runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:135808927096:runtime/alert_investigation_agent_v0-c7B2Y68BMr"
-  user_id: "cad-test-user"
-  region: "us-east-1"
-  timeout_seconds: 900
-  version: "dev"
-  ops_sop_version: "dev"
-  rosa_plugins_version: "dev"
-
-filters:
-  - investigation: aiassisted
-    any:
-      - input: ClusterID
-        operator: in
-        values: ["<test-cluster-id>"]
-      - input: OrganizationID
-        operator: in
-        values: ["<test-org-id>"]
-```
-
-Then set the path:
+For quick local testing, use the provided test config:
 
 ```bash
-export CAD_INVESTIGATION_CONFIG_PATH="./test-config.yaml"
+export CAD_INVESTIGATION_CONFIG_PATH="./test/local-config.yaml"
 ```
+
+Edit `test/local-config.yaml` to fill in your real `runtime_arn` and `invoker_role_arn` values. By default it enables AI investigation for all clusters with no filter restrictions.
 
 See `docs/investigation-filter-config.example.yaml` for the full reference.
 
@@ -115,12 +93,15 @@ This creates a `payload` file in the current directory and a PagerDuty incident 
 ### Step 3: Set Up Configuration and Credentials
 
 ```bash
+# Source stage environment (OCM, PagerDuty, etc.)
+source test/set_stage_env.sh
+
 # Set AWS credentials for AgentCore
 export AGENTCORE_AWS_ACCESS_KEY_ID="YOUR_ACCESS_KEY_ID"
 export AGENTCORE_AWS_SECRET_ACCESS_KEY="YOUR_SECRET_ACCESS_KEY"
 
-# Point to your config file (see step 2 in Prerequisites)
-export CAD_INVESTIGATION_CONFIG_PATH="./test-config.yaml"
+# Point to the local test config (edit it first to set your real ARNs)
+export CAD_INVESTIGATION_CONFIG_PATH="test/local-config.yaml"
 ```
 
 ### Step 4: Run the Investigation
@@ -156,7 +137,7 @@ The logs should include the full AI response:
 AI Output:
 🤖 AI Investigation Results 🤖
 Session ID: cad-<incident-id>-<timestamp>-<random>
-Runtime: arn:aws:bedrock-agentcore:us-east-1:135808927096:runtime/alert_investigation_agent_v0-c7B2Y68BMr
+Runtime: arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/your-agent-runtime-id
 Agent Version: dev
 ops-sop Version: dev
 rosa-plugins Version: dev
