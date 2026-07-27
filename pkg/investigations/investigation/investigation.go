@@ -210,35 +210,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 			return r.builtResources, r.buildErr
 		}
 
-		// Detect HCP early so investigations can use IsHCP without requiring management cluster resources
-		// Must check HCP status BEFORE calling IsManagingCluster() because the OCM API returns an error
-		// when trying to list external configuration labels on HCP clusters.
-		if hypershift := r.builtResources.Cluster.Hypershift(); hypershift != nil && hypershift.Enabled() {
-			r.builtResources.IsHCP = true
-		}
-
-		// Check if this is an infra cluster (hive, management or service)
-		// HCP clusters are customer clusters by definition - they can never be management clusters.
-		// Management clusters are the infrastructure that HOSTS HCP control planes.
-		internalID := r.builtResources.Cluster.ID()
-		if r.builtResources.IsHCP {
-			// HCP clusters are customer clusters, not infrastructure
-			r.builtResources.IsInfrastructureCluster = false
-			logging.Debugf("Cluster %s is HCP - treating as customer cluster, not infrastructure", internalID)
-		} else {
-			// For non-HCP clusters, check if it's a management/service/hive cluster
-			isManaging, err := r.ocmClient.IsManagingCluster(internalID)
-			if err != nil {
-				logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
-				r.builtResources.IsInfrastructureCluster = true
-				r.builtResources.IsInfrastructureClusterUncertain = true
-			} else {
-				r.builtResources.IsInfrastructureCluster = isManaging
-				if isManaging {
-					logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
-				}
-			}
-		}
+		r.detectClusterType()
 	}
 
 	if r.buildNotes && r.builtResources.Notes == nil {
@@ -453,4 +425,35 @@ func (r *ResourceBuilderMock) Build() (*Resources, error) {
 		return r.Resources, r.BuildError
 	}
 	return r.Resources, nil
+}
+
+// detectClusterType sets IsHCP and IsInfrastructureCluster on the built resources.
+// Must check HCP status BEFORE calling IsManagingCluster() because the OCM API returns an error
+// when trying to list external configuration labels on HCP clusters.
+func (r *ResourceBuilderT) detectClusterType() {
+	hypershift := r.builtResources.Cluster.Hypershift()
+	r.builtResources.IsHCP = hypershift != nil && hypershift.Enabled()
+
+	// HCP clusters are customer clusters by definition - they can never be management clusters.
+	// Management clusters are the infrastructure that HOSTS HCP control planes.
+	internalID := r.builtResources.Cluster.ID()
+	if r.builtResources.IsHCP {
+		r.builtResources.IsInfrastructureCluster = false
+		logging.Debugf("Cluster %s is HCP - treating as customer cluster, not infrastructure", internalID)
+		return
+	}
+
+	// For non-HCP clusters, check if it's a management/service/hive cluster
+	isManaging, err := r.ocmClient.IsManagingCluster(internalID)
+	if err != nil {
+		logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming it IS a managing cluster (fail-closed).", internalID, err)
+		r.builtResources.IsInfrastructureCluster = true
+		r.builtResources.IsInfrastructureClusterUncertain = true
+		return
+	}
+
+	r.builtResources.IsInfrastructureCluster = isManaging
+	if isManaging {
+		logging.Infof("Cluster %s is an infrastructure cluster (hive, management, or service cluster)", internalID)
+	}
 }
