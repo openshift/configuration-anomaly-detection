@@ -336,9 +336,22 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 
 	// Evaluate the investigation filter if one is configured for this investigation.
 	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
-	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId, pdClient); filtered {
+	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId); filtered {
 		metrics.Inc(metrics.AlertsFiltered, inv.Name())
 		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
+		// aiassisted filtering shouldn't surface the "filtered out by configuration" note,
+		// since that framing is specific to the other investigations; still escalate so
+		// SRE knows a real, alert-worthy investigation was skipped.
+		if pdClient != nil {
+			if inv.Name() == "aiassisted" {
+				logging.Infof("aiassisted investigation filtered out for cluster %s, escalating without note", clusterId)
+				if escErr := pdClient.EscalateIncident(); escErr != nil {
+					logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
+				}
+			} else if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", inv.Name())); escErr != nil {
+				logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
+			}
+		}
 		return nil
 	}
 
@@ -588,7 +601,9 @@ func (c *investigationRunner) executeActions(
 
 // evaluateFilter checks whether the investigation should be filtered out.
 // Returns true if the investigation was filtered (should not run), false otherwise.
-func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string, pdClient *pagerduty.SdkClient) bool {
+// Escalating the incident about the filtered-out investigation is the caller's
+// responsibility, since not every investigation wants that note posted (e.g. aiassisted).
+func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string) bool {
 	if c.dependencies.FilterConfig == nil || filterCtx == nil {
 		return false
 	}
@@ -613,12 +628,6 @@ func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.Fi
 		return false
 	default:
 		logging.Infof("Investigation %s filtered out for cluster %s: %s", invName, clusterID, reason)
-	}
-
-	if pdClient != nil {
-		if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", invName)); escErr != nil {
-			logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
-		}
 	}
 
 	return true
