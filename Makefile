@@ -64,7 +64,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 test-cadctl: check-go121-install ## Run automated tests for cadctl
 	@echo
 	@echo "Running unit tests for cadctl..."
-	go test $(TESTOPTS) -race -mod=readonly ./cadctl/... ./pkg/...
+	go test $(TESTOPTS) -race -p 2 -mod=readonly ./cadctl/... ./pkg/...
 
 ##@ Interceptor:
 .PHONY: interceptor
@@ -81,7 +81,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 test-interceptor: check-go121-install check-jq-install build-interceptor-release ## Run unit tests for interceptor
 	@echo
 	@echo "Running unit tests for interceptor..."
-	cd interceptor && go test -race -mod=readonly ./...
+	cd interceptor && go test -race -p 2 -mod=readonly ./...
 
 .PHONY: test-interceptor-e2e
 test-interceptor-e2e: check-go121-install check-jq-install check-vault-install build-interceptor-release ## Run e2e tests for interceptor
