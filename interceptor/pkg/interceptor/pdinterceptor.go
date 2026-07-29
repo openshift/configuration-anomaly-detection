@@ -3,6 +3,7 @@ package interceptor
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -213,7 +214,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 	if hasAlert {
 		logging.Infof("Incident %s has a configured alert, returning InterceptorResponse `Continue: true`.", pdClient.GetIncidentID())
-		return &triggersv1.InterceptorResponse{Continue: true}
+		return continueWithEncodedPayload(r.Body)
 	}
 
 	// AI fallback: if ai_agent is configured, allow the pipeline to run for AI investigation
@@ -224,7 +225,7 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 			return resp
 		}
 		logging.Infof("Launching AI investigation for incident %s", pdClient.GetIncidentID())
-		return &triggersv1.InterceptorResponse{Continue: true}
+		return continueWithEncodedPayload(r.Body)
 	}
 
 	// No chain and no AI — escalate to SRE
@@ -233,6 +234,18 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 		logging.Errorf("failed to escalate incident '%s': %v", pdClient.GetIncidentID(), err)
 	}
 	return &triggersv1.InterceptorResponse{Continue: false}
+}
+
+// continueWithEncodedPayload returns a Continue response with the webhook payload
+// base64-encoded as an extension. The TriggerBinding references this extension so
+// the payload reaches the Tekton task without shell metacharacter issues.
+func continueWithEncodedPayload(body string) *triggersv1.InterceptorResponse {
+	return &triggersv1.InterceptorResponse{
+		Continue: true,
+		Extensions: map[string]interface{}{
+			"payload_base64": base64.StdEncoding.EncodeToString([]byte(body)),
+		},
+	}
 }
 
 // clusterExists retrieves the cluster ID from PagerDuty and verifies it
