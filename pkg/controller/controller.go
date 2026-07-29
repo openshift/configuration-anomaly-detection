@@ -504,9 +504,9 @@ func (c *investigationRunner) recordManualCompletion(invName string, status stri
 
 func handleCADFailure(err error, rb investigation.ResourceBuilder, notifier incidentNotifier) {
 	logging.Errorf("CAD investigation failed: %v", err)
-	resources, err := rb.Build()
-	if err != nil {
-		logging.Errorf("resource builder failed with error: %v", err)
+	resources, buildErr := rb.Build()
+	if buildErr != nil {
+		logging.Errorf("resource builder failed with error: %v", buildErr)
 	}
 
 	var docErr *ocm.DocumentationMismatchError
