@@ -8,7 +8,6 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
@@ -66,13 +65,6 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	// Track manual investigation start
 	dryRun := strconv.FormatBool(c.dryRun)
 	metrics.Inc(metrics.ManualInvestigationStarted, inv.Name(), dryRun)
-
-	// For AI investigations, create a new instance with the runtime config from the global config.
-	if _, ok := inv.(*aiassisted.Investigation); ok {
-		inv = &aiassisted.Investigation{
-			AIConfig: c.dependencies.Cfg.GetAIAgentConfig(),
-		}
-	}
 
 	invEntries := []config.InvestigationEntry{}
 	if inv.Name() != "precheck" {
