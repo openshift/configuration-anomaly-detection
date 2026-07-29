@@ -306,4 +306,4 @@ For Red Hat employees, these environment variables can be found in the SRE-P vau
 
 ### Configuration File
 
-CAD now also has a configuration file and over time the environment variables will be moved to this file - for the supported fields at any time see the example configuration with comments in [./docs/investigation-filter-config.example.yaml](./docs/investigation-filter-config.example.yaml "this file").
+CAD now also has a configuration file and over time the environment variables will be moved to this file - for the supported fields at any time see the example configuration with comments in [./docs/investigation-config.example.yaml](./docs/investigation-config.example.yaml "this file").

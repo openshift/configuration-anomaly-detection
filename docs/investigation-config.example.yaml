@@ -5,8 +5,7 @@
 # loaded from the file path specified in the CAD_INVESTIGATION_CONFIG_PATH
 # environment variable.
 #
-# If the environment variable is not set, no config is loaded and alerts
-# without a matching chain are escalated to SRE.
+# If the environment variable is not set, no config is loaded and CAD exits.
 #
 # Structure:
 #   alerts:                  # List of alert → investigation mappings.
