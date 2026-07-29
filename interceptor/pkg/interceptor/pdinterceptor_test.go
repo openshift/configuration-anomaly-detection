@@ -223,13 +223,11 @@ func stringContains(s, substr string) bool {
 }
 
 func TestOversizedRequestBodyIsRejected(t *testing.T) {
-	t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "testdata/minimal-config.yaml")
-
 	oversizedBody := bytes.Repeat([]byte("A"), 10*1024*1024) // 10 MiB
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
 
-	handler, err := CreateInterceptorHandler([]string{"TEST"})
+	handler, err := CreateInterceptorHandler([]string{"TEST"}, "testdata/minimal-config.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +354,7 @@ func TestSignatureVerification(t *testing.T) {
 			req := makeSignedRequest(t, innerBody, tt.signingSecret)
 			rec := httptest.NewRecorder()
 
-			handler, err := CreateInterceptorHandler(tt.tokens)
+			handler, err := CreateInterceptorHandler(tt.tokens, "testdata/minimal-config.yaml")
 			if err != nil {
 				t.Fatal(err)
 			}

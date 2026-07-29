@@ -62,8 +62,8 @@ type interceptorHandler struct {
 	cfg      *config.Config
 }
 
-func CreateInterceptorHandler(pdTokens []string) (http.Handler, error) {
-	cfg, err := config.LoadConfig("", investigations.GetAvailableInvestigationsNames())
+func CreateInterceptorHandler(pdTokens []string, configPath string) (http.Handler, error) {
+	cfg, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
 	if err != nil {
 		return nil, fmt.Errorf("loading investigation config: %w", err)
 	}

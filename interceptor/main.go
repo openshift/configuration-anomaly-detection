@@ -48,7 +48,8 @@ func main() {
 	ctx := signals.NewContext()
 
 	mux := http.NewServeMux()
-	handler, err := interceptor.CreateInterceptorHandler(signatures)
+	configPath := os.Getenv("CAD_INVESTIGATION_CONFIG_PATH")
+	handler, err := interceptor.CreateInterceptorHandler(signatures, configPath)
 	if err != nil {
 		logger.Fatalf("failed to create interceptor handler: %v", err)
 	}

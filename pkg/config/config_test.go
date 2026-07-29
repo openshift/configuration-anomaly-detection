@@ -611,11 +611,10 @@ func TestAIAgentConfigGetTimeout(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	t.Run("env var not set returns error", func(t *testing.T) {
-		t.Setenv(ConfigEnvVar, "")
+	t.Run("empty path returns error", func(t *testing.T) {
 		_, err := LoadConfig("", testInvestigations)
 		if err == nil {
-			t.Fatal("expected error when config path is not provided")
+			t.Fatal("expected error when config path is empty")
 		}
 	})
 
@@ -624,9 +623,8 @@ func TestLoadConfig(t *testing.T) {
 		if err := os.WriteFile(path, []byte(testMustgatherChainYAML), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv(ConfigEnvVar, path)
 
-		cfg, err := LoadConfig("", testInvestigations)
+		cfg, err := LoadConfig(path, testInvestigations)
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
@@ -636,8 +634,7 @@ func TestLoadConfig(t *testing.T) {
 	})
 
 	t.Run("nonexistent file returns error", func(t *testing.T) {
-		t.Setenv(ConfigEnvVar, "/nonexistent/path.yaml")
-		_, err := LoadConfig("", testInvestigations)
+		_, err := LoadConfig("/nonexistent/path.yaml", testInvestigations)
 		if err == nil {
 			t.Fatal("expected error for nonexistent file")
 		}
@@ -648,53 +645,17 @@ func TestLoadConfig(t *testing.T) {
 		if err := os.WriteFile(path, []byte(`alerts: [{alert_title: "X", investigations: [{name: fake}]}]`), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		t.Setenv(ConfigEnvVar, path)
 
-		_, err := LoadConfig("", testInvestigations)
+		_, err := LoadConfig(path, testInvestigations)
 		if err == nil {
 			t.Fatal("expected error for invalid investigation name")
 		}
 	})
-
-	t.Run("path override takes precedence over env var", func(t *testing.T) {
-		t.Setenv(ConfigEnvVar, "/nonexistent/should-not-be-used.yaml")
-
-		path := filepath.Join(t.TempDir(), "override.yaml")
-		if err := os.WriteFile(path, []byte(testMustgatherChainYAML), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		cfg, err := LoadConfig(path, testInvestigations)
-		if err != nil {
-			t.Fatalf("LoadConfig() error = %v", err)
-		}
-		if cfg == nil || len(cfg.Alerts) != 1 {
-			t.Fatal("expected config with 1 investigation from override path")
-		}
-	})
-
-	t.Run("empty override falls back to env var", func(t *testing.T) {
-		content := `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - mustgather
-`
-		path := filepath.Join(t.TempDir(), "envvar.yaml")
-		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv(ConfigEnvVar, path)
-
-		cfg, err := LoadConfig("", testInvestigations)
-		if err != nil {
-			t.Fatalf("LoadConfig() error = %v", err)
-		}
-		if cfg == nil || len(cfg.Alerts) != 1 {
-			t.Fatal("expected config with 1 investigation from env var path")
-		}
-	})
 }
+
+// NOTE: The env var fallback (CAD_INVESTIGATION_CONFIG_PATH) is handled by
+// callers (controller.initializeDependencies, interceptor main) before calling
+// LoadConfig. Tests for that behavior belong with those callers.
 
 func TestInvestigationEntryUnmarshal(t *testing.T) {
 	yaml := `

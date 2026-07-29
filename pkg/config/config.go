@@ -10,11 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	// ConfigEnvVar is the environment variable that holds the path to the investigation filter config file.
-	ConfigEnvVar = "CAD_INVESTIGATION_CONFIG_PATH"
-)
-
 // AIAgentConfig holds runtime configuration for AgentCore AI investigations.
 type AIAgentConfig struct {
 	RuntimeARN     string `yaml:"runtime_arn"`      // AWS ARN of the agent runtime to invoke
@@ -77,22 +72,16 @@ func (e *InvestigationEntry) UnmarshalYAML(value *yaml.Node) error {
 	return value.Decode((*raw)(e))
 }
 
-// LoadConfig reads and parses the investigation configuration.
-// If pathOverride is non-empty, it is used as the config file path.
-// Otherwise, the path is read from the CAD_INVESTIGATION_CONFIG_PATH environment variable.
-// Returns an error if no config path is provided or the file cannot be read.
+// LoadConfig reads and parses the investigation configuration from the given path.
+// Returns an error if the path is empty or the file cannot be read.
 // The validInvestigations parameter is the list of known investigation names used to
 // validate that each chain entry references a real investigation.
-func LoadConfig(pathOverride string, validInvestigations []string) (*Config, error) {
-	path := pathOverride
+func LoadConfig(path string, validInvestigations []string) (*Config, error) {
 	if path == "" {
-		path = os.Getenv(ConfigEnvVar)
-	}
-	if path == "" {
-		return nil, fmt.Errorf("investigation config path not provided: set %s or pass a path override", ConfigEnvVar)
+		return nil, fmt.Errorf("investigation config path must not be empty")
 	}
 
-	data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
+	data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted source, not user input
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
 	}

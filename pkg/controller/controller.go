@@ -62,7 +62,7 @@ func (p *ManualConfig) Validate() error {
 type CommonConfig struct {
 	LogLevel   string
 	Identifier string
-	ConfigPath string // Optional path to investigation filter config file (overrides CAD_INVESTIGATION_CONFIG_PATH)
+	ConfigPath string // Path to investigation config file; falls back to CAD_INVESTIGATION_CONFIG_PATH env var
 }
 
 type Controller interface {
@@ -109,9 +109,12 @@ func (d *Dependencies) Cleanup() {
 }
 
 // initializeDependencies loads environment variables and creates shared clients.
-// configPath is an optional path to the investigation filter config file;
-// if empty, the CAD_INVESTIGATION_CONFIG_PATH env var is used instead.
+// configPath is the path to the investigation config file;
+// if empty, the CAD_INVESTIGATION_CONFIG_PATH env var is used as a fallback.
 func initializeDependencies(configPath string) (*Dependencies, error) {
+	if configPath == "" {
+		configPath = os.Getenv("CAD_INVESTIGATION_CONFIG_PATH")
+	}
 	// Load k8s environment variables
 	backplaneURL := os.Getenv("BACKPLANE_URL")
 	if backplaneURL == "" {
