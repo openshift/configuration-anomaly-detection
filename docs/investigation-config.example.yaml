@@ -100,16 +100,12 @@
 # AI investigation guards:
 #   1. The `ai_agent` section must be present — without it, any alert
 #      referencing `aiassisted` is rejected at config validation time.
-#   2. Every `aiassisted` entry must have a `when` filter — either
-#      on the alert itself or on the entry. This prevents uncontrolled AI
-#      execution. Configs without a filter are rejected at validation time.
-#   3. The `CAD_EXPERIMENTAL_ENABLED=true` env var must be set for the
-#      AI fallback path (unmatched alerts) to trigger. Alerts explicitly
-#      configured do not require this env var unless
-#      they are marked `experimental: true`.
-#   4. At runtime, the `when` filter is evaluated against real cluster data
-#      (org ID, cluster ID, cloud provider, etc.) to decide whether AI
-#      actually runs for a given cluster.
+#   2. The AI fallback path (unmatched alerts) triggers whenever the
+#      `ai_agent` section is configured, without requiring
+#      `CAD_EXPERIMENTAL_ENABLED=true`.
+#   3. At runtime, any `when` filter on the alert or entry is evaluated
+#      against real cluster data (org ID, cluster ID, cloud provider, etc.)
+#      to decide whether AI actually runs for a given cluster.
 #
 # ai_agent:
 #   runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/rosasreai_stage-abc123"
@@ -232,8 +228,7 @@ alerts:
 
   # AI-assisted investigation example
   # Requires the ai_agent section above to be configured.
-  # The `when` filter is mandatory for aiassisted — configs without one are
-  # rejected at validation time. The filter controls which clusters/orgs are
+  # A `when` filter can be used to control which clusters/orgs are
   # eligible for AI investigation (allowlisting, sampling, org-scoping).
   #
   # Entry-level filter (filter applies only to the aiassisted step):
