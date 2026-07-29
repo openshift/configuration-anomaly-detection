@@ -402,7 +402,7 @@ func (c *investigationRunner) runChain(
 	}
 
 	// Post-chain: title update (PD mode only)
-	if c.notifier.IsActive() && latestBuilder != nil {
+	if c.notifier.HasPagerDuty() && latestBuilder != nil {
 		a := executor.PagerDutyTitleUpdate{Prefix: pagerdutyTitlePrefix}
 		titleResult := investigation.InvestigationResult{
 			Actions: []types.Action{&a},
@@ -499,7 +499,7 @@ func calculateBackoff(attempt int) time.Duration {
 // recordManualCompletion records manual investigation completion metric.
 // Only tracks if this is a manual investigation (notifier is inactive).
 func (c *investigationRunner) recordManualCompletion(invName string, status string) {
-	if !c.notifier.IsActive() {
+	if !c.notifier.HasPagerDuty() {
 		dryRun := strconv.FormatBool(c.dryRun)
 		metrics.Inc(metrics.ManualInvestigationCompleted, invName, status, dryRun)
 	}

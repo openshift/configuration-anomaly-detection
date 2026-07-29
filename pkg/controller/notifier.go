@@ -12,7 +12,7 @@ import (
 type incidentNotifier interface {
 	EscalateWithNote(note string) error
 	AttachToBuilder(builder investigation.ResourceBuilder)
-	IsActive() bool
+	HasPagerDuty() bool
 }
 
 // pdIncidentNotifier wraps a real PagerDuty client.
@@ -32,7 +32,7 @@ func (n *pdIncidentNotifier) AttachToBuilder(builder investigation.ResourceBuild
 	builder.WithPdClient(n.client)
 }
 
-func (n *pdIncidentNotifier) IsActive() bool {
+func (n *pdIncidentNotifier) HasPagerDuty() bool {
 	return true
 }
 
@@ -50,6 +50,6 @@ func (n *noopIncidentNotifier) EscalateWithNote(note string) error {
 
 func (n *noopIncidentNotifier) AttachToBuilder(_ investigation.ResourceBuilder) {}
 
-func (n *noopIncidentNotifier) IsActive() bool {
+func (n *noopIncidentNotifier) HasPagerDuty() bool {
 	return false
 }
