@@ -341,7 +341,46 @@ var _ = Describe("Pagerduty", func() {
 					Expect(res).Should(Equal("654321"))
 				})
 			})
-			When("the alert body does not have a 'details' field", func() {
+			When("[HCPNodepoolUpgradeDelay] the payload contains the cluster_id in the firing field (single-line)", func() {
+				It("should succeed and pull the clusterID", func() {
+					// Arrange
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"firing": "cluster_id = 654321"}}}]}`)
+					})
+					// Act
+					res, err := p.RetrieveClusterID()
+					// Assert
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(res).Should(Equal("654321"))
+				})
+			})
+			When("[HCPNodepoolUpgradeDelay] the payload contains the cluster_id in the firing field (multi-line)", func() {
+				It("should succeed and pull the clusterID from a realistic multi-line firing payload", func() {
+					// Arrange: the firing field mimics real HCPNodepoolUpgradeDelay alert text where
+					// cluster_id appears on a line after other label/annotation entries.
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"firing": "alertname = HCPClusterNodepoolUpgradeDelay\n - cluster_id = 654321\n - nodepool = workers"}}}]}`)
+					})
+					// Act
+					res, err := p.RetrieveClusterID()
+					// Assert
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(res).Should(Equal("654321"))
+				})
+			})
+			When("[HCPNodepoolUpgradeDelay] the firing field only contains hosted_cluster_id (no standalone cluster_id)", func() {
+				It("should not match hosted_cluster_id and should raise an error", func() {
+					// Arrange: hosted_cluster_id must not be mistaken for cluster_id
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						_, _ = fmt.Fprint(w, `{"alerts":[{"id":"1234","body":{"details":{"firing": "hosted_cluster_id = abc123\nother_field = value"}}}]}`)
+					})
+					// Act
+					_, err := p.RetrieveClusterID()
+					// Assert
+					Expect(err).Should(HaveOccurred())
+				})
+			})
+			When("the alert body does not have a 'details' nor 'firing' field", func() {
 				It("should raise an error", func() {
 					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
 						// Standard alert format of

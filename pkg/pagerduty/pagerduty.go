@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -410,44 +411,81 @@ type notesData struct {
 	ClusterID string `yaml:"cluster_id"`
 }
 
+// clusterIDFromFiringRe matches standalone "cluster_id = <value>" within a (potentially
+// multi-line) firing alert text. The named capture group "id" extracts the value.
+// (?:^|\s) requires either start-of-string or a whitespace character immediately before
+// "cluster_id", preventing false matches inside compound names such as "hosted_cluster_id".
+// \s includes \n, so the anchor correctly finds cluster_id on any line of a multi-line payload.
+var clusterIDFromFiringRe = regexp.MustCompile(`(?:^|\s)cluster_id = (?P<id>\S+)`)
+
 func extractClusterIDFromAlertBody(data map[string]interface{}) (string, error) {
 	details, found := data["details"].(map[string]interface{})
 	if !found {
 		return "", fmt.Errorf("could not find alert details field: %s", data)
 	}
 
-	// PARSE OPTION 1 (new format): cluster_id directly contained in custom details
+	type extractor = func(map[string]interface{}) (string, error)
+	extractors := []extractor{parseClusterIdFromField, parseClusterIdFromNotes, parseClusterIdFromFiring}
+	var errs []error
+	for _, extractor := range extractors {
+		id, err := extractor(details)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if id != "" {
+			return id, nil
+		}
+	}
+	return "", errors.Join(errs...)
+}
+
+// PARSE OPTION 1 (new format): cluster_id directly contained in custom details
+func parseClusterIdFromField(details map[string]interface{}) (string, error) {
 	clusterID, found := details["cluster_id"].(string)
 	if !found {
 		logging.Warn("Unable to parse cluster_id as direct field directly from the alert details.")
 	} else {
 		return clusterID, nil
 	}
+	return "", nil
+}
 
-	// PARSE OPTION 2 (old format: OSD-18006): cluster_id contained in custom_details[notes]
-	// We have quite a few alerts fired from a few months ago that still are in this format.
-	// We will have to wait a bit until we remove the backwards compatibility.
-	// In theory, it's not a big issue that the alerts fail to get handled by CAD, as this
-	// only affects alerts that already exist, and re-pass CAD for the 'resolve' state.
-	// We still don't want to many failing pipelines though.
-	logging.Warn("Trying to parse cluster_id from the notes field...")
-
+// PARSE OPTION 2 (old format: OSD-18006): cluster_id contained in custom_details[notes]
+// We have quite a few alerts fired from a few months ago that still are in this format.
+// We will have to wait a bit until we remove the backwards compatibility.
+// In theory, it's not a big issue that the alerts fail to get handled by CAD, as this
+// only affects alerts that already exist, and re-pass CAD for the 'resolve' state.
+// We still don't want to many failing pipelines though.
+func parseClusterIdFromNotes(details map[string]interface{}) (string, error) {
 	notes, found := details["notes"].(string)
 	if !found {
-		return "", errors.New("could not find notes field")
+		return "", nil
 	}
-
+	logging.Warn("Trying to parse cluster_id from the notes field...")
 	var notesUnmarshalled notesData
 	if err := yaml.Unmarshal([]byte(notes), &notesUnmarshalled); err != nil {
 		return "", fmt.Errorf("error decoding notes YAML: %w", err)
 	}
-
-	clusterID = notesUnmarshalled.ClusterID
-	if clusterID == "" {
+	if notesUnmarshalled.ClusterID == "" {
 		return "", errors.New("could not find cluster_id field in notes")
 	}
+	return notesUnmarshalled.ClusterID, nil
+}
 
-	return clusterID, nil
+// PARSE OPTION 3 (HCPNodepoolUpgradeDelay): these alerts have their own format and set neither
+// 'notes' nor 'cluster_id', so the ID must be extracted from the free-text 'firing' field.
+func parseClusterIdFromFiring(details map[string]interface{}) (string, error) {
+	logging.Warn("Trying to parse 'cluster_id = <id>' free text from 'firing'")
+	firing, found := details["firing"].(string)
+	if !found {
+		return "", errors.New("could not find firing field")
+	}
+	match := clusterIDFromFiringRe.FindStringSubmatch(firing)
+	idIdx := clusterIDFromFiringRe.SubexpIndex("id")
+	if idIdx < 0 || idIdx >= len(match) {
+		return "", errors.New("no cluster_id found in firing field")
+	}
+	return match[idIdx], nil
 }
 
 // extractAlertDetails will extract required details from a sdk.IncidentAlert
