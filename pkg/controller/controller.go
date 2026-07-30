@@ -155,10 +155,14 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
 	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
 
-	// Load investigation config
-	cfg, err := config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load investigation config: %w", err)
+	// Load investigation config (optional for manual runs)
+	var cfg *config.Config
+	var err error
+	if configPath != "" {
+		cfg, err = config.LoadConfig(configPath, investigations.GetAvailableInvestigationsNames())
+		if err != nil {
+			return nil, fmt.Errorf("failed to load investigation config: %w", err)
+		}
 	}
 
 	// Create OCM client
@@ -197,6 +201,10 @@ func Run(opts ControllerOptions) error {
 		return err
 	}
 	defer deps.Cleanup()
+
+	if opts.Pd != nil && deps.Cfg == nil {
+		return fmt.Errorf("investigation config is required for PagerDuty mode; set --config or CAD_INVESTIGATION_CONFIG_PATH")
+	}
 
 	ctrl, err := NewController(opts, deps)
 	if err != nil {
