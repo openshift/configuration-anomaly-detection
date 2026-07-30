@@ -10,6 +10,9 @@
 # Structure:
 #   alerts:                  # List of alert → investigation mappings.
 #     - alert_title:         # Substring matched against the PagerDuty incident title.
+#       name:                # Short identifier used for metrics labels and backplane remediation RBAC.
+#                            # Must match the investigation directory name so backplane-api can resolve
+#                            # the correct metadata.yaml. Falls back to alert_title if unset.
 #       experimental: false  # Optional. If true, alert only matches when CAD_EXPERIMENTAL_ENABLED=true.
 #       when:                # Optional alert-level filter. If it blocks, the entire alert is skipped
 #                            # and the alert is escalated to PagerDuty.
@@ -121,6 +124,7 @@ alerts:
   # Cluster Has Gone Missing (CHGM)
   # Exclude a specific cluster from the investigation.
   - alert_title: "has gone missing"
+    name: chgm
     when:
       field: ClusterID
       operator: notin
@@ -136,6 +140,7 @@ alerts:
 
   # Cluster Provisioning Delay
   - alert_title: "ClusterProvisioningDelay -"
+    name: cpd
     investigations:
       - precheck
       - ccam
@@ -144,6 +149,7 @@ alerts:
   # Etcd Database Quota Low Space
   # Only run on non-HCP (classic) clusters.
   - alert_title: "etcdDatabaseQuotaLowSpace"
+    name: etcddatabasequotalowspace
     when:
       field: HCP
       operator: in
@@ -155,6 +161,7 @@ alerts:
   # Cluster Monitoring Error Budget Burn
   # Example: sample redhat.com emails at 10%, always run for others.
   # - alert_title: "ClusterMonitoringErrorBudgetBurnSRE"
+  #   name: clustermonitoringerrorbudgetburn
   #   investigations:
   #     - precheck
   #     - ccam
@@ -169,6 +176,7 @@ alerts:
 
   # Insights Operator Down
   - alert_title: "InsightsOperatorDown"
+    name: insightsoperatordown
     investigations:
       - precheck
       - ccam
@@ -176,6 +184,7 @@ alerts:
 
   # Upgrade Config Sync Failure Over 4hr
   - alert_title: "UpgradeConfigSyncFailureOver4HrSRE"
+    name: upgradeconfigsyncfailureover4hr
     investigations:
       - precheck
       - ccam
@@ -183,6 +192,7 @@ alerts:
 
   # Machine Health Check Unterminated Short Circuit SRE
   - alert_title: "MachineHealthCheckUnterminatedShortCircuitSRE"
+    name: machinehealthcheckunterminatedshortcircuitsre
     investigations:
       - precheck
       - ccam
@@ -190,12 +200,14 @@ alerts:
 
   # Restart Control Plane
   - alert_title: "RestartControlPlane"
+    name: restartcontrolplane
     investigations:
       - precheck
       - restartcontrolplane
 
   # Cannot Retrieve Updates SRE
   - alert_title: "CannotRetrieveUpdatesSRE"
+    name: cannotretrieveupdatessre
     investigations:
       - precheck
       - ccam
@@ -203,6 +215,7 @@ alerts:
 
   # Mustgather (standalone, with AWS-only alert-level filter)
   - alert_title: "MustGather"
+    name: mustgather
     when:
       field: CloudProvider
       operator: in
@@ -213,6 +226,7 @@ alerts:
 
   # OCM Agent Response Failure
   - alert_title: "OCMAgentResponseFailure"
+    name: ocmagentresponsefailure
     investigations:
       - precheck
       - ccam

@@ -298,7 +298,7 @@ func (c *investigationRunner) runChain(
 	params map[string]string,
 ) (err error) {
 	if len(alertConfig.Investigations) > 0 {
-		metrics.Inc(metrics.Alerts, alertConfig.AlertTitle)
+		metrics.Inc(metrics.Alerts, alertConfig.GetName())
 	}
 
 	var latestBuilder investigation.ResourceBuilder
