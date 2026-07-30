@@ -322,13 +322,11 @@ func (c *investigationRunner) runChain(
 		var requiredKeys []string
 		alertConfig.When.Keys(&requiredKeys)
 		if populateErr := c.populateFilterContextFromOCM(filterCtx, filterBuilder, clusterId, requiredKeys); populateErr != nil {
-			logging.Errorf("Could not populate filter context, skipping alert: %v", populateErr)
-			return nil
+			return fmt.Errorf("could not populate filter context for alert %q: %w", alertConfig.AlertTitle, populateErr)
 		}
 		pass, reason, filterErr := alertConfig.ShouldRun(filterCtx)
 		if filterErr != nil {
-			logging.Errorf("Alert-level filter error for %q: %v", alertConfig.AlertTitle, filterErr)
-			return nil
+			return fmt.Errorf("alert-level filter error for %q: %w", alertConfig.AlertTitle, filterErr)
 		}
 		if !pass {
 			logging.Infof("Alert %q filtered out: %s", alertConfig.AlertTitle, reason)
@@ -362,15 +360,13 @@ func (c *investigationRunner) runChain(
 		if entry.When != nil && filterCtx != nil {
 			requiredKeys := entry.Keys()
 			if populateErr := c.populateFilterContextFromOCM(filterCtx, builder, clusterId, requiredKeys); populateErr != nil {
-				logging.Errorf("Could not populate filter context for %q, skipping entry: %v", entry.Name, populateErr)
 				cleanupBuilder(builder)
-				continue
+				return fmt.Errorf("could not populate filter context for %q: %w", entry.Name, populateErr)
 			}
 			pass, reason, filterErr := entry.ShouldRun(filterCtx)
 			if filterErr != nil {
-				logging.Errorf("Entry-level filter error for %q: %v", entry.Name, filterErr)
 				cleanupBuilder(builder)
-				continue
+				return fmt.Errorf("entry-level filter error for %q: %w", entry.Name, filterErr)
 			}
 			if !pass {
 				logging.Infof("Entry %q filtered out: %s", entry.Name, reason)
