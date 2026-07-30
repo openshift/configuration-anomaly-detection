@@ -330,6 +330,7 @@ func (c *investigationRunner) runChain(
 		}
 		if !pass {
 			logging.Infof("Alert %q filtered out: %s", alertConfig.AlertTitle, reason)
+			metrics.Inc(metrics.AlertsFiltered, alertConfig.GetName())
 			c.recordManualCompletion(alertConfig.AlertTitle, "filtered")
 			return fmt.Errorf("%w: %s", errAlertFiltered, reason)
 		}
@@ -370,6 +371,7 @@ func (c *investigationRunner) runChain(
 			}
 			if !pass {
 				logging.Infof("Entry %q filtered out: %s", entry.Name, reason)
+				metrics.Inc(metrics.AlertsFiltered, entry.Name)
 				cleanupBuilder(builder)
 				continue
 			}
