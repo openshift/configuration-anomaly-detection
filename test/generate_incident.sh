@@ -94,5 +94,5 @@ INCIDENT_ID=$(curl --silent --request GET \
   --header "Authorization: Token token=${pd_test_token}" \
   --header 'Content-Type: application/json' | jq -r '.incidents[0].id')
 echo $INCIDENT_ID
-echo '{"__pd_metadata":{"incident":{"id":"'$INCIDENT_ID'"}}}' > ./payload
+echo '{"__pd_metadata":{"incident":{"id":"'$INCIDENT_ID'"}}}' | base64 > ./payload
 echo "Created ./payload"
