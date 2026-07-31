@@ -58,11 +58,11 @@ type Organization struct {
 }
 
 type interceptorHandler struct {
-	PDToken string
+	PDTokens []string
 }
 
-func CreateInterceptorHandler(pdToken string) http.Handler {
-	return &interceptorHandler{PDToken: pdToken}
+func CreateInterceptorHandler(pdTokens []string) http.Handler {
+	return &interceptorHandler{PDTokens: pdTokens}
 }
 
 func (pdi interceptorHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,9 +139,18 @@ func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *htt
 
 	logging.Debug("Unwrapped Request body: ", originalReq.Body)
 
-	err = webhookv3.VerifySignature(extractedRequest, pdi.PDToken)
-	if err != nil {
-		return nil, pdi.badRequest("failed to verify signature", err)
+	var sigErrs []error
+	for _, signature := range pdi.PDTokens {
+		err = webhookv3.VerifySignature(extractedRequest, signature)
+		if err != nil {
+			sigErrs = append(sigErrs, err)
+		} else {
+			// A signature successfully verified we can continue
+			break
+		}
+	}
+	if len(sigErrs) == len(pdi.PDTokens) {
+		return nil, pdi.badRequest("failed to verify signature against all signatures", errors.Join(sigErrs...))
 	}
 
 	logging.Info("Signature verified successfully")

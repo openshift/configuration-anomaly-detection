@@ -2,6 +2,10 @@ package interceptor
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -223,11 +227,137 @@ func TestOversizedRequestBodyIsRejected(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
 
-	handler := CreateInterceptorHandler("TEST")
+	handler := CreateInterceptorHandler([]string{"TEST"})
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("expected status 413 for oversized body, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// pdSignatureFor computes the HMAC-SHA256 signature for a PagerDuty v3 webhook
+// body, returning it in the "v1=<hex>" format expected by X-PagerDuty-Signature.
+func pdSignatureFor(secret, body string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(body))
+	return "v1=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+// makeSignedRequest builds an interceptor HTTP request whose body is the
+// double-wrapped JSON that executeInterceptor expects:
+//
+//	{ "body": "<innerBody>", "header": { "X-PagerDuty-Signature": ["v1=<hmac>"] } }
+//
+// The HMAC is computed over innerBody using signingSecret, exactly as
+// webhookv3.VerifySignature validates incoming PagerDuty webhooks.
+func makeSignedRequest(t *testing.T, innerBody, signingSecret string) *http.Request {
+	t.Helper()
+	sig := pdSignatureFor(signingSecret, innerBody)
+
+	outer, err := json.Marshal(map[string]interface{}{
+		"body": innerBody,
+		"header": map[string][]string{
+			"X-PagerDuty-Signature": {sig},
+		},
+	})
+	if err != nil {
+		t.Fatalf("makeSignedRequest: marshal: %v", err)
+	}
+	return httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(outer))
+}
+
+// TestSignatureVerification covers the multiple-signature verification loop.
+//
+// Key behaviours under test:
+//   - Backwards compat: a single token still works exactly as before.
+//   - Any-one-wins: a request signed by any one of the configured tokens is
+//     accepted, even if other tokens don't match.
+//   - All-must-fail: a request is rejected only when every configured token
+//     fails to verify the signature.
+//   - Empty list: a handler with no tokens configured always rejects.
+//
+// A valid signature causes executeInterceptor to proceed past the 400-returning
+// guard and into process(), which always returns an InterceptorResponse (HTTP
+// 200). An invalid signature is caught before that and returns HTTP 400 with
+// "signature" in the body. This gives a clean binary signal for each case.
+//
+// Note: webhookv3.VerifySignature restores r.Body after reading it, so
+// iterating the same extractedRequest over multiple tokens is safe.
+func TestSignatureVerification(t *testing.T) {
+	const (
+		secret1   = "signing-secret-one"
+		secret2   = "signing-secret-two"
+		innerBody = `{"__pd_metadata":{"incident":{"id":"QTEST1"}}}`
+	)
+
+	tests := []struct {
+		name             string
+		tokens           []string
+		signingSecret    string // secret used to sign the outgoing request
+		wantStatus       int
+		wantBodyContains string // substring that must appear in the response on failure
+	}{
+		// Backwards-compatibility: existing single-token deployments must still work.
+		{
+			name:          "single valid token — request accepted",
+			tokens:        []string{secret1},
+			signingSecret: secret1,
+			wantStatus:    http.StatusOK,
+		},
+		{
+			name:             "single invalid token — request rejected",
+			tokens:           []string{"wrong-secret"},
+			signingSecret:    secret1,
+			wantStatus:       http.StatusBadRequest,
+			wantBodyContains: "signature",
+		},
+		// Multi-token: accepted when the first configured token matches.
+		{
+			name:          "multiple tokens, first matches — request accepted",
+			tokens:        []string{secret1, secret2},
+			signingSecret: secret1,
+			wantStatus:    http.StatusOK,
+		},
+		// Multi-token: accepted when the second configured token matches (first fails).
+		// This is the core new behaviour: the loop must continue past the first failure.
+		{
+			name:          "multiple tokens, second matches — request accepted",
+			tokens:        []string{secret2, secret1},
+			signingSecret: secret1,
+			wantStatus:    http.StatusOK,
+		},
+		// Multi-token: rejected only when every token fails.
+		{
+			name:             "multiple tokens, none match — request rejected",
+			tokens:           []string{"wrong-one", "wrong-two"},
+			signingSecret:    secret1,
+			wantStatus:       http.StatusBadRequest,
+			wantBodyContains: "signature",
+		},
+		// Edge case: no tokens configured — nothing can ever verify, reject all.
+		{
+			name:             "empty token list — request rejected",
+			tokens:           []string{},
+			signingSecret:    secret1,
+			wantStatus:       http.StatusBadRequest,
+			wantBodyContains: "signature",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := makeSignedRequest(t, innerBody, tt.signingSecret)
+			rec := httptest.NewRecorder()
+
+			CreateInterceptorHandler(tt.tokens).ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Errorf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.wantBodyContains != "" && !stringContains(rec.Body.String(), tt.wantBodyContains) {
+				t.Errorf("body = %q, want it to contain %q", rec.Body.String(), tt.wantBodyContains)
+			}
+		})
 	}
 }
 

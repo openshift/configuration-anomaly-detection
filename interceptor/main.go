@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,16 +39,16 @@ func init() {
 func main() {
 	logger := logging.InitLogger(logLevelEnv, pipelineNameEnv, "")
 
-	token := os.Getenv("PD_SIGNATURE")
-	if token == "" {
-		logger.Fatal("PD_SIGNATURE environment variable missing")
+	signatures, err := loadPDSignatures()
+	if err != nil {
+		logger.Fatal("failed to load PD signatures: %v", err)
 	}
 
 	// set up signals so we handle the first shutdown signal gracefully
 	ctx := signals.NewContext()
 
 	mux := http.NewServeMux()
-	mux.Handle("/", interceptor.CreateInterceptorHandler(token))
+	mux.Handle("/", interceptor.CreateInterceptorHandler(signatures))
 	mux.HandleFunc("/ready", readinessHandler)
 	mux.Handle("/metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{Registry: metrics.Registry}))
 
@@ -90,4 +92,17 @@ func main() {
 
 func readinessHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
+}
+
+func loadPDSignatures() ([]string, error) {
+	var signatures []string
+	tokens := os.Getenv("PD_SIGNATURE")
+	if tokens == "" {
+		return signatures, errors.New("PD_SIGNATURE environment variable missing")
+	}
+	for _, sig := range strings.Split(tokens, ",") {
+		trim := strings.TrimSpace(sig)
+		signatures = append(signatures, trim)
+	}
+	return signatures, nil
 }
