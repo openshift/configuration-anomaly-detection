@@ -100,12 +100,14 @@ func readinessHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func loadPDSignatures() ([]string, error) {
-	var signatures []string
 	tokens := os.Getenv("PD_SIGNATURE")
 	if tokens == "" {
-		return signatures, errors.New("PD_SIGNATURE environment variable missing")
+		return nil, errors.New("PD_SIGNATURE environment variable missing")
 	}
-	for _, sig := range strings.Split(tokens, ",") {
+	parts := strings.Split(tokens, ",")
+
+	signatures := make([]string, 0, len(parts))
+	for _, sig := range parts {
 		trim := strings.TrimSpace(sig)
 		signatures = append(signatures, trim)
 	}
