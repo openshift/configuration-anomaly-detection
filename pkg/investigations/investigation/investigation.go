@@ -43,7 +43,10 @@ type InvestigationResult struct {
 
 func NewResourceBuilder(
 	ocmClient *ocm.SdkClient,
+	productionOcmClient *ocm.SdkClient,
 	bpClient backplane.Client,
+	productionBpClient backplane.Client,
+	managedCloud *managedcloud.Client,
 	clusterId string,
 	name string,
 	backplaneUrl string,
@@ -53,14 +56,18 @@ func NewResourceBuilder(
 		params = make(map[string]string)
 	}
 	rb := &ResourceBuilderT{
-		clusterId:    clusterId,
-		name:         name,
-		ocmClient:    ocmClient,
-		backplaneUrl: backplaneUrl,
+		clusterId:           clusterId,
+		name:                name,
+		ocmClient:           ocmClient,
+		productionOcmClient: productionOcmClient,
+		managedCloud:        managedCloud,
+		backplaneUrl:        backplaneUrl,
 		builtResources: &Resources{
-			BpClient:  bpClient,
-			OcmClient: ocmClient,
-			Params:    params,
+			BpClient:            bpClient,
+			BpProductionClient:  productionBpClient,
+			OcmClient:           ocmClient,
+			OcmProductionClient: productionOcmClient,
+			Params:              params,
 		},
 	}
 
@@ -79,22 +86,32 @@ type Investigation interface {
 
 // Resources holds all resources/tools required for alert investigations
 type Resources struct {
-	Name                             string
-	Cluster                          *cmv1.Cluster
-	ClusterDeployment                *hivev1.ClusterDeployment
-	AwsClient                        aws.Client
-	BpClient                         backplane.Client
-	RestConfig                       *backplane.RestConfig
-	K8sClient                        k8sclient.Client
-	OcmClient                        ocm.Client
-	PdClient                         pagerduty.Client
-	Notes                            *notewriter.NoteWriter
-	OCClient                         oc.Client
-	ManagementRestConfig             *backplane.RestConfig
-	ManagementK8sClient              k8sclient.Client
-	ManagementOCClient               oc.Client
-	HCPNamespace                     string
-	HCNamespace                      string
+	Name                string
+	Cluster             *cmv1.Cluster
+	ClusterDeployment   *hivev1.ClusterDeployment
+	AwsClient           aws.Client
+	BpClient            backplane.Client
+	BpProductionClient  backplane.Client
+	RestConfig          *backplane.RestConfig
+	K8sClient           k8sclient.Client
+	OcmClient           ocm.Client
+	OcmProductionClient ocm.Client
+	PdClient            pagerduty.Client
+	Notes               *notewriter.NoteWriter
+	OCClient            oc.Client
+	// ManagementRestConfig provides access to either:
+	// - The Hypershift management cluster (for HCP clusters)
+	// - The hive managing this cluster (for classic OSD/ROSA clusters)
+	ManagementRestConfig *backplane.RestConfig
+	// ManagementK8sClient is a K8s client for either the Hypershift management cluster or the hive
+	ManagementK8sClient k8sclient.Client
+	// ManagementOCClient is an OC client for either the Hypershift management cluster or the hive
+	ManagementOCClient oc.Client
+	// HCPNamespace is the namespace containing HCP resources (only for HCP clusters)
+	HCPNamespace string
+	// HCNamespace is the HostedCluster namespace (only for HCP clusters)
+	HCNamespace string
+	// IsHCP indicates if this is a Hypershift (HCP) cluster
 	IsHCP                            bool
 	IsInfrastructureCluster          bool
 	IsInfrastructureClusterUncertain bool
@@ -136,7 +153,12 @@ type ResourceBuilderT struct {
 	pipelineName string
 	backplaneUrl string
 
+	// The OCM client of the environment the cluster is in.
 	ocmClient *ocm.SdkClient
+	// The OCM client the shard/management cluster will live in.
+	productionOcmClient *ocm.SdkClient
+	// managedCloud provides access to customer AWS accounts via backplane.
+	managedCloud *managedcloud.Client
 
 	// cache
 	builtResources *Resources
@@ -252,7 +274,7 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	internalClusterId := r.builtResources.Cluster.ID()
 
 	if r.buildAwsClient && r.builtResources.AwsClient == nil {
-		r.builtResources.AwsClient, err = managedcloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
+		r.builtResources.AwsClient, err = r.managedCloud.CreateCustomerAWSClient(r.builtResources.Cluster, r.ocmClient)
 		if err != nil {
 			r.buildErr = AWSClientError{ClusterID: r.clusterId, Err: err}
 			return r.builtResources, r.buildErr
@@ -304,16 +326,25 @@ func (r *ResourceBuilderT) Build() (*Resources, error) {
 	return r.builtResources, nil
 }
 
-// buildManagementClusterResources checks if the cluster is HCP and builds management cluster resources
+// buildManagementClusterResources builds resources for either:
+// - The Hypershift management cluster (for HCP clusters)
+// - The hive managing this cluster (for classic OSD/ROSA clusters)
 func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	r.builtResources.IsHCP = false
 
 	hypershift := r.builtResources.Cluster.Hypershift()
-	if hypershift == nil || !hypershift.Enabled() {
-		logging.Infof("Cluster %s is not an HCP cluster, skipping management cluster resource creation", r.clusterId)
-		return nil
+	isHypershiftCluster := hypershift != nil && hypershift.Enabled()
+
+	if isHypershiftCluster {
+		return r.buildHypershiftManagementResources()
 	}
 
+	// For classic clusters (non-Hypershift), build hive resources
+	return r.buildHiveResources()
+}
+
+// buildHypershiftManagementResources builds management cluster resources for Hypershift clusters
+func (r *ResourceBuilderT) buildHypershiftManagementResources() error {
 	r.builtResources.IsHCP = true
 	logging.Infof("Cluster %s is an HCP cluster, retrieving management cluster information", r.clusterId)
 
@@ -346,7 +377,12 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 
 	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
 		logging.Infof("Creating RestConfig for management cluster")
-		r.builtResources.ManagementRestConfig, err = r.builtResources.BpClient.GetRestConfig(context.Background(), r.builtResources.Cluster.ID(), r.name, true)
+		r.builtResources.ManagementRestConfig, err = r.builtResources.BpClient.GetRestConfigWithManagingClusterType(
+			context.Background(),
+			r.builtResources.Cluster.ID(),
+			r.name,
+			backplane.ManagingClusterTypeManagement,
+		)
 		if err != nil {
 			return ManagementRestConfigError{
 				ClusterID: r.clusterId,
@@ -398,6 +434,52 @@ func (r *ResourceBuilderT) buildManagementClusterResources() error {
 	}
 
 	r.builtResources.DynatraceManagementClusterURL = dynatraceURL
+	return nil
+}
+
+// buildHiveResources builds hive resources for classic (non-Hypershift) clusters
+func (r *ResourceBuilderT) buildHiveResources() error {
+	logging.Infof("Cluster %s is a classic cluster, retrieving hive information", r.clusterId)
+
+	var err error
+	if r.buildManagementRestConfig && r.builtResources.ManagementRestConfig == nil {
+		logging.Infof("Creating RestConfig for hive")
+		r.builtResources.ManagementRestConfig, err = r.builtResources.BpProductionClient.GetRestConfigWithManagingClusterType(
+			context.Background(),
+			r.builtResources.Cluster.ID(),
+			r.name,
+			backplane.ManagingClusterTypeHive,
+		)
+		if err != nil {
+			return ManagementRestConfigError{
+				ClusterID: r.clusterId,
+				Err:       fmt.Errorf("failed to get hive RestConfig: %w", err),
+			}
+		}
+	}
+
+	if r.buildManagementK8sClient && r.builtResources.ManagementK8sClient == nil {
+		logging.Infof("Creating k8s client for hive of %s", r.clusterId)
+		r.builtResources.ManagementK8sClient, err = k8sclient.New(&r.builtResources.ManagementRestConfig.Config)
+		if err != nil {
+			return ManagementK8sClientError{
+				ClusterID: r.clusterId,
+				Err:       fmt.Errorf("failed to create hive k8s client: %w", err),
+			}
+		}
+	}
+
+	if r.buildManagementOCClient && r.builtResources.ManagementOCClient == nil {
+		logging.Infof("Creating OC client for hive of %s", r.clusterId)
+		r.builtResources.ManagementOCClient, err = oc.New(context.Background(), &r.builtResources.ManagementRestConfig.Config)
+		if err != nil {
+			return ManagementOCClientError{
+				ClusterID: r.clusterId,
+				Err:       fmt.Errorf("failed to create hive OC client: %w", err),
+			}
+		}
+	}
+
 	return nil
 }
 
