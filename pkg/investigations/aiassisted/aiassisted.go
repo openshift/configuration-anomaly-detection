@@ -26,10 +26,10 @@ type Investigation struct {
 
 // InvestigationPayload represents the payload sent to the AgentCore agent
 type InvestigationPayload struct {
-	InvestigationID      string `json:"investigation_id"`
-	InvestigationPayload string `json:"investigation_payload"` // TODO: Implement - should contain alert details/context
-	AlertName            string `json:"alert_name"`
-	ClusterID            string `json:"cluster_id"`
+	InvestigationID      string                 `json:"investigation_id"`
+	InvestigationPayload map[string]interface{} `json:"investigation_payload"` // Alert details and context
+	AlertName            string                 `json:"alert_name"`
+	ClusterID            string                 `json:"cluster_id"`
 }
 
 // generateSessionID generates a unique session ID for this investigation
@@ -112,10 +112,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
 
-	// Build investigation payload using typed structure
+	alertDetails, firingResult, err := r.PdClient.GetAlertContext(incidentID)
+	if err != nil {
+		logging.Warnf("Failed to extract alert context: %v", err)
+	}
+
+	payloadData := buildInvestigationPayload(firingResult, &alertDetails, pdClient.GetIncidentRef())
+	if err != nil {
+		payloadData["alert_context_error"] = err.Error()
+	}
+
 	investigationData := &InvestigationPayload{
 		InvestigationID:      incidentID,
-		InvestigationPayload: "{}", // TODO: Populate with alert details when implemented
+		InvestigationPayload: payloadData,
 		AlertName:            alertName,
 		ClusterID:            clusterID,
 	}
@@ -127,6 +136,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
+
+	logging.Infof("Payload: %s", string(payloadJSON))
 
 	// Get AI client (handles role assumption and client creation)
 	// Use incident ID as session identifier for audit trail
