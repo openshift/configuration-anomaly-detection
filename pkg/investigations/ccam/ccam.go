@@ -74,6 +74,10 @@ func (c *CloudCredentialsCheck) Run(r investigation.ResourceBuilder) (investigat
 	return result, err
 }
 
+func (c *CloudCredentialsCheck) Name() string {
+	return "ccam"
+}
+
 // userCausedErrors contains the list of backplane returned error strings that we map to
 // customer modifications/role deletions.
 var userCausedErrors = []string{

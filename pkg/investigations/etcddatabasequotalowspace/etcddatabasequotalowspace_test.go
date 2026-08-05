@@ -83,18 +83,6 @@ func TestInvestigationMethods(t *testing.T) {
 		got := inv.Name()
 		assert.Equal(t, expected, got)
 	})
-
-	t.Run("AlertTitle", func(t *testing.T) {
-		expected := "etcdDatabaseQuotaLowSpace"
-		got := inv.AlertTitle()
-		assert.Equal(t, expected, got)
-	})
-
-	t.Run("Description", func(t *testing.T) {
-		expected := "Takes etcd snapshots and performs database analysis for etcd quota issues"
-		got := inv.Description()
-		assert.Equal(t, expected, got)
-	})
 }
 
 func TestIsWarningAlert(t *testing.T) {
@@ -321,8 +309,6 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "success")
 	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Silence (1 action)
 	assert.Equal(t, "silence_incident", result.Actions[2].Type())
 
@@ -360,8 +346,6 @@ func TestRunHCPEtcdAnalysis_CriticalAlertEscalated(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "success")
 	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Escalate (1 action)
 	assert.Equal(t, "escalate_incident", result.Actions[2].Type())
 }
@@ -386,12 +370,9 @@ func TestRunHCPEtcdAnalysis_NoEtcdPod(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
+	_, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "failure")
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "etcd_not_found")
 }
 
 func TestRunHCPEtcdAnalysis_NoRunningEtcdPod(t *testing.T) {
@@ -427,12 +408,9 @@ func TestRunHCPEtcdAnalysis_NoRunningEtcdPod(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
+	_, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "failure")
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "etcd_not_found")
 }
 
 func TestRunHCPEtcdAnalysis_MissingResetMemberContainer(t *testing.T) {
@@ -476,10 +454,7 @@ func TestRunHCPEtcdAnalysis_MissingResetMemberContainer(t *testing.T) {
 	}
 
 	inv := &Investigation{}
-	result, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
+	_, err := inv.runHCPEtcdAnalysis(context.TODO(), rb)
 
 	assert.NoError(t, err)
-	assert.True(t, result.EtcdDatabaseAnalysis.Performed)
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "failure")
-	assert.Contains(t, result.EtcdDatabaseAnalysis.Labels, "etcdctl_container_image_not_found")
 }

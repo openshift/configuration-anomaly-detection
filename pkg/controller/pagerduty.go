@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
-	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
+	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -23,10 +23,6 @@ type PagerDutyController struct {
 }
 
 func (c *PagerDutyController) Investigate(ctx context.Context) error {
-	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
-	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
-	alertInvestigation := investigations.GetInvestigation(c.pdClient.GetTitle(), experimentalEnabled)
-
 	clusterID, err := c.pdClient.RetrieveClusterID()
 	if err != nil {
 		return err
@@ -36,34 +32,59 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	c.logger = logging.InitLogger(c.config.LogLevel, c.config.Identifier, clusterID)
 	c.logger.Infof("Investigating incident '%s' for service '%s (%s)'", c.pdClient.GetIncidentRef(), c.pdClient.GetServiceID(), c.pdClient.GetServiceName())
 
-	// If no formal investigation matches, fall back to AI investigation when enabled.
-	// AI is considered enabled when experimental mode is on and the filter config
-	// has an entry for "aiassisted". The actual cluster/org-level filtering happens
-	// later in runInvestigation via the filter evaluation.
-	if alertInvestigation == nil {
-		alertInvestigation = handleUnsupportedAlertWithAI(c.dependencies)
-		if alertInvestigation == nil {
-			err := c.pdClient.EscalateIncident()
-			if err != nil {
-				return fmt.Errorf("could not escalate unsupported alert: %w", err)
-			}
-			return nil
+	experimentalEnabled, _ := strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
+
+	cfg := c.dependencies.Cfg
+	alertTitle := c.pdClient.GetTitle()
+
+	var alertConfig *config.AlertConfig
+
+	// Look up alert config
+	if cfg != nil {
+		alertConfig = cfg.GetAlert(alertTitle, experimentalEnabled)
+	}
+
+	// If we matched a config, try running its chain. If the alert-level When
+	// filter rejects, fall through to AI/escalation instead of stopping.
+	if alertConfig != nil {
+		filterCtx := &types.FilterContext{
+			AlertName:   alertConfig.AlertTitle,
+			AlertTitle:  alertTitle,
+			ServiceName: c.pdClient.GetServiceName(),
 		}
+		err := c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
+		if !errors.Is(err, errAlertFiltered) {
+			return err
+		}
+		logging.Infof("Alert %q filtered out, falling through to AI/escalation", alertConfig.AlertTitle)
 	}
 
-	// Build the filter context with PagerDuty fields available at this point.
-	// OCM fields will be populated inside runInvestigation after precheck.
-	filterCtx := &types.FilterContext{
-		AlertName:   alertInvestigation.AlertTitle(),
-		AlertTitle:  c.pdClient.GetTitle(),
-		ServiceName: c.pdClient.GetServiceName(),
+	// AI fallback: no title match, or title matched but when-clause filtered
+	if cfg != nil && cfg.AIAgent != nil {
+		alertConfig = &config.AlertConfig{
+			AlertTitle: "aiassisted-fallback",
+			Investigations: []config.InvestigationEntry{
+				{Name: "precheck"},
+				{Name: "aiassisted", When: &config.FilterNode{
+					Field: config.FieldHCP, Operator: config.OperatorIn, Values: []string{"false"},
+				}},
+			},
+		}
+		filterCtx := &types.FilterContext{
+			AlertName:   alertConfig.AlertTitle,
+			AlertTitle:  alertTitle,
+			ServiceName: c.pdClient.GetServiceName(),
+		}
+		return c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
 	}
 
-	// Continue with investigation...
-	return c.runInvestigation(ctx, clusterID, alertInvestigation, c.pdClient, filterCtx, nil)
+	if escErr := c.pdClient.EscalateIncident(); escErr != nil {
+		return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
+	}
+	return nil
 }
 
-func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, pdClient *pagerduty.SdkClient) {
+func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resources *investigation.Resources, notifier incidentNotifier) {
 	message := docErr.EscalationMessage()
 
 	if resources != nil && resources.Notes != nil {
@@ -71,35 +92,10 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 		message = resources.Notes.String()
 	}
 
-	if pdClient == nil {
-		logging.Errorf("Failed to obtain PagerDuty client, unable to escalate documentation mismatch to PagerDuty notes.")
-		return
-	}
-
-	if err := pdClient.EscalateIncidentWithNote(message); err != nil {
+	if err := notifier.EscalateWithNote(message); err != nil {
 		logging.Errorf("Failed to escalate documentation mismatch notes to PagerDuty: %v", err)
 		return
 	}
 
 	logging.Info("Escalated documentation mismatch to PagerDuty")
-}
-
-// handleUnsupportedAlertWithAI checks if AI investigation is enabled via the filter config.
-// AI is considered enabled when the filter config has an entry for "aiassisted".
-// Returns an AI investigation populated with the runtime config, or nil if disabled.
-func handleUnsupportedAlertWithAI(deps *Dependencies) investigation.Investigation {
-	if deps.FilterConfig == nil {
-		return nil
-	}
-
-	// AI is enabled when the filter config has an entry for "aiassisted".
-	// The actual cluster/org-level gating is handled by filter evaluation
-	// in runInvestigation after OCM context is populated.
-	if deps.FilterConfig.GetFilter("aiassisted") == nil {
-		return nil
-	}
-
-	return &aiassisted.Investigation{
-		AIConfig: deps.FilterConfig.GetAIAgentConfig(),
-	}
 }
