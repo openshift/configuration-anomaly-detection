@@ -15,8 +15,6 @@ parameters:
   value: info
 - name: CAD_ORG_POLICY_MAPPING
   value: ""
-- name: CAD_AI_AGENT_CONFIG
-  value: ""
 - name: CAD_ACM_HCP_MUST_GATHER_IMAGE
   value: "registry.redhat.io/multicluster-engine/must-gather-rhel9:v2.8"
 - name: CAD_OCTOSQL_IMAGE
@@ -81,8 +79,6 @@ objects:
             value: ${LOG_LEVEL}
           - name: CAD_ORG_POLICY_MAPPING
             value: ${CAD_ORG_POLICY_MAPPING}
-          - name: CAD_AI_AGENT_CONFIG
-            value: ${CAD_AI_AGENT_CONFIG}
           - name: CAD_OCTOSQL_IMAGE
             value: ${CAD_OCTOSQL_IMAGE}
           - name: CAD_INVESTIGATION_CONFIG_PATH
@@ -349,7 +345,6 @@ objects:
     - secrets
     resourceNames:
     - srep-ai-sa-token
-    - cad-ai-agent-aws-credentials
     - cad-ocm-client-secret
     - cad-pd-token
     - cad-backplane-secret
@@ -424,8 +419,6 @@ objects:
         value: ${CAD_ACM_HCP_MUST_GATHER_IMAGE}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
-      - name: CAD_AI_AGENT_CONFIG
-        value: ${CAD_AI_AGENT_CONFIG}
       - name: CAD_OCTOSQL_IMAGE
         value: ${CAD_OCTOSQL_IMAGE}
       - name: CAD_INVESTIGATION_CONFIG_PATH
@@ -435,18 +428,6 @@ objects:
           secretKeyRef:
             key: token
             name: srep-ai-sa-token
-      - name: AGENTCORE_AWS_ACCESS_KEY_ID
-        valueFrom:
-          secretKeyRef:
-            key: aws_access_key_id
-            name: cad-ai-agent-aws-credentials
-            optional: true
-      - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            key: aws_secret_access_key
-            name: cad-ai-agent-aws-credentials
-            optional: true
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
@@ -516,24 +497,10 @@ objects:
         value: ${CAD_EXPERIMENTAL_ENABLED}
       - name: LOG_LEVEL
         value: ${LOG_LEVEL}
-      - name: CAD_AI_AGENT_CONFIG
-        value: ${CAD_AI_AGENT_CONFIG}
       - name: CAD_OCTOSQL_IMAGE
         value: ${CAD_OCTOSQL_IMAGE}
       - name: CAD_INVESTIGATION_CONFIG_PATH
         value: /config/cad-config.yaml
-      - name: AGENTCORE_AWS_ACCESS_KEY_ID
-        valueFrom:
-          secretKeyRef:
-            key: aws_access_key_id
-            name: cad-ai-agent-aws-credentials
-            optional: true
-      - name: AGENTCORE_AWS_SECRET_ACCESS_KEY
-        valueFrom:
-          secretKeyRef:
-            key: aws_secret_access_key
-            name: cad-ai-agent-aws-credentials
-            optional: true
       envFrom:
       - secretRef:
           name: cad-ocm-client-secret
