@@ -336,7 +336,11 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 
 	// Evaluate the investigation filter if one is configured for this investigation.
 	// Only populate OCM fields (org ID, owner) when a filter actually needs them.
-	if filtered := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId); filtered {
+	filtered, err := c.evaluateFilter(inv.Name(), filterCtx, builder, clusterId)
+	if err != nil {
+		return fmt.Errorf("failed to evaluate filter for %s: %w", inv.Name(), err)
+	}
+	if filtered {
 		metrics.Inc(metrics.AlertsFiltered, inv.Name())
 		c.recordManualCompletion(inv.Name(), pdClient, "filtered")
 		// aiassisted filtering shouldn't surface the "filtered out by configuration" note,
@@ -346,10 +350,13 @@ func (c *investigationRunner) runInvestigation(ctx context.Context, clusterId st
 			if inv.Name() == "aiassisted" {
 				logging.Infof("aiassisted investigation filtered out for cluster %s, escalating without note", clusterId)
 				if escErr := pdClient.EscalateIncident(); escErr != nil {
-					logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
+					return fmt.Errorf("failed to escalate filtered investigation: %w", escErr)
 				}
 			} else if escErr := pdClient.EscalateIncidentWithNote(fmt.Sprintf("🤖 Investigation %s was filtered out by configuration. Escalating to SRE. 🤖", inv.Name())); escErr != nil {
-				logging.Errorf("Failed to escalate filtered investigation: %v", escErr)
+				logging.Errorf("Failed to escalate filtered investigation with note, falling back to escalation without note: %v", escErr)
+				if fallbackErr := pdClient.EscalateIncident(); fallbackErr != nil {
+					return fmt.Errorf("failed to escalate filtered investigation: %w", fallbackErr)
+				}
 			}
 		}
 		return nil
@@ -600,37 +607,38 @@ func (c *investigationRunner) executeActions(
 }
 
 // evaluateFilter checks whether the investigation should be filtered out.
-// Returns true if the investigation was filtered (should not run), false otherwise.
+// Returns filtered=true only when the filter was successfully evaluated and confirmed
+// a rejection; errors populating context or evaluating the filter are returned as err
+// instead, so the caller can handle them like any other investigation failure rather
+// than treating them as a confirmed configuration-filter decision.
 // Escalating the incident about the filtered-out investigation is the caller's
 // responsibility, since not every investigation wants that note posted (e.g. aiassisted).
-func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string) bool {
+func (c *investigationRunner) evaluateFilter(invName string, filterCtx *types.FilterContext, builder investigation.ResourceBuilder, clusterID string) (filtered bool, err error) {
 	if c.dependencies.FilterConfig == nil || filterCtx == nil {
-		return false
+		return false, nil
 	}
 
 	invFilter := c.dependencies.FilterConfig.GetFilter(invName)
 	if invFilter == nil {
-		return false
+		return false, nil
 	}
 	requiredKeys := invFilter.Keys()
 
 	if err := c.populateFilterContextFromOCM(filterCtx, builder, clusterID, requiredKeys); err != nil {
-		logging.Errorf("Could not fill context with required fields %s, skipping investigation: %v", invName, err)
-		return true
+		return false, fmt.Errorf("could not fill context with required fields for %s: %w", invName, err)
 	}
 
 	pass, reason, filterErr := invFilter.Evaluate(filterCtx)
-	switch {
-	case filterErr != nil:
-		logging.Errorf("Filter evaluation error for %s, skipping investigation: %v", invName, filterErr)
-	case pass:
+	if filterErr != nil {
+		return false, fmt.Errorf("filter evaluation error for %s: %w", invName, filterErr)
+	}
+	if pass {
 		logging.Infof("Filter passed for %s: %s", invName, reason)
-		return false
-	default:
-		logging.Infof("Investigation %s filtered out for cluster %s: %s", invName, clusterID, reason)
+		return false, nil
 	}
 
-	return true
+	logging.Infof("Investigation %s filtered out for cluster %s: %s", invName, clusterID, reason)
+	return true, nil
 }
 
 // populateFilterContextFromOCM enriches the filter context with OCM cluster fields.
