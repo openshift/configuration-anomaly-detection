@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -400,6 +401,22 @@ var _ = Describe("Pagerduty", func() {
 
 					_, err := p.RetrieveClusterID()
 					Expect(err).Should(HaveOccurred())
+				})
+			})
+
+			When("the payload is a real-world alert exported from PagerDuty (testdata/alert.json)", func() {
+				It("should succeed and pull the clusterID", func() {
+					// Arrange
+					alertJSON, err := os.ReadFile("testdata/alert.json")
+					Expect(err).ShouldNot(HaveOccurred())
+					mux.HandleFunc(fmt.Sprintf("/incidents/%s/alerts", incidentID), func(w http.ResponseWriter, r *http.Request) {
+						_, _ = fmt.Fprintf(w, `{"alerts":%s}`, alertJSON)
+					})
+					// Act
+					res, err := p.RetrieveClusterID()
+					// Assert
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(res).Should(Equal("my-test-cluster-id"))
 				})
 			})
 		})
