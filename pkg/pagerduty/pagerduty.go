@@ -430,13 +430,16 @@ func extractClusterIDFromAlertBody(data map[string]interface{}) (string, error) 
 	for _, extractor := range extractors {
 		id, err := extractor(details)
 		if err != nil {
+			logging.Info("failed to extract cluster id (continuing): %s", err)
 			errs = append(errs, err)
 		}
 		if id != "" {
 			return id, nil
 		}
 	}
-	return "", errors.Join(errs...)
+	mergedErr := errors.Join(errs...)
+	logging.Info("failed to extract cluster id ( terminally ): %s", mergedErr)
+	return "", mergedErr
 }
 
 // PARSE OPTION 1 (new format): cluster_id directly contained in custom details
@@ -447,7 +450,7 @@ func parseClusterIdFromField(details map[string]interface{}) (string, error) {
 	} else {
 		return clusterID, nil
 	}
-	return "", nil
+	return "", errors.New("'cluster_id' field not found")
 }
 
 // PARSE OPTION 2 (old format: OSD-18006): cluster_id contained in custom_details[notes]
@@ -459,7 +462,7 @@ func parseClusterIdFromField(details map[string]interface{}) (string, error) {
 func parseClusterIdFromNotes(details map[string]interface{}) (string, error) {
 	notes, found := details["notes"].(string)
 	if !found {
-		return "", nil
+		return "", errors.New("'notes' field not found")
 	}
 	logging.Warn("Trying to parse cluster_id from the notes field...")
 	var notesUnmarshalled notesData

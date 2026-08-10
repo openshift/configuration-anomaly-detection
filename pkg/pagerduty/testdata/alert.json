@@ -1,0 +1,29 @@
+
+[
+  {
+    "id": "test",
+    "status": "resolved",
+    "type": "alert",
+    "self": "https://api.pagerduty.com/alerts/Q3ES7YLSVBOMTB",
+    "service": {
+      "id": "test",
+      "type": "service_reference",
+      "self": "https://api.pagerduty.com/services/test",
+      "summary": "CAD Event Based Automation",
+      "html_url": "https://my.pagerduty.com/service-directory/test"
+    },
+    "body": {
+      "type": "alert_body",
+      "details": {
+        "alert_name": "CreateMustGather",
+        "cluster_id": "my-test-cluster-id",
+        "firing": "",
+        "link": "",
+        "num_firing": "1",
+        "num_resolved": "0",
+        "region": "us-east-1",
+        "resolved": ""
+      }
+    }
+  }
+]
