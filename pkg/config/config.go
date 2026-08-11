@@ -1,13 +1,24 @@
 package config
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
-	"slices"
-	"strings"
 	"time"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"gopkg.in/yaml.v3"
+)
+
+const (
+	// ConfigEnvVar is the environment variable that holds the path to the investigation filter config file.
+	ConfigEnvVar = "CAD_INVESTIGATION_CONFIG_PATH"
+
+	// LegacyAIConfigEnvVar is the legacy environment variable that holds the AI agent config as JSON.
+	//
+	// Deprecated: use the ai_agent section in the config file instead.
+	LegacyAIConfigEnvVar = "CAD_AI_AGENT_CONFIG"
 )
 
 // AIAgentConfig holds runtime configuration for AgentCore AI investigations.
@@ -30,67 +41,142 @@ func (c *AIAgentConfig) GetTimeout() time.Duration {
 	return time.Duration(c.TimeoutSeconds) * time.Second
 }
 
-// Config holds the complete investigation configuration.
+// Config holds the complete investigation filter configuration.
 type Config struct {
-	AIAgent *AIAgentConfig `yaml:"ai_agent,omitempty"`
-	Alerts  []AlertConfig  `yaml:"alerts"`
+	AIAgent *AIAgentConfig        `yaml:"ai_agent,omitempty"`
+	Filters []InvestigationFilter `yaml:"filters"`
 }
 
-// AlertConfig defines which investigations to run for a given alert.
-type AlertConfig struct {
-	AlertTitle     string               `yaml:"alert_title"`
-	Name           string               `yaml:"name,omitempty"`
-	Experimental   bool                 `yaml:"experimental,omitempty"`
-	When           *FilterNode          `yaml:"when,omitempty"`
-	Investigations []InvestigationEntry `yaml:"investigations"`
-}
-
-// GetName returns the alert's investigation name, falling back to AlertTitle
-// when Name is not set. This preserves backward compatibility with configs
-// that predate the name field.
-func (ac *AlertConfig) GetName() string {
-	if ac.Name != "" {
-		return ac.Name
+// LoadConfig reads and parses the investigation filter configuration.
+// If pathOverride is non-empty, it is used as the config file path.
+// Otherwise, the path is read from the CAD_INVESTIGATION_CONFIG_PATH environment variable.
+// If neither is set, falls back to the legacy CAD_AI_AGENT_CONFIG JSON env var for
+// backwards compatibility.
+// Returns nil (no config) if no source is available.
+// The validInvestigations parameter is the list of known investigation names used to
+// validate that each filter references a real investigation.
+func LoadConfig(pathOverride string, validInvestigations []string) (*Config, error) {
+	path := pathOverride
+	if path == "" {
+		path = os.Getenv(ConfigEnvVar)
 	}
-	return ac.AlertTitle
+	if path != "" {
+		data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted env var, not user input
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// The config file is optional (e.g. mounted from an optional ConfigMap).
+				// Treat a missing file the same as "no config".
+				logging.Infof("Config file %q not found, continuing without config", path)
+				return nil, nil //nolint:nilnil // no config means "no filtering configured"
+			}
+			return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
+		}
+		return ParseConfig(data, validInvestigations)
+	}
+
+	// Fall back to legacy CAD_AI_AGENT_CONFIG env var.
+	return loadLegacyAIConfig()
 }
 
-// InvestigationEntry is a single investigation step within an alert's investigation list.
-// In YAML it can be a bare string (investigation name) or an object with name + optional when filter.
-type InvestigationEntry struct {
-	Name string      `yaml:"name"`
-	When *FilterNode `yaml:"when,omitempty"`
+// legacyAIAgentConfig is the old JSON-based AI agent configuration from CAD_AI_AGENT_CONFIG.
+type legacyAIAgentConfig struct {
+	RuntimeARN         string   `json:"runtime_arn"`
+	UserID             string   `json:"user_id"`
+	Region             string   `json:"region"`
+	InvokerRoleArn     string   `json:"invoker_role_arn,omitempty"`
+	Version            string   `json:"version,omitempty"`
+	OpsSopVersion      string   `json:"ops_sop_version,omitempty"`
+	RosaPluginsVersion string   `json:"rosa_plugins_version,omitempty"`
+	Organizations      []string `json:"organizations"`
+	Clusters           []string `json:"clusters"`
+	Enabled            bool     `json:"enabled"`
+	TimeoutSeconds     int      `json:"timeout_seconds,omitempty"`
 }
 
-// UnmarshalYAML allows InvestigationEntry to be specified as either a bare string or a mapping.
-func (e *InvestigationEntry) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind == yaml.ScalarNode {
-		e.Name = value.Value
+// loadLegacyAIConfig parses the legacy CAD_AI_AGENT_CONFIG JSON env var and converts it
+// into a Config with a synthesized aiassisted filter entry built from the old allowlists.
+// Returns nil if the env var is not set or enabled is false.
+func loadLegacyAIConfig() (*Config, error) {
+	configJSON := os.Getenv(LegacyAIConfigEnvVar)
+	if configJSON == "" {
+		return nil, nil //nolint:nilnil // no config means "no filtering configured"
+	}
+
+	var legacy legacyAIAgentConfig
+	if err := json.Unmarshal([]byte(configJSON), &legacy); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", LegacyAIConfigEnvVar, err)
+	}
+
+	if !legacy.Enabled {
+		return nil, nil //nolint:nilnil // disabled means no AI config
+	}
+
+	logging.Warnf("Using deprecated %s env var — migrate to a config file via %s", LegacyAIConfigEnvVar, ConfigEnvVar)
+
+	timeout := legacy.TimeoutSeconds
+	if timeout == 0 {
+		timeout = 900
+	}
+
+	// Build an OR filter from the old cluster/org allowlists.
+	filter := buildLegacyAllowlistFilter(legacy.Clusters, legacy.Organizations)
+	if filter == nil {
+		return nil, fmt.Errorf("%s: enabled but no clusters or organizations in allowlist", LegacyAIConfigEnvVar)
+	}
+
+	return &Config{
+		AIAgent: &AIAgentConfig{
+			RuntimeARN:         legacy.RuntimeARN,
+			UserID:             legacy.UserID,
+			Region:             legacy.Region,
+			InvokerRoleArn:     legacy.InvokerRoleArn,
+			Version:            legacy.Version,
+			OpsSopVersion:      legacy.OpsSopVersion,
+			RosaPluginsVersion: legacy.RosaPluginsVersion,
+			TimeoutSeconds:     timeout,
+		},
+		Filters: []InvestigationFilter{
+			{
+				Investigation: "aiassisted",
+				Filter:        filter,
+			},
+		},
+	}, nil
+}
+
+// buildLegacyAllowlistFilter converts the old clusters/organizations allowlists
+// into a filter tree. Returns nil if both lists are empty.
+func buildLegacyAllowlistFilter(clusters, organizations []string) *FilterNode {
+	var children []FilterNode
+
+	if len(clusters) > 0 {
+		children = append(children, FilterNode{
+			Field:    FieldClusterID,
+			Operator: OperatorIn,
+			Values:   clusters,
+		})
+	}
+
+	if len(organizations) > 0 {
+		children = append(children, FilterNode{
+			Field:    FieldOrganizationID,
+			Operator: OperatorIn,
+			Values:   organizations,
+		})
+	}
+
+	if len(children) == 0 {
 		return nil
 	}
-	type raw InvestigationEntry
-	return value.Decode((*raw)(e))
-}
-
-// LoadConfig reads and parses the investigation configuration from the given path.
-// Returns an error if the path is empty or the file cannot be read.
-// The validInvestigations parameter is the list of known investigation names used to
-// validate that each chain entry references a real investigation.
-func LoadConfig(path string, validInvestigations []string) (*Config, error) {
-	if path == "" {
-		return nil, fmt.Errorf("investigation config path must not be empty")
+	if len(children) == 1 {
+		return &children[0]
 	}
-
-	data, err := os.ReadFile(path) //nolint:gosec // path is from a trusted source, not user input
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file %q: %w", path, err)
-	}
-	return ParseConfig(data, validInvestigations)
+	return &FilterNode{Or: children}
 }
 
 // ParseConfig parses and validates a YAML config from raw bytes.
 // The validInvestigations parameter is the list of known investigation names used to
-// validate that each chain entry references a real investigation.
+// validate that each filter references a real investigation.
 func ParseConfig(data []byte, validInvestigations []string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
@@ -109,23 +195,6 @@ func ParseConfig(data []byte, validInvestigations []string) (*Config, error) {
 	return &cfg, nil
 }
 
-// GetAlert returns the first AlertConfig whose AlertTitle is contained in the given alert title.
-// Alerts marked experimental are only returned when experimentalEnabled is true.
-func (c *Config) GetAlert(alertTitle string, experimentalEnabled bool) *AlertConfig {
-	if c == nil {
-		return nil
-	}
-	for i := range c.Alerts {
-		if strings.Contains(alertTitle, c.Alerts[i].AlertTitle) {
-			if c.Alerts[i].Experimental && !experimentalEnabled {
-				continue
-			}
-			return &c.Alerts[i]
-		}
-	}
-	return nil
-}
-
 // GetAIAgentConfig returns the AI agent runtime configuration, or nil if not set.
 func (c *Config) GetAIAgentConfig() *AIAgentConfig {
 	if c == nil {
@@ -134,8 +203,8 @@ func (c *Config) GetAIAgentConfig() *AIAgentConfig {
 	return c.AIAgent
 }
 
-// Validate checks that all investigation names are known, all filter expressions
-// reference valid FilterContext fields, and chain-level/entry-level when clauses are valid.
+// Validate checks that all investigation names are known and all filter expressions
+// reference valid FilterContext fields.
 func (c *Config) Validate(validInvestigations []string) error {
 	if c.AIAgent != nil {
 		if c.AIAgent.RuntimeARN == "" {
@@ -153,58 +222,56 @@ func (c *Config) Validate(validInvestigations []string) error {
 	}
 
 	seen := make(map[string]bool)
-	hasAIAssisted := false
 
-	for i, ac := range c.Alerts {
-		if strings.TrimSpace(ac.AlertTitle) == "" {
-			return fmt.Errorf("alerts[%d]: alert_title must not be empty", i)
+	for i, f := range c.Filters {
+		if f.Investigation == "" {
+			return fmt.Errorf("filters[%d]: investigation name must not be empty", i)
 		}
 
-		if seen[ac.AlertTitle] {
-			return fmt.Errorf("alerts[%d]: duplicate alert_title %q", i, ac.AlertTitle)
+		if seen[f.Investigation] {
+			return fmt.Errorf("filters[%d]: duplicate investigation %q", i, f.Investigation)
 		}
-		seen[ac.AlertTitle] = true
+		seen[f.Investigation] = true
 
-		if len(ac.Investigations) == 0 {
-			return fmt.Errorf("alerts[%d] (alert_title %q): investigations must not be empty", i, ac.AlertTitle)
+		if !isValidInvestigation(f.Investigation, validInvestigations) {
+			return fmt.Errorf("filters[%d]: unknown investigation %q; valid investigations: %v", i, f.Investigation, validInvestigations)
 		}
 
-		// Validate alert-level when clause
-		if ac.When != nil {
-			if err := ac.When.validate(fmt.Sprintf("alerts[%d].when", i)); err != nil {
-				return fmt.Errorf("alerts[%d] (alert_title %q): %w", i, ac.AlertTitle, err)
+		if f.Filter != nil {
+			if err := f.Filter.validate(fmt.Sprintf("filters[%d].when", i)); err != nil {
+				return fmt.Errorf("filters[%d] (investigation %q): %w", i, f.Investigation, err)
 			}
 		}
 
-		for j, entry := range ac.Investigations {
-			if entry.Name == "" {
-				return fmt.Errorf("alerts[%d].investigations[%d]: name must not be empty", i, j)
-			}
-
-			if !isValidInvestigation(entry.Name, validInvestigations) {
-				return fmt.Errorf("alerts[%d].investigations[%d]: unknown investigation %q; valid investigations: %v", i, j, entry.Name, validInvestigations)
-			}
-
-			if entry.Name == "aiassisted" {
-				hasAIAssisted = true
-			}
-
-			// Validate entry-level when clause
-			if entry.When != nil {
-				if err := entry.When.validate(fmt.Sprintf("alerts[%d].investigations[%d].when", i, j)); err != nil {
-					return fmt.Errorf("alerts[%d].investigations[%d] (investigation %q): %w", i, j, entry.Name, err)
-				}
+		if f.Investigation == "aiassisted" {
+			if c.AIAgent == nil {
+				return fmt.Errorf("filters[%d]: investigation %q requires ai_agent configuration", i, f.Investigation)
 			}
 		}
-	}
-
-	if hasAIAssisted && c.AIAgent == nil {
-		return fmt.Errorf("aiassisted investigation requires ai_agent configuration")
 	}
 
 	return nil
 }
 
+// GetFilter returns the filter for the given investigation name, or nil if no filter
+// is configured. A nil return means the investigation should always run.
+func (c *Config) GetFilter(investigationName string) *InvestigationFilter {
+	if c == nil {
+		return nil
+	}
+	for i := range c.Filters {
+		if c.Filters[i].Investigation == investigationName {
+			return &c.Filters[i]
+		}
+	}
+	return nil
+}
+
 func isValidInvestigation(name string, valid []string) bool {
-	return slices.Contains(valid, name)
+	for _, v := range valid {
+		if v == name {
+			return true
+		}
+	}
+	return false
 }

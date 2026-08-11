@@ -250,3 +250,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 func (c *Investigation) Name() string {
 	return "aiassisted"
 }
+
+func (c *Investigation) AlertTitle() string {
+	// Return empty string - this investigation is used as a fallback, not for matching specific alert titles
+	return ""
+}
+
+func (c *Investigation) Description() string {
+	return "AI-powered investigation using AgentCore for unknown alerts"
+}
+
+func (c *Investigation) IsExperimental() bool {
+	return false
+}

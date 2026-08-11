@@ -1,6 +1,6 @@
-# Investigation Configuration
+# Investigation Filter Configuration
 
-CAD is configured via a YAML-based configuration file that controls which investigations run and optionally configures the AI agent. This allows you to restrict investigations to specific alerts, clusters, cloud providers, organizations, or other attributes — without code changes.
+CAD supports a YAML-based configuration file that controls which investigations run and optionally configures the AI agent. This allows you to restrict investigations to specific clusters, cloud providers, organizations, or other attributes — without code changes.
 
 ## Enabling the config
 
@@ -10,15 +10,15 @@ Set the `CAD_INVESTIGATION_CONFIG_PATH` environment variable to the path of your
 export CAD_INVESTIGATION_CONFIG_PATH=/path/to/config.yaml
 ```
 
-If the variable is not set, the program exits.
+If the variable is not set, no filtering is applied and all investigations run unconditionally.
 
 ## How filtering works
 
-Each alert configuration can have an optional **filter tree** — a boolean expression evaluated against the current alert and cluster context. If the filter passes, the alert is investigated by CAD by running its configured set of investigations; Each investigation can, in turn, have its own filter tree.
+Each investigation can have an optional **filter tree** — a boolean expression evaluated against the current alert and cluster context. If the filter passes, the investigation runs; if it fails, it is skipped.
 
-Investigations that have **no `when` entry** in the config always run for a given alert.
+Investigations that have **no entry** in the config always run. An investigation entry with no `when` key also always runs.
 
-The `aiassisted` investigation can run in two ways: explicitly listed in an alert's investigation chain, or as an automatic fallback when no alert title matches (or when the alert-level filter rejects). The fallback path triggers whenever the `ai_agent` section is configured, even without an explicit `aiassisted` entry in `alerts`.
+The one exception is `aiassisted`: it only runs if it has an entry in the config. Without an entry, the AI investigation is entirely disabled.
 
 ## Filter tree structure
 
@@ -89,8 +89,8 @@ Note: Not all fields are guaranteed to be populated in every context. PagerDuty 
 Only run an investigation on AWS clusters in `ready` state:
 
 ```yaml
-alerts:
-  - alert_title: "MustGather"
+filters:
+  - investigation: mustgather
     when:
       and:
         - field: CloudProvider
@@ -99,62 +99,47 @@ alerts:
         - field: ClusterState
           operator: in
           values: ["ready"]
-    investigations:
-      - precheck
-      - mustgather
 ```
 
 Exclude a specific cluster:
 
 ```yaml
-alerts:
-  - alert_title: "has gone missing"
+filters:
+  - investigation: "Cluster Has Gone Missing (CHGM)"
     when:
       field: ClusterID
       operator: notin
       values: ["2pr3e91qrgdje312keq8denphqs70tlr"]
-    investigations:
-      - precheck
-      - ccam
-      - chgm
 ```
 
-Sample 10% of internal (`@redhat.com`) traffic for a specific investigation step, always run for external customers:
+Sample 10% of internal (`@redhat.com`) traffic, always run for external customers:
 
 ```yaml
-alerts:
-  - alert_title: "ClusterMonitoringErrorBudgetBurnSRE"
-    investigations:
-      - precheck
-      - ccam
-      - name: clustermonitoringerrorbudgetburn
-        when:
-          or:
-            - field: OwnerEmail
-              operator: notmatches
-              values: [".*@redhat\\.com$"]
-            - operator: sample
-              values: ["0.10"]
+filters:
+  - investigation: clustermonitoringerrorbudgetburn
+    when:
+      or:
+        - field: OwnerEmail
+          operator: notmatches
+          values: [".*@redhat\\.com$"]
+        - operator: sample
+          values: ["0.10"]
 ```
 
 ## AI agent configuration
 
-When using the `aiassisted` investigation, the `ai_agent` section must be present and all required fields must be set:
+When using the `aiassisted` investigation, the `ai_agent` section must be present:
 
 ```yaml
 ai_agent:
-  runtime_arn: "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/agent-abc123"
-  user_id: "cad-service-account"
+  runtime_arn: "arn:aws:bedrock:us-east-1:123456789012:agent-runtime/EXAMPLE"
+  user_id: "cad-agent"
   region: "us-east-1"
-  invoker_role_arn: "arn:aws:iam::123456789012:role/agent-invoker"
-  timeout_seconds: 900              # optional, defaults to 900
-  version: "v1.0.0"                 # optional, audit trail only
-  ops_sop_version: "v2.0.0"         # optional, audit trail only
-  rosa_plugins_version: "v3.0.0"    # optional, audit trail only
+  timeout_seconds: 900   # optional, defaults to 900
 ```
 
-When the `ai_agent` section is configured, `aiassisted` also acts as a fallback: if no alert title matches the incoming incident (or the matched alert's `when` filter rejects), CAD automatically runs `precheck` followed by `aiassisted`. This fallback does not require an explicit `aiassisted` entry in `alerts`.
+The `aiassisted` investigation must also have an entry in `filters`. Without it, AI investigation is disabled even if `ai_agent` is configured.
 
 ## Full reference
 
-See [`docs/investigation-config.example.yaml`](investigation-config.example.yaml) for a fully commented example covering all operators, field types, and composition patterns.
+See [`docs/investigation-filter-config.example.yaml`](investigation-filter-config.example.yaml) for a fully commented example covering all operators, field types, and composition patterns.

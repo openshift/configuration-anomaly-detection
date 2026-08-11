@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"bytes"
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	ocmmock "github.com/openshift/configuration-anomaly-detection/pkg/ocm/mock"
@@ -224,13 +224,10 @@ func stringContains(s, substr string) bool {
 
 func TestOversizedRequestBodyIsRejected(t *testing.T) {
 	oversizedBody := bytes.Repeat([]byte("A"), 10*1024*1024) // 10 MiB
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(oversizedBody))
+	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(oversizedBody))
 	rec := httptest.NewRecorder()
 
-	handler, err := CreateInterceptorHandler([]string{"TEST"}, "testdata/minimal-config.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
+	handler := CreateInterceptorHandler([]string{"TEST"})
 	handler.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusRequestEntityTooLarge {
@@ -287,8 +284,6 @@ func makeSignedRequest(t *testing.T, innerBody, signingSecret string) *http.Requ
 // Note: webhookv3.VerifySignature restores r.Body after reading it, so
 // iterating the same extractedRequest over multiple tokens is safe.
 func TestSignatureVerification(t *testing.T) {
-	t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "testdata/minimal-config.yaml")
-
 	const (
 		secret1   = "signing-secret-one"
 		secret2   = "signing-secret-two"
@@ -354,18 +349,108 @@ func TestSignatureVerification(t *testing.T) {
 			req := makeSignedRequest(t, innerBody, tt.signingSecret)
 			rec := httptest.NewRecorder()
 
-			handler, err := CreateInterceptorHandler(tt.tokens, "testdata/minimal-config.yaml")
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			handler.ServeHTTP(rec, req)
+			CreateInterceptorHandler(tt.tokens).ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatus {
 				t.Errorf("status = %d, want %d (body: %s)", rec.Code, tt.wantStatus, rec.Body.String())
 			}
 			if tt.wantBodyContains != "" && !stringContains(rec.Body.String(), tt.wantBodyContains) {
 				t.Errorf("body = %q, want it to contain %q", rec.Body.String(), tt.wantBodyContains)
+			}
+		})
+	}
+}
+
+func TestShouldRunAIInvestigation(t *testing.T) {
+	// Helper to write a filter config file and set the env var.
+	setupFilterConfig := func(t *testing.T, yaml string) {
+		t.Helper()
+		path := t.TempDir() + "/filter.yaml"
+		if err := os.WriteFile(path, []byte(yaml), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", path)
+	}
+
+	tests := []struct {
+		name         string
+		filterYAML   string // empty = no filter config
+		expectResult bool
+	}{
+		{
+			name:         "no filter config — AI disabled",
+			filterYAML:   "",
+			expectResult: false,
+		},
+		{
+			name: "filter config without aiassisted entry — AI disabled",
+			filterYAML: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
+			expectResult: false,
+		},
+		{
+			name: "no ai_agent config — AI disabled",
+			filterYAML: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
+			expectResult: false,
+		},
+		{
+			name: "ai_agent and aiassisted filter present — AI enabled",
+			filterYAML: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "test"
+  region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/test"
+filters:
+  - investigation: aiassisted
+    when:
+      or:
+        - field: ClusterID
+          operator: in
+          values: ["cluster-1"]
+`,
+			expectResult: true,
+		},
+		{
+			name: "aiassisted with no filter tree — AI enabled (no filtering)",
+			filterYAML: `
+ai_agent:
+  runtime_arn: "arn:test"
+  user_id: "test"
+  region: "us-east-1"
+  invoker_role_arn: "arn:aws:iam::123456789012:role/test"
+filters:
+  - investigation: aiassisted
+`,
+			expectResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.filterYAML != "" {
+				setupFilterConfig(t, tt.filterYAML)
+			} else {
+				t.Setenv("CAD_INVESTIGATION_CONFIG_PATH", "")
+			}
+
+			result := shouldRunAIInvestigation()
+
+			if result != tt.expectResult {
+				t.Errorf("shouldRunAIInvestigation() = %v, want %v", result, tt.expectResult)
 			}
 		})
 	}

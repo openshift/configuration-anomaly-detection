@@ -3,11 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
-	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
@@ -17,9 +19,9 @@ import (
 var shortNameToInvestigation = map[string]string{
 	"ai":                       "aiassisted",
 	"can-not-retrieve-updates": "cannotretrieveupdatessre",
-	"chgm":                     "chgm",
+	"chgm":                     "Cluster Has Gone Missing (CHGM)",
 	"cmbb":                     "clustermonitoringerrorbudgetburn",
-	"cpd":                      "cpd",
+	"cpd":                      "ClusterProvisioningDelay",
 	"etcd-quota-low":           "etcddatabasequotalowspace",
 	"insightsoperatordown":     "insightsoperatordown",
 	"machine-health-check":     "machinehealthcheckunterminatedshortcircuitsre",
@@ -37,12 +39,13 @@ type ManualController struct {
 	investigationRunner
 }
 
-// resolveInvestigationName maps a short name to the full investigation name.
-func resolveInvestigationName(name string) string {
+// getInvestigation looks up an investigation by short name first, then falls back to the registry lookup.
+func getInvestigation(name string, experimental bool) investigation.Investigation {
+	// Check if the name is a short name and map it to the full name
 	if fullName, ok := shortNameToInvestigation[name]; ok {
-		return fullName
+		name = fullName
 	}
-	return name
+	return investigations.GetInvestigationByName(name, experimental)
 }
 
 func (c *ManualController) Investigate(ctx context.Context) error {
@@ -50,9 +53,10 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 		c.logger.Info("🔍 DRY RUN MODE: Investigation will run without performing any external operations")
 	}
 
-	name := resolveInvestigationName(c.manual.InvestigationName)
-	inv := investigations.GetInvestigationByName(name)
-	if inv == nil {
+	experimentalEnabledVar := os.Getenv("CAD_EXPERIMENTAL_ENABLED")
+	experimentalEnabled, _ := strconv.ParseBool(experimentalEnabledVar)
+	alertInvestigation := getInvestigation(c.manual.InvestigationName, experimentalEnabled)
+	if alertInvestigation == nil {
 		availableInvestigations := make([]string, 0, len(shortNameToInvestigation))
 		for shortName, longName := range shortNameToInvestigation {
 			format := fmt.Sprintf("- %s (%s)", shortName, longName)
@@ -64,21 +68,13 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 
 	// Track manual investigation start
 	dryRun := strconv.FormatBool(c.dryRun)
-	metrics.Inc(metrics.ManualInvestigationStarted, inv.Name(), dryRun)
+	metrics.Inc(metrics.ManualInvestigationStarted, alertInvestigation.Name(), dryRun)
 
-	invEntries := []config.InvestigationEntry{}
-	if inv.Name() != "precheck" {
-		invEntries = append(invEntries, config.InvestigationEntry{Name: "precheck"})
-	}
-	if inv.Name() != "ccam" && inv.Name() != "precheck" {
-		invEntries = append(invEntries, config.InvestigationEntry{Name: "ccam"})
-	}
-	invEntries = append(invEntries, config.InvestigationEntry{Name: inv.Name()})
-
-	alertConfig := &config.AlertConfig{
-		AlertTitle:     inv.Name(),
-		Name:           inv.Name(),
-		Investigations: invEntries,
+	// For AI investigations, create a new instance with the runtime config from the global config.
+	if _, ok := alertInvestigation.(*aiassisted.Investigation); ok {
+		alertInvestigation = &aiassisted.Investigation{
+			AIConfig: c.dependencies.FilterConfig.GetAIAgentConfig(),
+		}
 	}
 
 	// When --with-filtering is set, create a filter context so filters are evaluated.
@@ -86,9 +82,10 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	var filterCtx *types.FilterContext
 	if c.manual.WithFiltering {
 		filterCtx = &types.FilterContext{
-			AlertName: inv.Name(),
+			AlertName: alertInvestigation.Name(),
 		}
 	}
 
-	return c.runChain(ctx, c.manual.ClusterId, alertConfig, filterCtx, c.manual.Params)
+	// No PD client for manual runs.
+	return c.runInvestigation(ctx, c.manual.ClusterId, alertInvestigation, nil, filterCtx, c.manual.Params)
 }

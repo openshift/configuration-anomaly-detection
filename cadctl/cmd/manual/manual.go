@@ -31,7 +31,7 @@ func NewManualCmd() (*cobra.Command, error) {
 	cmd.Flags().StringVarP(&investigationFlag, "investigation", "i", "", "the investigation to run manually")
 	cmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "d", false, "run investigation without performing any external operations")
 	cmd.Flags().BoolVar(&withFilteringFlag, "with-filtering", false, "evaluate investigation filters during manual runs (default: filters are bypassed)")
-	cmd.Flags().StringVar(&configPath, "config", "", "path to investigation config file (overrides CAD_INVESTIGATION_CONFIG_PATH)")
+	cmd.Flags().StringVar(&configPath, "config", "", "path to investigation filter config file (overrides CAD_INVESTIGATION_CONFIG_PATH)")
 	cmd.Flags().StringArrayVarP(&paramsFlag, "params", "p", nil, "investigation-specific parameters as KEY=VALUE (can be specified multiple times)")
 	err := cmd.MarkFlagRequired("cluster-id")
 	if err != nil {
