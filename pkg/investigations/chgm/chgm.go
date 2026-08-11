@@ -36,7 +36,7 @@ type Investigation struct{}
 // Run runs the investigation for a triggered chgm pagerduty event
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithClusterDeployment().WithAwsClient().Build()
+	r, err := rb.WithClusterDeployment().Build()
 	if err != nil {
 		return result, err
 	}
@@ -153,7 +153,19 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 func (i *Investigation) Name() string {
-	return "chgm"
+	return "Cluster Has Gone Missing (CHGM)"
+}
+
+func (i *Investigation) AlertTitle() string {
+	return "has gone missing"
+}
+
+func (i *Investigation) Description() string {
+	return "Detects reason for clusters that have gone missing"
+}
+
+func (i *Investigation) IsExperimental() bool {
+	return false
 }
 
 // hasRecentlyResumed checks if the cluster was woken up from

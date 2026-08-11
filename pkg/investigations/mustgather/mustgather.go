@@ -21,7 +21,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/tarball"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/utils"
 )
@@ -183,13 +182,24 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
-	metrics.Inc(metrics.MustGatherPerformed, c.Name(), productName)
+	result.MustGatherPerformed = investigation.InvestigationStep{Performed: true, Labels: []string{productName}}
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name())
 	return result, nil
 }
 
 func (c *Investigation) Name() string {
 	return "mustgather"
+}
+
+func (c *Investigation) AlertTitle() string { return "CreateMustGather" }
+
+func (c *Investigation) Description() string {
+	return "creates a must gather for a cluster"
+}
+
+func (c *Investigation) IsExperimental() bool {
+	// TODO: Update to false when graduating to production.
+	return false
 }
 
 // waitForMustGatherNamespaceDeletion waits for any existing openshift-must-gather-* namespace to be deleted

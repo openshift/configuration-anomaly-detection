@@ -1,4 +1,0 @@
-alerts:
-  - alert_title: test
-    investigations:
-      - precheck

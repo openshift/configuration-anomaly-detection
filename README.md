@@ -95,7 +95,6 @@ To add a new alert investigation:
   ```
 - The returned `Resources` struct contains initialized clients and cluster objects. See [Integrations](#integrations) for a full list of available resources.
 - Add test objects or scripts used to recreate the alert symptoms to the `pkg/investigations/$INVESTIGATION_NAME/testing/` directory for future use. Be sure to clearly document the testing procedure under the `Testing` section of the investigation-specific README.md file
-- Add an entry for the new investigation to `test/e2e/e2e-investigation-config.yaml` so the e2e tests cover it. This file is embedded into the e2e test binary and defines which alert titles are triggered during end-to-end testing.
 
 ### Graduating an investigation
 
@@ -306,4 +305,4 @@ For Red Hat employees, these environment variables can be found in the SRE-P vau
 
 ### Configuration File
 
-CAD now also has a configuration file and over time the environment variables will be moved to this file - for the supported fields at any time see the example configuration with comments in [./docs/investigation-config.example.yaml](./docs/investigation-config.example.yaml "this file").
+CAD now also has a configuration file and over time the environment variables will be moved to this file - for the supported fields at any time see the example configuration with comments in [./docs/investigation-filter-config.example.yaml](./docs/investigation-filter-config.example.yaml "this file").

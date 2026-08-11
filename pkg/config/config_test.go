@@ -7,22 +7,20 @@ import (
 	"time"
 )
 
-const testMustgatherChainYAML = `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - mustgather
+const testMustgatherFilterYAML = `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
 `
 
-const alertName = "mustgather"
-
 var testInvestigations = []string{
-	"precheck",
-	"ccam",
 	"aiassisted",
-	"chgm",
+	"Cluster Has Gone Missing (CHGM)",
 	"clustermonitoringerrorbudgetburn",
-	"cpd",
+	"ClusterProvisioningDelay",
 	"etcddatabasequotalowspace",
 	"insightsoperatordown",
 	"upgradeconfigsyncfailureover4hr",
@@ -30,8 +28,6 @@ var testInvestigations = []string{
 	"restartcontrolplane",
 	"cannotretrieveupdatessre",
 	"mustgather",
-	"ocmagentresponsefailure",
-	"describenodes",
 }
 
 func TestParseConfig(t *testing.T) { //nolint:maintidx,gocyclo // table-driven test with many cases
@@ -42,200 +38,214 @@ func TestParseConfig(t *testing.T) { //nolint:maintidx,gocyclo // table-driven t
 		check   func(t *testing.T, cfg *Config)
 	}{
 		{
-			name: "valid config with one chain",
-			yaml: testMustgatherChainYAML,
+			name: "valid config with one filter",
+			yaml: testMustgatherFilterYAML,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Alerts) != 1 {
-					t.Fatalf("expected 1 investigation, got %d", len(cfg.Alerts))
+				if len(cfg.Filters) != 1 {
+					t.Fatalf("expected 1 filter, got %d", len(cfg.Filters))
 				}
-				if cfg.Alerts[0].AlertTitle != "TestAlert" {
-					t.Errorf("expected alert_title TestAlert, got %q", cfg.Alerts[0].AlertTitle)
+				if cfg.Filters[0].Investigation != "mustgather" {
+					t.Errorf("expected investigation mustgather, got %q", cfg.Filters[0].Investigation)
 				}
-				if len(cfg.Alerts[0].Investigations) != 1 {
-					t.Fatalf("expected 1 chain entry, got %d", len(cfg.Alerts[0].Investigations))
-				}
-				if cfg.Alerts[0].Investigations[0].Name != alertName {
-					t.Errorf("expected chain entry mustgather, got %q", cfg.Alerts[0].Investigations[0].Name)
+				if cfg.Filters[0].Filter == nil {
+					t.Fatal("expected filter node, got nil")
 				}
 			},
 		},
 		{
-			name: "valid config with multiple chain entries and bare strings",
+			name: "valid config with multiple filters",
 			yaml: `
-alerts:
-  - alert_title: "has gone missing"
-    investigations:
-      - precheck
-      - ccam
-      - "chgm"
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Alerts[0].Investigations) != 3 {
-					t.Fatalf("expected 3 chain entries, got %d", len(cfg.Alerts[0].Investigations))
-				}
-				if cfg.Alerts[0].Investigations[0].Name != "precheck" {
-					t.Errorf("chain[0] = %q, want precheck", cfg.Alerts[0].Investigations[0].Name)
-				}
-				if cfg.Alerts[0].Investigations[2].Name != "chgm" {
-					t.Errorf("chain[2] = %q", cfg.Alerts[0].Investigations[2].Name)
-				}
-			},
-		},
-		{
-			name: "chain entry with when filter (object form)",
-			yaml: `
-alerts:
-  - alert_title: "has gone missing"
-    investigations:
-      - precheck
-      - name: mustgather
-        when:
-          operator: sample
-          values: ["0.10"]
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Alerts[0].Investigations[1]
-				if entry.Name != alertName {
-					t.Errorf("entry name = %q, want mustgather", entry.Name)
-				}
-				if entry.When == nil {
-					t.Fatal("expected when filter on mustgather entry")
-				}
-				if entry.When.Operator != OperatorSample {
-					t.Errorf("operator = %q, want sample", entry.When.Operator)
-				}
-			},
-		},
-		{
-			name: "chain-level when filter",
-			yaml: `
-alerts:
-  - alert_title: "ClusterProvisioningDelay -"
+filters:
+  - investigation: mustgather
     when:
-      field: OrganizationID
-      operator: notin
-      values: ["org-exclude"]
-    investigations:
-      - precheck
-      - ccam
-      - cpd
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				ic := cfg.Alerts[0]
-				if ic.When == nil {
-					t.Fatal("expected chain-level when filter")
-				}
-				if ic.When.Field != FieldOrganizationID {
-					t.Errorf("when field = %q, want OrganizationID", ic.When.Field)
-				}
-				if ic.When.Operator != OperatorNotIn {
-					t.Errorf("when operator = %q, want notin", ic.When.Operator)
-				}
-			},
-		},
-		{
-			name: "experimental flag",
-			yaml: `
-alerts:
-  - alert_title: "TestExperimental"
-    experimental: true
-    investigations:
-      - mustgather
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if !cfg.Alerts[0].Experimental {
-					t.Error("expected experimental=true")
-				}
-			},
-		},
-		{
-			name: "empty investigations list is valid",
-			yaml: `
-alerts: []
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Alerts) != 0 {
-					t.Fatalf("expected 0 investigations, got %d", len(cfg.Alerts))
-				}
-			},
-		},
-		{
-			name: "empty chain is invalid",
-			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations: []
-`,
-			wantErr: true,
-		},
-		{
-			name: "empty alert_title is invalid",
-			yaml: `
-alerts:
-  - alert_title: ""
-    investigations:
-      - mustgather
-`,
-			wantErr: true,
-		},
-		{
-			name: "duplicate alert_title is invalid",
-			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - mustgather
-  - alert_title: "TestAlert"
-    investigations:
-      - precheck
-`,
-			wantErr: true,
-		},
-		{
-			name: "unknown investigation name in chain is invalid",
-			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - nonexistent
-`,
-			wantErr: true,
-		},
-		{
-			name: "empty chain entry name is invalid",
-			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - name: ""
-`,
-			wantErr: true,
-		},
-		{
-			name: "invalid when filter field is invalid",
-			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - name: mustgather
-        when:
-          field: BadField
+      and:
+        - field: CloudProvider
           operator: in
-          values: ["x"]
+          values: ["aws"]
+        - field: ClusterState
+          operator: in
+          values: ["ready"]
+  - investigation: etcddatabasequotalowspace
+    when:
+      field: HCP
+      operator: in
+      values: ["false"]
 `,
-			wantErr: true,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if len(cfg.Filters) != 2 {
+					t.Fatalf("expected 2 filters, got %d", len(cfg.Filters))
+				}
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather")
+				}
+				if len(f.Filter.And) != 2 {
+					t.Errorf("mustgather: expected 2 AND children, got %d", len(f.Filter.And))
+				}
+				f = cfg.GetFilter("etcddatabasequotalowspace")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for etcddatabasequotalowspace")
+				}
+				if f.Filter.Field != "HCP" {
+					t.Errorf("etcddatabasequotalowspace: expected field HCP, got %q", f.Filter.Field)
+				}
+			},
 		},
 		{
-			name: "invalid chain-level when filter is invalid",
+			name: "empty filters list is valid",
 			yaml: `
-alerts:
-  - alert_title: "TestAlert"
+filters: []
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if len(cfg.Filters) != 0 {
+					t.Fatalf("expected 0 filters, got %d", len(cfg.Filters))
+				}
+			},
+		},
+		{
+			name: "valid config with OR filter",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      or:
+        - field: ClusterID
+          operator: in
+          values: ["abc-123"]
+        - field: OrganizationID
+          operator: in
+          values: ["org-456"]
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				if len(cfg.Filters) != 1 {
+					t.Fatalf("expected 1 filter, got %d", len(cfg.Filters))
+				}
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather, got nil")
+				}
+				if len(f.Filter.Or) != 2 {
+					t.Fatalf("expected 2 OR children, got %d", len(f.Filter.Or))
+				}
+			},
+		},
+		{
+			name: "valid config with AND+OR combined",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      and:
+        - field: CloudProvider
+          operator: in
+          values: ["aws"]
+        - or:
+            - field: ClusterID
+              operator: in
+              values: ["abc-123"]
+            - field: OrganizationID
+              operator: in
+              values: ["org-456"]
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather, got nil")
+				}
+				if len(f.Filter.And) != 2 {
+					t.Errorf("expected 2 AND children, got %d", len(f.Filter.And))
+				}
+				if len(f.Filter.And[1].Or) != 2 {
+					t.Errorf("expected 2 OR children in second AND child, got %d", len(f.Filter.And[1].Or))
+				}
+			},
+		},
+		{
+			name: "invalid filter with bad field",
+			yaml: `
+filters:
+  - investigation: mustgather
     when:
       field: BadField
       operator: in
       values: ["x"]
-    investigations:
-      - mustgather
+`,
+			wantErr: true,
+		},
+		{
+			name: "unknown investigation name",
+			yaml: `
+filters:
+  - investigation: nonexistent
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty investigation name",
+			yaml: `
+filters:
+  - investigation: ""
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "duplicate investigation name",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: ["aws"]
+  - investigation: mustgather
+    when:
+      field: ClusterState
+      operator: in
+      values: ["ready"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "invalid filter field name",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      field: BadFieldName
+      operator: in
+      values: ["aws"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "invalid operator",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: equals
+      values: ["aws"]
+`,
+			wantErr: true,
+		},
+		{
+			name: "empty values",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      field: CloudProvider
+      operator: in
+      values: []
 `,
 			wantErr: true,
 		},
@@ -257,14 +267,12 @@ ai_agent:
   version: "v1.0.0"
   ops_sop_version: "v2.0.0"
   rosa_plugins_version: "v3.0.0"
-alerts:
-  - alert_title: "TestAI"
+filters:
+  - investigation: aiassisted
     when:
       field: ClusterID
       operator: in
-      values: ["cluster-1"]
-    investigations:
-      - aiassisted
+      values: ["test-cluster"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
@@ -295,14 +303,12 @@ ai_agent:
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-alerts:
-  - alert_title: "TestAI"
+filters:
+  - investigation: aiassisted
     when:
       field: ClusterID
       operator: in
-      values: ["cluster-1"]
-    investigations:
-      - aiassisted
+      values: ["test-cluster"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
@@ -319,7 +325,7 @@ alerts:
 ai_agent:
   user_id: "user"
   region: "us-east-1"
-alerts: []
+filters: []
 `,
 			wantErr: true,
 		},
@@ -329,7 +335,7 @@ alerts: []
 ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
-alerts: []
+filters: []
 `,
 			wantErr: true,
 		},
@@ -339,7 +345,7 @@ alerts: []
 ai_agent:
   runtime_arn: "arn:test"
   region: "us-east-1"
-alerts: []
+filters: []
 `,
 			wantErr: true,
 		},
@@ -356,7 +362,7 @@ filters: []
 		},
 		{
 			name: "config without ai_agent is valid",
-			yaml: testMustgatherChainYAML,
+			yaml: testMustgatherFilterYAML,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent != nil {
 					t.Errorf("expected nil ai_agent, got %+v", cfg.AIAgent)
@@ -364,151 +370,156 @@ filters: []
 			},
 		},
 		{
-			name: "aiassisted in chain without ai_agent is invalid",
+			name: "aiassisted filter without ai_agent is invalid",
 			yaml: `
-alerts:
-  - alert_title: "TestAI"
-    investigations:
-      - aiassisted
+filters:
+  - investigation: aiassisted
+    when:
+      or:
+        - field: ClusterID
+          operator: in
+          values: ["cluster-1"]
 `,
 			wantErr: true,
 		},
 		{
-			name: "ai_agent without aiassisted in any chain is valid",
+			name: "aiassisted without filter is valid now",
 			yaml: `
 ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - mustgather
+filters:
+  - investigation: aiassisted
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
 				if cfg.AIAgent == nil {
-					t.Fatal("expected ai_agent config")
+					t.Fatal("expected ai_agent config, got nil")
+				}
+				f := cfg.GetFilter("aiassisted")
+				if f == nil {
+					t.Fatal("expected aiassisted filter entry, got nil")
+				}
+				if f.Filter != nil {
+					t.Errorf("expected nil filter tree (no filtering), got %+v", f.Filter)
 				}
 			},
 		},
-		// --- aiassisted filter requirement ---
 		{
-			name: "aiassisted without when filter is valid",
+			name: "ai_agent without aiassisted filter entry is valid now",
 			yaml: `
 ai_agent:
   runtime_arn: "arn:test"
   user_id: "user"
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-alerts:
-  - alert_title: "TestAI"
-    investigations:
-      - precheck
-      - aiassisted
-`,
-			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if len(cfg.Alerts[0].Investigations) != 2 {
-					t.Fatalf("expected 2 investigations, got %d", len(cfg.Alerts[0].Investigations))
-				}
-			},
-		},
-		{
-			name: "aiassisted with chain-level when is valid",
-			yaml: `
-ai_agent:
-  runtime_arn: "arn:test"
-  user_id: "user"
-  region: "us-east-1"
-  invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-alerts:
-  - alert_title: "TestAI"
+filters:
+  - investigation: mustgather
     when:
-      field: OrganizationID
+      field: CloudProvider
       operator: in
-      values: ["org-1"]
-    investigations:
-      - precheck
-      - aiassisted
+      values: ["aws"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				if cfg.Alerts[0].When == nil {
-					t.Fatal("expected chain-level when filter")
+				if cfg.AIAgent == nil {
+					t.Fatal("expected ai_agent config, got nil")
+				}
+				f := cfg.GetFilter("aiassisted")
+				if f != nil {
+					t.Errorf("expected nil filter for absent aiassisted entry, got %+v", f)
+				}
+			},
+		},
+		// --- sample operator tests ---
+		{
+			name: "valid sample operator",
+			yaml: `
+filters:
+  - investigation: mustgather
+    when:
+      operator: sample
+      values: ["0.10"]
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather, got nil")
+				}
+				if f.Filter.Operator != OperatorSample {
+					t.Errorf("expected operator sample, got %q", f.Filter.Operator)
 				}
 			},
 		},
 		{
-			name: "aiassisted with entry-level when is valid",
+			name: "sample rate 0 is valid",
 			yaml: `
-ai_agent:
-  runtime_arn: "arn:test"
-  user_id: "user"
-  region: "us-east-1"
-  invoker_role_arn: "arn:aws:iam::123456789012:role/cad-invoker"
-alerts:
-  - alert_title: "TestAI"
-    investigations:
-      - precheck
-      - name: aiassisted
-        when:
-          field: ClusterID
-          operator: in
-          values: ["cluster-1"]
+filters:
+  - investigation: mustgather
+    when:
+      operator: sample
+      values: ["0"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Alerts[0].Investigations[1]
-				if entry.When == nil {
-					t.Fatal("expected entry-level when filter on aiassisted")
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather, got nil")
 				}
 			},
 		},
-		// --- sample operator in chain entry ---
 		{
-			name: "valid sample operator in chain entry",
+			name: "sample rate 1 is valid",
 			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - name: mustgather
-        when:
-          operator: sample
-          values: ["0.10"]
+filters:
+  - investigation: mustgather
+    when:
+      operator: sample
+      values: ["1"]
 `,
 			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
-				entry := cfg.Alerts[0].Investigations[0]
-				if entry.When == nil {
-					t.Fatal("expected when filter")
-				}
-				if entry.When.Operator != OperatorSample {
-					t.Errorf("operator = %q, want sample", entry.When.Operator)
+				f := cfg.GetFilter("mustgather")
+				if f == nil || f.Filter == nil {
+					t.Fatal("expected filter for mustgather, got nil")
 				}
 			},
 		},
 		{
 			name: "sample rate negative is invalid",
 			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - name: mustgather
-        when:
-          operator: sample
-          values: ["-0.1"]
+filters:
+  - investigation: mustgather
+    when:
+      operator: sample
+      values: ["-0.1"]
 `,
 			wantErr: true,
 		},
 		{
 			name: "sample rate greater than 1 is invalid",
 			yaml: `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - name: mustgather
-        when:
-          operator: sample
-          values: ["1.5"]
+filters:
+  - investigation: mustgather
+    when:
+      operator: sample
+      values: ["1.5"]
 `,
 			wantErr: true,
+		},
+		{
+			name: "no filter leaves it nil",
+			yaml: `
+filters:
+  - investigation: mustgather
+`,
+			check: func(t *testing.T, cfg *Config) { //nolint:thelper // not a helper, inline check
+				f := cfg.GetFilter("mustgather")
+				if f == nil {
+					t.Fatal("expected filter for mustgather, got nil")
+				}
+				if f.Filter != nil {
+					t.Errorf("expected nil filter tree, got %+v", f.Filter)
+				}
+			},
 		},
 	}
 
@@ -525,58 +536,35 @@ alerts:
 	}
 }
 
-func TestGetAlert(t *testing.T) {
-	cfg, err := ParseConfig([]byte(`
-alerts:
-  - alert_title: "has gone missing"
-    investigations:
-      - precheck
-      - ccam
-      - "chgm"
-  - alert_title: "ExperimentalAlert"
-    experimental: true
-    investigations:
-      - mustgather
-`), testInvestigations)
+func TestGetFilter(t *testing.T) {
+	cfg, err := ParseConfig([]byte(testMustgatherFilterYAML), testInvestigations)
 	if err != nil {
 		t.Fatalf("ParseConfig() error = %v", err)
 	}
 
-	// Matching alert title returns the chain.
-	ic := cfg.GetAlert("Cluster xyz has gone missing", false)
-	if ic == nil {
-		t.Fatal("expected chain for 'has gone missing'")
+	// Configured investigation returns its filter.
+	f := cfg.GetFilter("mustgather")
+	if f == nil {
+		t.Fatal("expected filter for mustgather, got nil")
 	}
-	if ic.AlertTitle != "has gone missing" {
-		t.Errorf("AlertTitle = %q", ic.AlertTitle)
+	if f.Filter == nil {
+		t.Fatal("expected filter tree, got nil")
 	}
-	if len(ic.Investigations) != 3 {
-		t.Fatalf("expected 3 chain entries, got %d", len(ic.Investigations))
-	}
-
-	// No match returns nil.
-	ic = cfg.GetAlert("UnknownAlert", false)
-	if ic != nil {
-		t.Fatalf("expected nil for unmatched alert, got %+v", ic)
+	if f.Filter.Field != "CloudProvider" {
+		t.Fatalf("expected field CloudProvider, got %q", f.Filter.Field)
 	}
 
-	// Experimental chain is hidden when experimentalEnabled=false.
-	ic = cfg.GetAlert("ExperimentalAlert fired", false)
-	if ic != nil {
-		t.Fatal("expected nil for experimental chain with experimental=false")
-	}
-
-	// Experimental chain is visible when experimentalEnabled=true.
-	ic = cfg.GetAlert("ExperimentalAlert fired", true)
-	if ic == nil {
-		t.Fatal("expected chain for experimental alert with experimental=true")
+	// Unconfigured investigation returns nil (always runs).
+	f = cfg.GetFilter("etcddatabasequotalowspace")
+	if f != nil {
+		t.Fatalf("expected nil filter for unconfigured investigation, got %v", f)
 	}
 
 	// Nil config returns nil.
 	var nilCfg *Config
-	ic = nilCfg.GetAlert("has gone missing", false)
-	if ic != nil {
-		t.Fatalf("expected nil from nil config, got %+v", ic)
+	f = nilCfg.GetFilter("mustgather")
+	if f != nil {
+		t.Fatalf("expected nil filter from nil config, got %v", f)
 	}
 }
 
@@ -610,17 +598,65 @@ func TestAIAgentConfigGetTimeout(t *testing.T) {
 	}
 }
 
-func TestLoadConfig(t *testing.T) {
-	t.Run("empty path returns error", func(t *testing.T) {
-		_, err := LoadConfig("", testInvestigations)
-		if err == nil {
-			t.Fatal("expected error when config path is empty")
+func TestLoadConfig(t *testing.T) { //nolint:gocyclo,maintidx // many sub-cases for config loading paths
+	t.Run("env var not set returns nil", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, "")
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg != nil {
+			t.Fatal("expected nil config when env var is not set")
 		}
 	})
 
 	t.Run("valid file loads successfully", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "config.yaml")
-		if err := os.WriteFile(path, []byte(testMustgatherChainYAML), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(testMustgatherFilterYAML), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(ConfigEnvVar, path)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil || len(cfg.Filters) != 1 {
+			t.Fatal("expected config with 1 filter")
+		}
+	})
+
+	t.Run("nonexistent file returns nil config", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "/nonexistent/path.yaml")
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("expected no error for nonexistent file, got: %v", err)
+		}
+		if cfg != nil {
+			t.Fatal("expected nil config for nonexistent file")
+		}
+	})
+
+	t.Run("invalid content returns error", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "bad.yaml")
+		if err := os.WriteFile(path, []byte(`filters: [{investigation: fake}]`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(ConfigEnvVar, path)
+
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error for invalid investigation name")
+		}
+	})
+
+	t.Run("path override takes precedence over env var", func(t *testing.T) {
+		// Set env var to a nonexistent file — if it were used, LoadConfig would fail.
+		t.Setenv(ConfigEnvVar, "/nonexistent/should-not-be-used.yaml")
+
+		path := filepath.Join(t.TempDir(), "override.yaml")
+		if err := os.WriteFile(path, []byte(testMustgatherFilterYAML), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
@@ -628,70 +664,180 @@ func TestLoadConfig(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadConfig() error = %v", err)
 		}
-		if cfg == nil || len(cfg.Alerts) != 1 {
-			t.Fatal("expected config with 1 investigation")
+		if cfg == nil || len(cfg.Filters) != 1 {
+			t.Fatal("expected config with 1 filter from override path")
 		}
 	})
 
-	t.Run("nonexistent file returns error", func(t *testing.T) {
-		_, err := LoadConfig("/nonexistent/path.yaml", testInvestigations)
-		if err == nil {
-			t.Fatal("expected error for nonexistent file")
-		}
-	})
-
-	t.Run("invalid content returns error", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "bad.yaml")
-		if err := os.WriteFile(path, []byte(`alerts: [{alert_title: "X", investigations: [{name: fake}]}]`), 0o600); err != nil {
+	t.Run("empty override falls back to env var", func(t *testing.T) {
+		content := `
+filters:
+  - investigation: mustgather
+`
+		path := filepath.Join(t.TempDir(), "envvar.yaml")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			t.Fatal(err)
 		}
+		t.Setenv(ConfigEnvVar, path)
 
-		_, err := LoadConfig(path, testInvestigations)
-		if err == nil {
-			t.Fatal("expected error for invalid investigation name")
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil || len(cfg.Filters) != 1 {
+			t.Fatal("expected config with 1 filter from env var path")
 		}
 	})
-}
 
-// NOTE: The env var fallback (CAD_INVESTIGATION_CONFIG_PATH) is handled by
-// callers (controller.initializeDependencies, interceptor main) before calling
-// LoadConfig. Tests for that behavior belong with those callers.
+	// --- Legacy CAD_AI_AGENT_CONFIG fallback tests ---
 
-func TestInvestigationEntryUnmarshal(t *testing.T) {
-	yaml := `
-alerts:
-  - alert_title: "TestAlert"
-    investigations:
-      - precheck
-      - name: mustgather
-        when:
-          operator: sample
-          values: ["0.50"]
-`
-	cfg, err := ParseConfig([]byte(yaml), testInvestigations)
-	if err != nil {
-		t.Fatalf("ParseConfig() error = %v", err)
-	}
-	if len(cfg.Alerts[0].Investigations) != 2 {
-		t.Fatalf("expected 2 chain entries, got %d", len(cfg.Alerts[0].Investigations))
-	}
+	t.Run("legacy env var with clusters and orgs", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": ["org1"],
+			"clusters": ["cluster1"],
+			"enabled": true,
+			"timeout_seconds": 600
+		}`)
 
-	// First entry: bare string
-	if cfg.Alerts[0].Investigations[0].Name != "precheck" {
-		t.Errorf("chain[0].Name = %q, want precheck", cfg.Alerts[0].Investigations[0].Name)
-	}
-	if cfg.Alerts[0].Investigations[0].When != nil {
-		t.Error("chain[0].When should be nil for bare string entry")
-	}
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil {
+			t.Fatal("expected config from legacy env var")
+		}
+		if cfg.AIAgent == nil {
+			t.Fatal("expected ai_agent config")
+		}
+		if cfg.AIAgent.RuntimeARN != "arn:test" {
+			t.Errorf("RuntimeARN = %q", cfg.AIAgent.RuntimeARN)
+		}
+		if cfg.AIAgent.TimeoutSeconds != 600 {
+			t.Errorf("TimeoutSeconds = %d, want 600", cfg.AIAgent.TimeoutSeconds)
+		}
 
-	// Second entry: object with when
-	if cfg.Alerts[0].Investigations[1].Name != alertName {
-		t.Errorf("chain[1].Name = %q, want mustgather", cfg.Alerts[0].Investigations[1].Name)
-	}
-	if cfg.Alerts[0].Investigations[1].When == nil {
-		t.Fatal("chain[1].When should not be nil")
-	}
-	if cfg.Alerts[0].Investigations[1].When.Operator != OperatorSample {
-		t.Errorf("chain[1].When.Operator = %q, want sample", cfg.Alerts[0].Investigations[1].When.Operator)
-	}
+		f := cfg.GetFilter("aiassisted")
+		if f == nil || f.Filter == nil {
+			t.Fatal("expected synthesized aiassisted filter")
+		}
+		// Should be OR of ClusterID + OrganizationID
+		if len(f.Filter.Or) != 2 {
+			t.Fatalf("expected 2 OR children, got %d", len(f.Filter.Or))
+		}
+	})
+
+	t.Run("legacy env var with clusters only", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": [],
+			"clusters": ["c1", "c2"],
+			"enabled": true
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		f := cfg.GetFilter("aiassisted")
+		if f == nil || f.Filter == nil {
+			t.Fatal("expected synthesized aiassisted filter")
+		}
+		// Single leaf, not OR
+		if f.Filter.Field != FieldClusterID {
+			t.Errorf("expected ClusterID leaf, got field %q", f.Filter.Field)
+		}
+		if len(f.Filter.Values) != 2 {
+			t.Errorf("expected 2 cluster values, got %d", len(f.Filter.Values))
+		}
+	})
+
+	t.Run("legacy env var disabled returns nil", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"enabled": false
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg != nil {
+			t.Fatal("expected nil config when legacy enabled=false")
+		}
+	})
+
+	t.Run("legacy env var empty allowlists returns error", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"organizations": [],
+			"clusters": [],
+			"enabled": true
+		}`)
+
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error when enabled but no allowlists")
+		}
+	})
+
+	t.Run("legacy env var invalid JSON returns error", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{invalid}`)
+
+		_, err := LoadConfig("", testInvestigations)
+		if err == nil {
+			t.Fatal("expected error for invalid JSON")
+		}
+	})
+
+	t.Run("legacy env var default timeout", func(t *testing.T) {
+		t.Setenv(ConfigEnvVar, "")
+		t.Setenv(LegacyAIConfigEnvVar, `{
+			"runtime_arn": "arn:test",
+			"user_id": "user",
+			"region": "us-east-1",
+			"clusters": ["c1"],
+			"enabled": true
+		}`)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg.AIAgent.TimeoutSeconds != 900 {
+			t.Errorf("TimeoutSeconds = %d, want 900 (default)", cfg.AIAgent.TimeoutSeconds)
+		}
+	})
+
+	t.Run("config file takes precedence over legacy env var", func(t *testing.T) {
+		// Legacy env var has invalid JSON — if used, LoadConfig would fail.
+		t.Setenv(LegacyAIConfigEnvVar, `{invalid}`)
+
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(testMustgatherFilterYAML), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv(ConfigEnvVar, path)
+
+		cfg, err := LoadConfig("", testInvestigations)
+		if err != nil {
+			t.Fatalf("LoadConfig() error = %v", err)
+		}
+		if cfg == nil || len(cfg.Filters) != 1 {
+			t.Fatal("expected config from file, not legacy env var")
+		}
+	})
 }

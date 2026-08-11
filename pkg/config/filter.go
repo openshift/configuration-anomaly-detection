@@ -87,38 +87,36 @@ type FilterNode struct {
 	Values   []string `yaml:"values,omitempty"`
 }
 
-// ShouldRun evaluates the alert-level filter for an alert config.
-// Returns (result, reason, error). A nil When always returns true.
-// A nil FilterContext always returns true (manual mode bypass).
-func (ac *AlertConfig) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
-	if ac.When == nil {
-		return true, "no alert-level filter configured", nil
-	}
-	if ctx == nil {
-		return true, "no filter context (manual mode)", nil
-	}
-	return ac.When.evaluate(ctx)
+// InvestigationFilter associates a filter tree with an investigation by name.
+// A nil Filter means the investigation always runs (no restrictions).
+type InvestigationFilter struct {
+	// Investigation is the investigation name, matching Investigation.Name() or a short name
+	// from the manual controller's shortNameToInvestigation map.
+	Investigation string `yaml:"investigation"`
+	// Filter is the root of the filter tree. nil means always run.
+	Filter *FilterNode `yaml:"when,omitempty"`
 }
 
-// ShouldRun evaluates the entry-level filter for an investigation entry.
-// Returns (result, reason, error). A nil When always returns true.
+// Evaluate checks the filter tree for an investigation.
+// Returns (result, reason, error) where reason describes which leaf determined the outcome.
+// A nil InvestigationFilter or nil Filter always returns true.
 // A nil FilterContext always returns true (manual mode bypass).
-func (e *InvestigationEntry) ShouldRun(ctx *types.FilterContext) (bool, string, error) {
-	if e.When == nil {
+func (f *InvestigationFilter) Evaluate(ctx *types.FilterContext) (bool, string, error) {
+	if f == nil || f.Filter == nil {
 		return true, "no filter configured", nil
 	}
 	if ctx == nil {
 		return true, "no filter context (manual mode)", nil
 	}
-	return e.When.evaluate(ctx)
+	return f.Filter.evaluate(ctx)
 }
 
 // Keys returns all field names referenced by leaf nodes in the filter tree.
 // Used to determine which FilterContext fields need to be populated.
-func (e *InvestigationEntry) Keys() []string {
+func (f InvestigationFilter) Keys() []string {
 	keys := make([]string, 0)
-	if e.When != nil {
-		e.When.Keys(&keys)
+	if f.Filter != nil {
+		f.Filter.keys(&keys)
 	}
 	return keys
 }
@@ -237,17 +235,17 @@ func passOrReject(passed bool) string {
 	return "reject"
 }
 
-// Keys recursively collects all field names referenced by leaf nodes.
-func (n *FilterNode) Keys(out *[]string) {
+// keys recursively collects all field names referenced by leaf nodes.
+func (n *FilterNode) keys(out *[]string) {
 	if len(n.And) > 0 {
 		for i := range n.And {
-			n.And[i].Keys(out)
+			n.And[i].keys(out)
 		}
 		return
 	}
 	if len(n.Or) > 0 {
 		for i := range n.Or {
-			n.Or[i].Keys(out)
+			n.Or[i].keys(out)
 		}
 		return
 	}

@@ -17,7 +17,7 @@ type Investigation struct{}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
-	r, err := rb.WithCluster().Build()
+	r, err := rb.Build()
 	if err != nil {
 		return result, err
 	}
@@ -145,4 +145,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 func (c *Investigation) Name() string {
 	return "upgradeconfigsyncfailureover4hr"
+}
+
+func (c *Investigation) AlertTitle() string {
+	return "UpgradeConfigSyncFailureOver4HrSRE"
+}
+
+func (c *Investigation) Description() string {
+	return "Investigates the UpgradeConfigSyncFailureOver4hr alert"
+}
+
+func (c *Investigation) IsExperimental() bool {
+	return false
 }

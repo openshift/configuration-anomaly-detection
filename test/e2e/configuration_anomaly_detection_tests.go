@@ -5,7 +5,6 @@ package osde2etests
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"os"
 	"time"
@@ -15,15 +14,11 @@ import (
 	. "github.com/onsi/gomega"
 	ocmConfig "github.com/openshift-online/ocm-common/pkg/ocm/config"
 	ocmConnBuilder "github.com/openshift-online/ocm-common/pkg/ocm/connection-builder"
-	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/test/e2e/utils"
 	ocme2e "github.com/openshift/osde2e-common/pkg/clients/ocm"
 	logger "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-//go:embed e2e-investigation-config.yaml
-var e2eInvestigationConfig []byte
 
 var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 	var (
@@ -32,7 +27,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		// region       string
 		clusterID    string
 		testPdClient utils.TestPagerDutyClient
-		cadCfg       *config.Config
 	)
 
 	BeforeAll(func(ctx context.Context) {
@@ -90,9 +84,6 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		pdRoutingKey := os.Getenv("CAD_PAGERDUTY_ROUTING_KEY")
 		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
 		testPdClient = utils.NewClient(pdRoutingKey)
-
-		cadCfg, err = config.ParseConfig(e2eInvestigationConfig, investigations.GetAvailableInvestigationsNames())
-		Expect(err).NotTo(HaveOccurred(), "Failed to parse embedded investigation config")
 	})
 
 	AfterAll(func() {
@@ -108,13 +99,8 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		lsReasonsBefore := lsResponseBefore.Items().Len()
 		ginkgo.GinkgoWriter.Printf("Limited support reasons before blocking egress: %d\n", lsReasonsBefore)
 
-		// Trigger all configured alerts against the healthy cluster
-		var alertTitles []string
-		for _, a := range cadCfg.Alerts {
-			if !a.Experimental {
-				alertTitles = append(alertTitles, a.AlertTitle)
-			}
-		}
+		// Trigger all investigations we have against the healthy cluster
+		alertTitles := investigations.GetAvailableInvestigationsTitles()
 		ginkgo.GinkgoWriter.Printf("Triggering %d investigations: %v\n", len(alertTitles), alertTitles)
 
 		for _, alertTitle := range alertTitles {

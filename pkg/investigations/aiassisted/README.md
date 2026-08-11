@@ -7,7 +7,7 @@ AI-powered investigation using AWS Bedrock AgentCore for alerts without formal i
 The aiassisted investigation serves as a **fallback handler** for alerts that don't have explicit investigation implementations in CAD. When CAD receives an alert without a matching investigation handler, it can invoke an AWS Bedrock AgentCore agent to investigate the issue and provide remediation guidance.
 
 **Trigger**: Any alert without an explicit CAD investigation handler (fallback)
-**Clusters**: Allowlist-controlled via investigation config (configured clusters and organizations only)
+**Clusters**: Allowlist-controlled via investigation filter config (configured clusters and organizations only)
 **Status**: Promoted (`IsExperimental() = false`)
 
 ## How It Works
@@ -59,7 +59,7 @@ The AI investigation requires two types of configuration:
 
 #### 1. Global Config (`CAD_INVESTIGATION_CONFIG_PATH`)
 
-The AI runtime config and filter rules are in the YAML config file. See `docs/investigation-config.example.yaml` for the full example.
+The AI runtime config and filter rules are in the YAML config file. See `docs/investigation-filter-config.example.yaml` for the full example.
 
 ```yaml
 ai_agent:
