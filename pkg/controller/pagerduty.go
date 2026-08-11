@@ -75,7 +75,9 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 			AlertTitle:  alertTitle,
 			ServiceName: c.pdClient.GetServiceName(),
 		}
-		return c.runChain(ctx, clusterID, alertConfig, filterCtx, nil)
+		if err := c.runChain(ctx, clusterID, alertConfig, filterCtx, nil); err != nil {
+			return err
+		}
 	}
 
 	if escErr := c.pdClient.EscalateIncident(); escErr != nil {
