@@ -110,13 +110,15 @@ func ParseConfig(data []byte, validInvestigations []string) (*Config, error) {
 }
 
 // GetAlert returns the first AlertConfig whose AlertTitle is contained in the given alert title.
+// The match is case-insensitive to prevent mismatches between config values and PagerDuty titles.
 // Alerts marked experimental are only returned when experimentalEnabled is true.
 func (c *Config) GetAlert(alertTitle string, experimentalEnabled bool) *AlertConfig {
 	if c == nil {
 		return nil
 	}
+	alertTitleLower := strings.ToLower(alertTitle)
 	for i := range c.Alerts {
-		if strings.Contains(alertTitle, c.Alerts[i].AlertTitle) {
+		if strings.Contains(alertTitleLower, strings.ToLower(c.Alerts[i].AlertTitle)) {
 			if c.Alerts[i].Experimental && !experimentalEnabled {
 				continue
 			}

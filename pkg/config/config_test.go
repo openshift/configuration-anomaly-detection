@@ -572,6 +572,16 @@ alerts:
 		t.Fatal("expected chain for experimental alert with experimental=true")
 	}
 
+	// Case-insensitive match: config has "has gone missing" (lowercase),
+	// PD title has "Has Gone Missing" (mixed case).
+	ic = cfg.GetAlert("Cluster xyz Has Gone Missing", false)
+	if ic == nil {
+		t.Fatal("expected case-insensitive match for 'Has Gone Missing'")
+	}
+	if ic.AlertTitle != "has gone missing" {
+		t.Errorf("AlertTitle = %q, want 'has gone missing'", ic.AlertTitle)
+	}
+
 	// Nil config returns nil.
 	var nilCfg *Config
 	ic = nilCfg.GetAlert("has gone missing", false)
