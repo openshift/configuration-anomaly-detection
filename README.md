@@ -21,7 +21,7 @@
     - [Templates](#templates)
     - [Dashboards](#dashboards)
     - [Boilerplate](#boilerplate)
-    - [PipelinePruner](#pipelinepruner)
+    - [Tekton Pipeline Pruning](#tekton-pipeline-pruning)
     - [Required ENV variables](#required-env-variables)
     - [Optional ENV variables](#optional-env-variables)
 
@@ -238,9 +238,11 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
 
-### PipelinePruner
+### Tekton Pipeline Pruning
 
-* [PipelinePruner](./openshift/PipelinePruning.md) -- Documentation about PipelineRun pruning.
+Depending on usage, tekton's default resource pruning configuration may need to be adjusted.
+
+> https://tekton.dev/docs/pruner/
 
 ### Required ENV variables
 
