@@ -11,6 +11,7 @@ import (
 	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	amutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/alertmanager"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 
@@ -58,11 +59,11 @@ func newTestNotes() *notewriter.NoteWriter {
 // --- Mock implementations ---
 
 type mockAlertsFetcher struct {
-	alerts []firingAlert
+	alerts []amutil.FiringAlert
 	err    error
 }
 
-func (m *mockAlertsFetcher) fetchFiringAlerts(_ context.Context, _ k8sclient.Client, _ *rest.Config) ([]firingAlert, error) {
+func (m *mockAlertsFetcher) fetchFiringAlerts(_ context.Context, _ k8sclient.Client, _ *rest.Config) ([]amutil.FiringAlert, error) {
 	return m.alerts, m.err
 }
 
@@ -1328,7 +1329,7 @@ func TestCheckFiringAlerts_WithAlerts(t *testing.T) {
 	notes := newTestNotes()
 	inv := &Investigation{
 		alertsFetcher: &mockAlertsFetcher{
-			alerts: []firingAlert{
+			alerts: []amutil.FiringAlert{
 				{Name: "HighMemoryUsage", Severity: "critical", State: "firing", Summary: "Memory > 90%"},
 				{Name: "DiskAlmostFull", Severity: "warning", State: "firing", Summary: "Disk > 85%"},
 			},
