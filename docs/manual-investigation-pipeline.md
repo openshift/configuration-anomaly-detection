@@ -149,10 +149,3 @@ oc logs \
   --follow
 ```
 
-### Automatic Cleanup
-
-A CronJob named `tekton-resource-pruner` runs hourly to clean up old PipelineRuns:
-- Keeps the most recent 100 PipelineRuns
-- Deletes older PipelineRuns automatically
-- Runs at the top of every hour
-
