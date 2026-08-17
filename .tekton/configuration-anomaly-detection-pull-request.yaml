@@ -241,7 +241,7 @@ spec:
         - name: name
           value: buildah
         - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-buildah:0.11.2@sha256:3f81f6d24a58c3c60adfdd9d43e4d8d05e7d8433177fd8dd9ffabd7aaa965cf0
+          value: quay.io/konflux-ci/tekton-catalog/task-buildah:0.12.0@sha256:4a4237129a4c8c6ba415b17793852a6764479b2657fa3af70a5615c241e3919b
         - name: kind
           value: task
         resolver: bundles
@@ -350,7 +350,7 @@ spec:
         - name: name
           value: ecosystem-cert-preflight-checks
         - name: bundle
-          value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:42720a1e9ed1ef75b615a03e521d01e3ce7ca67c995366a374a58e1307986c58
+          value: quay.io/konflux-ci/tekton-catalog/task-ecosystem-cert-preflight-checks:0.2@sha256:4619769705d4999e129b779d7699d89d33c47f7ab80d73ad6e3dcd8a6a4e43a7
         - name: kind
           value: task
         resolver: bundles
