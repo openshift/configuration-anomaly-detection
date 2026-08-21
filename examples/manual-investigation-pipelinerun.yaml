@@ -38,9 +38,9 @@ spec:
   - computeResources:
       limits:
         cpu: 500m
-        memory: 256Mi
+        memory: 512Mi
       requests:
         cpu: 100m
-        memory: 64Mi
+        memory: 256Mi
     pipelineTaskName: run-manual-investigation
   timeout: 30m

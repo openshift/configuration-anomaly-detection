@@ -20,7 +20,7 @@ ARG OC_VERSION=4.22.6
 ARG OC_HASH=3bbf6bdf7e8fd7ea1a18c6ff9454cfaed29e64e55af0d080d7d260418ffce16b
 
 RUN microdnf update -y && \
-    microdnf install wget tar gzip -y
+    microdnf install wget tar gzip rsync -y
 RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz -O /tmp/oc.tar.gz && \
     echo "${OC_HASH} /tmp/oc.tar.gz" | sha256sum --check --status && \
     tar -zxvf /tmp/oc.tar.gz -C /tmp && \
