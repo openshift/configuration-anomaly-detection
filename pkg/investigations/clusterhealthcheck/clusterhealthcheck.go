@@ -19,7 +19,6 @@ import (
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
-	amutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/alertmanager"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
@@ -36,7 +35,7 @@ import (
 )
 
 type alertsFetcher interface {
-	fetchFiringAlerts(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) ([]amutil.FiringAlert, error)
+	fetchFiringAlerts(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) ([]firingAlert, error)
 }
 
 type etcdHealthChecker interface {
@@ -55,6 +54,13 @@ type apiHealthResult struct {
 	healthz string
 	livez   string
 	readyz  string
+}
+
+type firingAlert struct {
+	Name     string
+	Severity string
+	State    string
+	Summary  string
 }
 
 type Investigation struct {
@@ -687,7 +693,7 @@ func (i *Investigation) checkFiringAlerts(ctx context.Context, r *investigation.
 		return
 	}
 
-	bySeverity := map[string][]amutil.FiringAlert{}
+	bySeverity := map[string][]firingAlert{}
 	for _, a := range alerts {
 		bySeverity[a.Severity] = append(bySeverity[a.Severity], a)
 	}
@@ -721,10 +727,65 @@ func (i *Investigation) checkFiringAlerts(ctx context.Context, r *investigation.
 	notes.AppendWarning("Firing Alerts: %s", summary.String())
 }
 
+type alertmanagerAlert struct {
+	Labels      map[string]string       `json:"labels"`
+	Annotations map[string]string       `json:"annotations"`
+	Status      alertmanagerAlertStatus `json:"status"`
+}
+
+type alertmanagerAlertStatus struct {
+	State string `json:"state"`
+}
+
 type defaultAlertsFetcher struct{}
 
-func (d *defaultAlertsFetcher) fetchFiringAlerts(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) ([]amutil.FiringAlert, error) {
-	return amutil.FetchFiringAlerts(ctx, k8sClient, restConfig)
+func (d *defaultAlertsFetcher) fetchFiringAlerts(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) ([]firingAlert, error) {
+	podList := &corev1.PodList{}
+	err := k8sClient.List(ctx, podList,
+		client.InNamespace("openshift-monitoring"),
+		client.MatchingLabels{"app.kubernetes.io/name": "alertmanager"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list alertmanager pods: %w", err)
+	}
+
+	var amPod *corev1.Pod
+	for idx := range podList.Items {
+		if podList.Items[idx].Status.Phase == corev1.PodRunning {
+			amPod = &podList.Items[idx]
+			break
+		}
+	}
+	if amPod == nil {
+		return nil, fmt.Errorf("no running alertmanager pods found in openshift-monitoring")
+	}
+
+	output, err := k8sclient.ExecInPod(ctx, restConfig, amPod, "alertmanager", []string{
+		"wget", "-qO-", "http://localhost:9093/api/v2/alerts?active=true",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to exec in alertmanager pod: %w", err)
+	}
+
+	var amAlerts []alertmanagerAlert
+	if err := json.Unmarshal([]byte(output), &amAlerts); err != nil {
+		return nil, fmt.Errorf("failed to decode alertmanager response: %w", err)
+	}
+
+	var firing []firingAlert
+	for _, a := range amAlerts {
+		if a.Status.State == "active" || a.Status.State == "firing" {
+			alert := firingAlert{
+				Name:     a.Labels["alertname"],
+				Severity: a.Labels["severity"],
+				State:    a.Status.State,
+				Summary:  a.Annotations["summary"],
+			}
+			firing = append(firing, alert)
+		}
+	}
+
+	return firing, nil
 }
 
 // checkClusterVersion reports the current cluster version, any update conditions, and EOL status.

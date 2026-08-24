@@ -282,7 +282,7 @@ func filterRelevantAlerts(alerts []amutil.FiringAlert) []amutil.FiringAlert {
 		severityAlert: true,
 	}
 
-	var filtered []amutil.FiringAlert
+	filtered := make([]amutil.FiringAlert, 0, len(alerts))
 	for _, a := range alerts {
 		if excluded[a.Name] || ignoredSeverities[a.Severity] {
 			continue
