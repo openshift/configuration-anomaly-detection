@@ -198,6 +198,15 @@ func (c *Investigation) Name() string {
 	return "mustgather"
 }
 
+const (
+	severityCritical = "critical"
+	severityError    = "error"
+	severityWarning  = "warning"
+	severityInfo     = "info"
+	severityNone     = "none"
+	severityAlert    = "alert"
+)
+
 // appendFiringAlerts queries the cluster's Alertmanager for currently firing
 // alerts and appends them to the PD note. Failures are logged but do not block
 // the investigation since the must-gather has already been collected and uploaded.
@@ -223,20 +232,33 @@ func appendFiringAlerts(r *investigation.Resources) {
 	}
 
 	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("Firing alerts at time of must-gather (%d):\n", len(relevant)))
-	for _, sev := range []string{"critical", "warning", "error"} {
-		for _, a := range relevant {
+	fmt.Fprintf(&summary, "Firing alerts at time of must-gather (%d):\n", len(relevant))
+
+	rendered := make(map[int]bool)
+	for _, sev := range []string{severityCritical, severityError, severityWarning} {
+		for i, a := range relevant {
 			if a.Severity != sev {
 				continue
 			}
-			summary.WriteString(fmt.Sprintf("  [%s] %s", a.Severity, a.Name))
-			if a.Summary != "" {
-				summary.WriteString(fmt.Sprintf(" - %s", a.Summary))
-			}
-			summary.WriteString("\n")
+			rendered[i] = true
+			writeAlertLine(&summary, a)
 		}
 	}
+	for i, a := range relevant {
+		if rendered[i] {
+			continue
+		}
+		writeAlertLine(&summary, a)
+	}
 	r.Notes.AppendAutomation("%s", summary.String())
+}
+
+func writeAlertLine(sb *strings.Builder, a amutil.FiringAlert) {
+	fmt.Fprintf(sb, "  [%s] %s", a.Severity, a.Name)
+	if a.Summary != "" {
+		fmt.Fprintf(sb, " - %s", a.Summary)
+	}
+	sb.WriteString("\n")
 }
 
 func getRestConfigForAlerts(r *investigation.Resources) (*rest.Config, error) {
@@ -251,13 +273,13 @@ func getRestConfigForAlerts(r *investigation.Resources) (*rest.Config, error) {
 func filterRelevantAlerts(alerts []amutil.FiringAlert) []amutil.FiringAlert {
 	excluded := map[string]bool{
 		"Watchdog":                 true,
-		"CreateMustGather":        true,
+		"CreateMustGather":         true,
 		"CreateMustGatherCritical": true,
 	}
 	ignoredSeverities := map[string]bool{
-		"info":  true,
-		"none":  true,
-		"alert": true,
+		severityInfo:  true,
+		severityNone:  true,
+		severityAlert: true,
 	}
 
 	var filtered []amutil.FiringAlert

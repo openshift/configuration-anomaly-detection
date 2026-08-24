@@ -174,11 +174,11 @@ func TestFilterRelevantAlerts(t *testing.T) {
 		{
 			name: "filters out info, none, alert severities",
 			input: []amutil.FiringAlert{
-				{Name: "CriticalAlert", Severity: "critical"},
-				{Name: "InfoAlert", Severity: "info"},
-				{Name: "NoneAlert", Severity: "none"},
-				{Name: "AlertSeverity", Severity: "alert"},
-				{Name: "WarningAlert", Severity: "warning"},
+				{Name: "CriticalAlert", Severity: severityCritical},
+				{Name: "InfoAlert", Severity: severityInfo},
+				{Name: "NoneAlert", Severity: severityNone},
+				{Name: "AlertSeverity", Severity: severityAlert},
+				{Name: "WarningAlert", Severity: severityWarning},
 			},
 			expected: 2,
 			names:    []string{"CriticalAlert", "WarningAlert"},
@@ -186,10 +186,10 @@ func TestFilterRelevantAlerts(t *testing.T) {
 		{
 			name: "filters out Watchdog and CreateMustGather variants",
 			input: []amutil.FiringAlert{
-				{Name: "Watchdog", Severity: "none"},
-				{Name: "CreateMustGather", Severity: "info"},
-				{Name: "CreateMustGatherCritical", Severity: "info"},
-				{Name: "RealAlert", Severity: "critical"},
+				{Name: "Watchdog", Severity: severityNone},
+				{Name: "CreateMustGather", Severity: severityInfo},
+				{Name: "CreateMustGatherCritical", Severity: severityInfo},
+				{Name: "RealAlert", Severity: severityCritical},
 			},
 			expected: 1,
 			names:    []string{"RealAlert"},
@@ -197,12 +197,22 @@ func TestFilterRelevantAlerts(t *testing.T) {
 		{
 			name: "keeps all relevant alerts",
 			input: []amutil.FiringAlert{
-				{Name: "HighMemoryUsage", Severity: "critical", Summary: "Memory > 90%"},
-				{Name: "DiskAlmostFull", Severity: "warning", Summary: "Disk > 85%"},
-				{Name: "EtcdQuotaLow", Severity: "critical", Summary: "etcd quota low"},
+				{Name: "HighMemoryUsage", Severity: severityCritical, Summary: "Memory > 90%"},
+				{Name: "DiskAlmostFull", Severity: severityWarning, Summary: "Disk > 85%"},
+				{Name: "EtcdQuotaLow", Severity: severityCritical, Summary: "etcd quota low"},
 			},
 			expected: 3,
 			names:    []string{"HighMemoryUsage", "DiskAlmostFull", "EtcdQuotaLow"},
+		},
+		{
+			name: "keeps alerts with unknown severity",
+			input: []amutil.FiringAlert{
+				{Name: "CriticalOne", Severity: severityCritical},
+				{Name: "HighAlert", Severity: "high"},
+				{Name: "CustomAlert", Severity: "custom"},
+			},
+			expected: 3,
+			names:    []string{"CriticalOne", "HighAlert", "CustomAlert"},
 		},
 	}
 
