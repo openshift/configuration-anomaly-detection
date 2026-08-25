@@ -31,6 +31,7 @@ import (
 type MockEC2API struct {
 	ctrl     *gomock.Controller
 	recorder *MockEC2APIMockRecorder
+	isgomock struct{}
 }
 
 // MockEC2APIMockRecorder is the mock recorder for MockEC2API.
@@ -174,6 +175,7 @@ func (mr *MockEC2APIMockRecorder) DescribeVpcs(ctx, in any, optFns ...any) *gomo
 type MockCloudTrailAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockCloudTrailAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockCloudTrailAPIMockRecorder is the mock recorder for MockCloudTrailAPI.
@@ -217,6 +219,7 @@ func (mr *MockCloudTrailAPIMockRecorder) LookupEvents(ctx, in any, optFns ...any
 type MockStsAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockStsAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockStsAPIMockRecorder is the mock recorder for MockStsAPI.
@@ -260,6 +263,7 @@ func (mr *MockStsAPIMockRecorder) AssumeRole(ctx, in any, optFns ...any) *gomock
 type MockAgentCoreAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockAgentCoreAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockAgentCoreAPIMockRecorder is the mock recorder for MockAgentCoreAPI.
@@ -303,6 +307,7 @@ func (mr *MockAgentCoreAPIMockRecorder) InvokeAgentRuntime(ctx, in any, optFns .
 type MockRoute53API struct {
 	ctrl     *gomock.Controller
 	recorder *MockRoute53APIMockRecorder
+	isgomock struct{}
 }
 
 // MockRoute53APIMockRecorder is the mock recorder for MockRoute53API.
@@ -366,6 +371,7 @@ func (mr *MockRoute53APIMockRecorder) ListResourceRecordSets(ctx, in any, optFns
 type MockELBV2API struct {
 	ctrl     *gomock.Controller
 	recorder *MockELBV2APIMockRecorder
+	isgomock struct{}
 }
 
 // MockELBV2APIMockRecorder is the mock recorder for MockELBV2API.
@@ -449,6 +455,7 @@ func (mr *MockELBV2APIMockRecorder) DescribeTargetHealth(ctx, in any, optFns ...
 type MockELBAPI struct {
 	ctrl     *gomock.Controller
 	recorder *MockELBAPIMockRecorder
+	isgomock struct{}
 }
 
 // MockELBAPIMockRecorder is the mock recorder for MockELBAPI.
@@ -512,6 +519,7 @@ func (mr *MockELBAPIMockRecorder) DescribeLoadBalancers(ctx, in any, optFns ...a
 type MockClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockClientMockRecorder
+	isgomock struct{}
 }
 
 // MockClientMockRecorder is the mock recorder for MockClient.
