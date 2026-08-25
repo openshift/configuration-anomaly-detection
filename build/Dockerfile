@@ -25,6 +25,7 @@ RUN wget https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}
     echo "${OC_HASH} /tmp/oc.tar.gz" | sha256sum --check --status && \
     tar -zxvf /tmp/oc.tar.gz -C /tmp && \
     mv /tmp/oc /bin/oc && \
+    rm /tmp/kubectl && \
     rm -f /tmp/oc.tar.gz
 
 LABEL vendor="Red Hat, Inc." \
