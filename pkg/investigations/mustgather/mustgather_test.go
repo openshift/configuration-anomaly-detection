@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	amutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/alertmanager"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -152,6 +154,78 @@ func TestGetAcmHcpMustGatherImage(t *testing.T) {
 			got := getAcmHcpMustGatherImage()
 			if got != tt.expected {
 				t.Errorf("getAcmHcpMustGatherImage() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestFilterRelevantAlerts(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []amutil.FiringAlert
+		expected int
+		names    []string
+	}{
+		{
+			name:     "empty input",
+			input:    nil,
+			expected: 0,
+		},
+		{
+			name: "filters out info, none, alert severities",
+			input: []amutil.FiringAlert{
+				{Name: "CriticalAlert", Severity: severityCritical},
+				{Name: "InfoAlert", Severity: severityInfo},
+				{Name: "NoneAlert", Severity: severityNone},
+				{Name: "AlertSeverity", Severity: severityAlert},
+				{Name: "WarningAlert", Severity: severityWarning},
+			},
+			expected: 2,
+			names:    []string{"CriticalAlert", "WarningAlert"},
+		},
+		{
+			name: "filters out Watchdog and CreateMustGather variants",
+			input: []amutil.FiringAlert{
+				{Name: "Watchdog", Severity: severityNone},
+				{Name: "CreateMustGather", Severity: severityInfo},
+				{Name: "CreateMustGatherCritical", Severity: severityInfo},
+				{Name: "RealAlert", Severity: severityCritical},
+			},
+			expected: 1,
+			names:    []string{"RealAlert"},
+		},
+		{
+			name: "keeps all relevant alerts",
+			input: []amutil.FiringAlert{
+				{Name: "HighMemoryUsage", Severity: severityCritical, Summary: "Memory > 90%"},
+				{Name: "DiskAlmostFull", Severity: severityWarning, Summary: "Disk > 85%"},
+				{Name: "EtcdQuotaLow", Severity: severityCritical, Summary: "etcd quota low"},
+			},
+			expected: 3,
+			names:    []string{"HighMemoryUsage", "DiskAlmostFull", "EtcdQuotaLow"},
+		},
+		{
+			name: "keeps alerts with unknown severity",
+			input: []amutil.FiringAlert{
+				{Name: "CriticalOne", Severity: severityCritical},
+				{Name: "HighAlert", Severity: "high"},
+				{Name: "CustomAlert", Severity: "custom"},
+			},
+			expected: 3,
+			names:    []string{"CriticalOne", "HighAlert", "CustomAlert"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterRelevantAlerts(tt.input)
+			if len(result) != tt.expected {
+				t.Errorf("filterRelevantAlerts() returned %d alerts, want %d", len(result), tt.expected)
+			}
+			for i, name := range tt.names {
+				if i < len(result) && result[i].Name != name {
+					t.Errorf("alert[%d].Name = %q, want %q", i, result[i].Name, name)
+				}
 			}
 		})
 	}

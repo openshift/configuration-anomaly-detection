@@ -15,11 +15,14 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	amutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/alertmanager"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/tarball"
+	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
@@ -66,7 +69,7 @@ type Investigation struct{}
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
-	r, err := rb.WithNotes().WithOC().WithManagementOCClient().WithManagementK8sClient().Build()
+	r, err := rb.WithNotes().WithOC().WithK8sClient().WithRestConfig().WithManagementOCClient().WithManagementK8sClient().Build()
 	if err != nil {
 		return result, err
 	}
@@ -184,12 +187,109 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
 	metrics.Inc(metrics.MustGatherPerformed, c.Name(), productName)
+
+	appendFiringAlerts(r)
+
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name())
 	return result, nil
 }
 
 func (c *Investigation) Name() string {
 	return "mustgather"
+}
+
+const (
+	severityCritical = "critical"
+	severityError    = "error"
+	severityWarning  = "warning"
+	severityInfo     = "info"
+	severityNone     = "none"
+	severityAlert    = "alert"
+)
+
+// appendFiringAlerts queries the cluster's Alertmanager for currently firing
+// alerts and appends them to the PD note. Failures are logged but do not block
+// the investigation since the must-gather has already been collected and uploaded.
+func appendFiringAlerts(r *investigation.Resources) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cfg, err := getRestConfigForAlerts(r)
+	if err != nil {
+		logging.Warnf("Firing alerts: unable to get REST config - %v", err)
+		return
+	}
+
+	alerts, err := amutil.FetchFiringAlerts(ctx, r.K8sClient, cfg)
+	if err != nil {
+		logging.Warnf("Firing alerts: failed to fetch - %v", err)
+		return
+	}
+
+	relevant := filterRelevantAlerts(alerts)
+	if len(relevant) == 0 {
+		return
+	}
+
+	var summary strings.Builder
+	fmt.Fprintf(&summary, "Firing alerts at time of must-gather (%d):\n", len(relevant))
+
+	rendered := make(map[int]bool)
+	for _, sev := range []string{severityCritical, severityError, severityWarning} {
+		for i, a := range relevant {
+			if a.Severity != sev {
+				continue
+			}
+			rendered[i] = true
+			writeAlertLine(&summary, a)
+		}
+	}
+	for i, a := range relevant {
+		if rendered[i] {
+			continue
+		}
+		writeAlertLine(&summary, a)
+	}
+	r.Notes.AppendAutomation("%s", summary.String())
+}
+
+func writeAlertLine(sb *strings.Builder, a amutil.FiringAlert) {
+	fmt.Fprintf(sb, "  [%s] %s", a.Severity, a.Name)
+	if a.Summary != "" {
+		fmt.Fprintf(sb, " - %s", a.Summary)
+	}
+	sb.WriteString("\n")
+}
+
+func getRestConfigForAlerts(r *investigation.Resources) (*rest.Config, error) {
+	if r.RestConfig != nil {
+		return &r.RestConfig.Config, nil
+	}
+	return k8sclient.GetRestConfig(r.K8sClient)
+}
+
+// filterRelevantAlerts removes info/none-severity alerts, Watchdog, and the
+// CreateMustGather meta-alerts to return only the originating alerts.
+func filterRelevantAlerts(alerts []amutil.FiringAlert) []amutil.FiringAlert {
+	excluded := map[string]bool{
+		"Watchdog":                 true,
+		"CreateMustGather":         true,
+		"CreateMustGatherCritical": true,
+	}
+	ignoredSeverities := map[string]bool{
+		severityInfo:  true,
+		severityNone:  true,
+		severityAlert: true,
+	}
+
+	filtered := make([]amutil.FiringAlert, 0, len(alerts))
+	for _, a := range alerts {
+		if excluded[a.Name] || ignoredSeverities[a.Severity] {
+			continue
+		}
+		filtered = append(filtered, a)
+	}
+	return filtered
 }
 
 // waitForMustGatherNamespaceDeletion waits for any existing openshift-must-gather-* namespace to be deleted
