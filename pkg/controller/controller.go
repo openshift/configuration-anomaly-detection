@@ -372,6 +372,9 @@ func (c *investigationRunner) runChain(
 			if !pass {
 				logging.Infof("Entry %q filtered out: %s", entry.Name, reason)
 				metrics.Inc(metrics.AlertsFiltered, entry.Name)
+				if err := c.notifier.AddNote(fmt.Sprintf("🤖 Investigation %q was filtered out by configuration: %s 🤖", entry.Name, reason)); err != nil {
+					logging.Errorf("Failed to add PD note for filtered entry %q: %v", entry.Name, err)
+				}
 				cleanupBuilder(builder)
 				continue
 			}

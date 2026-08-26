@@ -10,6 +10,7 @@ import (
 // manual (non-PD) runs use a no-op implementation instead of
 // nil-checking a *pagerduty.SdkClient.
 type incidentNotifier interface {
+	AddNote(note string) error
 	EscalateWithNote(note string) error
 	AttachToBuilder(builder investigation.ResourceBuilder)
 	HasPagerDuty() bool
@@ -22,6 +23,10 @@ type pdIncidentNotifier struct {
 
 func newPDIncidentNotifier(client *pagerduty.SdkClient) incidentNotifier {
 	return &pdIncidentNotifier{client: client}
+}
+
+func (n *pdIncidentNotifier) AddNote(note string) error {
+	return n.client.AddNote(note)
 }
 
 func (n *pdIncidentNotifier) EscalateWithNote(note string) error {
@@ -41,6 +46,11 @@ type noopIncidentNotifier struct{}
 
 func newNoopIncidentNotifier() incidentNotifier {
 	return &noopIncidentNotifier{}
+}
+
+func (n *noopIncidentNotifier) AddNote(note string) error {
+	logging.Infof("Skipping PD note (manual mode): %s", note)
+	return nil
 }
 
 func (n *noopIncidentNotifier) EscalateWithNote(note string) error {
