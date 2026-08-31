@@ -299,6 +299,9 @@ func (c *investigationRunner) runChain(
 ) (err error) {
 	if len(alertConfig.Investigations) > 0 {
 		metrics.Inc(metrics.Alerts, alertConfig.GetName())
+		// Push early so the alert count is recorded even if the pod is OOM-killed
+		// before the investigation completes.
+		metrics.Push()
 	}
 
 	var latestBuilder investigation.ResourceBuilder

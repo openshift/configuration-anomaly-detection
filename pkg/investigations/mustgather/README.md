@@ -148,6 +148,14 @@ Integration testing requires:
 
 Common issues and solutions are documented in [testing/README.md](./testing/README.md#troubleshooting).
 
+### Do not install rsync in the CAD container image
+
+`oc adm must-gather` copies results from the must-gather pod to the local filesystem using `oc rsync` internally. When rsync is available on both sides, it uses the rsync protocol; otherwise it falls back to tar streaming.
+
+The rsync strategy builds in-memory file lists and buffers whose size scales with the must-gather output. Large must-gathers (clusters with many rotated logs) can push the CAD pod past its memory limit, causing an OOM kill. An OOM kill prevents completion metrics from being emitted, but the alert metric is pushed early so the dashboard shows a success-rate drop.
+
+The tar fallback streams files sequentially with constant memory overhead regardless of must-gather size. Since must-gather is always a fresh full copy (no pre-existing data to diff against), rsync's delta-transfer advantage does not apply.
+
 ## Future Enhancements
 
 Potential improvements when graduating from experimental:
