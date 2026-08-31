@@ -180,8 +180,8 @@ func stopAttribution(ctx context.Context, awsCli aws.Client, instanceID string) 
 }
 
 // newWorkerNodesStoppedSL mirrors the managed-notifications template
-// hcp/WorkerNodes_Stopped_error.json. Severity uses the new HCC name
-// "Important" (formerly "Major" in the template).
+// hcp/WorkerNodes_Stopped_error.json. Severity uses the HCC name "Important"
+// (equivalent to the legacy "Major" the template is authored with).
 func newWorkerNodesStoppedSL() *ocm.ServiceLog {
 	return &ocm.ServiceLog{
 		Severity:     "Important",
