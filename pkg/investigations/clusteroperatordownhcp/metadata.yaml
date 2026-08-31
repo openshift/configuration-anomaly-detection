@@ -1,0 +1,10 @@
+name: clusteroperatordownhcp
+managementClusterRbac:
+  hcpNamespace:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "infrastructure.cluster.x-k8s.io"
+      resources:
+        - "awsmachines"

@@ -616,6 +616,21 @@ func (mr *MockClientMockRecorder) GetCLBInstanceHealth(ctx, lbName any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCLBInstanceHealth", reflect.TypeOf((*MockClient)(nil).GetCLBInstanceHealth), ctx, lbName)
 }
 
+// GetInstanceByID mocks base method.
+func (m *MockClient) GetInstanceByID(ctx context.Context, instanceID string) (types0.Instance, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetInstanceByID", ctx, instanceID)
+	ret0, _ := ret[0].(types0.Instance)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetInstanceByID indicates an expected call of GetInstanceByID.
+func (mr *MockClientMockRecorder) GetInstanceByID(ctx, instanceID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetInstanceByID", reflect.TypeOf((*MockClient)(nil).GetInstanceByID), ctx, instanceID)
+}
+
 // GetInstanceSecurityGroupIDs mocks base method.
 func (m *MockClient) GetInstanceSecurityGroupIDs(ctx context.Context, instanceIDs []string) ([]string, error) {
 	m.ctrl.T.Helper()
