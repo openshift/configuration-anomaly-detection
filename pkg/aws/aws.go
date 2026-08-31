@@ -94,6 +94,7 @@ type CLBInstanceHealth struct {
 type Client interface {
 	ListRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
+	GetInstanceByID(ctx context.Context, instanceID string) (ec2v2types.Instance, error)
 	PollInstanceStopEventsFor(instances []ec2v2types.Instance, retryTimes int) ([]cloudtrailv2types.Event, error)
 	GetBaseConfig() *awsv2.Config
 	GetSecurityGroupID(infraID string) (string, error)
@@ -228,6 +229,28 @@ func (c *SdkClient) listInstancesWithFilter(filters []ec2v2types.Filter) ([]ec2v
 		in.NextToken = out.NextToken
 	}
 	return instances, nil
+}
+
+// Why not reuse ListNonRunningInstances: those filter on the cluster infraID
+// tag (kubernetes.io/cluster/<infraID>=owned), which HCP data plane nodes do
+// not carry — so a tag lookup can't find them. We already know the exact
+// instance ID from the AWSMachine's providerID, so we ask for it directly.
+//
+// The returned instance carries StateTransitionReason, which is what
+// PollInstanceStopEventsFor needs to attribute the CloudTrail stop event.
+func (c *SdkClient) GetInstanceByID(ctx context.Context, instanceID string) (ec2v2types.Instance, error) {
+	describeResp, err := c.Ec2Client.DescribeInstances(ctx, &ec2v2.DescribeInstancesInput{
+		InstanceIds: []string{instanceID},
+	})
+	if err != nil {
+		return ec2v2types.Instance{}, fmt.Errorf("failed to describe instance %s: %w", instanceID, err)
+	}
+	for _, reservation := range describeResp.Reservations {
+		if len(reservation.Instances) > 0 {
+			return reservation.Instances[0], nil
+		}
+	}
+	return ec2v2types.Instance{}, fmt.Errorf("no instance found with id %s", instanceID)
 }
 
 // ListNonRunningInstances lists all non-running instances that belong to a cluster
