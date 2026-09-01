@@ -23,7 +23,7 @@ func newBYOVPCRoutingSL(docLink string) *ocm.ServiceLog {
 	}
 
 	return &ocm.ServiceLog{
-		Severity:     "Major",
+		Severity:     "Important",
 		Summary:      "Installation blocked: Missing route to internet",
 		Description:  fmt.Sprintf("Your cluster's installation is blocked because of the missing route to internet in the route table(s) associated with the supplied subnet(s) for cluster installation. Please review and validate the routes by following documentation and re-install the cluster: %s.", docLink),
 		InternalOnly: false,

@@ -21,7 +21,7 @@ type ServiceLogActionBuilder struct {
 }
 
 // NewServiceLogAction creates a builder with required fields
-// severity: "Info", "Warning", "Major", "Critical"
+// severity (HCC names): "Low", "Moderate", "Important", "Critical"
 // summary: Brief title of the service log
 func NewServiceLogAction(severity, summary string) *ServiceLogActionBuilder {
 	return &ServiceLogActionBuilder{
