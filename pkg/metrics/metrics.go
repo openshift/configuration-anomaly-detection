@@ -2,13 +2,17 @@
 package metrics
 
 import (
+	"context"
 	"os"
+	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/push"
 	"github.com/prometheus/common/expfmt"
 )
+
+const pushTimeout = 10 * time.Second
 
 // Push collects and pushes metrics to the configured pushgateway
 func Push() {
@@ -25,7 +29,9 @@ func Push() {
 		promPusher.Collector(EtcdSnapshotCleanup)
 		promPusher.Collector(ManualInvestigationStarted)
 		promPusher.Collector(ManualInvestigationCompleted)
-		err := promPusher.Add()
+		ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
+		defer cancel()
+		err := promPusher.AddContext(ctx)
 		if err != nil {
 			logging.Errorf("failed to push metrics: %w", err)
 		}
