@@ -684,10 +684,9 @@ See the clustermonitoringerrorbudgetburn investigation for examples of:
 ```go
 type Investigation interface {
     Run(builder ResourceBuilder) (InvestigationResult, error)
+    // Please note that when adding an investigation the name and the directory currently need to be the same,
+    // so that backplane-api can fetch the metadata.yaml
     Name() string
-    AlertTitle() string
-    Description() string
-    IsExperimental() bool
 }
 ```
 
@@ -695,14 +694,8 @@ type Investigation interface {
 
 ```go
 type InvestigationResult struct {
-    // NEW: Actions to execute via executor (modern approach)
+    // Actions to execute via executor
     Actions []types.Action
-
-    // DEPRECATED: Legacy fields (maintained for backwards compatibility)
-    // These will be removed once all investigations are migrated
-    LimitedSupportSet  InvestigationStep
-    ServiceLogPrepared InvestigationStep
-    ServiceLogSent     InvestigationStep
 
     // If not nil, indicates fatal error preventing further investigations
     StopInvestigations error

@@ -74,12 +74,12 @@ CAD investigations are triggered by PagerDuty webhooks. Currently, CAD supports 
 -  WebhookV3
 -  EventOrchestrationWebhook
 
-The required investigation is identified by CAD based on the incident and its payload.
+The required investigations can be configured based on the incident title and configured filters ([prod](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/configuration-anomaly-detection/namespaces/configuration-anomaly-detection-production.cadp01ue1.yaml)) ([staging](https://gitlab.cee.redhat.com/service/app-interface/-/blob/master/data/services/configuration-anomaly-detection/namespaces/configuration-anomaly-detection-stage.cads01ue1.yaml)).
 As PagerDuty itself does not provide finer granularity for webhooks than service-based, CAD filters out the alerts it should investigate. For more information, please refer to https://support.pagerduty.com/docs/webhooks.
 
 To add a new alert investigation:
 
-- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also appends the investigation to the `availableInvestigations` interface in `registry.go`.).
+- run `make bootstrap-investigation` to generate boilerplate code in `pkg/investigations` (This creates the corresponding folder & .go file, and also registers the investigation in the `availableInvestigations` list in `registry.go` so it can be resolved by name.). To enable it for alerts, add it to the investigation configuration file (see [Configuration File](#configuration-file)).
 - The `Run` method of your investigation receives a `ResourceBuilder`. Use its `With...` methods to request the resources your investigation needs, then call `Build()` to get a `Resources` struct containing them. The builder automatically handles dependencies between resources (e.g., requesting an AWS client will also initialize the cluster object). For example:
   ```go
   func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
