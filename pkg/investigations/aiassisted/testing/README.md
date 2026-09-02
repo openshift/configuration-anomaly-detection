@@ -30,7 +30,7 @@ export CAD_INVESTIGATION_CONFIG_PATH="./test/local-config.yaml"
 
 Edit `test/local-config.yaml` to fill in your real `runtime_arn` and `invoker_role_arn` values. By default it enables AI investigation for all clusters with no filter restrictions.
 
-See `docs/investigation-filter-config.example.yaml` for the full reference.
+See `docs/investigation-config.example.yaml` for the full reference.
 
 ### 3. AWS Credentials
 
@@ -220,7 +220,7 @@ No manual cleanup is required.
 
 ## Notes
 
-- AI investigation has been promoted to prod (`IsExperimental() = false`)
+- AI investigation has been promoted to prod
 - Only runs for alerts **without explicit investigation handlers** (fallback behavior)
 - Requires filter config with `aiassisted` entry (cluster ID or organization ID)
 - Timeout defaults to **15 minutes** (900 seconds), configurable via `timeout_seconds`
