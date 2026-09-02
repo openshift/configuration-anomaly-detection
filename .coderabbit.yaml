@@ -1,0 +1,5 @@
+inheritance: true
+reviews:
+  path_filters:
+    # Exclude boilerplate changes from review
+    - "!boilerplate/**"
