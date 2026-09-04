@@ -179,28 +179,50 @@ It will run services on the following local ports:8001 8091 8443 8888
    ./test/generate_incident.sh <alertname> <clusterid>
    ```
 
-2. In a separate terminal start the local infrastructure
-> **Note:** You need to clone the backplane-api code repository to a local directory and copy ocm.json from a staging cluster to its ./configs dir.
+2. Clone the [backplane-api](https://github.com/openshift/backplane-api) repository to a local directory and fetch `ocm.json` from a staging cluster into its `./configs` dir.
+
+   > **Warning:** The local backplane **will not work** without a valid `ocm.json`. This step is required.
+
+   ```bash
+   # Login to OCM production
+   ocm login --use-auth-code --url "production"
+
+   # Login to a backplanes cluster (e.g. backplanes05ue1)
+   ocm backplane login backplanes05ue1
+
+   # Debug into a backplane-api pod (provide a ticket as justification)
+   ocm backplane elevate "<ticket-id>" -- debug pod/backplane-api-0 -n backplane
+
+   # Inside the debug pod, print the file content
+   cat /ocm/ocm.json
+
+   # On the host, save the output into your local backplane-api checkout, e.g.:
+   xclip -selection clipboard -o > /home/me/backplane-api/configs/ocm.json
    ```
+
+3. In a separate terminal start the local infrastructure
+
+   ```bash
    OCM_BACKPLANE_REPO_PATH=/home/me/backplane-api ./test/launch_local_env.sh
    ```
 
+   > **Note:** The local backplane does not log to the terminal it was started in. Check `test/testinfra/backplane-api.error.log` to troubleshoot any issues.
 
-3. Export the required env variables from vault
+4. Export the required env variables from vault
    > **Note:** For information on the envs see [required env variables](#required-env-variables).
 
-   ```
+   ```bash
    source test/set_stage_env.sh
    ```
 
-4. `make build`
-5. Run `cadctl` with the payload file created by `test/generate_incident.sh` and proxy as well as the backplane URL set to localhost
+5. `make build`
+6. Run `cadctl` with the payload file created by `test/generate_incident.sh` and proxy as well as the backplane URL set to localhost
 
    ```bash
    BACKPLANE_URL=https://localhost:8443 HTTP_PROXY=http://127.0.0.1:8888 HTTPS_PROXY=http://127.0.0.1:8888 BACKPLANE_PROXY=http://127.0.0.1:8888  ./bin/cadctl investigate --payload-path ./payload --log-level debug
    ```
 
-6. Close the local infrastructure when done by sending SIGINT (Ctrl+C) to the launch_local_env.sh
+7. Close the local infrastructure when done by sending SIGINT (Ctrl+C) to the launch_local_env.sh
 
 ## Run e2e test manually
 

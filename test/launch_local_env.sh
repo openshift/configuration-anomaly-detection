@@ -68,7 +68,7 @@ popd
 
 echo "Starting backplane-api on port 8001"
 pushd $OCM_BACKPLANE_REPO_PATH
-GIT_REPO=${CAD_REPO_PATH} make run-local-with-testremediation > ${CAD_REPO_PATH}/test/testinfra/backplan-api.log 2> ${CAD_REPO_PATH}/test/testinfra/backplan-api.error.log &
+GIT_REPO=${CAD_REPO_PATH} make run-local-with-testremediation > ${CAD_REPO_PATH}/test/testinfra/backplane-api.log 2> ${CAD_REPO_PATH}/test/testinfra/backplane-api.error.log &
 popd
 
 echo "Environment started. Check ${CAD_REPO_PATH}/test/testinfra/ directory for logs"
