@@ -8,7 +8,7 @@ The mustgather investigation automates the process of collecting cluster diagnos
 
 **Trigger**: PagerDuty alert with title "CreateMustGather"
 **Clusters**: ROSA classic and HCP (Hypershift)
-**Status**: Experimental (`IsExperimental() = true`)
+**Status**: In production (sampled)
 
 ## How It Works
 

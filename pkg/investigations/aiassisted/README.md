@@ -8,7 +8,7 @@ The aiassisted investigation serves as a **fallback handler** for alerts that do
 
 **Trigger**: Any alert without an explicit CAD investigation handler (fallback)
 **Clusters**: Allowlist-controlled via investigation config (configured clusters and organizations only)
-**Status**: Promoted (`IsExperimental() = false`)
+**Status**: Promoted
 
 ## How It Works
 
@@ -217,4 +217,4 @@ Potential improvements:
 ## Related Documentation
 
 - [Testing Guide](./testing/README.md)
-- [Investigation Filter Config Example](../../../docs/investigation-filter-config.example.yaml)
+- [Investigation Config Example](../../../docs/investigation-config.example.yaml)

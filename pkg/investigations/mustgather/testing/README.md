@@ -251,7 +251,7 @@ rm -f /tmp/*-must-gather-*.tar.gz
 ```
 ## Notes
 
-- Must-gather is currently **experimental** (`IsExperimental() = true`)
+- Must-gather currently runs **in production** (sampled)
 - Only works with **ROSA classic** clusters (not HCP)
 - SFTP upload uses **anonymous credentials** (temporary, time-limited)
 - Upload location is posted to PagerDuty for SRE access
