@@ -25,6 +25,10 @@ type PagerDutyController struct {
 func (c *PagerDutyController) Investigate(ctx context.Context) error {
 	clusterID, err := c.pdClient.RetrieveClusterID()
 	if err != nil {
+		note := fmt.Sprintf("🚨 CAD could not determine the cluster ID for this incident - investigate manually.\n%v", err)
+		if escErr := c.notifier.EscalateWithNote(note); escErr != nil {
+			logging.Errorf("failed to escalate after cluster ID failure: %v", escErr)
+		}
 		return err
 	}
 
