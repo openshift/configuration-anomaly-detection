@@ -412,13 +412,6 @@ type notesData struct {
 	ClusterID string `yaml:"cluster_id"`
 }
 
-// firingAlert is the subset of Alertmanager's template.Alert that CAD needs. Since the COO
-// cutover (app-interface !204683, 2026-09-02) the PagerDuty 'firing' custom detail carries a
-// JSON array of these instead of the plain-text 'pagerduty.default.instances' render.
-type firingAlert struct {
-	Labels map[string]string `json:"labels"`
-}
-
 // clusterIDFromFiringRe matches standalone "cluster_id = <value>" within a (potentially
 // multi-line) firing alert text. The named capture group "id" extracts the value.
 // (?:^|\s) requires either start-of-string or a whitespace character immediately before
@@ -496,23 +489,44 @@ func parseClusterIdFromNotes(details map[string]interface{}) (string, error) {
 // 'notes' nor 'cluster_id', so the ID must be extracted from the 'firing' field (as a JSON
 // array of alerts post-COO-cutover, or as free-text on older incidents).
 func parseClusterIdFromFiring(details map[string]interface{}) (string, error) {
-	logging.Warn("Trying to parse 'cluster_id' from JSON 'firing' field")
-	firing, found := details["firing"].(string)
+	firing, found := details["firing"]
 	if !found {
 		return "", errors.New("could not find firing field")
 	}
 
-	var alerts []firingAlert
-	if err := json.Unmarshal([]byte(firing), &alerts); err == nil {
-		for _, alert := range alerts {
-			if id := alert.Labels["cluster_id"]; id != "" {
-				return id, nil
-			}
-		}
-		return "", errors.New("no cluster_id label found in JSON firing field")
+	switch f := firing.(type) {
+	case string:
+		logging.Warn("Trying to parse 'cluster_id = <id>' free text from 'firing'")
+		return parseClusterIdFromFiringText(f)
+	case []interface{}:
+		logging.Warn("Trying to parse 'cluster_id' from JSON 'firing' field")
+		return parseClusterIdFromFiringList(f)
+	default:
+		return "", fmt.Errorf("'firing' has unexpected type %T", firing)
 	}
+}
 
-	logging.Warn("Trying to parse 'cluster_id = <id>' free text from 'firing'")
+// Since the COO cutover (app-interface !204683, 2026-09-02) the PagerDuty 'firing'
+// custom detail carries a JSON array of these instead of the plain-text
+// 'pagerduty.default.instances' render.
+func parseClusterIdFromFiringList(firing []interface{}) (string, error) {
+	for _, entry := range firing {
+		alert, ok := entry.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		labels, ok := alert["labels"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if id, ok := labels["cluster_id"].(string); ok && id != "" {
+			return id, nil
+		}
+	}
+	return "", errors.New("no cluster_id label found in JSON firing field")
+}
+
+func parseClusterIdFromFiringText(firing string) (string, error) {
 	match := clusterIDFromFiringRe.FindStringSubmatch(firing)
 	idIdx := clusterIDFromFiringRe.SubexpIndex("id")
 	if idIdx < 0 || idIdx >= len(match) {
