@@ -81,6 +81,34 @@ func (mr *MockClientMockRecorder) EscalateIncidentWithNote(notes any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EscalateIncidentWithNote", reflect.TypeOf((*MockClient)(nil).EscalateIncidentWithNote), notes)
 }
 
+// GetIncidentID mocks base method.
+func (m *MockClient) GetIncidentID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIncidentID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIncidentID indicates an expected call of GetIncidentID.
+func (mr *MockClientMockRecorder) GetIncidentID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIncidentID", reflect.TypeOf((*MockClient)(nil).GetIncidentID))
+}
+
+// GetIncidentRef mocks base method.
+func (m *MockClient) GetIncidentRef() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIncidentRef")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIncidentRef indicates an expected call of GetIncidentRef.
+func (mr *MockClientMockRecorder) GetIncidentRef() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIncidentRef", reflect.TypeOf((*MockClient)(nil).GetIncidentRef))
+}
+
 // GetServiceID mocks base method.
 func (m *MockClient) GetServiceID() string {
 	m.ctrl.T.Helper()
@@ -93,6 +121,20 @@ func (m *MockClient) GetServiceID() string {
 func (mr *MockClientMockRecorder) GetServiceID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceID", reflect.TypeOf((*MockClient)(nil).GetServiceID))
+}
+
+// GetServiceName mocks base method.
+func (m *MockClient) GetServiceName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServiceName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetServiceName indicates an expected call of GetServiceName.
+func (mr *MockClientMockRecorder) GetServiceName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServiceName", reflect.TypeOf((*MockClient)(nil).GetServiceName))
 }
 
 // GetTitle mocks base method.

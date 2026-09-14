@@ -9,6 +9,7 @@ import (
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 	backplanemock "github.com/openshift/configuration-anomaly-detection/pkg/backplane/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/config"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	investigation "github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -115,6 +116,42 @@ var _ = Describe("aiassisted", func() {
 				Expect(result.Actions).NotTo(BeEmpty())
 				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
 				Expect(hasNoteAction(result.Actions)).To(BeTrue())
+			})
+		})
+
+		Context("when a PagerDuty client is available on a non-HCP, non-infra cluster", func() {
+			It("accesses PdClient through the pagerduty.Client interface, not a concrete-type assertion", func() {
+				// Regression test: Run used to fetch incident details via
+				// `r.PdClient.(*pagerduty.SdkClient)`, a concrete-type
+				// assertion. Any interface-only implementation of
+				// pagerduty.Client (like this mock, or the trackingPDClient
+				// wrapper used in production) would fail that assertion and
+				// silently skip the whole AI investigation. These EXPECT
+				// calls only pass if Run instead calls the methods directly
+				// on the pagerduty.Client interface.
+				pdClientMock := pdmock.NewMockClient(mockCtrl)
+				pdClientMock.EXPECT().EscalateIncident().Return(nil).Times(1)
+				pdClientMock.EXPECT().GetIncidentID().Return("INC-123").Times(1)
+				pdClientMock.EXPECT().GetTitle().Return("SomeAlert").Times(1)
+				r.Resources.PdClient = pdClientMock
+
+				inv := Investigation{
+					AIConfig: &config.AIAgentConfig{
+						RuntimeARN:     "arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/test",
+						Region:         "us-east-1",
+						UserID:         "cad-test",
+						InvokerRoleArn: "arn:aws:iam::123456789012:role/test-role",
+						// Zero timeout means the AWS call below fails
+						// immediately via context cancellation instead of
+						// making a real network call - irrelevant to this
+						// test, which only cares that PdClient was reached.
+						TimeoutSeconds: 0,
+					},
+				}
+				result, err := inv.Run(r)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.Actions).NotTo(BeEmpty())
 			})
 		})
 	})
