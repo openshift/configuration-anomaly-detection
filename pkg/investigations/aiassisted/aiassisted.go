@@ -226,23 +226,26 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// Format to human-readable markdown
+	// Format to human-readable markdown for backplane report
 	formattedReport := FormatInvestigationReport(&investigationResult)
 
-	// Add simple note about AI automation completion
-	notes.AppendAutomation("AI automation completed. Check recent cluster reports for AI investigation details: 'osdctl cluster reports list --cluster-id %s'", clusterID)
+	// Format a structured PD note with the investigation summary.
+	// Use the authoritative cluster external ID (not Cora's response) for the
+	// osdctl footer so the command always matches the backplane report.
+	reportClusterID := r.Cluster.ExternalID()
+	pdNote := FormatPagerDutyNote(&investigationResult, reportClusterID)
 
 	// Create backplane report action with formatted output
 	backplaneReportAction := &executor.BackplaneReportAction{
-		ClusterID: r.Cluster.ExternalID(),
+		ClusterID: reportClusterID,
 		Summary:   fmt.Sprintf("CAD Investigation: AI-Assisted Analysis for %s", alertName),
 		Data:      formattedReport,
 	}
 
 	// Return actions for executor to handle
 	result.Actions = []executor.Action{
-		executor.NoteFrom(notes), // Send automation message to PagerDuty
-		backplaneReportAction,    // Create cluster report with AI investigation results
+		backplaneReportAction, // Create cluster report first
+		executor.Note(pdNote), // Post structured investigation summary to PagerDuty
 	}
 	return result, nil
 }

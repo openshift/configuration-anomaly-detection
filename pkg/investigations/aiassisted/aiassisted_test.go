@@ -20,6 +20,14 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// Test constants to avoid goconst violations
+const (
+	testClusterID = "test-cluster"
+	testAlertName = "TestAlert"
+	testConfHigh  = "high"
+	testConfLow   = "low"
+)
+
 func TestAiassisted(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Aiassisted Suite")
@@ -119,6 +127,86 @@ var _ = Describe("aiassisted", func() {
 		})
 	})
 
+	Describe("FormatPagerDutyNote", func() {
+		Context("when formatting a complete investigation result", func() {
+			It("should produce a well-structured plain text note", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:        "test-cluster-abc",
+					AlertName:        "ClusterOperatorDegraded CRITICAL (1)",
+					Summary:          "The cluster-samples-operator is degraded due to missing ImageStreams",
+					Confidence:       testConfHigh,
+					NeedsEscalation:  true,
+					RemediationSteps: []RemediationStep{},
+				}
+
+				output := FormatPagerDutyNote(result, "test-cluster-abc")
+
+				Expect(output).To(ContainSubstring("🤖 AI-Assisted Investigation"), "should contain header")
+				Expect(output).To(ContainSubstring("Alert: ClusterOperatorDegraded CRITICAL (1)"), "should contain alert name")
+				Expect(output).To(ContainSubstring("Confidence: HIGH"), "should contain uppercase confidence")
+				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"), "should contain summary text")
+				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should contain escalation recommendation")
+				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id test-cluster-abc"), "should contain osdctl footer")
+
+				Expect(output).ToNot(ContainSubstring("REASONING:"), "simplified note should not contain reasoning section")
+				Expect(output).ToNot(ContainSubstring("ACTION STEPS:"), "simplified note should not contain action steps section")
+			})
+		})
+
+		Context("when no escalation is needed", func() {
+			It("should show no escalation needed message", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:        testClusterID,
+					AlertName:        testAlertName,
+					Summary:          "Self-healing succeeded",
+					Confidence:       testConfHigh,
+					RemediationSteps: []RemediationStep{},
+					NeedsEscalation:  false,
+				}
+
+				output := FormatPagerDutyNote(result, testClusterID)
+
+				Expect(output).To(ContainSubstring("✅ Cora: no further escalation needed"), "should show Cora's no-escalation message")
+				Expect(output).ToNot(ContainSubstring("⚠️"), "should not contain escalation warning emoji")
+			})
+		})
+
+		Context("when escalation is needed", func() {
+			It("should show Cora's escalation recommendation", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:        testClusterID,
+					AlertName:        testAlertName,
+					Summary:          "Investigation inconclusive",
+					Confidence:       testConfLow,
+					RemediationSteps: []RemediationStep{},
+					NeedsEscalation:  true,
+				}
+
+				output := FormatPagerDutyNote(result, testClusterID)
+
+				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should show Cora's escalation recommendation")
+			})
+		})
+
+		Context("when Cora cluster ID differs from report cluster ID", func() {
+			It("should use the report cluster ID in the footer", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:        "cora-returned-id",
+					AlertName:        testAlertName,
+					Summary:          "Issue found",
+					Confidence:       testConfHigh,
+					RemediationSteps: []RemediationStep{},
+					NeedsEscalation:  false,
+				}
+
+				output := FormatPagerDutyNote(result, "authoritative-external-id")
+
+				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id authoritative-external-id"), "footer should use report cluster ID")
+				Expect(output).ToNot(ContainSubstring("cora-returned-id"), "footer should not contain Cora's internal cluster ID")
+			})
+		})
+	})
+
 	// Happy Path to Test Investigation Report Format
 	Describe("FormatInvestigationReport", func() {
 		Context("when formatting a complete investigation result", func() {
@@ -129,7 +217,7 @@ var _ = Describe("aiassisted", func() {
 					ClusterID:  "test-cluster-abc",
 					AlertName:  "ClusterOperatorDegraded",
 					Summary:    "The cluster-samples-operator is degraded due to missing ImageStreams",
-					Confidence: "high",
+					Confidence: testConfHigh,
 					Reasoning:  "Root cause analysis shows the operator cannot find required ImageStreams",
 					Evidence:   "Checked cluster-samples-operator logs and found missing ImageStream errors",
 					RemediationSteps: []RemediationStep{
@@ -157,10 +245,10 @@ var _ = Describe("aiassisted", func() {
 		Context("when handling null command", func() {
 			It("should skip code block when command is nil", func() {
 				result := &CoraInvestigationResult{
-					ClusterID:  "test-cluster",
-					AlertName:  "TestAlert",
+					ClusterID:  testClusterID,
+					AlertName:  testAlertName,
 					Summary:    "Issue found",
-					Confidence: "high",
+					Confidence: testConfHigh,
 					Reasoning:  "Manual verification required",
 					Evidence:   "System logs inconclusive",
 					RemediationSteps: []RemediationStep{
@@ -183,10 +271,10 @@ var _ = Describe("aiassisted", func() {
 		Context("when remediation has no steps", func() {
 			It("should show no action steps available message", func() {
 				result := &CoraInvestigationResult{
-					ClusterID:        "test-cluster",
-					AlertName:        "TestAlert",
+					ClusterID:        testClusterID,
+					AlertName:        testAlertName,
 					Summary:          "Self-healing succeeded",
-					Confidence:       "high",
+					Confidence:       testConfHigh,
 					Reasoning:        "System automatically resolved the issue",
 					Evidence:         "Cluster operators returned to healthy state",
 					RemediationSteps: []RemediationStep{},
@@ -228,10 +316,10 @@ var _ = Describe("aiassisted", func() {
 				err := json.Unmarshal([]byte(jsonInput), &result)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.ClusterID).To(Equal("test-cluster"))
+				Expect(result.ClusterID).To(Equal(testClusterID))
 				Expect(result.AlertName).To(Equal("QuickSchemaTest"))
 				Expect(result.Summary).To(Equal("Test investigation completed successfully"))
-				Expect(result.Confidence).To(Equal("high"))
+				Expect(result.Confidence).To(Equal(testConfHigh))
 				Expect(result.RemediationSteps).To(HaveLen(1))
 				Expect(result.RemediationSteps[0].Command).To(BeNil())
 				Expect(result.NeedsEscalation).To(BeFalse())
