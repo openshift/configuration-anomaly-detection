@@ -14,50 +14,28 @@ func FormatPagerDutyNote(result *CoraInvestigationResult, reportClusterID string
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString("🤖 AI-Assisted Investigation 🤖\n")
-	sb.WriteString("===========================\n\n")
+	sb.WriteString("🤖 AI-Assisted Investigation\n")
+	sb.WriteString("════════════════════════════════\n\n")
 
 	// Alert & Confidence
-	fmt.Fprintf(&sb, "ALERT: %s\n", result.AlertName)
-	fmt.Fprintf(&sb, "CONFIDENCE: %s\n\n", strings.ToUpper(result.Confidence))
+	fmt.Fprintf(&sb, "Alert: %s\n", result.AlertName)
+	fmt.Fprintf(&sb, "Confidence: %s\n\n", strings.ToUpper(result.Confidence))
 
-	// Summary
-	sb.WriteString("SUMMARY:\n")
+	// Summary — the key triage info
 	fmt.Fprintf(&sb, "%s\n\n", result.Summary)
-
-	// Reasoning
-	sb.WriteString("REASONING:\n")
-	fmt.Fprintf(&sb, "%s\n\n", result.Reasoning)
-
-	// Action Steps
-	if len(result.RemediationSteps) > 0 {
-		sb.WriteString("ACTION STEPS:\n")
-		for i, step := range result.RemediationSteps {
-			fmt.Fprintf(&sb, "%d. %s\n", i+1, step.Action)
-			if step.Command != nil && *step.Command != "" {
-				fmt.Fprintf(&sb, "   Command: %s\n", *step.Command)
-			}
-		}
-		sb.WriteString("\n")
-	}
 
 	// Escalation recommendation from Cora (the PD incident is always escalated
 	// before the AI investigation runs, so this reflects Cora's assessment, not
 	// the current incident state)
-	sb.WriteString("CORA RECOMMENDATION:\n")
 	if result.NeedsEscalation {
-		sb.WriteString("⚠️ Escalation recommended")
-		if result.EscalationReason != nil && *result.EscalationReason != "" {
-			fmt.Fprintf(&sb, ": %s", *result.EscalationReason)
-		}
-		sb.WriteString("\n")
+		sb.WriteString("⚠️ Cora recommends escalation\n")
 	} else {
-		sb.WriteString("✅ No further escalation needed\n")
+		sb.WriteString("✅ Cora: no further escalation needed\n")
 	}
 
 	// Footer with cluster report access
-	sb.WriteString("\n---\n")
-	fmt.Fprintf(&sb, "Full report: osdctl cluster reports list --cluster-id %s\n", reportClusterID)
+	sb.WriteString("\n────────────────────────────────\n")
+	fmt.Fprintf(&sb, "Full details: osdctl cluster reports list --cluster-id %s\n", reportClusterID)
 
 	return sb.String()
 }
