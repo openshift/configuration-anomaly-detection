@@ -22,11 +22,10 @@ import (
 
 // Test constants to avoid goconst violations
 const (
-	testClusterID  = "test-cluster"
-	testAlertName  = "TestAlert"
-	testConfHigh   = "high"
-	testConfMedium = "medium"
-	testConfLow    = "low"
+	testClusterID = "test-cluster"
+	testAlertName = "TestAlert"
+	testConfHigh  = "high"
+	testConfLow   = "low"
 )
 
 func TestAiassisted(t *testing.T) {
@@ -131,40 +130,26 @@ var _ = Describe("aiassisted", func() {
 	Describe("FormatPagerDutyNote", func() {
 		Context("when formatting a complete investigation result", func() {
 			It("should produce a well-structured plain text note", func() {
-				command := "oc apply -f fix.yaml"
-				escalationReason := "Requires manual verification"
-
 				result := &CoraInvestigationResult{
-					ClusterID:  "test-cluster-abc",
-					AlertName:  "ClusterOperatorDegraded CRITICAL (1)",
-					Summary:    "The cluster-samples-operator is degraded due to missing ImageStreams",
-					Confidence: testConfHigh,
-					Reasoning:  "Root cause analysis shows the operator cannot find required ImageStreams",
-					RemediationSteps: []RemediationStep{
-						{
-							Action:  "Restore default ImageStreams",
-							Command: &command,
-						},
-					},
+					ClusterID:        "test-cluster-abc",
+					AlertName:        "ClusterOperatorDegraded CRITICAL (1)",
+					Summary:          "The cluster-samples-operator is degraded due to missing ImageStreams",
+					Confidence:       testConfHigh,
 					NeedsEscalation:  true,
-					EscalationReason: &escalationReason,
+					RemediationSteps: []RemediationStep{},
 				}
 
 				output := FormatPagerDutyNote(result, "test-cluster-abc")
 
-				Expect(output).To(ContainSubstring("🤖 AI-Assisted Investigation 🤖"))
-				Expect(output).To(ContainSubstring("ALERT: ClusterOperatorDegraded CRITICAL (1)"))
-				Expect(output).To(ContainSubstring("CONFIDENCE: HIGH"))
-				Expect(output).To(ContainSubstring("SUMMARY:"))
-				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"))
-				Expect(output).To(ContainSubstring("REASONING:"))
-				Expect(output).To(ContainSubstring("Root cause analysis"))
-				Expect(output).To(ContainSubstring("ACTION STEPS:"))
-				Expect(output).To(ContainSubstring("1. Restore default ImageStreams"))
-				Expect(output).To(ContainSubstring("Command: oc apply -f fix.yaml"))
-				Expect(output).To(ContainSubstring("CORA RECOMMENDATION:"))
-				Expect(output).To(ContainSubstring("⚠️ Escalation recommended: Requires manual verification"))
-				Expect(output).To(ContainSubstring("Full report: osdctl cluster reports list --cluster-id test-cluster-abc"))
+				Expect(output).To(ContainSubstring("🤖 AI-Assisted Investigation"), "should contain header")
+				Expect(output).To(ContainSubstring("Alert: ClusterOperatorDegraded CRITICAL (1)"), "should contain alert name")
+				Expect(output).To(ContainSubstring("Confidence: HIGH"), "should contain uppercase confidence")
+				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"), "should contain summary text")
+				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should contain escalation recommendation")
+				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id test-cluster-abc"), "should contain osdctl footer")
+
+				Expect(output).ToNot(ContainSubstring("REASONING:"), "simplified note should not contain reasoning section")
+				Expect(output).ToNot(ContainSubstring("ACTION STEPS:"), "simplified note should not contain action steps section")
 			})
 		})
 
@@ -175,59 +160,31 @@ var _ = Describe("aiassisted", func() {
 					AlertName:        testAlertName,
 					Summary:          "Self-healing succeeded",
 					Confidence:       testConfHigh,
-					Reasoning:        "System automatically resolved",
 					RemediationSteps: []RemediationStep{},
 					NeedsEscalation:  false,
 				}
 
 				output := FormatPagerDutyNote(result, testClusterID)
 
-				Expect(output).To(ContainSubstring("✅ No further escalation needed"))
-				Expect(output).ToNot(ContainSubstring("ACTION STEPS:"))
+				Expect(output).To(ContainSubstring("✅ Cora: no further escalation needed"), "should show Cora's no-escalation message")
+				Expect(output).ToNot(ContainSubstring("⚠️"), "should not contain escalation warning emoji")
 			})
 		})
 
-		Context("when escalation has no reason", func() {
-			It("should show escalation needed without reason", func() {
+		Context("when escalation is needed", func() {
+			It("should show Cora's escalation recommendation", func() {
 				result := &CoraInvestigationResult{
 					ClusterID:        testClusterID,
 					AlertName:        testAlertName,
 					Summary:          "Investigation inconclusive",
 					Confidence:       testConfLow,
-					Reasoning:        "Insufficient data",
 					RemediationSteps: []RemediationStep{},
 					NeedsEscalation:  true,
-					EscalationReason: nil,
 				}
 
 				output := FormatPagerDutyNote(result, testClusterID)
 
-				Expect(output).To(ContainSubstring("⚠️ Escalation recommended"))
-				Expect(output).ToNot(ContainSubstring("⚠️ Escalation recommended:"))
-			})
-		})
-
-		Context("when command is nil", func() {
-			It("should not include Command line", func() {
-				result := &CoraInvestigationResult{
-					ClusterID:  testClusterID,
-					AlertName:  testAlertName,
-					Summary:    "Manual action required",
-					Confidence: testConfMedium,
-					Reasoning:  "Needs human judgment",
-					RemediationSteps: []RemediationStep{
-						{
-							Action:  "Manually verify the configuration in console",
-							Command: nil,
-						},
-					},
-					NeedsEscalation: false,
-				}
-
-				output := FormatPagerDutyNote(result, testClusterID)
-
-				Expect(output).To(ContainSubstring("1. Manually verify the configuration"))
-				Expect(output).ToNot(ContainSubstring("Command:"))
+				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should show Cora's escalation recommendation")
 			})
 		})
 
@@ -238,15 +195,14 @@ var _ = Describe("aiassisted", func() {
 					AlertName:        testAlertName,
 					Summary:          "Issue found",
 					Confidence:       testConfHigh,
-					Reasoning:        "Evidence gathered",
 					RemediationSteps: []RemediationStep{},
 					NeedsEscalation:  false,
 				}
 
 				output := FormatPagerDutyNote(result, "authoritative-external-id")
 
-				Expect(output).To(ContainSubstring("Full report: osdctl cluster reports list --cluster-id authoritative-external-id"))
-				Expect(output).ToNot(ContainSubstring("cora-returned-id"))
+				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id authoritative-external-id"), "footer should use report cluster ID")
+				Expect(output).ToNot(ContainSubstring("cora-returned-id"), "footer should not contain Cora's internal cluster ID")
 			})
 		})
 	})
