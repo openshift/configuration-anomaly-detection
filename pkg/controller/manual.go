@@ -54,6 +54,8 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	}
 	if c.manual.DryRun {
 		c.manual.Params["CAD_DRY_RUN"] = "true"
+	} else {
+		delete(c.manual.Params, "CAD_DRY_RUN")
 	}
 
 	name := resolveInvestigationName(c.manual.InvestigationName)

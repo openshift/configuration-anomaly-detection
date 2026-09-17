@@ -78,3 +78,62 @@ func TestCollectCloudTrailEventsReturnsPartialOnPageFailure(t *testing.T) {
 		t.Fatalf("unexpected partial collection: %+v", got)
 	}
 }
+
+func TestCollectCloudTrailEventsSanitizesRestrictedNestedValues(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := awsmock.NewMockCloudTrailAPI(ctrl)
+	client.EXPECT().LookupEvents(gomock.Any(), gomock.Any()).Return(&cloudtrail.LookupEventsOutput{
+		Events: []cloudtrailtypes.Event{{
+			EventId:         awsv2.String("one"),
+			CloudTrailEvent: awsv2.String(`{"requestParameters":{"count":42,"values":["i-0123456789abcdef0",["vpc-0123456789abcdef0",99]],"nested":{"enabled":true,"name":"sg-0123456789abcdef0"}}}`),
+		}},
+	}, nil)
+
+	c := &cadaws.SdkClient{CloudtrailClient: client}
+	got, err := c.CollectCloudTrailEvents(context.Background(), cadaws.CloudTrailCollectionOptions{Sleep: func(context.Context, time.Duration) error { return nil }})
+	if err != nil {
+		t.Fatalf("CollectCloudTrailEvents() error = %v", err)
+	}
+	var event map[string]any
+	if err := json.Unmarshal(got.Events[0].Data, &event); err != nil {
+		t.Fatal(err)
+	}
+	requestParameters := event["requestParameters"].(map[string]any)
+	if _, ok := requestParameters["count"]; ok {
+		t.Fatal("restricted numeric value was retained")
+	}
+	values := requestParameters["values"].([]any)
+	if len(values) != 2 || values[0] != "i-0123456789abcdef0" {
+		t.Fatalf("unexpected sanitized values: %#v", values)
+	}
+	nestedValues := values[1].([]any)
+	if len(nestedValues) != 1 || nestedValues[0] != "vpc-0123456789abcdef0" {
+		t.Fatalf("unexpected sanitized nested values: %#v", nestedValues)
+	}
+	nested := requestParameters["nested"].(map[string]any)
+	if _, ok := nested["enabled"]; ok {
+		t.Fatal("restricted boolean value was retained")
+	}
+	if nested["name"] != "sg-0123456789abcdef0" {
+		t.Fatalf("permitted restricted string was removed: %#v", nested)
+	}
+}
+
+func TestCollectCloudTrailEventsReturnsContextErrorFromLookup(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := awsmock.NewMockCloudTrailAPI(ctrl)
+	ctx, cancel := context.WithCancel(context.Background())
+	client.EXPECT().LookupEvents(gomock.Any(), gomock.Any()).DoAndReturn(func(context.Context, *cloudtrail.LookupEventsInput, ...func(*cloudtrail.Options)) (*cloudtrail.LookupEventsOutput, error) {
+		cancel()
+		return nil, errors.New("request interrupted")
+	})
+
+	c := &cadaws.SdkClient{CloudtrailClient: client}
+	got, err := c.CollectCloudTrailEvents(ctx, cadaws.CloudTrailCollectionOptions{Sleep: func(context.Context, time.Duration) error { return nil }})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if got.Status != "unavailable" || got.StopReason != "timeout" || got.ErrorCategory != "context_canceled" {
+		t.Fatalf("unexpected context cancellation metadata: %+v", got)
+	}
+}

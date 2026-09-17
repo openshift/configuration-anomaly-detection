@@ -102,6 +102,10 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 		input := &cloudtrail.LookupEventsInput{StartTime: awsv2.Time(options.StartTime), EndTime: awsv2.Time(options.EndTime), MaxResults: awsv2.Int32(CloudTrailPageSize), NextToken: token}
 		output, err := lookupWithRetry(ctx, c.CloudtrailClient, input)
 		if err != nil {
+			if ctx.Err() != nil {
+				collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "timeout", "context_canceled"
+				return collection, ctx.Err()
+			}
 			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "api_error", "lookup_events_failed"
 			return collection, err
 		}
@@ -208,14 +212,8 @@ func sanitizeCloudTrailMapWithContext(input map[string]any, restricted bool) map
 		case []any:
 			items := make([]any, 0, len(typed))
 			for _, item := range typed {
-				if child, ok := item.(map[string]any); ok {
-					items = append(items, sanitizeCloudTrailMapWithContext(child, childRestricted))
-				} else if text, ok := item.(string); ok && childRestricted {
-					if safeCloudTrailValue.MatchString(text) {
-						items = append(items, text)
-					}
-				} else {
-					items = append(items, item)
+				if sanitized, ok := sanitizeCloudTrailValue(item, childRestricted); ok {
+					items = append(items, sanitized)
 				}
 			}
 			output[key] = items
@@ -224,10 +222,34 @@ func sanitizeCloudTrailMapWithContext(input map[string]any, restricted bool) map
 				output[key] = typed
 			}
 		default:
-			output[key] = value
+			if !restricted {
+				output[key] = value
+			}
 		}
 	}
 	return output
+}
+
+func sanitizeCloudTrailValue(value any, restricted bool) (any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return sanitizeCloudTrailMapWithContext(typed, restricted), true
+	case []any:
+		items := make([]any, 0, len(typed))
+		for _, item := range typed {
+			if sanitized, ok := sanitizeCloudTrailValue(item, restricted); ok {
+				items = append(items, sanitized)
+			}
+		}
+		return items, true
+	case string:
+		if !restricted || safeCloudTrailValue.MatchString(typed) {
+			return typed, true
+		}
+		return nil, false
+	default:
+		return value, !restricted
+	}
 }
 
 func statusForPartial(collection CloudTrailCollection) string {
@@ -236,6 +258,7 @@ func statusForPartial(collection CloudTrailCollection) string {
 	}
 	return "partial"
 }
+
 func sleepContext(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
