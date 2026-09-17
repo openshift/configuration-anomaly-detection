@@ -148,6 +148,8 @@ ai_agent:
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/agent-invoker"
   timeout_seconds: 900              # optional, defaults to 900
+  cloudtrail:
+    enabled: false                  # optional supplemental AWS evidence; safe limits are built in
   version: "v1.0.0"                 # optional, audit trail only
   ops_sop_version: "v2.0.0"         # optional, audit trail only
   rosa_plugins_version: "v3.0.0"    # optional, audit trail only

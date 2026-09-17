@@ -49,6 +49,14 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	if c.manual.DryRun {
 		c.logger.Info("🔍 DRY RUN MODE: Investigation will run without performing any external operations")
 	}
+	if c.manual.Params == nil {
+		c.manual.Params = make(map[string]string)
+	}
+	if c.manual.DryRun {
+		c.manual.Params["CAD_DRY_RUN"] = "true"
+	} else {
+		delete(c.manual.Params, "CAD_DRY_RUN")
+	}
 
 	name := resolveInvestigationName(c.manual.InvestigationName)
 	inv := investigations.GetInvestigationByName(name)

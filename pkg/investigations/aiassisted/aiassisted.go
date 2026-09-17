@@ -24,12 +24,13 @@ type Investigation struct {
 	AIConfig *config.AIAgentConfig
 }
 
-// InvestigationPayload represents the payload sent to the AgentCore agent
+// InvestigationPayload represents the payload sent to the AgentCore agent.
 type InvestigationPayload struct {
-	InvestigationID      string `json:"investigation_id"`
-	InvestigationPayload string `json:"investigation_payload"` // TODO: Implement - should contain alert details/context
-	AlertName            string `json:"alert_name"`
-	ClusterID            string `json:"cluster_id"`
+	InvestigationID      string               `json:"investigation_id"`
+	InvestigationPayload string               `json:"investigation_payload"` // TODO: Implement - should contain alert details/context
+	AlertName            string               `json:"alert_name"`
+	ClusterID            string               `json:"cluster_id"`
+	CloudTrail           *CloudTrailReference `json:"cloudtrail,omitempty"`
 }
 
 // generateSessionID generates a unique session ID for this investigation
@@ -111,6 +112,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	incidentID := pdClient.GetIncidentID()
 	alertName := pdClient.GetTitle()
+	sessionID := generateSessionID(incidentID)
+	var cloudtrailRef *CloudTrailReference
+	if aiConfig.CloudTrail != nil && aiConfig.CloudTrail.Enabled && !isDryRun(r) {
+		cloudtrailRef = c.collectAndPublishCloudTrail(ctx, rb, r, incidentID, sessionID)
+	} else if aiConfig.CloudTrail != nil && aiConfig.CloudTrail.Enabled {
+		logging.Info("Skipping CloudTrail evidence collection during dry-run")
+	}
 
 	// Build investigation payload using typed structure
 	investigationData := &InvestigationPayload{
@@ -118,6 +126,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		InvestigationPayload: "{}", // TODO: Populate with alert details when implemented
 		AlertName:            alertName,
 		ClusterID:            clusterID,
+		CloudTrail:           cloudtrailRef,
 	}
 
 	// Marshal to JSON for AgentCore
@@ -136,11 +145,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
 		return result, nil
 	}
-
-	// TODO: Move session ID generation outside of AI investigation so all investigations have unique IDs
-	// This will require adapting this code to use the externally-generated ID instead
-	// Generate unique session ID for this investigation
-	sessionID := generateSessionID(incidentID)
 
 	// Log AI invocation
 	logging.Infof("🤖 Invoking AI agent for incident %s", incidentID)
@@ -248,6 +252,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.Note(pdNote), // Post structured investigation summary to PagerDuty
 	}
 	return result, nil
+}
+
+func isDryRun(resources *investigation.Resources) bool {
+	return resources != nil && resources.Params != nil && strings.EqualFold(resources.Params["CAD_DRY_RUN"], "true")
 }
 
 func (c *Investigation) Name() string {
