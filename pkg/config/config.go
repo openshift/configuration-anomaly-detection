@@ -22,7 +22,13 @@ type AIAgentConfig struct {
 	OpsSopVersion      string `yaml:"ops_sop_version,omitempty"`      // ops-sop repository version
 	RosaPluginsVersion string `yaml:"rosa_plugins_version,omitempty"` // rosa-claude-plugins version
 
-	TimeoutSeconds int `yaml:"timeout_seconds,omitempty"` // Timeout for agent API call (default: 900 seconds / 15 minutes)
+	TimeoutSeconds int               `yaml:"timeout_seconds,omitempty"` // Timeout for agent API call (default: 900 seconds / 15 minutes)
+	CloudTrail     *CloudTrailConfig `yaml:"cloudtrail,omitempty"`
+}
+
+// CloudTrailConfig controls optional account/region CloudTrail evidence for AI investigations.
+type CloudTrailConfig struct {
+	Enabled bool `yaml:"enabled,omitempty"`
 }
 
 // GetTimeout returns the timeout as a time.Duration for use with context.WithTimeout.
