@@ -15,6 +15,8 @@ ai_agent:
   region: "us-east-1"
   invoker_role_arn: "arn:aws:iam::123456789012:role/rosasreai_stage-invoker"
   timeout_seconds: 900              # 15 minutes
+  cloudtrail:
+    enabled: false
   version: "local-dev"              # Optional, for audit trail
   ops_sop_version: "local"          # Optional, for audit trail
   rosa_plugins_version: "local"     # Optional, for audit trail
