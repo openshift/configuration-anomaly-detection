@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/config"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
@@ -18,7 +19,7 @@ import (
 type PagerDutyController struct {
 	config   CommonConfig
 	pd       PagerDutyConfig
-	pdClient *pagerduty.SdkClient
+	pdClient pagerduty.Client
 	investigationRunner
 }
 
@@ -69,7 +70,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 			AlertTitle: "aiassisted-fallback",
 			Investigations: []config.InvestigationEntry{
 				{Name: "precheck"},
-				{Name: "aiassisted", When: &config.FilterNode{
+				{Name: aiassisted.Name, When: &config.FilterNode{
 					Field: config.FieldHCP, Operator: config.OperatorIn, Values: []string{"false"},
 				}},
 			},
@@ -84,7 +85,12 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		}
 	}
 
-	if escErr := c.pdClient.EscalateIncident(); escErr != nil {
+	// Nothing above escalated this incident yet (e.g. the AI-fallback chain
+	// was skipped entirely, or precheck/aiassisted didn't escalate on their
+	// own): issue a generic escalation now. If something upstream already
+	// escalated, notifier.Escalate() is a safe no-op (trackingPDClient
+	// de-duplicates at the source) rather than a real second escalation.
+	if escErr := c.notifier.Escalate(); escErr != nil {
 		return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
 	}
 	return nil
@@ -98,6 +104,8 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 		message = resources.Notes.String()
 	}
 
+	// If this incident was already escalated (e.g. by aiassisted), trackingPDClient
+	// degrades this to a plain note instead of a real second escalation.
 	if err := notifier.EscalateWithNote(message); err != nil {
 		logging.Errorf("Failed to escalate documentation mismatch notes to PagerDuty: %v", err)
 		return
