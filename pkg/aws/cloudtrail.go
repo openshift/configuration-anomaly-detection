@@ -263,7 +263,6 @@ func statusForPartial(collection CloudTrailCollection) string {
 	}
 	return "partial"
 }
-
 func sleepContext(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
