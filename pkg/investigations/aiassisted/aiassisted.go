@@ -17,8 +17,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
+
+// Name is the investigation's registered name, used to reference it from
+// investigation-entry configs (e.g. the AI-fallback chain in pagerduty.go).
+const Name = "aiassisted"
 
 type Investigation struct {
 	AIConfig *config.AIAgentConfig
@@ -90,8 +93,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	defer cancel()
 
 	// Get PagerDuty incident details
-	pdClient, ok := r.PdClient.(*pagerduty.SdkClient)
-	if !ok {
+	if r.PdClient == nil {
 		notes.AppendWarning("Failed to access PagerDuty client details")
 		result.Actions = append(
 			executor.NoteAndReportFrom(notes, clusterID, c.Name()),
@@ -109,8 +111,8 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 	logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
 
-	incidentID := pdClient.GetIncidentID()
-	alertName := pdClient.GetTitle()
+	incidentID := r.PdClient.GetIncidentID()
+	alertName := r.PdClient.GetTitle()
 
 	// Build investigation payload using typed structure
 	investigationData := &InvestigationPayload{
@@ -251,5 +253,5 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 func (c *Investigation) Name() string {
-	return "aiassisted"
+	return Name
 }

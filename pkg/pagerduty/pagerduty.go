@@ -36,7 +36,10 @@ type Client interface {
 	AddNote(notes string) error
 	EscalateIncident() error
 	EscalateIncidentWithNote(notes string) error
+	GetIncidentID() string
+	GetIncidentRef() string
 	GetServiceID() string
+	GetServiceName() string
 	GetTitle() string
 	MoveToEscalationPolicy(escalationPolicyID string) error
 	RetrieveClusterID() (string, error)

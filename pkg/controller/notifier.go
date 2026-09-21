@@ -3,14 +3,14 @@ package controller
 import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
 // incidentNotifier abstracts PagerDuty incident operations so that
 // manual (non-PD) runs use a no-op implementation instead of
-// nil-checking a *pagerduty.SdkClient.
+// nil-checking a *trackingPDClient.
 type incidentNotifier interface {
 	AddNote(note string) error
+	Escalate() error
 	EscalateWithNote(note string) error
 	AttachToBuilder(builder investigation.ResourceBuilder)
 	HasPagerDuty() bool
@@ -18,15 +18,19 @@ type incidentNotifier interface {
 
 // pdIncidentNotifier wraps a real PagerDuty client.
 type pdIncidentNotifier struct {
-	client *pagerduty.SdkClient
+	client *trackingPDClient
 }
 
-func newPDIncidentNotifier(client *pagerduty.SdkClient) incidentNotifier {
+func newPDIncidentNotifier(client *trackingPDClient) incidentNotifier {
 	return &pdIncidentNotifier{client: client}
 }
 
 func (n *pdIncidentNotifier) AddNote(note string) error {
 	return n.client.AddNote(note)
+}
+
+func (n *pdIncidentNotifier) Escalate() error {
+	return n.client.EscalateIncident()
 }
 
 func (n *pdIncidentNotifier) EscalateWithNote(note string) error {
@@ -53,8 +57,13 @@ func (n *noopIncidentNotifier) AddNote(note string) error {
 	return nil
 }
 
-func (n *noopIncidentNotifier) EscalateWithNote(note string) error {
+func (n *noopIncidentNotifier) Escalate() error {
 	logging.Infof("Skipping PD escalation (manual mode)")
+	return nil
+}
+
+func (n *noopIncidentNotifier) EscalateWithNote(note string) error {
+	logging.Infof("Skipping PD escalation (manual mode): %s", note)
 	return nil
 }
 
