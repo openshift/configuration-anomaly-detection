@@ -122,6 +122,11 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 				return collection, nil
 			}
 			item, malformed := normalizeCloudTrailEvent(event)
+			if collection.AccountID == "" {
+				if accountID, ok := item["recipientAccountId"].(string); ok {
+					collection.AccountID = accountID
+				}
+			}
 			line, marshalErr := json.Marshal(item)
 			if marshalErr != nil {
 				continue

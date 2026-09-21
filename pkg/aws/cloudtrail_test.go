@@ -27,7 +27,7 @@ func TestCollectCloudTrailEventsBoundsAndDeduplicates(t *testing.T) {
 			t.Fatalf("unexpected fixed lookup window or page size: %#v", in)
 		}
 		return &cloudtrail.LookupEventsOutput{Events: []cloudtrailtypes.Event{
-			{EventId: awsv2.String("one"), CloudTrailEvent: awsv2.String(`{"eventID":"one","eventName":"CreateThing","secret":"remove"}`)},
+			{EventId: awsv2.String("one"), CloudTrailEvent: awsv2.String(`{"eventID":"one","eventName":"CreateThing","recipientAccountId":"123456789012","secret":"remove"}`)},
 			{EventId: awsv2.String("one"), CloudTrailEvent: awsv2.String(`{"eventID":"one","eventName":"duplicate"}`)},
 		}, NextToken: &next}, nil
 	}).Times(1)
@@ -44,6 +44,9 @@ func TestCollectCloudTrailEventsBoundsAndDeduplicates(t *testing.T) {
 	got, err := c.CollectCloudTrailEvents(context.Background(), cadaws.CloudTrailCollectionOptions{StartTime: start, EndTime: end, MaxEvents: 10, Sleep: func(context.Context, time.Duration) error { return nil }})
 	if err != nil {
 		t.Fatalf("CollectCloudTrailEvents() error = %v", err)
+	}
+	if got.AccountID != "123456789012" {
+		t.Fatalf("CollectCloudTrailEvents() account ID = %q, want %q", got.AccountID, "123456789012")
 	}
 	if got.Status != "complete" || got.StopReason != "pagination_exhausted" || got.EventCount != 2 {
 		t.Fatalf("unexpected collection metadata: %+v", got)
