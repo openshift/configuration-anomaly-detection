@@ -114,6 +114,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	incidentID := r.PdClient.GetIncidentID()
 	alertName := r.PdClient.GetTitle()
+	sessionID := generateSessionID(incidentID)
+	var cloudtrailRef *CloudTrailReference
+	if aiConfig.CloudTrail != nil && aiConfig.CloudTrail.Enabled && !isDryRun(r) {
+		cloudtrailRef = c.collectAndPublishCloudTrail(ctx, rb, r, incidentID, sessionID)
+	} else if aiConfig.CloudTrail != nil && aiConfig.CloudTrail.Enabled {
+		logging.Info("Skipping CloudTrail evidence collection during dry-run")
+	}
 
 	// Build investigation payload using typed structure
 	investigationData := &InvestigationPayload{
