@@ -60,8 +60,11 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 	if options.EndTime.IsZero() {
 		options.EndTime = now
 	}
+	minimumStartTime := options.EndTime.Add(-CloudTrailMaxLookback)
 	if options.StartTime.IsZero() {
-		options.StartTime = options.EndTime.Add(-CloudTrailMaxLookback)
+		options.StartTime = minimumStartTime
+	} else if options.StartTime.Before(minimumStartTime) {
+		options.StartTime = minimumStartTime
 	}
 	if options.MaxEvents <= 0 || options.MaxEvents > CloudTrailMaxEvents {
 		options.MaxEvents = CloudTrailMaxEvents

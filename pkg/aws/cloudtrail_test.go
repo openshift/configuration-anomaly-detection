@@ -66,6 +66,28 @@ func TestCollectCloudTrailEventsBoundsAndDeduplicates(t *testing.T) {
 	}
 }
 
+func TestCollectCloudTrailEventsClampsStartTime(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	client := awsmock.NewMockCloudTrailAPI(ctrl)
+	end := time.Date(2026, 9, 17, 14, 0, 0, 0, time.UTC)
+	minimumStart := end.Add(-cadaws.CloudTrailMaxLookback)
+	client.EXPECT().LookupEvents(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, in *cloudtrail.LookupEventsInput, _ ...func(*cloudtrail.Options)) (*cloudtrail.LookupEventsOutput, error) {
+		if !in.StartTime.Equal(minimumStart) || !in.EndTime.Equal(end) {
+			t.Fatalf("unexpected clamped lookup window: %#v", in)
+		}
+		return &cloudtrail.LookupEventsOutput{}, nil
+	})
+
+	c := &cadaws.SdkClient{CloudtrailClient: client}
+	_, err := c.CollectCloudTrailEvents(context.Background(), cadaws.CloudTrailCollectionOptions{
+		StartTime: minimumStart.Add(-time.Hour), EndTime: end,
+		Sleep: func(context.Context, time.Duration) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("CollectCloudTrailEvents() error = %v", err)
+	}
+}
+
 func TestCollectCloudTrailEventsReturnsPartialOnPageFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	client := awsmock.NewMockCloudTrailAPI(ctrl)
