@@ -14,9 +14,14 @@ import (
 )
 
 const (
-	CloudTrailPageSize    = 50
-	CloudTrailMaxEvents   = 2000
-	CloudTrailMaxLookback = 120 * time.Minute
+	CloudTrailPageSize             = 50
+	CloudTrailMaxEvents            = 2000
+	CloudTrailMaxLookback          = 120 * time.Minute
+	cloudTrailStatusPartial        = "partial"
+	cloudTrailStatusUnavailable    = "unavailable"
+	cloudTrailStopReasonAPIError   = "api_error"
+	cloudTrailStopReasonTimeout    = "timeout"
+	cloudTrailErrorContextCanceled = "context_canceled"
 )
 
 type CloudTrailCollectionOptions struct {
@@ -82,22 +87,25 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 		Region: options.Region, Events: make([]CloudTrailEvent, 0),
 	}
 	if c.CloudtrailClient == nil {
-		collection.Status, collection.StopReason, collection.ErrorCategory = "unavailable", "api_error", "client_unavailable"
+		collection.Status, collection.StopReason, collection.ErrorCategory = cloudTrailStatusUnavailable, cloudTrailStopReasonAPIError, "client_unavailable"
 		return collection, fmt.Errorf("cloudtrail client is nil")
 	}
+	return c.collectCloudTrailPages(ctx, options, collection)
+}
 
+func (c *SdkClient) collectCloudTrailPages(ctx context.Context, options CloudTrailCollectionOptions, collection CloudTrailCollection) (CloudTrailCollection, error) {
 	seenTokens := map[string]struct{}{}
 	seenEvents := map[string]struct{}{}
 	var token *string
 	firstPage := true
 	for {
 		if err := ctx.Err(); err != nil {
-			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "timeout", "context_canceled"
+			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), cloudTrailStopReasonTimeout, cloudTrailErrorContextCanceled
 			return collection, err
 		}
 		if !firstPage {
 			if err := options.Sleep(ctx, 500*time.Millisecond); err != nil {
-				collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "timeout", "context_canceled"
+				collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), cloudTrailStopReasonTimeout, cloudTrailErrorContextCanceled
 				return collection, err
 			}
 		}
@@ -106,10 +114,10 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 		output, err := lookupWithRetry(ctx, c.CloudtrailClient, input)
 		if err != nil {
 			if ctx.Err() != nil {
-				collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "timeout", "context_canceled"
+				collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), cloudTrailStopReasonTimeout, cloudTrailErrorContextCanceled
 				return collection, ctx.Err()
 			}
-			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "api_error", "lookup_events_failed"
+			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), cloudTrailStopReasonAPIError, "lookup_events_failed"
 			return collection, err
 		}
 		for _, event := range output.Events {
@@ -121,7 +129,7 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 				seenEvents[id] = struct{}{}
 			}
 			if len(collection.Events) >= options.MaxEvents {
-				collection.Status, collection.StopReason = "partial", "event_limit"
+				collection.Status, collection.StopReason = cloudTrailStatusPartial, "event_limit"
 				return collection, nil
 			}
 			item, malformed := normalizeCloudTrailEvent(event)
@@ -135,7 +143,7 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 				continue
 			}
 			if options.MaxBytes > 0 && collection.ByteCount+len(line)+1 > options.MaxBytes {
-				collection.Status, collection.StopReason = "partial", "byte_limit"
+				collection.Status, collection.StopReason = cloudTrailStatusPartial, "byte_limit"
 				return collection, nil
 			}
 			collection.Events = append(collection.Events, CloudTrailEvent{Data: line, EventID: id, EventTime: event.EventTime, RawDetailParseFailed: malformed})
@@ -146,7 +154,7 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 			}
 		}
 		if len(collection.Events) >= options.MaxEvents && output.NextToken != nil && awsv2.ToString(output.NextToken) != "" {
-			collection.Status, collection.StopReason = "partial", "event_limit"
+			collection.Status, collection.StopReason = cloudTrailStatusPartial, "event_limit"
 			return collection, nil
 		}
 		if output.NextToken == nil || awsv2.ToString(output.NextToken) == "" {
@@ -154,7 +162,7 @@ func (c *SdkClient) CollectCloudTrailEvents(ctx context.Context, options CloudTr
 		}
 		next := awsv2.ToString(output.NextToken)
 		if _, ok := seenTokens[next]; ok {
-			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), "api_error", "repeated_pagination_token"
+			collection.Status, collection.StopReason, collection.ErrorCategory = statusForPartial(collection), cloudTrailStopReasonAPIError, "repeated_pagination_token"
 			return collection, fmt.Errorf("cloudtrail returned a repeated pagination token")
 		}
 		seenTokens[next] = struct{}{}
@@ -262,10 +270,11 @@ func sanitizeCloudTrailValue(value any, restricted bool) (any, bool) {
 
 func statusForPartial(collection CloudTrailCollection) string {
 	if len(collection.Events) == 0 {
-		return "unavailable"
+		return cloudTrailStatusUnavailable
 	}
-	return "partial"
+	return cloudTrailStatusPartial
 }
+
 func sleepContext(ctx context.Context, d time.Duration) error {
 	timer := time.NewTimer(d)
 	defer timer.Stop()

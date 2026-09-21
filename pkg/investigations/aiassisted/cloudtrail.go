@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	cloudTrailLookback = 2 * time.Hour
-	cloudTrailTimeout  = 60 * time.Second
-	cloudTrailMaxBytes = 5 * 1024 * 1024
+	cloudTrailLookback          = 2 * time.Hour
+	cloudTrailTimeout           = 60 * time.Second
+	cloudTrailMaxBytes          = 5 * 1024 * 1024
+	cloudTrailStatusUnavailable = "unavailable"
 )
 
 type CloudTrailReference struct {
@@ -44,7 +45,7 @@ type cloudTrailEvidenceReport struct {
 }
 
 func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb investigation.ResourceBuilder, resources *investigation.Resources, incidentID, invocationID string) *CloudTrailReference {
-	ref := &CloudTrailReference{SchemaVersion: 1, Status: "unavailable", StorageStatus: "unavailable", InvocationID: invocationID, ReportClusterID: resources.Cluster.ExternalID()}
+	ref := &CloudTrailReference{SchemaVersion: 1, Status: cloudTrailStatusUnavailable, StorageStatus: cloudTrailStatusUnavailable, InvocationID: invocationID, ReportClusterID: resources.Cluster.ExternalID()}
 	awsResources, buildErr := rb.WithAwsClient().Build()
 	if buildErr != nil || awsResources == nil || awsResources.AwsClient == nil {
 		ref.ErrorCategory = "aws_client_unavailable"
@@ -103,7 +104,7 @@ func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb inve
 		}
 	}
 	if cloudTrailMaxBytes > 0 && len(reportBytes) > cloudTrailMaxBytes {
-		ref.Status, ref.StorageStatus, ref.ErrorCategory = "unavailable", "unavailable", "report_envelope_exceeds_limit"
+		ref.Status, ref.StorageStatus, ref.ErrorCategory = cloudTrailStatusUnavailable, cloudTrailStatusUnavailable, "report_envelope_exceeds_limit"
 		return ref
 	}
 	digest := sha256.Sum256(reportBytes)
