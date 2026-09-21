@@ -157,6 +157,16 @@ ai_agent:
 
 When the `ai_agent` section is configured, `aiassisted` also acts as a fallback: if no alert title matches the incoming incident (or the matched alert's `when` filter rejects), CAD automatically runs `precheck` followed by `aiassisted`. This fallback does not require an explicit `aiassisted` entry in `alerts`.
 
+When `ai_agent.cloudtrail.enabled` is `true`, CAD collects recent AWS
+CloudTrail management events from the customer account and region, sanitizes
+them, and uploads them as a Backplane cluster report before invoking the AI
+runtime. The AgentCore request contains the evidence report reference and
+collection metadata; the report is limited to a two-hour lookback, 2,000
+events, and 5 MiB. Dry runs skip collection and upload. The evidence is
+account- and region-scoped, so the AI runtime must retrieve the referenced
+Backplane report and correlate events with the target cluster before
+attributing a change.
+
 ## Full reference
 
 See [`docs/investigation-config.example.yaml`](investigation-config.example.yaml) for a fully commented example covering all operators, field types, and composition patterns.

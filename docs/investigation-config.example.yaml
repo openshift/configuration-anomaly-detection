@@ -116,6 +116,8 @@
 #   region: "us-east-1"
 #   invoker_role_arn: "arn:aws:iam::123456789012:role/rosasreai_stage-invoker"
 #   timeout_seconds: 900              # Optional, defaults to 900 (15 min)
+#   cloudtrail:
+#     enabled: false                  # Optional supplemental AWS evidence
 #   version: "v1.0.0"                 # Optional, audit trail only
 #   ops_sop_version: "v2.0.0"         # Optional, audit trail only
 #   rosa_plugins_version: "v3.0.0"    # Optional, audit trail only

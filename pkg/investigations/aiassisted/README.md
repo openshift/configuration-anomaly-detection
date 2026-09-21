@@ -17,10 +17,11 @@ The investigation performs the following steps:
 1. **Validate configuration** - Checks that the AI runtime config (`ai_agent` section) is present in the global config
 2. **Load credentials** - Retrieves AWS credentials from environment variables
 3. **Fetch incident details** - Gets PagerDuty incident ID, title, and cluster information
-4. **Invoke AI agent** - Calls AWS Bedrock AgentCore runtime with investigation payload
-5. **Stream response** - Collects real-time streaming AI output
-6. **Post to PagerDuty** - Adds automation note indicating AI investigation completed
-7. **Escalate** - Always escalates to SRE for manual review
+4. **Collect optional evidence** - When enabled, collects and sanitizes recent CloudTrail events and uploads them as a Backplane cluster report
+5. **Invoke AI agent** - Calls AWS Bedrock AgentCore runtime with the investigation payload and optional evidence reference
+6. **Stream response** - Collects real-time streaming AI output
+7. **Post to PagerDuty** - Adds automation note indicating AI investigation completed
+8. **Escalate** - Always escalates to SRE for manual review
 
 On any failure (config missing, credential issues, etc.), the investigation escalates with a warning note explaining the issue.
 
@@ -67,6 +68,8 @@ ai_agent:
   user_id: "cad-service-account"
   region: "us-east-1"
   timeout_seconds: 900
+  cloudtrail:
+    enabled: false  # Optional; two-hour, 2,000-event, 5 MiB limits apply
   version: "v1.0.0"
   ops_sop_version: "v2.3.4"
   rosa_plugins_version: "v1.2.3"
@@ -90,7 +93,15 @@ filters:
 
 **Optional `ai_agent` fields:**
 - `timeout_seconds` - API call timeout (default: 900 / 15 minutes)
+- `cloudtrail.enabled` - Collect supplemental customer-account CloudTrail evidence and upload it to Backplane; disabled by default
 - `version`, `ops_sop_version`, `rosa_plugins_version` - Version metadata for audit
+
+CloudTrail evidence collection is skipped during dry runs and for HCP or
+infrastructure clusters. Collection is scoped to the customer AWS account and
+region represented by the Backplane-provided credentials, but the returned
+events are not automatically cluster-specific. The AI runtime must retrieve
+the Backplane report referenced in the request and correlate events with the
+target cluster.
 
 **Filter entry:** The `aiassisted` entry in `filters` controls which clusters/organizations can use AI. Removing the entry disables AI entirely.
 
