@@ -209,12 +209,12 @@ func normalizeCloudTrailEvent(event cloudtrailtypes.Event) (map[string]any, bool
 }
 
 func sanitizeCloudTrailMap(input map[string]any) map[string]any {
-	return sanitizeCloudTrailMapWithContext(input, false)
+	return sanitizeCloudTrailMapRestricted(input, false)
 }
 
 var safeCloudTrailValue = regexp.MustCompile(`^(arn:aws:[^\s]+|arn:aws-us-gov:[^\s]+|arn:aws-cn:[^\s]+|(?:i|vpc|subnet|sg|eni|nat|igw|rtb|vol|snap|ami|acl|route|lb|targetgroup)-[A-Za-z0-9._:/-]+|[a-z]{2}(?:-gov)?-[a-z]+-\d)$`)
 
-func sanitizeCloudTrailMapWithContext(input map[string]any, restricted bool) map[string]any {
+func sanitizeCloudTrailMapRestricted(input map[string]any, restricted bool) map[string]any {
 	output := make(map[string]any, len(input))
 	for key, value := range input {
 		lower := strings.ToLower(key)
@@ -224,7 +224,7 @@ func sanitizeCloudTrailMapWithContext(input map[string]any, restricted bool) map
 		childRestricted := restricted || lower == "requestparameters" || lower == "responseelements" || lower == "additionaleventdata"
 		switch typed := value.(type) {
 		case map[string]any:
-			output[key] = sanitizeCloudTrailMapWithContext(typed, childRestricted)
+			output[key] = sanitizeCloudTrailMapRestricted(typed, childRestricted)
 		case []any:
 			items := make([]any, 0, len(typed))
 			for _, item := range typed {
@@ -249,7 +249,7 @@ func sanitizeCloudTrailMapWithContext(input map[string]any, restricted bool) map
 func sanitizeCloudTrailValue(value any, restricted bool) (any, bool) {
 	switch typed := value.(type) {
 	case map[string]any:
-		return sanitizeCloudTrailMapWithContext(typed, restricted), true
+		return sanitizeCloudTrailMapRestricted(typed, restricted), true
 	case []any:
 		items := make([]any, 0, len(typed))
 		for _, item := range typed {
