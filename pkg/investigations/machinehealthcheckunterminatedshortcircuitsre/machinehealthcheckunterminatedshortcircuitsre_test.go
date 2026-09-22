@@ -8,10 +8,14 @@ import (
 	"testing"
 	"time"
 
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	machineutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/machine"
 	nodeutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 
@@ -516,6 +520,159 @@ func TestInvestigation_InvestigateNode(t *testing.T) {
 	}
 }
 
+func Test_isSCPRunInstancesDeny(t *testing.T) {
+	tests := []struct {
+		name     string
+		errorMsg string
+		want     bool
+	}{
+		{
+			name:     "empty-error",
+			errorMsg: "",
+			want:     false,
+		},
+		{
+			name:     "generic-error",
+			errorMsg: "Generic error message",
+			want:     false,
+		},
+		{
+			name:     "scp-denies-runInstances",
+			errorMsg: "error launching instance: You are not authorized to perform this operation. User: arn:aws:sts::0123456789:assumed-role/example-cluster-xxxx-openshift-machine-api-aws-cloud-credentials/0123456789012345 is not authorized to perform: ec2:RunInstances on resource: arn:aws:ec2:ap-southeast-3:0123456789:instance/* with an explicit deny in a service control policy. Encoded authorization failure message: [...]",
+			want:     true,
+		},
+		{
+			name:     "scp-denies-DescribeInstances",
+			errorMsg: "error launching instance: You are not authorized to perform this operation. User: arn:aws:sts::0123456789:assumed-role/example-cluster-xxxx-openshift-machine-api-aws-cloud-credentials/0123456789012345 is not authorized to perform: ec2:DescribeInstances on resource: arn:aws:ec2:ap-southeast-3:0123456789:instance/* with an explicit deny in a service control policy. Encoded authorization failure message: [...]",
+			want:     false,
+		},
+		{
+			name:     "runInstance-denied-not-scp",
+			errorMsg: "error launching instance: You are not authorized to perform this operation. User: arn:aws:sts::0123456789:assumed-role/example-cluster-xxxx-openshift-machine-api-aws-cloud-credentials/0123456789012345 is not authorized to perform: ec2:RunInstances on resource: arn:aws:ec2:ap-southeast-3:0123456789:instance/* due to some reason",
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isSCPRunInstancesDeny(tt.errorMsg)
+
+			if got != tt.want {
+				t.Errorf("got %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestInvestigation_investigateFailingMachine_SCPDeny verifies that a machine failing to provision
+// due to an SCP deny on ec2:RunInstances flips the scpMisconfigured flag and short-circuits before
+// producing a (misleading) recommendation.
+func TestInvestigation_investigateFailingMachine_SCPDeny(t *testing.T) {
+	machine := newWorkerMachine("scp-denied")
+	errorMsg := "error launching instance: You are not authorized to perform this operation. User: arn:aws:sts::0123456789:assumed-role/example-cluster-xxxx-openshift-machine-api-aws-cloud-credentials/0123456789012345 is not authorized to perform: ec2:RunInstances on resource: arn:aws:ec2:ap-southeast-3:0123456789:instance/* with an explicit deny in a service control policy. Encoded authorization failure message: [...]"
+	machine.Status.ErrorMessage = &errorMsg
+
+	i, err := newTestInvestigation(machine)
+	if err != nil {
+		t.Fatalf("failed to create test investigation: %v", err)
+	}
+
+	if err := i.investigateFailingMachine(*machine); err != nil {
+		t.Errorf("unexpected error investigating SCP-denied machine: %v", err)
+	}
+
+	if !i.scpMisconfigured {
+		t.Errorf("expected scpMisconfigured to be true for an SCP RunInstances deny")
+	}
+
+	// The SCP branch must short-circuit before the switch, so no recommendation should be added
+	if len(i.recommendations) != 0 {
+		t.Errorf("expected no recommendations for an SCP deny (short-circuit), got %d", len(i.recommendations))
+	}
+}
+
+// TestInvestigation_Run_SCPDisposition verifies the end-to-end action disposition for
+// an SCP RunInstances deny: an SCP deny always queues the customer-facing service log,
+// and it silences only when the SCP is the *sole* finding. If any other machine yields a
+// recommendation, the incident is escalated so Primary addresses the remaining findings.
+func TestInvestigation_Run_SCPDisposition(t *testing.T) {
+	scpErr := "error launching instance: ... is not authorized to perform: ec2:RunInstances on resource: ... with an explicit deny in a service control policy. Encoded authorization failure message: [...]"
+
+	// A machine only reaches investigateFailingMachine when Phase==Failed or ErrorReason!=nil,
+	// so give the SCP machine a (non-SCP-relevant) ErrorReason to enter the failing path.
+	newSCPMachine := func() *machinev1beta1.Machine {
+		m := newWorkerMachine("scp-denied")
+		reason := machinev1beta1.CreateMachineError
+		m.Status.ErrorReason = &reason
+		m.Status.ErrorMessage = &scpErr
+		return m
+	}
+
+	tests := []struct {
+		name        string
+		objects     []client.Object
+		wantSilence bool // else Escalate
+	}{
+		{
+			name:        "SCP deny alone silences",
+			objects:     []client.Object{newFailingMachineHealthCheck(), newSCPMachine()},
+			wantSilence: true,
+		},
+		{
+			name: "SCP deny plus another finding escalates",
+			objects: []client.Object{
+				newFailingMachineHealthCheck(),
+				newSCPMachine(),
+				func() *machinev1beta1.Machine {
+					m := newWorkerMachine("create-failed")
+					reason := machinev1beta1.CreateMachineError
+					m.Status.ErrorReason = &reason
+					return m
+				}(),
+			},
+			wantSilence: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient, err := newFakeClient(tt.objects...)
+			if err != nil {
+				t.Fatalf("failed to create fake client: %v", err)
+			}
+
+			rb := &investigation.ResourceBuilderMock{
+				Resources: &investigation.Resources{
+					Cluster:   newTestCluster("test-cluster"),
+					K8sClient: clientImpl{fakeClient},
+					Notes:     notewriter.New("testing", logging.RawLogger),
+				},
+			}
+
+			i := &Investigation{}
+			result, err := i.Run(rb)
+			if err != nil {
+				t.Fatalf("unexpected error from Run(): %v", err)
+			}
+
+			// An SCP deny must always queue the customer-facing service log.
+			if !hasActionType(result.Actions, executor.ActionTypeServiceLog) {
+				t.Errorf("expected a ServiceLog action for an SCP deny")
+			}
+
+			gotSilence := hasActionType(result.Actions, executor.ActionTypeSilenceIncident)
+			gotEscalate := hasActionType(result.Actions, executor.ActionTypeEscalateIncident)
+
+			if tt.wantSilence && (!gotSilence || gotEscalate) {
+				t.Errorf("expected Silence and no Escalate; got silence=%t escalate=%t", gotSilence, gotEscalate)
+			}
+			if !tt.wantSilence && (!gotEscalate || gotSilence) {
+				t.Errorf("expected Escalate and no Silence; got silence=%t escalate=%t", gotSilence, gotEscalate)
+			}
+		})
+	}
+}
+
 func newFailingMachineHealthCheck() *machinev1beta1.MachineHealthCheck {
 	mhc := &machinev1beta1.MachineHealthCheck{
 		ObjectMeta: metav1.ObjectMeta{
@@ -577,6 +734,17 @@ type clientImpl struct {
 
 func (client clientImpl) Clean() error {
 	return nil
+}
+
+func newTestCluster(id string) *cmv1.Cluster {
+	cluster, _ := cmv1.NewCluster().ID(id).Build()
+	return cluster
+}
+
+func hasActionType(actions []types.Action, want executor.ActionType) bool {
+	return slices.ContainsFunc(actions, func(a types.Action) bool {
+		return a.Type() == string(want)
+	})
 }
 
 func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {

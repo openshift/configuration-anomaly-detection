@@ -18,6 +18,7 @@ import (
 	nodeutil "github.com/openshift/configuration-anomaly-detection/pkg/investigations/utils/node"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	corev1 "k8s.io/api/core/v1"
@@ -28,6 +29,16 @@ const (
 	alertname = "MachineHealthCheckUnterminatedShortCircuitSRE"
 )
 
+// scpSL mirrors the managed-notifications template:
+// https://github.com/openshift/managed-notifications/blob/master/osd/rosa_cluster_cant_manage_instances.json
+var scpSL = ocm.ServiceLog{
+	Severity:     "Major",
+	ServiceName:  "SREManualAction",
+	Summary:      "Cluster degraded, action required",
+	Description:  "Your cluster is unable to manage its AWS EC2 instances using AWS API operations such as ec2:RunInstances and ec2:TerminateInstances, which prevents critical cluster functions from operating. This can be caused by insufficient AWS IAM permissions, insufficient AWS quota, or ABAC policies blocking AWS instance operations. Please review the product documentation and ensure your cluster fulfils all prerequisites: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws_classic_architecture/4/html/prepare_your_environment/rosa-sts-aws-prereqs.",
+	InternalOnly: false,
+}
+
 type Investigation struct {
 	// k8scli provides access to on-cluster resources
 	k8scli k8sclient.Client
@@ -35,6 +46,8 @@ type Investigation struct {
 	notes *notewriter.NoteWriter
 	// recommendations holds the set of actions CAD recommends primary to take
 	recommendations investigationRecommendations
+	// scpMisconfigured is true when a misconfigured SCP prevents AWS access (e.g. runInstances)
+	scpMisconfigured bool
 }
 
 // Run investigates the MachineHealthCheckUnterminatedShortCircuitSRE alert
@@ -61,6 +74,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	i.k8scli = r.K8sClient
 	i.notes = r.Notes
 	i.recommendations = investigationRecommendations{}
+	i.scpMisconfigured = false
 
 	targetMachines, err := i.getMachinesFromFailingMHC(ctx)
 	if err != nil {
@@ -105,6 +119,17 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 
+	if i.scpMisconfigured {
+		i.notes.AppendWarning("a misconfigured SCP is denying ec2:RunInstances; a service log has been sent to the customer to review the AWS permissions required to manage cluster instances")
+		result.Actions = append(
+			result.Actions,
+			executor.NewServiceLogAction(scpSL.Severity, scpSL.Summary).
+				WithDescription(scpSL.Description).
+				WithServiceName(scpSL.ServiceName).
+				Build(),
+		)
+	}
+
 	// Summarize recommendations from investigation in PD notes, if any found
 	if len(i.recommendations) > 0 {
 		i.notes.AppendWarning("%s", i.recommendations.summarize())
@@ -113,9 +138,24 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	result.Actions = append(
-		executor.NoteAndReportFrom(i.notes, r.Cluster.ID(), i.Name()),
-		executor.Escalate("MachineHealthCheck investigation complete"),
+		result.Actions,
+		executor.NoteAndReportFrom(i.notes, r.Cluster.ID(), i.Name())...,
 	)
+
+	// A SL is queued to be sent already for the SCP, no other actionable items
+	if i.scpMisconfigured && len(i.recommendations) == 0 {
+		result.Actions = append(
+			result.Actions,
+			executor.Silence("Unactionable by SRE"),
+		)
+	} else {
+		// A SL is queued to be sent out for a misconfigured SCP, but there are other findings
+		// to be addressed by primary.
+		result.Actions = append(
+			result.Actions,
+			executor.Escalate("MachineHealthCheck investigation complete"),
+		)
+	}
 	return result, nil
 }
 
@@ -187,6 +227,12 @@ func (i *Investigation) investigateFailingMachine(machine machinev1beta1.Machine
 	var errorMsg string
 	if machine.Status.ErrorMessage != nil {
 		errorMsg = *machine.Status.ErrorMessage
+	}
+
+	// A SCP prevents runInstances
+	if isSCPRunInstancesDeny(errorMsg) {
+		i.scpMisconfigured = true
+		return nil
 	}
 
 	if role != machineutil.WorkerRoleLabelValue {
@@ -317,4 +363,10 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 
 func (i *Investigation) Name() string {
 	return strings.ToLower(alertname)
+}
+
+// isSCPRunInstancesDeny verifies if the error message is due to a SCP denying RunInstances events
+func isSCPRunInstancesDeny(errorMsg string) bool {
+	return strings.Contains(errorMsg, "is not authorized to perform: ec2:RunInstances") &&
+		strings.Contains(errorMsg, "with an explicit deny in a service control policy")
 }
