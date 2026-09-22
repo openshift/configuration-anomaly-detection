@@ -214,6 +214,12 @@ func sanitizeCloudTrailMap(input map[string]any) map[string]any {
 
 var safeCloudTrailValue = regexp.MustCompile(`^(arn:aws:[^\s]+|arn:aws-us-gov:[^\s]+|arn:aws-cn:[^\s]+|(?:i|vpc|subnet|sg|eni|nat|igw|rtb|vol|snap|ami|acl|route|lb|targetgroup)-[A-Za-z0-9._:/-]+|[a-z]{2}(?:-gov)?-[a-z]+-\d)$`)
 
+// sanitizeCloudTrailMapRestricted strips potentially sensitive values before a
+// CloudTrail event is published. The key deny-list (secret/password/token/...)
+// is a heuristic — AWS doesn't document which fields hold secrets, so it can't
+// catch everything. Inside the free-form request/response fields we instead
+// allow-list values by shape (safeCloudTrailValue): only ARNs, resource IDs,
+// and regions survive, so unrecognized values are dropped rather than leaked.
 func sanitizeCloudTrailMapRestricted(input map[string]any, restricted bool) map[string]any {
 	output := make(map[string]any, len(input))
 	for key, value := range input {
