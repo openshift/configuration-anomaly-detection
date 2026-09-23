@@ -8,6 +8,7 @@ reviewers:
 - tnierman
 - zmird-r
 - joshbranham
+- dustman9000
 - srep-functional-team-orange
 approvers:
 - AlexSmithGH
@@ -19,6 +20,7 @@ approvers:
 - tnierman
 - zmird-r
 - joshbranham
+- dustman9000
 - BATMAN-JD
 - eth1030
 - srep-functional-team-orange
