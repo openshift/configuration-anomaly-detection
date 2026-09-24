@@ -113,7 +113,7 @@ New investigations and their remediation steps should be deployed in advancing s
     * The investigation should be accompanied by unit tests and/or step-by-step manual tests in the investigation's testing README, including:
         * A clear step-by-step process to manually test the investigation (e.g. cluster setup, other expected conditions).
 
-3. **Actioning Stage (Read/Write, staging):**
+2. **Actioning Stage (Read/Write, staging):**
 
     The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable **staging** clusters.
 
@@ -122,7 +122,7 @@ New investigations and their remediation steps should be deployed in advancing s
     * The investigation should be locally tested in staging against a live alert.
     * E2E testing is desired for actioning investigations; the tests should cover the execution of remediative steps as well as verification of their effectiveness.
    
-4. **Production graduation**
+3. **Production graduation**
 
    The investigation is performed in production, against all applicable clusters.
 
