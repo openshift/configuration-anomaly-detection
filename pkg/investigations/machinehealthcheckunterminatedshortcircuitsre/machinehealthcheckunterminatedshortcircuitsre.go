@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -29,10 +30,11 @@ const (
 	alertname = "MachineHealthCheckUnterminatedShortCircuitSRE"
 )
 
-// scpSL mirrors the managed-notifications template:
+// scpSL is based on the managed-notifications template:
 // https://github.com/openshift/managed-notifications/blob/master/osd/rosa_cluster_cant_manage_instances.json
+// Severity updated from Major to Important per OSL HCC-alignment (ROSAENG-59901).
 var scpSL = ocm.ServiceLog{
-	Severity:     "Major",
+	Severity:     servicelogsv1.SeverityImportant,
 	ServiceName:  "SREManualAction",
 	Summary:      "Cluster degraded, action required",
 	Description:  "Your cluster is unable to manage its AWS EC2 instances using AWS API operations such as ec2:RunInstances and ec2:TerminateInstances, which prevents critical cluster functions from operating. This can be caused by insufficient AWS IAM permissions, insufficient AWS quota, or ABAC policies blocking AWS instance operations. Please review the product documentation and ensure your cluster fulfils all prerequisites: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws_classic_architecture/4/html/prepare_your_environment/rosa-sts-aws-prereqs.",

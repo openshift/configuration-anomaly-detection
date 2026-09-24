@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"gotest.tools/v3/assert"
 )
@@ -21,7 +22,7 @@ func TestCreateEgressSL(t *testing.T) {
 	)
 
 	expected := &ocm.ServiceLog{
-		Severity:     "Critical",
+		Severity:     servicelogsv1.SeverityCritical,
 		Summary:      "Action required: Network misconfiguration",
 		ServiceName:  "SREManualAction",
 		Description:  expectedDescription,

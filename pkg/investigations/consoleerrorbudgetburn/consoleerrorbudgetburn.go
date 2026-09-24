@@ -15,6 +15,7 @@ import (
 	"time"
 
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
@@ -308,7 +309,7 @@ func sgAllowsTCPInbound(securityGroups []ec2v2types.SecurityGroup, fromPort, toP
 // Content matches the managed-notifications AllowedSourceRanges.json template.
 func newAllowedSourceRangesSL(machineCIDR string) *ocm.ServiceLog {
 	return &ocm.ServiceLog{
-		Severity:     "Critical",
+		Severity:     servicelogsv1.SeverityCritical,
 		ServiceName:  "SREManualAction",
 		Summary:      "Action required: Incorrect Default IngressController Configuration",
 		Description:  fmt.Sprintf("Your cluster requires you to take action. Your default ingresscontroller is misconfigured, generating alerts for Red Hat SRE and degrading cluster health. The Machine CIDR for the cluster, '%s', needs to be added to the allowlist.", machineCIDR),
@@ -319,7 +320,7 @@ func newAllowedSourceRangesSL(machineCIDR string) *ocm.ServiceLog {
 // newNetworkMisconfigurationSL returns the service log for a network misconfiguration
 func newNetworkMisconfigurationSL(change string) *ocm.ServiceLog {
 	return &ocm.ServiceLog{
-		Severity:     "Critical",
+		Severity:     servicelogsv1.SeverityCritical,
 		ServiceName:  "SREManualAction",
 		Summary:      "Action required: Network misconfiguration",
 		Description:  fmt.Sprintf("Your cluster requires you to take action. SRE has observed that there have been changes made to network configuration which impact normal working of the cluster: %s.", change),

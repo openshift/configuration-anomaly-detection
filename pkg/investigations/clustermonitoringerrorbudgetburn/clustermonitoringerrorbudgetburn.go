@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -23,7 +24,7 @@ func newUwmConfigMapMisconfiguredSL(docLink string) *ocm.ServiceLog {
 	}
 
 	return &ocm.ServiceLog{
-		Severity:     "Major",
+		Severity:     servicelogsv1.SeverityImportant,
 		Summary:      "Action required: review user-workload-monitoring configuration",
 		ServiceName:  "SREManualAction",
 		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the user-workload-monitoring-config ConfigMap in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
@@ -37,7 +38,7 @@ func newUwmAMMisconfiguredSL(docLink string) *ocm.ServiceLog {
 	}
 
 	return &ocm.ServiceLog{
-		Severity:     "Major",
+		Severity:     servicelogsv1.SeverityImportant,
 		Summary:      "Action required: review user-workload-monitoring configuration",
 		ServiceName:  "SREManualAction",
 		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
@@ -51,7 +52,7 @@ func newUwmGenericMisconfiguredSL(docLink string) *ocm.ServiceLog {
 	}
 
 	return &ocm.ServiceLog{
-		Severity:     "Major",
+		Severity:     servicelogsv1.SeverityImportant,
 		Summary:      "Action required: review user-workload-monitoring configuration",
 		ServiceName:  "SREManualAction",
 		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),

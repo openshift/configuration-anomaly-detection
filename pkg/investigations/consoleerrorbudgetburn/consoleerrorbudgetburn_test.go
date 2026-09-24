@@ -11,6 +11,7 @@ import (
 
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
@@ -536,7 +537,7 @@ func TestCheckAllowedSourceRanges_EmptyAllowedSourceRanges(t *testing.T) {
 func TestNewAllowedSourceRangesSL(t *testing.T) {
 	machineCIDR := "10.0.0.0/16"
 	expected := &ocm.ServiceLog{
-		Severity:     "Critical",
+		Severity:     servicelogsv1.SeverityCritical,
 		ServiceName:  "SREManualAction",
 		Summary:      "Action required: Incorrect Default IngressController Configuration",
 		Description:  fmt.Sprintf("Your cluster requires you to take action. Your default ingresscontroller is misconfigured, generating alerts for Red Hat SRE and degrading cluster health. The Machine CIDR for the cluster, '%s', needs to be added to the allowlist.", machineCIDR),

@@ -5,13 +5,14 @@ import (
 	"strings"
 	"time"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 )
 
 // ServiceLogActionBuilder builds ServiceLogAction instances
 type ServiceLogActionBuilder struct {
-	severity        string
+	severity        servicelogsv1.Severity
 	serviceName     string
 	summary         string
 	description     string
@@ -21,9 +22,9 @@ type ServiceLogActionBuilder struct {
 }
 
 // NewServiceLogAction creates a builder with required fields
-// severity: "Info", "Warning", "Major", "Critical"
+// severity: use OCM SDK constants (e.g. servicelogsv1.SeverityCritical, SeverityImportant, SeverityModerate, SeverityLow)
 // summary: Brief title of the service log
-func NewServiceLogAction(severity, summary string) *ServiceLogActionBuilder {
+func NewServiceLogAction(severity servicelogsv1.Severity, summary string) *ServiceLogActionBuilder {
 	return &ServiceLogActionBuilder{
 		severity:        severity,
 		summary:         summary,
@@ -267,7 +268,7 @@ func NoteAndReportFrom(nw *notewriter.NoteWriter, clusterID, summary string) []A
 }
 
 // ServiceLog creates a basic service log action
-func ServiceLog(severity, summary, description string) Action {
+func ServiceLog(severity servicelogsv1.Severity, summary, description string) Action {
 	return NewServiceLogAction(severity, summary).
 		WithDescription(description).
 		Build()

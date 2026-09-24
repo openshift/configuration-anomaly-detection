@@ -29,7 +29,7 @@ type LimitedSupportReason struct {
 
 // ServiceLog is the internal representation of a service log
 type ServiceLog struct {
-	Severity     string
+	Severity     servicelogsv1.Severity
 	ServiceName  string
 	Summary      string
 	Description  string
@@ -264,7 +264,7 @@ func (c *SdkClient) PostServiceLog(cluster *cmv1.Cluster, sl *ServiceLog) error 
 	}
 
 	builder := &servicelogsv1.LogEntryBuilder{}
-	builder.Severity(servicelogsv1.Severity(sl.Severity))
+	builder.Severity(sl.Severity)
 	builder.ServiceName(sl.ServiceName)
 	builder.Summary(sl.Summary)
 	builder.Description(sl.Description)
@@ -485,7 +485,7 @@ func (e UserBannedError) Error() string {
 
 func NewOCMBannedUserServiceLog() ServiceLog {
 	return ServiceLog{
-		Severity:     "Critical",
+		Severity:     servicelogsv1.SeverityCritical,
 		Summary:      "Action required: Arrange new cluster owner",
 		Description:  "Your cluster requires you to take action because it is no longer owned by a user with an enabled Red Hat account. This will impact the cluster's ability to upgrade to future versions. Please raise a support case with Red Hat to nominate a new owner for the cluster in https://console.redhat.com/openshift/.",
 		InternalOnly: false,

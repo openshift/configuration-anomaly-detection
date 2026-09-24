@@ -1,6 +1,7 @@
 package executor
 
 import (
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
@@ -26,7 +27,7 @@ func (b *ResultWithActionsBuilder) AddAction(action Action) *ResultWithActionsBu
 
 // AddServiceLog adds a service log action with a builder function
 func (b *ResultWithActionsBuilder) AddServiceLog(
-	severity, summary string,
+	severity servicelogsv1.Severity, summary string,
 	configure func(*ServiceLogActionBuilder),
 ) *ResultWithActionsBuilder {
 	builder := NewServiceLogAction(severity, summary)

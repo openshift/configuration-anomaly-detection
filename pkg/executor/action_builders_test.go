@@ -3,6 +3,7 @@ package executor
 import (
 	"testing"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -39,4 +40,24 @@ func Test_BackplaneReportActionBuilder_Type(t *testing.T) {
 
 	backplaneAction := action.(*BackplaneReportAction)
 	assert.Equal(t, string(ActionTypeBackplaneReport), backplaneAction.Type())
+}
+
+func Test_ServiceLogAction_Validate_RequiredFields(t *testing.T) {
+	action := NewServiceLogAction("", "").Build()
+	err := action.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Summary is required")
+
+	action = NewServiceLogAction(servicelogsv1.SeverityCritical, "").Build()
+	err = action.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Summary is required")
+
+	action = NewServiceLogAction("", "some summary").Build()
+	err = action.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Severity is required")
+
+	action = NewServiceLogAction(servicelogsv1.SeverityCritical, "valid summary").Build()
+	assert.NoError(t, action.Validate())
 }
