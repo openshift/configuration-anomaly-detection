@@ -17,6 +17,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	machinev1beta1 "github.com/openshift/api/machine/v1beta1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +26,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
+
+func TestScpServiceLog(t *testing.T) {
+	if scpSL.Severity != servicelogsv1.SeverityImportant {
+		t.Errorf("expected severity %q, got %q", servicelogsv1.SeverityImportant, scpSL.Severity)
+	}
+	if scpSL.ServiceName != "SREManualAction" {
+		t.Errorf("expected service name SREManualAction, got %q", scpSL.ServiceName)
+	}
+	if scpSL.Summary == "" {
+		t.Error("expected non-empty summary")
+	}
+	if scpSL.Description == "" {
+		t.Error("expected non-empty description")
+	}
+}
 
 func TestInvestigation_getMachinesFromFailingMHC(t *testing.T) {
 	// Test objects

@@ -1,9 +1,13 @@
 package clustermonitoringerrorbudgetburn
 
 import (
+	"strings"
 	"testing"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
+	"gotest.tools/v3/assert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -49,6 +53,49 @@ func TestSymptomMatchesPrometheus(t *testing.T) {
 	if !isUWMPrometheusBroken(&monitoringCo) {
 		t.Fatal("expected symptoms to match")
 	}
+}
+
+func TestNewUwmServiceLogs(t *testing.T) {
+	docLink := "https://docs.example.com"
+
+	tests := []struct {
+		name     string
+		buildSL  func(string) *ocm.ServiceLog
+		wantDesc string
+	}{
+		{
+			name:     "ConfigMap misconfigured",
+			buildSL:  newUwmConfigMapMisconfiguredSL,
+			wantDesc: "please review the user-workload-monitoring-config ConfigMap",
+		},
+		{
+			name:     "AlertManager misconfigured",
+			buildSL:  newUwmAMMisconfiguredSL,
+			wantDesc: "please review the Alert Manager configuration",
+		},
+		{
+			name:     "Generic misconfigured",
+			buildSL:  newUwmGenericMisconfiguredSL,
+			wantDesc: "please review the cluster operator status",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sl := tt.buildSL(docLink)
+			assert.Equal(t, servicelogsv1.SeverityImportant, sl.Severity)
+			assert.Equal(t, "SREManualAction", sl.ServiceName)
+			assert.Equal(t, "Action required: review user-workload-monitoring configuration", sl.Summary)
+			assert.Assert(t, !sl.InternalOnly)
+			assert.Assert(t, strings.Contains(sl.Description, tt.wantDesc))
+			assert.Assert(t, strings.Contains(sl.Description, docLink))
+		})
+	}
+}
+
+func TestNewUwmServiceLogs_DefaultDocLink(t *testing.T) {
+	sl := newUwmConfigMapMisconfiguredSL("")
+	assert.Assert(t, strings.Contains(sl.Description, "docs."))
 }
 
 func TestSymptomNoMatch(t *testing.T) {
