@@ -33,6 +33,11 @@ func (n *NoteWriter) String() string {
 	return n.sb.String()
 }
 
+// AppendText adds already-formatted note content without adding a status prefix.
+func (n *NoteWriter) AppendText(content string) {
+	n.sb.WriteString(content)
+}
+
 func (n *NoteWriter) writeWithLog(format string, a ...any) {
 	if n.logger != nil {
 		n.logger.Infof(format, a...)

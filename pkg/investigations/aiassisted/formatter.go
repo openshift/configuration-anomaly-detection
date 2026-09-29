@@ -8,9 +8,7 @@ import (
 // FormatPagerDutyNote converts CoraInvestigationResult into a well-formatted
 // PagerDuty note. PD notes are plain text (no markdown rendering), so this
 // uses emoji, caps, and indentation for structure instead of markdown syntax.
-// reportClusterID is the authoritative cluster external ID used in the osdctl
-// footer command — it must match the ID used for the backplane report.
-func FormatPagerDutyNote(result *CoraInvestigationResult, reportClusterID string) string {
+func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 	var sb strings.Builder
 
 	// Header
@@ -32,10 +30,6 @@ func FormatPagerDutyNote(result *CoraInvestigationResult, reportClusterID string
 	} else {
 		sb.WriteString("✅ Cora: no further escalation needed\n")
 	}
-
-	// Footer with cluster report access
-	sb.WriteString("\n────────────────────────────────\n")
-	fmt.Fprintf(&sb, "Full details: osdctl cluster reports list --cluster-id %s\n", reportClusterID)
 
 	return sb.String()
 }

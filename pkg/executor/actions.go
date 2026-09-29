@@ -311,7 +311,7 @@ func (a *BackplaneReportAction) GenerateStringForNoteWriter() string {
 	if a.createdReport == nil {
 		return "Backplane report created (report details not available)"
 	}
-	return fmt.Sprintf("CAD created a cluster report, access it with the following command:\n"+
+	return fmt.Sprintf("View the full cluster report:\n"+
 		"osdctl cluster reports get --cluster-id %s --report-id %s", a.createdReport.ClusterID, a.createdReport.ReportID)
 }
 
