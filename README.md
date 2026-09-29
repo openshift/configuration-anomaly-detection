@@ -101,24 +101,57 @@ To add a new alert investigation:
 
 New investigations and their remediation steps should be deployed in advancing stages through a progressive deployment strategy.
 
-1. **Informing Stage (Read-only):**
+1. **Informing Stage (Read-only, staging):**
+   
     The investigation is merely informative through PagerDuty at this stage; remediation _**does not involve any write operations**_. Notes are collected throughout the investigation, and upon the investigation's conclusion are posted to PagerDuty.
 
     **Aim:** Validating the investigation's accuracy and usefulness **without performing any write actions**.
 
     **Validation Criteria:**
-    * The investigation successfully carries out each step on it's respective incident type, on both staging and production environments.
+    * The investigation successfully carries out each step on it's respective incident type
     * It provides useful information (equivalent to a manual investigation) to SREs through PagerDuty.
     * The investigation should be accompanied by unit tests and/or step-by-step manual tests in the investigation's testing README, including:
         * A clear step-by-step process to manually test the investigation (e.g. cluster setup, other expected conditions).
 
-2. **Actioning Stage (Read/Write):**
-    The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable clusters.
+2. **Actioning Stage (Read/Write, staging):**
+
+    The investigation's remediation capabilities, including **read and write** operations, are performed on all applicable **staging** clusters.
 
     **Validation Criteria:**
     * The investigation is verified to conduct remediations on staging as expected.
     * The investigation should be locally tested in staging against a live alert.
     * E2E testing is desired for actioning investigations; the tests should cover the execution of remediative steps as well as verification of their effectiveness.
+   
+3. **Production graduation**
+
+   The investigation is performed in production, against all applicable clusters.
+
+   **Validation Criteria**
+   * The investigation has been tested in staging (including **write** operations)
+   * An appropriate **soaking period** (e.g. two weeks) has passed during which no side effect (e.g. unexpected Service Log/Limited support being submitted) has been observed
+
+Since staging and production use different configurations, production rollouts can be combined with previous steps, i.e. an investigation can be promoted to production in its **informing-only** phase first, then write operations can be promoted after soaking.
+
+Additionally, to further control the rollout, these steps can be combined with:
+  * **sample rating** (e.g. run the investigation on 20% of the associated incoming alerts):
+    ```YAML
+    - name: clustermonitoringerrorbudgetburn
+      when:
+        operator: sample
+        values: ["0.20"]
+    ```
+  * **filtering** (e.g. only perform the investigation on Red Hat-owned clusters, ROSA clusters, etc.):
+    ```YAML
+    - name: clustermonitoringerrorbudgetburn
+      when:
+        field: OwnerEmail
+        operator: matches
+        values: [".*@redhat\\.com$"]
+    ```
+  * a combination of both
+
+Refer to the [example configuration](https://github.com/openshift/configuration-anomaly-detection/blob/main/docs/investigation-config.example.yaml) to know more about the configuration options.
+   
 
 ### Integrations
 
