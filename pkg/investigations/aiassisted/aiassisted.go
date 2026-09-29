@@ -235,23 +235,22 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Format to human-readable markdown for backplane report
 	formattedReport := FormatInvestigationReport(&investigationResult)
 
-	// Format a structured PD note with the investigation summary.
-	// Use the authoritative cluster external ID (not Cora's response) for the
-	// osdctl footer so the command always matches the backplane report.
-	reportClusterID := r.Cluster.ExternalID()
-	pdNote := FormatPagerDutyNote(&investigationResult, reportClusterID)
+	// Add the structured result to the shared note writer. The Backplane report
+	// action appends its returned report ID before the PagerDuty note is sent.
+	pdNote := FormatPagerDutyNote(&investigationResult)
+	notes.AppendText(pdNote)
 
 	// Create backplane report action with formatted output
 	backplaneReportAction := &executor.BackplaneReportAction{
-		ClusterID: reportClusterID,
+		ClusterID: r.Cluster.ExternalID(),
 		Summary:   fmt.Sprintf("CAD Investigation: AI-Assisted Analysis for %s", alertName),
 		Data:      formattedReport,
 	}
 
 	// Return actions for executor to handle
 	result.Actions = []executor.Action{
-		backplaneReportAction, // Create cluster report first
-		executor.Note(pdNote), // Post structured investigation summary to PagerDuty
+		backplaneReportAction,    // Create cluster report first
+		executor.NoteFrom(notes), // Include the report ID appended by the report action
 	}
 	return result, nil
 }

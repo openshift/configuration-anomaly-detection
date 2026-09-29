@@ -298,6 +298,7 @@ func (a *BackplaneReportAction) Execute(ctx context.Context, execCtx *ExecutionC
 
 	// Append the report string to notes if notewriter is available
 	if execCtx.Notes != nil {
+		execCtx.Notes.AppendText("===========================\n")
 		execCtx.Notes.AppendAutomation("%s", a.GenerateStringForNoteWriter())
 	}
 
@@ -311,7 +312,7 @@ func (a *BackplaneReportAction) GenerateStringForNoteWriter() string {
 	if a.createdReport == nil {
 		return "Backplane report created (report details not available)"
 	}
-	return fmt.Sprintf("CAD created a cluster report, access it with the following command:\n"+
+	return fmt.Sprintf("View the full cluster report:\n"+
 		"osdctl cluster reports get --cluster-id %s --report-id %s", a.createdReport.ClusterID, a.createdReport.ReportID)
 }
 

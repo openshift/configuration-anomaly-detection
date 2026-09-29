@@ -176,14 +176,13 @@ var _ = Describe("aiassisted", func() {
 					RemediationSteps: []RemediationStep{},
 				}
 
-				output := FormatPagerDutyNote(result, "test-cluster-abc")
+				output := FormatPagerDutyNote(result)
 
-				Expect(output).To(ContainSubstring("🤖 AI-Assisted Investigation"), "should contain header")
 				Expect(output).To(ContainSubstring("Alert: ClusterOperatorDegraded CRITICAL (1)"), "should contain alert name")
 				Expect(output).To(ContainSubstring("Confidence: HIGH"), "should contain uppercase confidence")
 				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"), "should contain summary text")
 				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should contain escalation recommendation")
-				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id test-cluster-abc"), "should contain osdctl footer")
+				Expect(output).ToNot(ContainSubstring("--report-id report-id"), "report IDs are appended after report creation")
 
 				Expect(output).ToNot(ContainSubstring("REASONING:"), "simplified note should not contain reasoning section")
 				Expect(output).ToNot(ContainSubstring("ACTION STEPS:"), "simplified note should not contain action steps section")
@@ -201,7 +200,7 @@ var _ = Describe("aiassisted", func() {
 					NeedsEscalation:  false,
 				}
 
-				output := FormatPagerDutyNote(result, testClusterID)
+				output := FormatPagerDutyNote(result)
 
 				Expect(output).To(ContainSubstring("✅ Cora: no further escalation needed"), "should show Cora's no-escalation message")
 				Expect(output).ToNot(ContainSubstring("⚠️"), "should not contain escalation warning emoji")
@@ -219,14 +218,14 @@ var _ = Describe("aiassisted", func() {
 					NeedsEscalation:  true,
 				}
 
-				output := FormatPagerDutyNote(result, testClusterID)
+				output := FormatPagerDutyNote(result)
 
 				Expect(output).To(ContainSubstring("⚠️ Cora recommends escalation"), "should show Cora's escalation recommendation")
 			})
 		})
 
-		Context("when Cora cluster ID differs from report cluster ID", func() {
-			It("should use the report cluster ID in the footer", func() {
+		Context("when Cora returns a cluster ID", func() {
+			It("should not include a report footer before the report is created", func() {
 				result := &CoraInvestigationResult{
 					ClusterID:        "cora-returned-id",
 					AlertName:        testAlertName,
@@ -236,10 +235,10 @@ var _ = Describe("aiassisted", func() {
 					NeedsEscalation:  false,
 				}
 
-				output := FormatPagerDutyNote(result, "authoritative-external-id")
+				output := FormatPagerDutyNote(result)
 
-				Expect(output).To(ContainSubstring("Full details: osdctl cluster reports list --cluster-id authoritative-external-id"), "footer should use report cluster ID")
-				Expect(output).ToNot(ContainSubstring("cora-returned-id"), "footer should not contain Cora's internal cluster ID")
+				Expect(output).ToNot(ContainSubstring("--report-id"), "report command is appended after report creation")
+				Expect(output).ToNot(ContainSubstring("cora-returned-id"), "note should not contain Cora's internal cluster ID")
 			})
 		})
 	})
