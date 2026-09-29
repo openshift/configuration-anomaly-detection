@@ -298,6 +298,7 @@ func (a *BackplaneReportAction) Execute(ctx context.Context, execCtx *ExecutionC
 
 	// Append the report string to notes if notewriter is available
 	if execCtx.Notes != nil {
+		execCtx.Notes.AppendText("===========================\n")
 		execCtx.Notes.AppendAutomation("%s", a.GenerateStringForNoteWriter())
 	}
 

@@ -11,10 +11,6 @@ import (
 func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 	var sb strings.Builder
 
-	// Header
-	sb.WriteString("🤖 AI-Assisted Investigation\n")
-	sb.WriteString("════════════════════════════════\n\n")
-
 	// Alert & Confidence
 	fmt.Fprintf(&sb, "Alert: %s\n", result.AlertName)
 	fmt.Fprintf(&sb, "Confidence: %s\n\n", strings.ToUpper(result.Confidence))
@@ -30,8 +26,6 @@ func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 	} else {
 		sb.WriteString("✅ Cora: no further escalation needed\n")
 	}
-
-	sb.WriteString("\n════════════════════════════════\n")
 
 	return sb.String()
 }
