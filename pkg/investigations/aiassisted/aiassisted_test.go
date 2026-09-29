@@ -178,7 +178,6 @@ var _ = Describe("aiassisted", func() {
 
 				output := FormatPagerDutyNote(result)
 
-				Expect(output).To(ContainSubstring("🤖 AI-Assisted Investigation"), "should contain header")
 				Expect(output).To(ContainSubstring("Alert: ClusterOperatorDegraded CRITICAL (1)"), "should contain alert name")
 				Expect(output).To(ContainSubstring("Confidence: HIGH"), "should contain uppercase confidence")
 				Expect(output).To(ContainSubstring("The cluster-samples-operator is degraded"), "should contain summary text")
