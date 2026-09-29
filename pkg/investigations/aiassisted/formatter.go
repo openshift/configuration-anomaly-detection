@@ -31,6 +31,8 @@ func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 		sb.WriteString("✅ Cora: no further escalation needed\n")
 	}
 
+	sb.WriteString("\n════════════════════════════════\n")
+
 	return sb.String()
 }
 
