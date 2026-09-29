@@ -249,7 +249,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Return actions for executor to handle
 	result.Actions = []executor.Action{
-		backplaneReportAction, // Create cluster report first
+		backplaneReportAction,    // Create cluster report first
 		executor.NoteFrom(notes), // Include the report ID appended by the report action
 	}
 	return result, nil
