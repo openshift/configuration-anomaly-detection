@@ -91,7 +91,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}()
 
-	mustGatherCommandFlags := []string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir)}
+	mustGatherCommandFlags := []string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir), "--since=12h"}
 
 	if r.IsHCP {
 		productName = productNameHCP
