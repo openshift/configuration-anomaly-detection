@@ -130,12 +130,6 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 	backplaneProxy := os.Getenv("BACKPLANE_PROXY")
 	awsProxy := os.Getenv("AWS_PROXY")
 
-	// Set managedcloud environment configuration for this session
-	managedcloud.SetBackplaneURL(backplaneURL)
-	managedcloud.SetBackplaneInitialARN(backplaneInitialARN)
-	managedcloud.SetBackplaneProxy(backplaneProxy)
-	managedcloud.SetAWSProxy(awsProxy)
-
 	// Load OCM environment variables
 	ocmClientID := os.Getenv("CAD_OCM_CLIENT_ID")
 	if ocmClientID == "" {
@@ -179,8 +173,13 @@ func initializeDependencies(configPath string) (*Dependencies, error) {
 	}
 	bpClient, err := backplane.NewClient(config)
 	if err != nil {
-		return nil, fmt.Errorf("could not construct backplane-client")
+		return nil, fmt.Errorf("could not construct backplane-client: %w", err)
 	}
+
+	// Set managedcloud environment configuration for this session
+	managedcloud.SetBackplaneClient(bpClient)
+	managedcloud.SetBackplaneInitialARN(backplaneInitialARN)
+	managedcloud.SetAWSProxy(awsProxy)
 
 	return &Dependencies{
 		OCMClient:           ocmClient,

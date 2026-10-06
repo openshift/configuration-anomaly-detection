@@ -4,12 +4,14 @@ package backplane
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	bpapi "github.com/openshift/backplane-api/pkg/client"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"k8s.io/client-go/rest"
@@ -21,6 +23,11 @@ type Client interface {
 	CreateReport(ctx context.Context, clusterId string, summary string, reportData string) (*bpapi.Report, error)
 	// GetRestConfig creates a remediation and returns a rest.Config for connecting to the cluster's API server through the backplane proxy
 	GetRestConfig(ctx context.Context, clusterId string, remediationName string, isManagementCluster bool) (*RestConfig, error)
+	// GetAWSCredentials retrieves AWS credentials for a non-isolated cluster from the backplane API
+	GetAWSCredentials(ctx context.Context, clusterId string, region string) (*AWSCredentials, error)
+	// GetIsolatedAWSCredentials retrieves AWS credentials for an isolated cluster (HCP, newer STS)
+	// using the client-side JWT assume-role chain flow
+	GetIsolatedAWSCredentials(ctx context.Context, cluster *cmv1.Cluster, initialArn string, awsProxyURL string) (*AWSCredentials, error)
 }
 
 type Cleaner interface {
@@ -197,6 +204,48 @@ func (c *ClientImpl) GetRestConfig(ctx context.Context, clusterId string, remedi
 	}
 
 	return restConfig, nil
+}
+
+// AWSCredentials represents AWS credentials returned from the backplane API
+type AWSCredentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+	Expiration      string
+	Region          string
+}
+
+// GetAWSCredentials retrieves AWS credentials for a cluster from the backplane API
+func (c *ClientImpl) GetAWSCredentials(ctx context.Context, clusterId string, region string) (*AWSCredentials, error) {
+	if clusterId == "" {
+		return nil, fmt.Errorf("clusterId is required")
+	}
+
+	resp, err := c.bpClient.GetCloudCredentialsWithResponse(ctx, clusterId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cloud credentials: %w", err)
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code %d when getting cloud credentials: %s", resp.StatusCode(), resp.Body)
+	}
+
+	if resp.JSON200 == nil || resp.JSON200.Credentials == nil {
+		return nil, fmt.Errorf("empty credentials response from backplane")
+	}
+
+	// The credentials field is a JSON string that needs to be unmarshaled
+	var creds AWSCredentials
+	if err := json.Unmarshal([]byte(*resp.JSON200.Credentials), &creds); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal AWS credentials: %w", err)
+	}
+
+	// Set the region if it wasn't included in the response
+	if creds.Region == "" {
+		creds.Region = region
+	}
+
+	return &creds, nil
 }
 
 func httpDoerWithProxy(proxyURL string) (*http.Client, error) {
