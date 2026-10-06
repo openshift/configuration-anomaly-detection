@@ -46,9 +46,16 @@ type cloudTrailEvidenceReport struct {
 
 func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb investigation.ResourceBuilder, resources *investigation.Resources, incidentID, invocationID string) *CloudTrailReference {
 	ref := &CloudTrailReference{SchemaVersion: 1, Status: cloudTrailStatusUnavailable, StorageStatus: cloudTrailStatusUnavailable, InvocationID: invocationID, ReportClusterID: resources.Cluster.ExternalID()}
+	var evidenceErr error
+	defer func() {
+		if ref.StorageStatus != "available" {
+			logging.Warnf("CloudTrail evidence unavailable: invocation_id=%s reason=%s error=%v", invocationID, ref.ErrorCategory, evidenceErr)
+		}
+	}()
 	awsResources, buildErr := rb.WithAwsClient().Build()
 	if buildErr != nil || awsResources == nil || awsResources.AwsClient == nil {
 		ref.ErrorCategory = "aws_client_unavailable"
+		evidenceErr = buildErr
 		return ref
 	}
 	collector, ok := awsResources.AwsClient.(interface {
@@ -84,6 +91,7 @@ func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb inve
 	reportBytes, err := json.Marshal(report)
 	if err != nil {
 		ref.ErrorCategory = "report_marshal_failed"
+		evidenceErr = err
 		return ref
 	}
 	// The collector's event budget does not include the report envelope. Trim
@@ -100,6 +108,7 @@ func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb inve
 		reportBytes, err = json.Marshal(report)
 		if err != nil {
 			ref.ErrorCategory = "report_marshal_failed"
+			evidenceErr = err
 			return ref
 		}
 	}
@@ -120,6 +129,7 @@ func (c *Investigation) collectAndPublishCloudTrail(ctx context.Context, rb inve
 	if err != nil || backplaneReport == nil || backplaneReport.ReportId == "" {
 		if err != nil {
 			ref.ErrorCategory = "report_upload_failed"
+			evidenceErr = err
 		} else {
 			ref.ErrorCategory = "report_upload_missing_id"
 		}
