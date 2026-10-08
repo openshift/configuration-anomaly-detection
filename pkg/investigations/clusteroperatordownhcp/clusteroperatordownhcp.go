@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -197,11 +198,11 @@ func stopAttribution(ctx context.Context, awsCli aws.Client, instanceID string) 
 }
 
 // newWorkerNodesStoppedSL mirrors the managed-notifications template
-// hcp/WorkerNodes_Stopped_error.json. Severity uses the new HCC name
-// "Important" (formerly "Major" in the template).
+// hcp/WorkerNodes_Stopped_error.json, whose severity is the legacy "Major" —
+// SeverityImportant is the same level under the current HCC names.
 func newWorkerNodesStoppedSL() *ocm.ServiceLog {
 	return &ocm.ServiceLog{
-		Severity:     "Important",
+		Severity:     servicelogsv1.SeverityImportant,
 		ServiceName:  "SREManualAction",
 		Summary:      "Worker node(s) stopped, action required",
 		Description:  "Your cluster's worker nodes are stopped due to manual action in AWS which is not supported. Please remediate the issue by starting the instances again. If you would like to change the number of worker instances, please refer to the documentation https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/cluster_administration/managing-compute-nodes-using-machine-pools#rosa-scaling-worker-nodes_rosa-managing-worker-nodes.",
