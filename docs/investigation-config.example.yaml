@@ -147,6 +147,10 @@ alerts:
       - precheck
       - ccam
       - cpd
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Etcd Database Quota Low Space
   # Only run on non-HCP (classic) clusters.
@@ -159,6 +163,10 @@ alerts:
     investigations:
       - precheck
       - etcddatabasequotalowspace
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Cluster Monitoring Error Budget Burn
   # Example: sample redhat.com emails at 10%, always run for others.
@@ -183,6 +191,10 @@ alerts:
       - precheck
       - ccam
       - insightsoperatordown
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Upgrade Config Sync Failure Over 4hr
   - alert_title: "UpgradeConfigSyncFailureOver4HrSRE"
@@ -191,6 +203,10 @@ alerts:
       - precheck
       - ccam
       - upgradeconfigsyncfailureover4hr
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Machine Health Check Unterminated Short Circuit SRE
   - alert_title: "MachineHealthCheckUnterminatedShortCircuitSRE"
@@ -199,6 +215,10 @@ alerts:
       - precheck
       - ccam
       - machinehealthcheckunterminatedshortcircuitsre
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Restart Control Plane
   - alert_title: "RestartControlPlane"
@@ -206,6 +226,10 @@ alerts:
     investigations:
       - precheck
       - restartcontrolplane
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Cannot Retrieve Updates SRE
   - alert_title: "CannotRetrieveUpdatesSRE"
@@ -214,6 +238,10 @@ alerts:
       - precheck
       - ccam
       - cannotretrieveupdatessre
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Mustgather (standalone, with AWS-only alert-level filter)
   - alert_title: "MustGather"
@@ -233,6 +261,10 @@ alerts:
       - precheck
       - ccam
       - ocmagentresponsefailure
+      - name: mustgather
+        when:
+          operator: sample
+          values: ["0.10"]
 
   # Experimental investigation example
   # Only matched when CAD_EXPERIMENTAL_ENABLED=true.

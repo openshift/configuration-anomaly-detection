@@ -35,6 +35,10 @@ type FilterContext struct {
 	// ClusterState is the current cluster state (e.g. "ready", "uninstalling").
 	ClusterState string
 
+	// InfrastructureCluster indicates whether the cluster is a managing cluster
+	// (management, service, or hive cluster) rather than a customer workload cluster.
+	InfrastructureCluster bool
+
 	// --- PagerDuty fields ---
 
 	// AlertName is the name of the alert as matched by investigation.AlertTitle().
