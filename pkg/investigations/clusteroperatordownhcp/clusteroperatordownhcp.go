@@ -32,9 +32,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result := investigation.InvestigationResult{}
 	ctx := context.Background()
 
-	// WithAwsClient authenticates to the HCP's own (customer) AWS account, which
-	// is where the data plane EC2 instances live — not the management cluster's.
-	r, err := rb.WithCluster().WithManagementK8sClient().WithAwsClient().WithNotes().Build()
+	// ClusterOperatorDown also fires on classic clusters, so the AWS client is not
+	// built here: it authenticates into the customer's AWS account and is only
+	// needed once we know this is HCP and a node is actually stopped.
+	r, err := rb.WithCluster().WithManagementK8sClient().WithNotes().Build()
 	if err != nil {
 		return result, err
 	}
@@ -69,9 +70,22 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// On HCP, SRE never stops data plane instances, so a stopped instance is a
-	// customer action by definition. CloudTrail attribution is recorded in the
-	// PD note for SRE visibility, but does not change the action taken.
+	// Only now is the customer AWS account needed, to attribute the stop via
+	// CloudTrail. Building it here keeps the non-HCP and healthy-data-plane paths
+	// from paying for a client they never use.
+	r, err = rb.WithAwsClient().Build()
+	if err != nil {
+		return result, err
+	}
+
+	// Nothing in the HCP data plane lifecycle leaves an instance stopped: CAPA
+	// terminates on scale-down and node replacement — it calls TerminateInstance
+	// even on an already-stopped instance — and reports "stopped" as an
+	// Error-severity condition rather than an expected lifecycle state. Neither
+	// autoscaling nor instance replacement can therefore produce this state, so a
+	// stopped instance is an out-of-band action by the customer. That is what
+	// makes the service log below safe to send without SRE review. CloudTrail
+	// attribution is recorded in the note for visibility but does not gate it.
 	attribution := stopAttribution(ctx, r.AwsClient, instanceID)
 	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", machine, instanceID, attribution)
 
@@ -168,9 +182,12 @@ func stopAttribution(ctx context.Context, awsCli aws.Client, instanceID string) 
 	}
 
 	stopEvent := events[0]
-	stoppedBy := "unknown"
-	if stopEvent.Username != nil {
-		stoppedBy = *stopEvent.Username
+	// The CloudTrail Username is PII. The access key ID identifies the same
+	// principal and lets an SRE trace it back through CloudTrail when needed,
+	// so it is recorded instead of the username.
+	stoppedBy := "an unknown principal"
+	if stopEvent.AccessKeyId != nil {
+		stoppedBy = fmt.Sprintf("access key %s", *stopEvent.AccessKeyId)
 	}
 	stoppedAt := "unknown time"
 	if stopEvent.EventTime != nil {

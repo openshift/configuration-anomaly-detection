@@ -51,6 +51,7 @@
 #   - chgm
 #   - cpd
 #   - clustermonitoringerrorbudgetburn
+#   - clusteroperatordownhcp
 #   - etcddatabasequotalowspace
 #   - insightsoperatordown
 #   - upgradeconfigsyncfailureover4hr
