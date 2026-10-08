@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -74,9 +75,16 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Only now is the customer AWS account needed, to attribute the stop via
 	// CloudTrail. Building it here keeps the non-HCP and healthy-data-plane paths
 	// from paying for a client they never use.
-	r, err = rb.WithAwsClient().Build()
+	//
+	// The client is best-effort for the same reason the CloudTrail lookup below
+	// is: the stopped instance is already proven from the management cluster, so
+	// an unreachable customer account must not cost us the service log.
+	attribution := "CloudTrail attribution unavailable: could not create AWS client."
+	awsResources, err := rb.WithAwsClient().Build()
 	if err != nil {
-		return result, err
+		logging.Warnf("could not create AWS client for CloudTrail attribution: %v", err)
+	} else {
+		attribution = stopAttribution(ctx, awsResources.AwsClient, instanceID)
 	}
 
 	// Nothing in the HCP data plane lifecycle leaves an instance stopped: CAPA
@@ -87,7 +95,6 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// stopped instance is an out-of-band action by the customer. That is what
 	// makes the service log below safe to send without SRE review. CloudTrail
 	// attribution is recorded in the note for visibility but does not gate it.
-	attribution := stopAttribution(ctx, r.AwsClient, instanceID)
 	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", machine, instanceID, attribution)
 
 	sl := newWorkerNodesStoppedSL()
