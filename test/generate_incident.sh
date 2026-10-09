@@ -8,6 +8,7 @@ declare -A alert_mapping=(
     ["ClusterProvisioningDelay"]="ClusterProvisioningDelay -"
     ["ClusterMonitoringErrorBudgetBurnSRE"]="ClusterMonitoringErrorBudgetBurnSRE Critical (1)"
     ["InsightsOperatorDown"]="InsightsOperatorDown"
+    ["ClusterOperatorDown"]="ClusterOperatorDown"
     ["MachineHealthCheckUnterminatedShortCircuitSRE"]="MachineHealthCheckUnterminatedShortCircuitSRE CRITICAL (1)"
     ["CreateMustGather"]="CreateMustGather"
     ["CannotRetrieveUpdatesSRE"]="CannotRetrieveUpdatesSRE"
