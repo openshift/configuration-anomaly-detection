@@ -153,6 +153,37 @@ func TestCreateReport_DataEncoding(t *testing.T) {
 	assert.Equal(t, "VGVzdCBSZXBvcnQgRGF0YSB3aXRoIHNwZWNpYWwgY2hhcnM6ICFAIyQlXiYqKCk=", expectedEncoded)
 }
 
+func TestClientImpl_GetAWSCredentials(t *testing.T) {
+	tests := []struct {
+		name        string
+		clusterId   string
+		region      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "Missing clusterId",
+			clusterId:   "",
+			region:      "us-east-1",
+			expectError: true,
+			errorMsg:    "clusterId is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a minimal client for testing GetAWSCredentials validation
+			client := &ClientImpl{}
+
+			creds, err := client.GetAWSCredentials(context.Background(), tt.clusterId, tt.region)
+
+			assert.Error(t, err)
+			assert.Nil(t, creds)
+			assert.Contains(t, err.Error(), tt.errorMsg)
+		})
+	}
+}
+
 func TestHttpDoerWithProxy(t *testing.T) {
 	tests := []struct {
 		name                 string
