@@ -3,7 +3,9 @@ package clusteroperatordownhcp
 import (
 	"errors"
 	"testing"
+	"time"
 
+	cloudtrailv2types "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/stretchr/testify/assert"
@@ -208,8 +210,10 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	awsCli := awsmock.NewMockClient(mockCtrl)
 	stoppedInstance := ec2v2types.Instance{InstanceId: &instanceID}
 	awsCli.EXPECT().GetInstanceByID(gomock.Any(), instanceID).Return(stoppedInstance, nil)
-	// Attribution is best-effort; returning no events still yields the remediation.
-	awsCli.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, nil)
+	accessKeyID := "AKIAEXAMPLE"
+	stoppedAt := time.Now().UTC()
+	awsCli.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).
+		Return([]cloudtrailv2types.Event{{AccessKeyId: &accessKeyID, EventTime: &stoppedAt}}, nil)
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
@@ -227,4 +231,42 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	assert.True(t, hasServiceLogAction(result.Actions), "stopped machine should send a service log")
 	assert.True(t, hasSilenceAction(result.Actions), "stopped machine should silence")
 	assert.False(t, hasEscalateAction(result.Actions), "stopped machine should not escalate")
+}
+
+// CloudTrail only looks back 2h, so an older stop returns no event. Without one
+// the stop is unattributed, and the incident goes to a human rather than
+// telling the customer to act on unconfirmed evidence.
+func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster, err := cmv1.NewCluster().ID("test-123").Build()
+	require.NoError(t, err)
+
+	hcpNamespace := "ocm-test-hcp-namespace"
+	instanceID := "i-0stopped456"
+	stopped := awsMachine(hcpNamespace, "worker-1", "stopped", instanceID)
+	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
+
+	awsCli := awsmock.NewMockClient(mockCtrl)
+	awsCli.EXPECT().GetInstanceByID(gomock.Any(), instanceID).
+		Return(ec2v2types.Instance{InstanceId: &instanceID}, nil)
+	awsCli.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			IsHCP:               true,
+			Cluster:             cluster,
+			HCPNamespace:        hcpNamespace,
+			ManagementK8sClient: fakeK8s,
+			AwsClient:           awsCli,
+			Notes:               notewriter.New("test", logging.RawLogger),
+		},
+	}
+
+	result, err := (&Investigation{}).Run(rb)
+	assert.NoError(t, err)
+	assert.True(t, hasEscalateAction(result.Actions), "unattributed stop should escalate")
+	assert.False(t, hasServiceLogAction(result.Actions), "no service log without CloudTrail attribution")
+	assert.False(t, hasSilenceAction(result.Actions), "must not silence without CloudTrail attribution")
 }

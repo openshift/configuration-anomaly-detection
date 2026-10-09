@@ -75,27 +75,35 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Only now is the customer AWS account needed, to attribute the stop via
 	// CloudTrail. Building it here keeps the non-HCP and healthy-data-plane paths
 	// from paying for a client they never use.
-	//
-	// The client is best-effort for the same reason the CloudTrail lookup below
-	// is: the stopped instance is already proven from the management cluster, so
-	// an unreachable customer account must not cost us the service log.
 	attribution := "CloudTrail attribution unavailable: could not create AWS client."
+	attributed := false
 	awsResources, err := rb.WithAwsClient().Build()
 	if err != nil {
 		logging.Warnf("could not create AWS client for CloudTrail attribution: %v", err)
 	} else {
-		attribution = stopAttribution(ctx, awsResources.AwsClient, instanceID)
+		attribution, attributed = stopAttribution(ctx, awsResources.AwsClient, instanceID)
+	}
+
+	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", awsMachineName, instanceID, attribution)
+
+	// CloudTrail only looks back 2h, so an older stop - or an unreachable
+	// customer account - leaves the stop unattributed. The customer is not told
+	// to act on evidence that could not be confirmed, so a human decides instead.
+	if !attributed {
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
+			executor.Escalate("Stopped worker instance could not be attributed via CloudTrail - manual investigation required"),
+		)
+		return result, nil
 	}
 
 	// Nothing in the HCP data plane lifecycle leaves an instance stopped: CAPA
 	// terminates on scale-down and node replacement — it calls TerminateInstance
 	// even on an already-stopped instance — and reports "stopped" as an
 	// Error-severity condition rather than an expected lifecycle state. Neither
-	// autoscaling nor instance replacement can therefore produce this state, so a
-	// stopped instance is an out-of-band action by the customer. That is what
-	// makes the service log below safe to send without SRE review.
-	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", awsMachineName, instanceID, attribution)
-
+	// autoscaling nor instance replacement can therefore produce this state, so
+	// with CloudTrail confirming the stop, the service log is safe to send
+	// without SRE review.
 	serviceLog := newWorkerNodesStoppedSL()
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
@@ -175,13 +183,16 @@ func instanceIDFromProviderID(providerID string) string {
 }
 
 // stopAttribution returns a human-readable "stopped by <access key> at <time>"
-// string from CloudTrail for the PD note. Attribution is best-effort: CloudTrail
-// only retains ~2h of lookup events, so an older stop yields a fallback message
-// rather than an error — we still act on the stopped state regardless.
-func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID string) string {
+// string from CloudTrail for the PD note, and whether attribution was actually
+// established. A false result means the stop could not be tied to a CloudTrail
+// event, which the caller treats as grounds to escalate rather than remediate.
+//
+// CloudTrail is only searched over the last 2h, so a stop older than that
+// returns no event even though one occurred.
+func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID string) (string, bool) {
 	instance, err := awsClient.GetInstanceByID(ctx, instanceID)
 	if err != nil {
-		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err)
+		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err), false
 	}
 
 	stopEvents, err := awsClient.PollInstanceStopEventsFor([]ec2v2types.Instance{instance}, 5)
@@ -189,10 +200,10 @@ func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID strin
 	// persistent CloudTrail problem (denied permissions, throttling) would
 	// otherwise read to an SRE as "CloudTrail was checked and had nothing".
 	if err != nil {
-		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err)
+		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err), false
 	}
 	if len(stopEvents) == 0 {
-		return "CloudTrail stop event not found (instance may have been stopped more than 2h ago)."
+		return "CloudTrail stop event not found (instance may have been stopped more than 2h ago).", false
 	}
 
 	stopEvent := stopEvents[0]
@@ -207,7 +218,7 @@ func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID strin
 	if stopEvent.EventTime != nil {
 		stoppedAt = stopEvent.EventTime.UTC().String()
 	}
-	return fmt.Sprintf("Stopped by %s at %s (per CloudTrail).", stoppedBy, stoppedAt)
+	return fmt.Sprintf("Stopped by %s at %s (per CloudTrail).", stoppedBy, stoppedAt), true
 }
 
 // newWorkerNodesStoppedSL mirrors the managed-notifications template
