@@ -54,7 +54,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	machine, instanceID, err := firstStoppedAWSMachine(ctx, r.ManagementK8sClient, r.HCPNamespace)
+	awsMachineName, instanceID, err := firstStoppedAWSMachine(ctx, r.ManagementK8sClient, r.HCPNamespace)
 	if err != nil {
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("failed to list AWSMachines in %s: %w", r.HCPNamespace, err),
@@ -63,7 +63,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// No stopped data plane instance means the ClusterOperator is degraded for
 	// some other reason CAD can't remediate here.
-	if machine == "" {
+	if awsMachineName == "" {
 		r.Notes.AppendWarning("No stopped AWSMachine found in %s - the degraded operator is not caused by a stopped worker instance", r.HCPNamespace)
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
@@ -93,16 +93,15 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// Error-severity condition rather than an expected lifecycle state. Neither
 	// autoscaling nor instance replacement can therefore produce this state, so a
 	// stopped instance is an out-of-band action by the customer. That is what
-	// makes the service log below safe to send without SRE review. CloudTrail
-	// attribution is recorded in the note for visibility but does not gate it.
-	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", machine, instanceID, attribution)
+	// makes the service log below safe to send without SRE review.
+	r.Notes.AppendWarning("AWSMachine %q is stopped (instance %s). %s", awsMachineName, instanceID, attribution)
 
-	sl := newWorkerNodesStoppedSL()
+	serviceLog := newWorkerNodesStoppedSL()
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
-		executor.NewServiceLogAction(sl.Severity, sl.Summary).
-			WithDescription(sl.Description).
-			WithServiceName(sl.ServiceName).
+		executor.NewServiceLogAction(serviceLog.Severity, serviceLog.Summary).
+			WithDescription(serviceLog.Description).
+			WithServiceName(serviceLog.ServiceName).
 			Build(),
 		executor.Silence("Customer stopped worker instance on HCP - service log sent"),
 	)
@@ -110,36 +109,37 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 // firstStoppedAWSMachine returns the name and backing EC2 instance ID of the
-// first AWSMachine in the namespace whose instance is stopped. It returns an
-// empty name (with nil error) when none are stopped.
+// first AWSMachine in the namespace whose instance is stopped. The returned name
+// is empty, with a nil error, both when no machine is stopped and when every
+// stopped machine lacks a resolvable instance ID — without that ID the EC2
+// instance cannot be attributed, so such a machine is passed over.
 //
 // All AWSMachines in an HCP namespace are data plane nodes, so no role filtering
 // is applied — the first stopped one is enough to act on.
-func firstStoppedAWSMachine(ctx context.Context, mgmt client.Client, namespace string) (name string, instanceID string, err error) {
-	list := &unstructured.UnstructuredList{}
+func firstStoppedAWSMachine(ctx context.Context, managementClient client.Client, namespace string) (string, string, error) {
+	awsMachines := &unstructured.UnstructuredList{}
 	// v1beta2 is the only served version of the CAPA AWSMachine CRD; v1beta1
 	// exists in the schema but is served: false.
-	list.SetGroupVersionKind(schema.GroupVersionKind{
+	awsMachines.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "infrastructure.cluster.x-k8s.io",
 		Version: "v1beta2",
 		Kind:    "AWSMachineList",
 	})
 
-	if err := mgmt.List(ctx, list, client.InNamespace(namespace)); err != nil {
+	if err := managementClient.List(ctx, awsMachines, client.InNamespace(namespace)); err != nil {
 		return "", "", err
 	}
 
-	for i := range list.Items {
-		m := &list.Items[i]
-		state, _, _ := unstructured.NestedString(m.Object, "status", "instanceState")
-		if state != awsMachineStopped {
+	for _, awsMachine := range awsMachines.Items {
+		instanceState, _, _ := unstructured.NestedString(awsMachine.Object, "status", "instanceState")
+		if instanceState != awsMachineStopped {
 			continue
 		}
-		id := instanceIDForMachine(m)
-		if id == "" {
+		stoppedInstanceID := instanceIDForMachine(&awsMachine)
+		if stoppedInstanceID == "" {
 			continue
 		}
-		return m.GetName(), id, nil
+		return awsMachine.GetName(), stoppedInstanceID, nil
 	}
 	return "", "", nil
 }
@@ -151,11 +151,11 @@ func firstStoppedAWSMachine(ctx context.Context, mgmt client.Client, namespace s
 // spec.instanceID is the direct, canonical field on CAPA AWSMachines; providerID
 // is kept as a fallback because it is populated slightly later in the machine
 // lifecycle and is the more universally-present field across CAPI providers.
-func instanceIDForMachine(m *unstructured.Unstructured) string {
-	if id, _, _ := unstructured.NestedString(m.Object, "spec", "instanceID"); strings.HasPrefix(id, "i-") {
-		return id
+func instanceIDForMachine(awsMachine *unstructured.Unstructured) string {
+	if instanceID, _, _ := unstructured.NestedString(awsMachine.Object, "spec", "instanceID"); strings.HasPrefix(instanceID, "i-") {
+		return instanceID
 	}
-	providerID, _, _ := unstructured.NestedString(m.Object, "spec", "providerID")
+	providerID, _, _ := unstructured.NestedString(awsMachine.Object, "spec", "providerID")
 	return instanceIDFromProviderID(providerID)
 }
 
@@ -174,22 +174,28 @@ func instanceIDFromProviderID(providerID string) string {
 	return lastSegment
 }
 
-// stopAttribution returns a human-readable "stopped by <user> at <time>" string
-// from CloudTrail for the PD note. Attribution is best-effort: CloudTrail only
-// retains ~2h of lookup events, so an older stop yields a fallback message
+// stopAttribution returns a human-readable "stopped by <access key> at <time>"
+// string from CloudTrail for the PD note. Attribution is best-effort: CloudTrail
+// only retains ~2h of lookup events, so an older stop yields a fallback message
 // rather than an error — we still act on the stopped state regardless.
-func stopAttribution(ctx context.Context, awsCli aws.Client, instanceID string) string {
-	inst, err := awsCli.GetInstanceByID(ctx, instanceID)
+func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID string) string {
+	instance, err := awsClient.GetInstanceByID(ctx, instanceID)
 	if err != nil {
-		return fmt.Sprintf("CloudTrail attribution unavailable: %v", err)
+		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err)
 	}
 
-	events, err := awsCli.PollInstanceStopEventsFor([]ec2v2types.Instance{inst}, 5)
-	if err != nil || len(events) == 0 {
+	stopEvents, err := awsClient.PollInstanceStopEventsFor([]ec2v2types.Instance{instance}, 5)
+	// A failed lookup is reported as such rather than as an absent event: a
+	// persistent CloudTrail problem (denied permissions, throttling) would
+	// otherwise read to an SRE as "CloudTrail was checked and had nothing".
+	if err != nil {
+		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err)
+	}
+	if len(stopEvents) == 0 {
 		return "CloudTrail stop event not found (instance may have been stopped more than 2h ago)."
 	}
 
-	stopEvent := events[0]
+	stopEvent := stopEvents[0]
 	// The CloudTrail Username is PII. The access key ID identifies the same
 	// principal and lets an SRE trace it back through CloudTrail when needed,
 	// so it is recorded instead of the username.

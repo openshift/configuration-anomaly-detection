@@ -47,20 +47,20 @@ func hasServiceLogAction(actions []types.Action) bool {
 // status.instanceState). instanceID may be empty to simulate a machine whose
 // instance ID is not yet populated.
 func awsMachine(namespace, name, instanceState, instanceID string) *unstructured.Unstructured {
-	m := &unstructured.Unstructured{}
-	m.SetGroupVersionKind(schema.GroupVersionKind{
+	machine := &unstructured.Unstructured{}
+	machine.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "infrastructure.cluster.x-k8s.io",
 		Version: "v1beta2",
 		Kind:    "AWSMachine",
 	})
-	m.SetNamespace(namespace)
-	m.SetName(name)
+	machine.SetNamespace(namespace)
+	machine.SetName(name)
 	if instanceID != "" {
-		_ = unstructured.SetNestedField(m.Object, instanceID, "spec", "instanceID")
-		_ = unstructured.SetNestedField(m.Object, "aws:///us-east-2a/"+instanceID, "spec", "providerID")
+		_ = unstructured.SetNestedField(machine.Object, instanceID, "spec", "instanceID")
+		_ = unstructured.SetNestedField(machine.Object, "aws:///us-east-2a/"+instanceID, "spec", "providerID")
 	}
-	_ = unstructured.SetNestedField(m.Object, instanceState, "status", "instanceState")
-	return m
+	_ = unstructured.SetNestedField(machine.Object, instanceState, "status", "instanceState")
+	return machine
 }
 
 func TestInvestigation_Name(t *testing.T) {
@@ -104,9 +104,9 @@ func TestInstanceIDFromProviderID(t *testing.T) {
 			want:       "",
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, instanceIDFromProviderID(tt.providerID))
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			assert.Equal(t, testCase.want, instanceIDFromProviderID(testCase.providerID))
 		})
 	}
 }
