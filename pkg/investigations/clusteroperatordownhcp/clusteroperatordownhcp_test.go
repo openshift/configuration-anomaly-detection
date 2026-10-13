@@ -23,6 +23,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// HCP_NAMESPACE stands in for the HCP namespace on the management cluster,
+// which is where the investigation lists AWSMachines.
+const HCP_NAMESPACE = "ocm-test-hcp-namespace"
+
 func hasActionType(actions []types.Action, actionType string) bool {
 	for _, action := range actions {
 		if action.Type() == actionType {
@@ -149,15 +153,14 @@ func TestInvestigation_Run_NoStoppedMachineEscalates(t *testing.T) {
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	hcpNamespace := "ocm-test-hcp-namespace"
-	running := awsMachine(hcpNamespace, "worker-1", "running", "i-0running")
+	running := awsMachine(HCP_NAMESPACE, "worker-1", "running", "i-0running")
 	fakeK8s := fake.NewClientBuilder().WithObjects(running).Build()
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
 			IsHCP:               true,
 			Cluster:             cluster,
-			HCPNamespace:        hcpNamespace,
+			HCPNamespace:        HCP_NAMESPACE,
 			ManagementK8sClient: fakeK8s,
 			Notes:               notewriter.New("test", logging.RawLogger),
 		},
@@ -180,7 +183,7 @@ func TestInvestigation_Run_EmptyMachineListEscalates(t *testing.T) {
 		Resources: &investigation.Resources{
 			IsHCP:               true,
 			Cluster:             cluster,
-			HCPNamespace:        "ocm-test-hcp-namespace",
+			HCPNamespace:        HCP_NAMESPACE,
 			ManagementK8sClient: fakeK8s,
 			Notes:               notewriter.New("test", logging.RawLogger),
 		},
@@ -202,9 +205,8 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	hcpNamespace := "ocm-test-hcp-namespace"
 	instanceID := "i-0stopped456"
-	stopped := awsMachine(hcpNamespace, "worker-1", "stopped", instanceID)
+	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
 	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
 
 	awsCli := awsmock.NewMockClient(mockCtrl)
@@ -219,7 +221,7 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 		Resources: &investigation.Resources{
 			IsHCP:               true,
 			Cluster:             cluster,
-			HCPNamespace:        hcpNamespace,
+			HCPNamespace:        HCP_NAMESPACE,
 			ManagementK8sClient: fakeK8s,
 			AwsClient:           awsCli,
 			Notes:               notewriter.New("test", logging.RawLogger),
@@ -233,6 +235,33 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	assert.False(t, hasEscalateAction(result.Actions), "stopped machine should not escalate")
 }
 
+// A stopped machine whose instance ID has not populated yet cannot be traced to
+// EC2, so it escalates - but the note must name it rather than claim the
+// namespace held nothing stopped.
+func TestInvestigation_Run_StoppedMachineWithoutInstanceIDEscalates(t *testing.T) {
+	cluster, err := cmv1.NewCluster().ID("test-123").Build()
+	require.NoError(t, err)
+
+	stoppedWithoutID := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", "")
+	fakeK8s := fake.NewClientBuilder().WithObjects(stoppedWithoutID).Build()
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			IsHCP:               true,
+			Cluster:             cluster,
+			HCPNamespace:        HCP_NAMESPACE,
+			ManagementK8sClient: fakeK8s,
+			Notes:               notewriter.New("test", logging.RawLogger),
+		},
+	}
+
+	result, err := (&Investigation{}).Run(rb)
+	assert.NoError(t, err)
+	assert.True(t, hasEscalateAction(result.Actions), "stopped machine without an instance ID should escalate")
+	assert.False(t, hasServiceLogAction(result.Actions), "no service log without attribution")
+	assert.False(t, hasSilenceAction(result.Actions), "must not silence without attribution")
+}
+
 // CloudTrail only looks back 2h, so an older stop returns no event. Without one
 // the stop is unattributed, and the incident goes to a human rather than
 // telling the customer to act on unconfirmed evidence.
@@ -243,9 +272,8 @@ func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	hcpNamespace := "ocm-test-hcp-namespace"
 	instanceID := "i-0stopped456"
-	stopped := awsMachine(hcpNamespace, "worker-1", "stopped", instanceID)
+	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
 	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
 
 	awsCli := awsmock.NewMockClient(mockCtrl)
@@ -257,7 +285,7 @@ func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
 		Resources: &investigation.Resources{
 			IsHCP:               true,
 			Cluster:             cluster,
-			HCPNamespace:        hcpNamespace,
+			HCPNamespace:        HCP_NAMESPACE,
 			ManagementK8sClient: fakeK8s,
 			AwsClient:           awsCli,
 			Notes:               notewriter.New("test", logging.RawLogger),

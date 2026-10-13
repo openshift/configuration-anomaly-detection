@@ -72,6 +72,18 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
+	// Without an instance ID there is nothing to look up in CloudTrail, so this
+	// takes the same escalation path as a failed attribution - but the note names
+	// the machine instead of reporting an idle namespace.
+	if instanceID == "" {
+		r.Notes.AppendWarning("AWSMachine %q is stopped but has no EC2 instance ID yet - the stop cannot be attributed", awsMachineName)
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), c.Name()),
+			executor.Escalate("Stopped worker instance has no EC2 instance ID - manual investigation required"),
+		)
+		return result, nil
+	}
+
 	// Only now is the customer AWS account needed, to attribute the stop via
 	// CloudTrail. Building it here keeps the non-HCP and healthy-data-plane paths
 	// from paying for a client they never use.
@@ -117,10 +129,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 }
 
 // firstStoppedAWSMachine returns the name and backing EC2 instance ID of the
-// first AWSMachine in the namespace whose instance is stopped. The returned name
-// is empty, with a nil error, both when no machine is stopped and when every
-// stopped machine lacks a resolvable instance ID — without that ID the EC2
-// instance cannot be attributed, so such a machine is passed over.
+// first AWSMachine in the namespace whose instance is stopped. An empty name
+// means nothing is stopped; a name with an empty instance ID means something is
+// stopped but cannot be traced to an EC2 instance, which the caller reports
+// rather than mistaking for an idle namespace.
 //
 // All AWSMachines in an HCP namespace are data plane nodes, so no role filtering
 // is applied — the first stopped one is enough to act on.
@@ -138,6 +150,11 @@ func firstStoppedAWSMachine(ctx context.Context, managementClient client.Client,
 		return "", "", err
 	}
 
+	// spec.instanceID and spec.providerID populate slightly after the machine
+	// itself, so a stopped machine can briefly have neither. Keep looking for one
+	// that can be traced to an instance, but remember the first that cannot so the
+	// caller can still name it.
+	untraceableName := ""
 	for _, awsMachine := range awsMachines.Items {
 		instanceState, _, _ := unstructured.NestedString(awsMachine.Object, "status", "instanceState")
 		if instanceState != awsMachineStopped {
@@ -145,11 +162,14 @@ func firstStoppedAWSMachine(ctx context.Context, managementClient client.Client,
 		}
 		stoppedInstanceID := instanceIDForMachine(&awsMachine)
 		if stoppedInstanceID == "" {
+			if untraceableName == "" {
+				untraceableName = awsMachine.GetName()
+			}
 			continue
 		}
 		return awsMachine.GetName(), stoppedInstanceID, nil
 	}
-	return "", "", nil
+	return untraceableName, "", nil
 }
 
 // instanceIDForMachine reads the EC2 instance ID from an AWSMachine, preferring
