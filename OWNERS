@@ -10,6 +10,7 @@ reviewers:
 - joshbranham
 - dustman9000
 - srep-functional-team-orange
+- rosa-trust-engineering-access-tooling
 approvers:
 - AlexSmithGH
 - Makdaam
@@ -24,5 +25,6 @@ approvers:
 - BATMAN-JD
 - eth1030
 - srep-functional-team-orange
+- rosa-trust-engineering-access-tooling
 maintainers:
 - rafael-azevedo
