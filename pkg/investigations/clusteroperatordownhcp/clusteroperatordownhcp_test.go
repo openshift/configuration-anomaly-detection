@@ -27,6 +27,10 @@ import (
 // which is where the investigation lists AWSMachines.
 const HCP_NAMESPACE = "ocm-test-hcp-namespace"
 
+// STOPPED_INSTANCE_ID is the EC2 instance backing the stopped AWSMachine that
+// the tests build.
+const STOPPED_INSTANCE_ID = "i-0stopped456"
+
 func hasActionType(actions []types.Action, actionType string) bool {
 	for _, action := range actions {
 		if action.Type() == actionType {
@@ -205,7 +209,7 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	instanceID := "i-0stopped456"
+	instanceID := STOPPED_INSTANCE_ID
 	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
 	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
 
@@ -279,7 +283,7 @@ func TestInvestigation_Run_TerminateEventIsNotAttribution(t *testing.T) {
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	instanceID := "i-0stopped456"
+	instanceID := STOPPED_INSTANCE_ID
 	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
 	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
 
@@ -324,7 +328,7 @@ func TestInvestigation_Run_UnattributedStopEscalates(t *testing.T) {
 	cluster, err := cmv1.NewCluster().ID("test-123").Build()
 	require.NoError(t, err)
 
-	instanceID := "i-0stopped456"
+	instanceID := STOPPED_INSTANCE_ID
 	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
 	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
 
