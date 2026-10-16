@@ -30,6 +30,12 @@ func (c *Investigation) Name() string {
 // its backing EC2 instance has been stopped.
 const awsMachineStopped = "stopped"
 
+// stopInstancesEventName is the CloudTrail event that attributes a stop.
+// PollInstanceStopEventsFor also returns TerminateInstances events for the same
+// instance and keeps whichever is newest, so the name must be checked before an
+// event is read as a stop — a termination says nothing about who stopped it.
+const stopInstancesEventName = "StopInstances"
+
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 	ctx := context.Background()
@@ -208,37 +214,42 @@ func instanceIDFromProviderID(providerID string) string {
 // event, which the caller treats as grounds to escalate rather than remediate.
 //
 // CloudTrail is only searched over the last 2h, so a stop older than that
-// returns no event even though one occurred.
+// returns no event even though one occurred. Only a StopInstances event counts
+// as attribution.
 func stopAttribution(ctx context.Context, awsClient aws.Client, instanceID string) (string, bool) {
 	instance, err := awsClient.GetInstanceByID(ctx, instanceID)
 	if err != nil {
 		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err), false
 	}
 
-	stopEvents, err := awsClient.PollInstanceStopEventsFor([]ec2v2types.Instance{instance}, 5)
+	events, err := awsClient.PollInstanceStopEventsFor([]ec2v2types.Instance{instance}, 5)
 	// A failed lookup is reported as such rather than as an absent event: a
 	// persistent CloudTrail problem (denied permissions, throttling) would
 	// otherwise read to an SRE as "CloudTrail was checked and had nothing".
 	if err != nil {
 		return fmt.Sprintf("CloudTrail attribution unavailable: %v.", err), false
 	}
-	if len(stopEvents) == 0 {
-		return "CloudTrail stop event not found (instance may have been stopped more than 2h ago).", false
+
+	for _, event := range events {
+		if event.EventName == nil || *event.EventName != stopInstancesEventName {
+			continue
+		}
+
+		// The CloudTrail Username is PII. The access key ID identifies the same
+		// principal and lets an SRE trace it back through CloudTrail when needed,
+		// so it is recorded instead of the username.
+		stoppedBy := "an unknown principal"
+		if event.AccessKeyId != nil {
+			stoppedBy = fmt.Sprintf("access key %s", *event.AccessKeyId)
+		}
+		stoppedAt := "unknown time"
+		if event.EventTime != nil {
+			stoppedAt = event.EventTime.UTC().String()
+		}
+		return fmt.Sprintf("Stopped by %s at %s (per CloudTrail).", stoppedBy, stoppedAt), true
 	}
 
-	stopEvent := stopEvents[0]
-	// The CloudTrail Username is PII. The access key ID identifies the same
-	// principal and lets an SRE trace it back through CloudTrail when needed,
-	// so it is recorded instead of the username.
-	stoppedBy := "an unknown principal"
-	if stopEvent.AccessKeyId != nil {
-		stoppedBy = fmt.Sprintf("access key %s", *stopEvent.AccessKeyId)
-	}
-	stoppedAt := "unknown time"
-	if stopEvent.EventTime != nil {
-		stoppedAt = stopEvent.EventTime.UTC().String()
-	}
-	return fmt.Sprintf("Stopped by %s at %s (per CloudTrail).", stoppedBy, stoppedAt), true
+	return "CloudTrail stop event not found (instance may have been stopped more than 2h ago).", false
 }
 
 // newWorkerNodesStoppedSL mirrors the managed-notifications template

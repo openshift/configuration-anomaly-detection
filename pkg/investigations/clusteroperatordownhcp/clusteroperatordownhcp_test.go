@@ -214,8 +214,13 @@ func TestInvestigation_Run_StoppedMachineSendsServiceLogAndSilences(t *testing.T
 	awsCli.EXPECT().GetInstanceByID(gomock.Any(), instanceID).Return(stoppedInstance, nil)
 	accessKeyID := "AKIAEXAMPLE"
 	stoppedAt := time.Now().UTC()
+	stopEventName := stopInstancesEventName
 	awsCli.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).
-		Return([]cloudtrailv2types.Event{{AccessKeyId: &accessKeyID, EventTime: &stoppedAt}}, nil)
+		Return([]cloudtrailv2types.Event{{
+			EventName:   &stopEventName,
+			AccessKeyId: &accessKeyID,
+			EventTime:   &stoppedAt,
+		}}, nil)
 
 	rb := &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
@@ -260,6 +265,53 @@ func TestInvestigation_Run_StoppedMachineWithoutInstanceIDEscalates(t *testing.T
 	assert.True(t, hasEscalateAction(result.Actions), "stopped machine without an instance ID should escalate")
 	assert.False(t, hasServiceLogAction(result.Actions), "no service log without attribution")
 	assert.False(t, hasSilenceAction(result.Actions), "must not silence without attribution")
+}
+
+// PollInstanceStopEventsFor also returns TerminateInstances events for the
+// instance and keeps whichever is newest. A termination says nothing about who
+// stopped the instance, so it must not be read as attribution - otherwise a
+// stop older than the lookup window would be "attributed" to the termination
+// and wrongly silenced.
+func TestInvestigation_Run_TerminateEventIsNotAttribution(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+
+	cluster, err := cmv1.NewCluster().ID("test-123").Build()
+	require.NoError(t, err)
+
+	instanceID := "i-0stopped456"
+	stopped := awsMachine(HCP_NAMESPACE, "worker-1", "stopped", instanceID)
+	fakeK8s := fake.NewClientBuilder().WithObjects(stopped).Build()
+
+	awsCli := awsmock.NewMockClient(mockCtrl)
+	awsCli.EXPECT().GetInstanceByID(gomock.Any(), instanceID).
+		Return(ec2v2types.Instance{InstanceId: &instanceID}, nil)
+	accessKeyID := "AKIAEXAMPLE"
+	terminatedAt := time.Now().UTC()
+	terminateEventName := "TerminateInstances"
+	awsCli.EXPECT().PollInstanceStopEventsFor(gomock.Any(), gomock.Any()).
+		Return([]cloudtrailv2types.Event{{
+			EventName:   &terminateEventName,
+			AccessKeyId: &accessKeyID,
+			EventTime:   &terminatedAt,
+		}}, nil)
+
+	rb := &investigation.ResourceBuilderMock{
+		Resources: &investigation.Resources{
+			IsHCP:               true,
+			Cluster:             cluster,
+			HCPNamespace:        HCP_NAMESPACE,
+			ManagementK8sClient: fakeK8s,
+			AwsClient:           awsCli,
+			Notes:               notewriter.New("test", logging.RawLogger),
+		},
+	}
+
+	result, err := (&Investigation{}).Run(rb)
+	assert.NoError(t, err)
+	assert.True(t, hasEscalateAction(result.Actions), "a terminate event must not attribute a stop")
+	assert.False(t, hasServiceLogAction(result.Actions), "no service log from a terminate event")
+	assert.False(t, hasSilenceAction(result.Actions), "must not silence on a terminate event")
 }
 
 // CloudTrail only looks back 2h, so an older stop returns no event. Without one
