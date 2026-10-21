@@ -361,5 +361,152 @@ var _ = Describe("aiassisted", func() {
 				Expect(result.NeedsEscalation).To(BeFalse())
 			})
 		})
+
+		Context("when service log recommendation is present", func() {
+			It("should include it in the investigation report", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:        testClusterID,
+					AlertName:        "ClusterHasGoneMissing",
+					Summary:          "Customer stopped EC2 instances",
+					Confidence:       testConfHigh,
+					Reasoning:        "CloudTrail shows StopInstances by customer IAM user",
+					Evidence:         "CloudTrail events confirmed",
+					RemediationSteps: []RemediationStep{},
+					ServiceLogRecommendation: &ServiceLogRecommendation{
+						TemplatePath: "osd/cluster_has_gone_missing.json",
+						Command:      "osdctl servicelog post --cluster-id test-cluster -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json",
+						Reasoning:    "Cluster instances were stopped by the customer, matching the CHGM service log template",
+					},
+					NeedsEscalation: false,
+				}
+
+				output := FormatInvestigationReport(result)
+
+				Expect(output).To(ContainSubstring("## Service Log Recommendation"))
+				Expect(output).To(ContainSubstring("osd/cluster_has_gone_missing.json"))
+				Expect(output).To(ContainSubstring("osdctl servicelog post"))
+				Expect(output).To(ContainSubstring("Cluster instances were stopped by the customer"))
+			})
+		})
+
+		Context("when service log recommendation is nil", func() {
+			It("should not include a service log section in the report", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:                testClusterID,
+					AlertName:                testAlertName,
+					Summary:                  "No customer-actionable issue found",
+					Confidence:               testConfHigh,
+					Reasoning:                "Internal platform issue",
+					Evidence:                 "Platform logs show internal error",
+					RemediationSteps:         []RemediationStep{},
+					ServiceLogRecommendation: nil,
+					NeedsEscalation:          true,
+				}
+
+				output := FormatInvestigationReport(result)
+
+				Expect(output).ToNot(ContainSubstring("Service Log Recommendation"))
+			})
+		})
+	})
+
+	Describe("FormatPagerDutyNote with service log recommendation", func() {
+		Context("when a service log recommendation is present", func() {
+			It("should include the command in the PD note", func() {
+				result := &CoraInvestigationResult{
+					AlertName:  "ClusterHasGoneMissing",
+					Summary:    "Customer stopped instances",
+					Confidence: testConfHigh,
+					ServiceLogRecommendation: &ServiceLogRecommendation{
+						TemplatePath: "osd/cluster_has_gone_missing.json",
+						Command:      "osdctl servicelog post --cluster-id test-cluster -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json",
+						Reasoning:    "Customer stopped EC2 instances",
+					},
+					NeedsEscalation: false,
+				}
+
+				output := FormatPagerDutyNote(result)
+
+				Expect(output).To(ContainSubstring("📋 Suggested service log:"))
+				Expect(output).To(ContainSubstring("osdctl servicelog post"))
+			})
+		})
+
+		Context("when no service log recommendation exists", func() {
+			It("should not include a service log section", func() {
+				result := &CoraInvestigationResult{
+					AlertName:                testAlertName,
+					Summary:                  "Internal platform issue",
+					Confidence:               testConfHigh,
+					ServiceLogRecommendation: nil,
+					NeedsEscalation:          true,
+				}
+
+				output := FormatPagerDutyNote(result)
+
+				Expect(output).ToNot(ContainSubstring("Suggested service log"))
+			})
+		})
+	})
+
+	Describe("JSON parsing with service log recommendation", func() {
+		Context("when Cora returns a service log recommendation", func() {
+			It("should correctly unmarshal the recommendation", func() {
+				jsonInput := `{
+					"investigation_id": "inv-sl-test",
+					"cluster_id": "test-cluster",
+					"alert_name": "ClusterHasGoneMissing",
+					"timestamp": "2026-10-20T19:00:00.000Z",
+					"duration_seconds": 45.0,
+					"summary": "Customer stopped EC2 instances",
+					"confidence": "high",
+					"reasoning": "CloudTrail confirms customer action",
+					"evidence": "StopInstances events found",
+					"remediation_steps": [],
+					"service_log_recommendation": {
+						"template_path": "osd/cluster_has_gone_missing.json",
+						"command": "osdctl servicelog post --cluster-id test-cluster -t https://raw.githubusercontent.com/openshift/managed-notifications/master/osd/cluster_has_gone_missing.json",
+						"reasoning": "Cluster instances stopped by customer"
+					},
+					"needs_escalation": false,
+					"escalation_reason": null
+				}`
+
+				var result CoraInvestigationResult
+				err := json.Unmarshal([]byte(jsonInput), &result)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.ServiceLogRecommendation).ToNot(BeNil())
+				Expect(result.ServiceLogRecommendation.TemplatePath).To(Equal("osd/cluster_has_gone_missing.json"))
+				Expect(result.ServiceLogRecommendation.Command).To(ContainSubstring("osdctl servicelog post"))
+				Expect(result.ServiceLogRecommendation.Reasoning).To(Equal("Cluster instances stopped by customer"))
+			})
+		})
+
+		Context("when Cora returns null service log recommendation", func() {
+			It("should correctly parse null as nil", func() {
+				jsonInput := `{
+					"investigation_id": "inv-no-sl",
+					"cluster_id": "test-cluster",
+					"alert_name": "SomeAlert",
+					"timestamp": "2026-10-20T19:00:00.000Z",
+					"duration_seconds": 30.0,
+					"summary": "No customer issue",
+					"confidence": "low",
+					"reasoning": "Internal platform issue",
+					"evidence": "Platform logs",
+					"remediation_steps": [],
+					"service_log_recommendation": null,
+					"needs_escalation": true,
+					"escalation_reason": "Manual investigation needed"
+				}`
+
+				var result CoraInvestigationResult
+				err := json.Unmarshal([]byte(jsonInput), &result)
+
+				Expect(err).ToNot(HaveOccurred())
+				Expect(result.ServiceLogRecommendation).To(BeNil())
+			})
+		})
 	})
 })
