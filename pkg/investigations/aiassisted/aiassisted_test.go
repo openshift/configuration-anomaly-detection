@@ -412,12 +412,12 @@ var _ = Describe("aiassisted", func() {
 		Context("when recommendation exists but confidence is low", func() {
 			It("should suppress the service log in the report", func() {
 				result := &CoraInvestigationResult{
-					ClusterID:  testClusterID,
-					AlertName:  testAlertName,
-					Summary:    "Weak signal",
-					Confidence: "low",
-					Reasoning:  "Inconclusive",
-					Evidence:   "Minimal",
+					ClusterID:        testClusterID,
+					AlertName:        testAlertName,
+					Summary:          "Weak signal",
+					Confidence:       "low",
+					Reasoning:        "Inconclusive",
+					Evidence:         "Minimal",
 					RemediationSteps: []RemediationStep{},
 					ServiceLogRecommendation: &ServiceLogRecommendation{
 						TemplatePath: "osd/cluster_has_gone_missing.json",
