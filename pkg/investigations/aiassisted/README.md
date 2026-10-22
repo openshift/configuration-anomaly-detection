@@ -21,9 +21,9 @@ The investigation performs the following steps:
 5. **Invoke AI agent** - Calls AWS Bedrock AgentCore runtime with the investigation payload and optional evidence reference
 6. **Stream response** - Collects real-time streaming AI output
 7. **Post to PagerDuty** - Adds automation note indicating AI investigation completed
-8. **Escalate** - Always escalates to SRE for manual review
+8. **Escalate** - Attempts best-effort guarded escalation after the report and PagerDuty note, regardless of Cora's recommendation. CAD does not escalate while Cora runs; PagerDuty's unchanged automatic timer may still page a human.
 
-On any failure (config missing, credential issues, etc.), the investigation escalates with a warning note explaining the issue.
+On any failure (config missing, credential issues, invocation/stream timeout, invalid response, etc.), the investigation returns a warning report/note followed by escalation. Unsupported cluster types return a warning note followed by escalation. The controller continues action execution after report/note failures, so guarded escalation is still attempted after reporting attempts. State lookup failures, prior handling, and ambiguous policies/history skip escalation and leave PagerDuty's timer in control. The live GET/PUT guard is not atomic: external actions can race the final read.
 
 ## Architecture
 
@@ -190,12 +190,13 @@ The full AI response is logged (not posted to PagerDuty) and includes:
 
 ### Escalation
 
-The investigation **always escalates** with the reason:
-```
-AI investigation completed - manual review required
-```
+The investigation queues escalation after the Backplane report and PagerDuty note, on both AI success and failure. Cora's `needs_escalation` recommendation is informational: even a recommendation not to escalate does not suppress this action. HCP and management/service clusters skip AI investigation and queue only a warning note followed by escalation.
 
-This ensures human SREs review the AI's findings before taking action. The investigation **never auto-resolves** incidents.
+The PagerDuty client then makes a **guarded, best-effort attempt to escalate to level 2**. It checks the complete incident history for an initial trigger with no prior handling or ambiguous events, then freshly confirms that the incident is still triggered and unacknowledged. If these checks fail or cannot be completed, CAD skips the update and leaves PagerDuty's automatic escalation timer as the backstop. Reporting is attempted before escalation; successful report or note delivery is not a prerequisite.
+
+The guard retains the existing assumption that incidents start at level 1 and CAD escalates to level 2; it **does not validate escalation-policy layout**. The checks and update are not atomic, so external PagerDuty actions can still race the attempt. A skipped attempt is not a successful CAD escalation.
+
+The investigation **never auto-resolves** incidents.
 
 ## Integration Testing
 

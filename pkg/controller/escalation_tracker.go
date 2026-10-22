@@ -1,14 +1,16 @@
 package controller
 
 import (
+	"errors"
 	"sync"
 
+	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 )
 
 // trackingPDClient wraps a pagerduty.Client and de-duplicates escalations at
-// the source: EscalateIncident/EscalateIncidentWithNote only ever reach the
-// real client once per incident, no matter how many callers (an
+// the source: after a successful escalation, EscalateIncident and
+// EscalateIncidentWithNote never escalate again, no matter how many callers (an
 // investigation's direct call, an investigation's action via the executor,
 // or the controller's own fallback/failure-handling logic) try to escalate.
 // A single instance is shared across all of those paths (via
@@ -35,7 +37,7 @@ func (t *trackingPDClient) EscalateIncident() error {
 		return nil
 	}
 	if err := t.Client.EscalateIncident(); err != nil {
-		return err
+		return suppressEscalationSkip(err)
 	}
 	t.escalated = true
 	return nil
@@ -52,15 +54,24 @@ func (t *trackingPDClient) EscalateIncidentWithNote(note string) error {
 		return t.AddNote(note)
 	}
 	if err := t.Client.EscalateIncidentWithNote(note); err != nil {
-		return err
+		return suppressEscalationSkip(err)
 	}
 	t.escalated = true
 	return nil
 }
 
-// HasEscalated reports whether this incident has already been escalated,
-// through any path (investigation action, direct call, or note-attached
-// escalation).
+func suppressEscalationSkip(err error) error {
+	var skipped *pagerduty.EscalationSkippedError
+	if errors.As(err, &skipped) {
+		logging.Infof("PagerDuty escalation skipped: %v", err)
+		return nil
+	}
+	return err
+}
+
+// HasEscalated reports whether this tracker observed a successful escalation
+// in this run, not the incident's externally managed PagerDuty state.
+// Guard skips and failed attempts do not count.
 func (t *trackingPDClient) HasEscalated() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
