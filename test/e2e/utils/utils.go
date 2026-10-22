@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 
 	sdk "github.com/openshift-online/ocm-sdk-go"
@@ -97,6 +98,29 @@ func getCreatorFromCluster(conn *sdk.Connection, cluster *cmv1.Cluster) (*amv1.A
 		return nil, fmt.Errorf("failed to get account body")
 	}
 	return account, nil
+}
+
+// GetClusterProvider returns the cloud provider for the cluster (e.g., "aws", "gcp").
+func GetClusterProvider(ctx context.Context, ocme2eCli *ocme2e.Client, clusterID string) (string, error) {
+	resp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().SendContext(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get cluster %s: %w", clusterID, err)
+	}
+	cluster := resp.Body()
+	if cp := cluster.CloudProvider(); cp != nil {
+		return cp.ID(), nil
+	}
+	return "", fmt.Errorf("cluster %s has no cloud provider set", clusterID)
+}
+
+// IsHCP returns true if the cluster is a ROSA Hosted Control Plane cluster.
+func IsHCP(ctx context.Context, ocme2eCli *ocme2e.Client, clusterID string) (bool, error) {
+	resp, err := ocme2eCli.ClustersMgmt().V1().Clusters().Cluster(clusterID).Get().SendContext(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to get cluster %s: %w", clusterID, err)
+	}
+	cluster := resp.Body()
+	return cluster.Hypershift() != nil && cluster.Hypershift().Enabled(), nil
 }
 
 // === CREATE CLIENT FROM KUBECONFIG ===
