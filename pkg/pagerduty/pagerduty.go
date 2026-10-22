@@ -599,9 +599,14 @@ func (c *SdkClient) EscalateIncidentWithNote(notes string) error {
 	return c.EscalateIncident()
 }
 
-// EscalateIncident escalates an incident to incident level 2.
-// This currently assumes that we are always at level 1.
+// EscalateIncident attempts level 2 after best-effort live-state checks.
+// The GET/PUT sequence is not atomic with external PagerDuty actions.
 func (c *SdkClient) EscalateIncident() error {
+	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
+	defer cancel()
+	if err := c.checkEscalationEligibility(ctx); err != nil {
+		return err
+	}
 	o := []sdk.ManageIncidentsOptions{
 		{
 			ID:              c.GetIncidentID(),
@@ -609,20 +614,30 @@ func (c *SdkClient) EscalateIncident() error {
 		},
 	}
 
-	err := c.updateIncident(o)
+	_, err := c.sdkClient.ManageIncidentsWithContext(ctx, CADEmailAddress, o)
 	if err != nil {
+		var sdkErr sdk.APIError
+		if errors.As(err, &sdkErr) {
+			classified := commonErrorHandling(err, sdkErr)
+			var invalidInput InvalidInputParamsError
+			if errors.As(classified, &invalidInput) {
+				return skipEscalation("escalation parameters invalid or no higher level available")
+			}
+			if classified != nil {
+				return classified
+			}
+		}
 		if strings.Contains(err.Error(), "Incident Already Resolved") {
-			logging.Infof("Skipped escalating incident as it is already resolved.")
-			return nil
+			return skipEscalation("incident already resolved")
 		}
 		// Error below can be encountered if the Escalation Policy is misconfigured with only 1 layer
 		// CAD requires 2 layers in its deployment scenario
 		if strings.Contains(err.Error(), "the escalation policy or incident id are invalid") {
-			logging.Warnf("Escalation policy invalid - probably nowhere higher to escalate, skipping escalation")
-			return nil
+			return skipEscalation("escalation policy invalid or no higher level available")
 		}
 		return fmt.Errorf("could not escalate the incident: %w", err)
 	}
+	logging.Info("PagerDuty accepted CAD escalation to level 2 (best-effort live-state guard)")
 	return nil
 }
 

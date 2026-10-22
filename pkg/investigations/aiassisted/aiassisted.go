@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -25,6 +26,9 @@ const Name = "aiassisted"
 
 type Investigation struct {
 	AIConfig *config.AIAgentConfig
+
+	// Optional factory for offline tests; production uses aws.GetAIClient.
+	getAIClient func(context.Context, string, string, string) (aws.AgentCoreAPI, error)
 }
 
 // InvestigationPayload represents the payload sent to the AgentCore agent.
@@ -103,14 +107,12 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	// Escalate immediately - AI investigations always go to SRE.
-	// Results will be posted async to PD notes for review.
-	if err := r.PdClient.EscalateIncident(); err != nil {
-		// Fail pipeline - if there's no incident or issue reaching PD, there's nothing to post results back to
-		logging.Errorf("Failed to escalate incident for AI investigation: %v", err)
-		return result, investigation.WrapInfrastructure(err, "PagerDuty incident escalation failed")
+	// Return reporting actions before escalation, including on AI failures.
+	// Cora's recommendation is informational and never suppresses escalation.
+	failureActions := func() []executor.Action {
+		return append(executor.NoteAndReportFrom(notes, clusterID, c.Name()),
+			executor.Escalate("AI investigation failed - manual review required"))
 	}
-	logging.Info("Incident escalated immediately for AI investigation - SRE can review results async")
 
 	incidentID := r.PdClient.GetIncidentID()
 	alertName := r.PdClient.GetTitle()
@@ -135,16 +137,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	payloadJSON, err := json.Marshal(investigationData)
 	if err != nil {
 		notes.AppendWarning("Failed to marshal investigation payload: %v", err)
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		result.Actions = failureActions()
 		return result, nil
 	}
 
 	// Get AI client (handles role assumption and client creation)
 	// Use incident ID as session identifier for audit trail
-	agentClient, err := aws.GetAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
+	getAIClient := c.getAIClient
+	if getAIClient == nil {
+		getAIClient = aws.GetAIClient
+	}
+	agentClient, err := getAIClient(ctx, aiConfig.InvokerRoleArn, aiConfig.Region, incidentID)
 	if err != nil {
 		notes.AppendWarning("Failed to create AI client: %v", err)
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		result.Actions = failureActions()
 		return result, nil
 	}
 
@@ -164,7 +170,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	output, err := agentClient.InvokeAgentRuntime(ctx, input)
 	if err != nil {
 		notes.AppendWarning("Failed to invoke AgentCore runtime: %v", err)
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		result.Actions = failureActions()
 		return result, nil
 	}
 	defer func() {
@@ -188,20 +194,20 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		logging.Infof("rosa-plugins Version: %s", aiConfig.RosaPluginsVersion)
 	}
 
-	var aiResponse strings.Builder
+	aiResponse, streamErr := readAIResponse(output.Response)
 
-	scanner := bufio.NewScanner(output.Response)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Streaming responses have lines prefixed with "data: "
-		line = strings.TrimPrefix(line, "data: ")
-		aiResponse.WriteString(line + "\n")
+	// A cancelled HTTP stream can end at EOF without a scanner error. Do not
+	// treat a partial (or even valid-looking) response after timeout as success.
+	if err := ctx.Err(); err != nil {
+		notes.AppendWarning("AI investigation timed out or was cancelled: %v", err)
+		result.Actions = failureActions()
+		return result, nil
 	}
 
-	if err := scanner.Err(); err != nil {
-		logging.Errorf("Error reading AI response stream: %v", err)
-		notes.AppendWarning("Error reading AI response stream: %v\n\nRaw output:\n%s", err, aiResponse.String())
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+	if streamErr != nil {
+		logging.Errorf("Error reading AI response stream: %v", streamErr)
+		notes.AppendWarning("Error reading AI response stream: %v\n\nRaw output:\n%s", streamErr, aiResponse)
+		result.Actions = failureActions()
 		return result, nil
 	}
 
@@ -211,7 +217,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	// The SDK wraps Cora's JSON in another JSON string, so we receive:
 	//   "{\"investigation_id\": ...}" instead of {"investigation_id": ...}
 	// Unmarshal into a string to strip outer quotes and unescape.
-	responseStr := strings.TrimSpace(aiResponse.String())
+	responseStr := strings.TrimSpace(aiResponse)
 	var unquoted string
 	if err := json.Unmarshal([]byte(responseStr), &unquoted); err == nil {
 		responseStr = unquoted
@@ -228,7 +234,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			rawOutput = rawOutput[:60000] + "\n... [truncated]"
 		}
 		notes.AppendWarning("Failed to parse Cora JSON response: %v\n\nRaw output:\n%s", err, rawOutput)
-		result.Actions = executor.NoteAndReportFrom(notes, clusterID, c.Name())
+		result.Actions = failureActions()
 		return result, nil
 	}
 
@@ -251,8 +257,19 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result.Actions = []executor.Action{
 		backplaneReportAction,    // Create cluster report first
 		executor.NoteFrom(notes), // Include the report ID appended by the report action
+		executor.Escalate("AI investigation completed - manual review required"),
 	}
 	return result, nil
+}
+
+// readAIResponse collects the data lines while preserving partial output on failure.
+func readAIResponse(response io.Reader) (string, error) {
+	var result strings.Builder
+	scanner := bufio.NewScanner(response)
+	for scanner.Scan() {
+		result.WriteString(strings.TrimPrefix(scanner.Text(), "data: ") + "\n")
+	}
+	return result.String(), scanner.Err()
 }
 
 func isDryRun(resources *investigation.Resources) bool {

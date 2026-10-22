@@ -25,9 +25,8 @@ func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 		fmt.Fprintf(&sb, "%s\n\n", result.ServiceLogRecommendation.Command)
 	}
 
-	// Escalation recommendation from Cora (the PD incident is always escalated
-	// before the AI investigation runs, so this reflects Cora's assessment, not
-	// the current incident state)
+	// Cora's recommendation is advisory. CAD attempts guarded escalation after
+	// reporting regardless of this value; it does not describe live PD state.
 	if result.NeedsEscalation {
 		sb.WriteString("⚠️ Cora recommends escalation\n")
 	} else {

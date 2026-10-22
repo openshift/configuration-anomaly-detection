@@ -1,8 +1,15 @@
 package aiassisted
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"strings"
 	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/service/bedrockagentcore"
+	"github.com/openshift/configuration-anomaly-detection/pkg/aws"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -50,6 +57,45 @@ func hasEscalateAction(actions []types.Action) bool {
 
 func hasNoteAction(actions []types.Action) bool {
 	return hasActionType(actions, string(executor.ActionTypePagerDutyNote))
+}
+
+func expectReportNoteEscalation(actions []types.Action) {
+	GinkgoHelper()
+	Expect(actions).To(HaveLen(3), "expected exactly a Backplane report, PagerDuty note, and escalation action")
+	Expect(actions[0].Type()).To(Equal(string(executor.ActionTypeBackplaneReport)), "the Backplane report must precede the note so its report link can be included")
+	Expect(actions[1].Type()).To(Equal(string(executor.ActionTypePagerDutyNote)), "the PagerDuty note must follow the report and precede escalation")
+	Expect(actions[2].Type()).To(Equal(string(executor.ActionTypeEscalateIncident)), "escalation must be queued last, after reporting")
+}
+
+type testAgentClient struct {
+	stream io.ReadCloser
+	err    error
+}
+
+func (c testAgentClient) InvokeAgentRuntime(context.Context, *bedrockagentcore.InvokeAgentRuntimeInput, ...func(*bedrockagentcore.Options)) (*bedrockagentcore.InvokeAgentRuntimeOutput, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &bedrockagentcore.InvokeAgentRuntimeOutput{Response: c.stream}, nil
+}
+
+type testAIStream struct {
+	*strings.Reader
+	err    error
+	closed bool
+}
+
+func (s *testAIStream) Read(p []byte) (int, error) {
+	n, err := s.Reader.Read(p)
+	if err == io.EOF && s.err != nil {
+		return n, s.err
+	}
+	return n, err
+}
+
+func (s *testAIStream) Close() error {
+	s.closed = true
+	return nil
 }
 
 var _ = Describe("aiassisted", func() {
@@ -115,6 +161,26 @@ var _ = Describe("aiassisted", func() {
 			})
 		})
 
+		Context("when cluster is HCP", func() {
+			It("returns a note before escalation without contacting AWS", func() {
+				r.Resources.IsHCP = true
+				result, err := (&Investigation{}).Run(r)
+				Expect(err).NotTo(HaveOccurred(), "HCP clusters should skip AI and return reporting actions without an error")
+				Expect(result.Actions).To(HaveLen(2), "HCP clusters should return only a warning note and escalation, with no Backplane report")
+				Expect(result.Actions[0].Type()).To(Equal(string(executor.ActionTypePagerDutyNote)), "the HCP warning note must precede escalation")
+				Expect(result.Actions[1].Type()).To(Equal(string(executor.ActionTypeEscalateIncident)), "HCP clusters must queue escalation after the warning note")
+			})
+		})
+
+		Context("when PagerDuty client is missing", func() {
+			It("returns a warning report and note before escalation", func() {
+				r.Resources.PdClient = nil
+				result, err := (&Investigation{AIConfig: &config.AIAgentConfig{}}).Run(r)
+				Expect(err).NotTo(HaveOccurred(), "a missing PagerDuty client should produce warning reporting and escalation actions, not a Run error")
+				expectReportNoteEscalation(result.Actions)
+			})
+		})
+
 		Context("when AI runtime configuration is nil", func() {
 			It("should escalate with configuration warning", func() {
 				inv := Investigation{}
@@ -122,8 +188,7 @@ var _ = Describe("aiassisted", func() {
 
 				Expect(err).ToNot(HaveOccurred())
 				Expect(result.Actions).NotTo(BeEmpty())
-				Expect(hasEscalateAction(result.Actions)).To(BeTrue())
-				Expect(hasNoteAction(result.Actions)).To(BeTrue())
+				expectReportNoteEscalation(result.Actions)
 			})
 		})
 
@@ -138,7 +203,6 @@ var _ = Describe("aiassisted", func() {
 				// calls only pass if Run instead calls the methods directly
 				// on the pagerduty.Client interface.
 				pdClientMock := pdmock.NewMockClient(mockCtrl)
-				pdClientMock.EXPECT().EscalateIncident().Return(nil).Times(1)
 				pdClientMock.EXPECT().GetIncidentID().Return("INC-123").Times(1)
 				pdClientMock.EXPECT().GetTitle().Return("SomeAlert").Times(1)
 				r.Resources.PdClient = pdClientMock
@@ -149,19 +213,54 @@ var _ = Describe("aiassisted", func() {
 						Region:         "us-east-1",
 						UserID:         "cad-test",
 						InvokerRoleArn: "arn:aws:iam::123456789012:role/test-role",
-						// Zero timeout means the AWS call below fails
-						// immediately via context cancellation instead of
-						// making a real network call - irrelevant to this
-						// test, which only cares that PdClient was reached.
-						TimeoutSeconds: 0,
+						TimeoutSeconds: 60,
+					},
+					// Never assume a cancelled context prevents SDK credential or
+					// network access: stub the entire AWS client factory.
+					getAIClient: func(context.Context, string, string, string) (aws.AgentCoreAPI, error) {
+						return nil, errors.New("offline client failure")
 					},
 				}
 				result, err := inv.Run(r)
 
 				Expect(err).ToNot(HaveOccurred())
-				Expect(result.Actions).NotTo(BeEmpty())
+				expectReportNoteEscalation(result.Actions)
 			})
 		})
+
+		DescribeTable("reports before escalating every AI outcome without calling AWS",
+			func(response string, clientErr, invokeErr, readErr error, timeout int) {
+				pd := pdmock.NewMockClient(mockCtrl)
+				pd.EXPECT().GetIncidentID().Return("INC-123")
+				pd.EXPECT().GetTitle().Return(testAlertName)
+				// No EscalateIncident expectation: Run must not escalate directly.
+				r.Resources.PdClient = pd
+				stream := &testAIStream{Reader: strings.NewReader(response), err: readErr}
+				inv := Investigation{
+					AIConfig: &config.AIAgentConfig{TimeoutSeconds: timeout},
+					getAIClient: func(context.Context, string, string, string) (aws.AgentCoreAPI, error) {
+						return testAgentClient{stream: stream, err: invokeErr}, clientErr
+					},
+				}
+				result, err := inv.Run(r)
+				Expect(err).NotTo(HaveOccurred(), "every AI outcome should return reporting and escalation actions rather than a Run error")
+				expectReportNoteEscalation(result.Actions)
+				if clientErr == nil && invokeErr == nil {
+					Expect(stream.closed).To(BeTrue(), "the AI response stream must be closed after success, read failure, timeout, or invalid JSON")
+					if timeout == 0 {
+						Expect(r.Resources.Notes.String()).To(ContainSubstring("timed out or was cancelled"), "an expired context must record a timeout warning even when the stream ends with clean EOF")
+					}
+				}
+			},
+			Entry("success recommending escalation", `{"summary":"done","needs_escalation":true}`, nil, nil, nil, 60),
+			Entry("success recommending no escalation", `{"summary":"done","needs_escalation":false}`, nil, nil, nil, 60),
+			Entry("client creation failure", "", errors.New("client failed"), nil, nil, 60),
+			Entry("invocation failure", "", nil, errors.New("invoke failed"), nil, 60),
+			Entry("invocation timeout", "", nil, context.DeadlineExceeded, nil, 0),
+			Entry("stream failure", "partial", nil, nil, errors.New("read failed"), 60),
+			Entry("stream timeout with clean EOF", `{"summary":"partial"}`, nil, nil, nil, 0),
+			Entry("invalid JSON", "not json", nil, nil, nil, 60),
+		)
 	})
 
 	Describe("FormatPagerDutyNote", func() {
