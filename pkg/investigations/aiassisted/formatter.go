@@ -18,8 +18,9 @@ func FormatPagerDutyNote(result *CoraInvestigationResult) string {
 	// Summary — the key triage info
 	fmt.Fprintf(&sb, "%s\n\n", result.Summary)
 
-	// Service log recommendation
-	if result.ServiceLogRecommendation != nil {
+	// Service log recommendation — only display when confidence is high.
+	// CORA enforces this server-side, but we defensively suppress here too.
+	if result.ServiceLogRecommendation != nil && strings.EqualFold(result.Confidence, "high") {
 		sb.WriteString("📋 Suggested service log:\n")
 		fmt.Fprintf(&sb, "%s\n\n", result.ServiceLogRecommendation.Command)
 	}
@@ -76,8 +77,8 @@ func FormatInvestigationReport(result *CoraInvestigationResult) string {
 		sb.WriteString("\n")
 	}
 
-	// Service Log Recommendation
-	if result.ServiceLogRecommendation != nil {
+	// Service Log Recommendation — only display when confidence is high.
+	if result.ServiceLogRecommendation != nil && strings.EqualFold(result.Confidence, "high") {
 		sb.WriteString("## Service Log Recommendation\n\n")
 		fmt.Fprintf(&sb, "**Template**: `%s`\n\n", result.ServiceLogRecommendation.TemplatePath)
 		fmt.Fprintf(&sb, "**Reasoning**: %s\n\n", result.ServiceLogRecommendation.Reasoning)

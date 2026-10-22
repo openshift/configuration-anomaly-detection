@@ -408,6 +408,29 @@ var _ = Describe("aiassisted", func() {
 				Expect(output).ToNot(ContainSubstring("Service Log Recommendation"))
 			})
 		})
+
+		Context("when recommendation exists but confidence is low", func() {
+			It("should suppress the service log in the report", func() {
+				result := &CoraInvestigationResult{
+					ClusterID:  testClusterID,
+					AlertName:  testAlertName,
+					Summary:    "Weak signal",
+					Confidence: "low",
+					Reasoning:  "Inconclusive",
+					Evidence:   "Minimal",
+					RemediationSteps: []RemediationStep{},
+					ServiceLogRecommendation: &ServiceLogRecommendation{
+						TemplatePath: "osd/cluster_has_gone_missing.json",
+						Command:      "osdctl servicelog post --cluster-id c1 -t https://example.com",
+						Reasoning:    "Uncertain match",
+					},
+					NeedsEscalation: true,
+				}
+
+				output := FormatInvestigationReport(result)
+				Expect(output).ToNot(ContainSubstring("Service Log Recommendation"))
+			})
+		})
 	})
 
 	Describe("FormatPagerDutyNote with service log recommendation", func() {
@@ -444,6 +467,44 @@ var _ = Describe("aiassisted", func() {
 
 				output := FormatPagerDutyNote(result)
 
+				Expect(output).ToNot(ContainSubstring("Suggested service log"))
+			})
+		})
+
+		Context("when recommendation exists but confidence is low", func() {
+			It("should suppress the service log in the PD note", func() {
+				result := &CoraInvestigationResult{
+					AlertName:  "SomeAlert",
+					Summary:    "Weak signal",
+					Confidence: "low",
+					ServiceLogRecommendation: &ServiceLogRecommendation{
+						TemplatePath: "osd/cluster_has_gone_missing.json",
+						Command:      "osdctl servicelog post --cluster-id c1 -t https://example.com",
+						Reasoning:    "Uncertain match",
+					},
+					NeedsEscalation: true,
+				}
+
+				output := FormatPagerDutyNote(result)
+				Expect(output).ToNot(ContainSubstring("Suggested service log"))
+			})
+		})
+
+		Context("when recommendation exists but confidence is medium", func() {
+			It("should suppress the service log in the PD note", func() {
+				result := &CoraInvestigationResult{
+					AlertName:  "SomeAlert",
+					Summary:    "Ambiguous evidence",
+					Confidence: "medium",
+					ServiceLogRecommendation: &ServiceLogRecommendation{
+						TemplatePath: "osd/invalid_iaas_credentials.json",
+						Command:      "osdctl servicelog post --cluster-id c1 -t https://example.com",
+						Reasoning:    "Some evidence but not conclusive",
+					},
+					NeedsEscalation: false,
+				}
+
+				output := FormatPagerDutyNote(result)
 				Expect(output).ToNot(ContainSubstring("Suggested service log"))
 			})
 		})
