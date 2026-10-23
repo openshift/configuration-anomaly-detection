@@ -19,10 +19,10 @@ type client struct {
 	apiClient  *sdk.Client
 }
 
-func NewClient(routingKey string) TestPagerDutyClient {
+func NewClient(routingKey, apiToken string) TestPagerDutyClient {
 	return &client{
 		routingKey: routingKey,
-		apiClient:  sdk.NewClient(routingKey),
+		apiClient:  sdk.NewClient(apiToken),
 	}
 }
 
@@ -51,13 +51,27 @@ func (c *client) TriggerIncident(alertTitle, clusterID string) (string, error) {
 }
 
 func (c *client) GetIncidentID(dedupKey string) (string, error) {
-	// Implementation can be added if needed
-	return "", nil
+	resp, err := c.apiClient.ListIncidentsWithContext(context.Background(), sdk.ListIncidentsOptions{
+		IncidentKey: dedupKey,
+		Statuses:    []string{"triggered", "acknowledged"},
+	})
+	if err != nil {
+		return "", fmt.Errorf("listing incidents for dedup key %s: %w", dedupKey, err)
+	}
+	if len(resp.Incidents) == 0 {
+		return "", fmt.Errorf("no incident found for dedup key %s", dedupKey)
+	}
+	return resp.Incidents[0].ID, nil
 }
 
-func (c *client) ResolveIncident(incidentID string) error {
-	// Implementation can be added if needed
-	return nil
+func (c *client) ResolveIncident(dedupKey string) error {
+	event := sdk.V2Event{
+		RoutingKey: c.routingKey,
+		Action:     "resolve",
+		DedupKey:   dedupKey,
+	}
+	_, err := sdk.ManageEventWithContext(context.Background(), event)
+	return err
 }
 
 func generateUUID() string {

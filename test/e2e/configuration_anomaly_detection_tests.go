@@ -89,7 +89,9 @@ var _ = Describe("Configuration Anomaly Detection", Ordered, func() {
 		//
 		pdRoutingKey := os.Getenv("CAD_PAGERDUTY_ROUTING_KEY")
 		Expect(pdRoutingKey).NotTo(BeEmpty(), "PAGERDUTY_ROUTING_KEY must be set")
-		testPdClient = utils.NewClient(pdRoutingKey)
+		pdAPIToken := os.Getenv("CAD_PD_TOKEN")
+		Expect(pdAPIToken).NotTo(BeEmpty(), "CAD_PD_TOKEN must be set")
+		testPdClient = utils.NewClient(pdRoutingKey, pdAPIToken)
 
 		cadCfg, err = config.ParseConfig(e2eInvestigationConfig, investigations.GetAvailableInvestigationsNames())
 		Expect(err).NotTo(HaveOccurred(), "Failed to parse embedded investigation config")
