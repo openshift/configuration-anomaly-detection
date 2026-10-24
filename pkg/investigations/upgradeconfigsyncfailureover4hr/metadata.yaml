@@ -11,4 +11,27 @@ rbac:
             - "secrets"
           resourceNames:
             - "pull-secret"
+    - namespace: "openshift-managed-upgrade-operator"
+      rules:
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - "configmaps"
+          resourceNames:
+            - "managed-upgrade-operator-config"
+        - verbs:
+            - "get"
+            - "list"
+          apiGroups:
+            - ""
+          resources:
+            - "pods"
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - "pods/log"
 customerDataAccess: false
