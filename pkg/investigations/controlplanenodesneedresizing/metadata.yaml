@@ -1,0 +1,12 @@
+name: controlplanenodesneedresizing
+rbac:
+  clusterRoleRules:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "nodes"
+        - "pods"
+customerDataAccess: false

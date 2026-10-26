@@ -9,6 +9,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clustermonitoringerrorbudgetburn"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/clusteroperatordownhcp"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/consoleerrorbudgetburn"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/controlplanenodesneedresizing"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/cpd"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/etcddatabasequotalowspace"
@@ -32,6 +33,7 @@ var availableInvestigations = []investigation.Investigation{
 	&chgm.Investigation{},
 	&clustermonitoringerrorbudgetburn.Investigation{},
 	&clusteroperatordownhcp.Investigation{},
+	&controlplanenodesneedresizing.Investigation{},
 	&cpd.Investigation{},
 	&etcddatabasequotalowspace.Investigation{},
 	&insightsoperatordown.Investigation{},
