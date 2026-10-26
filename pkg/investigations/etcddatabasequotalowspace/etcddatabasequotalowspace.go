@@ -13,7 +13,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
-	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
@@ -205,13 +204,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	if len(customers) > 0 {
-		result.Actions = append(result.Actions, executor.ServiceLog(
-			servicelogsv1.SeverityWarning,
-			"etcd database quota is filling with customer data",
-			"CAD found customer namespaces among the largest etcd consumers. Review those namespaces and remove unneeded objects before the API is affected. SRE will not defragment etcd from this alert.",
-		))
-	}
 	if isWarningAlert(r.PdClient) {
 		result.Actions = append(result.Actions, executor.Silence("etcd warning alert - investigation and analysis complete, see report for details"))
 	} else {
