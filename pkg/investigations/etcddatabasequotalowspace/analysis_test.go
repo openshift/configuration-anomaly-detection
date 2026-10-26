@@ -104,6 +104,19 @@ secrets,8.22`
 	assert.Equal(t, 8.22, result.TopResourceTypes[1].SizeMB)
 }
 
+func TestCustomerNamespacesSkipsPlatform(t *testing.T) {
+	result := &AnalysisResult{
+		TopNamespaces: []NamespaceSize{
+			{Namespace: "openshift-monitoring", SizeMB: 45},
+			{Namespace: "kube-system", SizeMB: 32},
+			{Namespace: "my-app", SizeMB: 10},
+		},
+	}
+	got := customerNamespaces(result)
+	assert.Len(t, got, 1)
+	assert.Equal(t, "my-app", got[0].Namespace)
+}
+
 func TestFormatAnalysisResults(t *testing.T) {
 	result := &AnalysisResult{
 		TopNamespaces: []NamespaceSize{
