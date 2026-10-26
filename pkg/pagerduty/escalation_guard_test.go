@@ -48,7 +48,7 @@ func TestEscalationLiveGuard(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write := func(w http.ResponseWriter, format string, args ...any) {
-				if _, err := fmt.Fprintf(w, format, args...); err != nil { //nolint:gosec // Local JSON fixtures, not HTML or request-derived content.
+				if _, err := fmt.Fprintf(w, format, args...); err != nil {
 					t.Errorf("write mock response: %v", err)
 				}
 			}
