@@ -1,50 +1,37 @@
 package controlplanenodesneedresizing
 
-import (
-	"context"
-	"strings"
-	"testing"
+import "testing"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-)
-
-type wrap struct{ client.Client }
-
-func TestSummarizeMasterPods(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
+func TestNodeFromAlert(t *testing.T) {
+	if got := nodeFromAlert("ControlPlaneNodesNeedResizingSRE node=master-0"); got != "master-0" {
+		t.Fatalf("got %q", got)
 	}
-	master := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "master-0", Labels: map[string]string{masterRoleLabel: ""}}}
-	worker := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "worker-0", Labels: map[string]string{"node-role.kubernetes.io/worker": ""}}}
-	pods := []*corev1.Pod{
-		pod("openshift-kube-apiserver", "kube-apiserver-master-0", "master-0"),
-		pod("my-app", "web-0", "master-0"),
-		pod("my-app", "web-1", "worker-0"),
-	}
-	objs := []client.Object{master, worker}
-	for _, p := range pods {
-		objs = append(objs, p)
-	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithIndex(&corev1.Pod{}, "spec.nodeName", func(obj client.Object) []string {
-		return []string{obj.(*corev1.Pod).Spec.NodeName}
-	}).Build()
-
-	got, err := summarizeMasterPods(context.Background(), wrap{c})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"Control plane nodes: 1", "my-app: 1 pods (customer)", "openshift-kube-apiserver: 1 pods (platform)"} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("summary missing %q:\n%s", want, got)
-		}
+	if got := nodeFromAlert("no node here"); got != "" {
+		t.Fatalf("got %q", got)
 	}
 }
 
-func pod(ns, name, node string) *corev1.Pod {
-	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns}, Spec: corev1.PodSpec{NodeName: node}}
+func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
+	usages := []podUsage{
+		{namespace: "openshift-kube-apiserver", name: "idle", cpuMilli: 10, memBytes: 20 * 1024 * 1024},
+		{namespace: "my-app", name: "heavy", cpuMilli: 50, memBytes: 800 * 1024 * 1024},
+	}
+	got := formatRanking("master-0", 70, 80, usages)
+	heavy := indexOf(got, "1. my-app/heavy")
+	idle := indexOf(got, "2. openshift-kube-apiserver/idle")
+	if heavy < 0 || idle < 0 || heavy > idle {
+		t.Fatalf("ranking:\n%s", got)
+	}
+	if indexOf(got, "(customer)") < 0 || indexOf(got, "(platform)") < 0 {
+		t.Fatalf("missing kind:\n%s", got)
+	}
+}
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
 }
