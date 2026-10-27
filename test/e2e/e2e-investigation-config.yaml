@@ -125,3 +125,12 @@
        - ccam
        - expiredcertificates
        - pdbblockingnodedrain
+
+   - alert_title: "UpgradeControlPlaneUpgradeTimeoutSRE"
+     name: "upgradecontrolplaneupgradetimeoutsre"
+     investigations:
+       - precheck
+       - ccam
+       - expiredcertificates
+       - upgradecontrolplaneupgradetimeoutsre
+       - pdbblockingnodedrain
