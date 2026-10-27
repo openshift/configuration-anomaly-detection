@@ -85,13 +85,44 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		}
 	}
 
-	// Nothing above escalated this incident yet (e.g. the AI-fallback chain
-	// was skipped entirely, or precheck/aiassisted didn't escalate on their
-	// own): issue a generic escalation now. If something upstream already
-	// escalated, notifier.Escalate() is a safe no-op (trackingPDClient
-	// de-duplicates at the source) rather than a real second escalation.
-	if escErr := c.notifier.Escalate(); escErr != nil {
-		return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
+	// Must-gather sampling: collect diagnostics for a fraction of unmapped alerts.
+	if c.ocmClient == nil {
+		if escErr := c.notifier.Escalate(); escErr != nil {
+			return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
+		}
+		return nil
+	}
+	mustgatherConfig := &config.AlertConfig{
+		AlertTitle: "mustgather-sampling",
+		When: &config.FilterNode{
+			And: []config.FilterNode{
+				{Field: config.FieldHCP, Operator: config.OperatorIn, Values: []string{"false"}},
+				{Field: config.FieldInfrastructureCluster, Operator: config.OperatorIn, Values: []string{"false"}},
+			},
+		},
+		Investigations: []config.InvestigationEntry{
+			{Name: "mustgather", When: &config.FilterNode{
+				Operator: config.OperatorSample, Values: []string{"0.10"},
+			}},
+		},
+	}
+	mgFilterCtx := &types.FilterContext{
+		AlertName:   mustgatherConfig.AlertTitle,
+		AlertTitle:  alertTitle,
+		ServiceName: c.pdClient.GetServiceName(),
+	}
+	if err := c.runChain(ctx, clusterID, mustgatherConfig, mgFilterCtx, nil); err != nil && !errors.Is(err, errAlertFiltered) {
+		logging.Warnf("Must-gather sampling failed: %v", err)
+	}
+
+	// When alertConfig is nil at this point, no config matched and the AI
+	// fallback was not configured. The interceptor already escalated this
+	// incident before starting the pipeline, so skip escalation here to
+	// avoid a duplicate.
+	if alertConfig != nil {
+		if escErr := c.notifier.Escalate(); escErr != nil {
+			return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
+		}
 	}
 	return nil
 }

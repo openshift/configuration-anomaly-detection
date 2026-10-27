@@ -90,3 +90,39 @@ func TestInvestigate_AlreadyEscalated_DoesNotEscalateAgain(t *testing.T) {
 	err := c.Investigate(context.Background())
 	require.NoError(t, err)
 }
+
+// TestInvestigate_UnmappedAlert_NoOCMClient_Escalates verifies that when no
+// alert config matches (alertConfig is nil), no AI agent is configured, and
+// no OCM client is available, Investigate escalates exactly once from the
+// must-gather sampling guard (c.ocmClient == nil) and does not attempt
+// a second escalation at the final fallback (which is gated by alertConfig != nil).
+func TestInvestigate_UnmappedAlert_NoOCMClient_Escalates(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPD := pdmock.NewMockClient(ctrl)
+	mockPD.EXPECT().RetrieveClusterID().Return("cluster123", nil)
+	mockPD.EXPECT().GetIncidentRef().Return("INC-1").AnyTimes()
+	mockPD.EXPECT().GetServiceID().Return("SVC-1").AnyTimes()
+	mockPD.EXPECT().GetServiceName().Return("some-service").AnyTimes()
+	mockPD.EXPECT().GetTitle().Return("UnmappedAlert").AnyTimes()
+	// Must be called exactly once: from the must-gather guard's
+	// c.ocmClient == nil early return. The final escalation is skipped
+	// because alertConfig is nil (the interceptor already escalated).
+	mockPD.EXPECT().EscalateIncident().Return(nil).Times(1)
+
+	tracked := newTrackingPDClient(mockPD)
+	c := &PagerDutyController{
+		pdClient: tracked,
+		investigationRunner: investigationRunner{
+			// No config, no OCM client — simulates the unmapped alert path
+			// where the interceptor already escalated before starting the pipeline.
+			dependencies: &Dependencies{},
+			notifier:     newPDIncidentNotifier(tracked),
+		},
+	}
+
+	err := c.Investigate(context.Background())
+	require.NoError(t, err)
+	require.True(t, tracked.HasEscalated())
+}

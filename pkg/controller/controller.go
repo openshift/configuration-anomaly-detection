@@ -635,6 +635,21 @@ func (c *investigationRunner) populateFilterContextFromOCM(filterCtx *types.Filt
 		filterCtx.OrganizationID = orgID
 	}
 
+	// Infrastructure cluster check requires an OCM API call — only call if a filter needs it.
+	if slices.Contains(requiredKeys, config.FieldInfrastructureCluster) {
+		if filterCtx.HCP {
+			filterCtx.InfrastructureCluster = false
+		} else {
+			isManaging, err := c.ocmClient.IsManagingCluster(cluster.ID())
+			if err != nil {
+				logging.Warnf("Failed to check if cluster %s is a managing cluster: %v. Assuming infrastructure (fail-closed).", cluster.ID(), err)
+				filterCtx.InfrastructureCluster = true
+			} else {
+				filterCtx.InfrastructureCluster = isManaging
+			}
+		}
+	}
+
 	// Owner ID and email require subscription + account lookups — only call if a filter needs them.
 	if slices.Contains(requiredKeys, config.FieldOwnerID) || slices.Contains(requiredKeys, config.FieldOwnerEmail) {
 		creator, err := c.ocmClient.GetCreatorFromCluster(cluster)

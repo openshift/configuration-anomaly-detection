@@ -41,17 +41,18 @@ const (
 // Field name constants for FilterContext fields.
 // Use these in filter configs, resolveField, and anywhere a field is referenced by name.
 const (
-	FieldClusterID      = "ClusterID"
-	FieldClusterName    = "ClusterName"
-	FieldOrganizationID = "OrganizationID"
-	FieldOwnerID        = "OwnerID"
-	FieldOwnerEmail     = "OwnerEmail"
-	FieldCloudProvider  = "CloudProvider"
-	FieldHCP            = "HCP"
-	FieldClusterState   = "ClusterState"
-	FieldAlertName      = "AlertName"
-	FieldAlertTitle     = "AlertTitle"
-	FieldServiceName    = "ServiceName"
+	FieldClusterID             = "ClusterID"
+	FieldClusterName           = "ClusterName"
+	FieldOrganizationID        = "OrganizationID"
+	FieldOwnerID               = "OwnerID"
+	FieldOwnerEmail            = "OwnerEmail"
+	FieldCloudProvider         = "CloudProvider"
+	FieldHCP                   = "HCP"
+	FieldClusterState          = "ClusterState"
+	FieldInfrastructureCluster = "InfrastructureCluster"
+	FieldAlertName             = "AlertName"
+	FieldAlertTitle            = "AlertTitle"
+	FieldServiceName           = "ServiceName"
 )
 
 // validFields lists all FilterContext field names that can be used in leaf nodes.
@@ -65,6 +66,7 @@ var validFields = []string{
 	FieldCloudProvider,
 	FieldHCP,
 	FieldClusterState,
+	FieldInfrastructureCluster,
 	FieldAlertName,
 	FieldAlertTitle,
 	FieldServiceName,
@@ -369,6 +371,8 @@ func resolveField(field string, ctx *types.FilterContext) (string, error) {
 		return strconv.FormatBool(ctx.HCP), nil
 	case FieldClusterState:
 		return ctx.ClusterState, nil
+	case FieldInfrastructureCluster:
+		return strconv.FormatBool(ctx.InfrastructureCluster), nil
 	case FieldAlertName:
 		return ctx.AlertName, nil
 	case FieldAlertTitle:
