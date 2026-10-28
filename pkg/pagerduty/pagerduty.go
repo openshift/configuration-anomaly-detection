@@ -635,7 +635,7 @@ func (c *SdkClient) EscalateIncident() error {
 		if strings.Contains(err.Error(), "the escalation policy or incident id are invalid") {
 			return skipEscalation("escalation policy invalid or no higher level available")
 		}
-		return fmt.Errorf("could not escalate the incident: %w", err)
+		return errors.New("could not escalate the incident")
 	}
 	logging.Info("PagerDuty accepted CAD escalation to level 2 (best-effort live-state guard)")
 	return nil
