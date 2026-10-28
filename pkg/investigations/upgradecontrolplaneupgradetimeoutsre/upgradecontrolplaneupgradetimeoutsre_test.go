@@ -185,7 +185,8 @@ func TestRun_CVOFailingWins(t *testing.T) {
 	_, notes := runWith(t, &investigation.Resources{K8sClient: k8s})
 
 	assert.Contains(t, notes, "Likely blocker: CVO reports Failing: Cluster operator authentication is degraded")
-	assert.Contains(t, notes, "authentication (OAuthServerDeploymentDegraded: pods not ready)")
+	assert.Contains(t, notes, "authentication (OAuthServerDeploymentDegraded)")
+	assert.NotContains(t, notes, "pods not ready", "operator condition messages are not written to the note")
 }
 
 func TestRun_CompletedUpgrade(t *testing.T) {
@@ -197,6 +198,22 @@ func TestRun_CompletedUpgrade(t *testing.T) {
 	_, notes := runWith(t, &investigation.Resources{K8sClient: k8s})
 
 	assert.Contains(t, notes, "Likely blocker: none: upgrade to 4.20.2 has completed")
+}
+
+// A failed MCP list must not be reported as "no blocker found".
+func TestRun_MCPReadErrorIsInconclusive(t *testing.T) {
+	noMCPScheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(noMCPScheme)
+	_ = configv1.Install(noMCPScheme)
+	k8s := fake.NewClientBuilder().WithScheme(noMCPScheme).WithObjects(
+		clusterVersion(toVersion, false),
+		clusterOperator("kube-apiserver", toVersion),
+	).Build()
+
+	_, notes := runWith(t, &investigation.Resources{K8sClient: k8s})
+
+	assert.Contains(t, notes, "MachineConfigPools: failed to list")
+	assert.Contains(t, notes, "Likely blocker: inconclusive: could not read MachineConfigPools")
 }
 
 func TestRun_MissingClusterVersion(t *testing.T) {
@@ -222,7 +239,7 @@ func TestCheckClusterOperators_LaggingAndUnavailable(t *testing.T) {
 
 	assert.ElementsMatch(t, []string{"network (at 4.19.10)", "ingress (at 4.19.10)"}, state.LaggingOperators)
 	require.Len(t, state.UnavailableOperators, 1)
-	assert.Equal(t, "ingress (IngressUnavailable: router pods pending)", state.UnavailableOperators[0], "messages are collapsed to one line")
+	assert.Equal(t, "ingress (IngressUnavailable)", state.UnavailableOperators[0], "reason only, no raw message")
 	assert.Empty(t, state.DegradedOperators)
 }
 
@@ -261,6 +278,7 @@ func TestClassify(t *testing.T) {
 		{"degraded", upgradeState{DesiredVersion: toVersion, DegradedOperators: []string{"b"}, MasterPool: master(true, true)}, "degraded operator(s): b"},
 		{"master degraded", upgradeState{DesiredVersion: toVersion, MasterPool: master(true, true)}, "master MachineConfigPool degraded: bad disk"},
 		{"master updating", upgradeState{DesiredVersion: toVersion, MasterPool: master(true, false)}, "master MachineConfigPool rollout stalled at 1/3"},
+		{"read error beats lagging", upgradeState{DesiredVersion: toVersion, ReadErrors: []string{"MachineConfigPools"}, LaggingOperators: []string{"a"}}, "inconclusive: could not read MachineConfigPools"},
 		{"slow", upgradeState{DesiredVersion: toVersion, LaggingOperators: []string{"a", "b"}}, "2 operator(s) not yet at 4.20.2"},
 		{"nothing", upgradeState{DesiredVersion: toVersion}, "no blocker found"},
 	}

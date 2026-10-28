@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
 	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
@@ -32,6 +33,10 @@ const (
 	investigationName = "upgradecontrolplaneupgradetimeoutsre"
 	masterPool        = "master"
 	operatorOperand   = "operator"
+
+	// checksTimeout bounds all cluster reads so a hung API call cannot block
+	// the PD note and escalation.
+	checksTimeout = 2 * time.Minute
 )
 
 // upgradeState is the read-only snapshot used to pick a verdict.
@@ -41,14 +46,19 @@ type upgradeState struct {
 	CVOFailing     string // ClusterVersion Failing=True message, if any
 	CVOProgressing string // ClusterVersion Progressing message, if any
 
-	DegradedOperators    []string // "name (reason: message)"
-	UnavailableOperators []string
+	DegradedOperators    []string // "name (reason)"
+	UnavailableOperators []string // "name (reason)"
 	LaggingOperators     []string // operators whose operand version != desired
 
 	MasterPool *poolState
 	OtherPools []poolState
+
+	// ReadErrors names the resources that could not be read, so the verdict
+	// is reported as inconclusive rather than "no blocker found".
+	ReadErrors []string
 }
 
+// poolState summarises one MachineConfigPool's rollout.
 type poolState struct {
 	Name           string
 	Machines       int32
@@ -59,8 +69,10 @@ type poolState struct {
 	DegradedReason string
 }
 
+// Investigation implements the UpgradeControlPlaneUpgradeTimeoutSRE investigation.
 type Investigation struct{}
 
+// Run gates on cluster type, reads upgrade state and escalates with a verdict.
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
@@ -98,7 +110,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, nil
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), checksTimeout)
+	defer cancel()
 	state := upgradeState{}
 
 	i.checkClusterVersion(ctx, r.K8sClient, &state, r.Notes)
@@ -121,6 +134,7 @@ func (i *Investigation) checkClusterVersion(ctx context.Context, k8sClient k8scl
 	cv := &configv1.ClusterVersion{}
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: "version"}, cv); err != nil {
 		notes.AppendWarning("ClusterVersion: failed to get: %v", err)
+		state.ReadErrors = append(state.ReadErrors, "ClusterVersion")
 		return
 	}
 
@@ -154,12 +168,14 @@ func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8s
 	coList := &configv1.ClusterOperatorList{}
 	if err := k8sClient.List(ctx, coList); err != nil {
 		notes.AppendWarning("ClusterOperators: failed to list: %v", err)
+		state.ReadErrors = append(state.ReadErrors, "ClusterOperators")
 		return
 	}
 
 	for _, co := range coList.Items {
 		for _, cond := range co.Status.Conditions {
-			detail := fmt.Sprintf("%s (%s: %s)", co.Name, cond.Reason, oneLine(cond.Message))
+			// Reason only: condition messages can carry hostnames and endpoints.
+			detail := fmt.Sprintf("%s (%s)", co.Name, cond.Reason)
 			switch {
 			case cond.Type == configv1.OperatorDegraded && cond.Status == configv1.ConditionTrue:
 				state.DegradedOperators = append(state.DegradedOperators, detail)
@@ -198,6 +214,7 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 	mcpList := &mcfgv1.MachineConfigPoolList{}
 	if err := k8sClient.List(ctx, mcpList); err != nil {
 		notes.AppendWarning("MachineConfigPools: failed to list: %v", err)
+		state.ReadErrors = append(state.ReadErrors, "MachineConfigPools")
 		return
 	}
 
@@ -265,6 +282,8 @@ func classify(s upgradeState) string {
 	case s.MasterPool != nil && s.MasterPool.IsUpdating:
 		return fmt.Sprintf("master MachineConfigPool rollout stalled at %d/%d nodes; check for drain blockers (see pdbblockingnodedrain note)",
 			s.MasterPool.Updated, s.MasterPool.Machines)
+	case len(s.ReadErrors) > 0:
+		return "inconclusive: could not read " + strings.Join(s.ReadErrors, ", ") + "; investigate manually"
 	case len(s.LaggingOperators) > 0:
 		return fmt.Sprintf("%d operator(s) not yet at %s and none degraded: upgrade may be slow rather than stuck", len(s.LaggingOperators), s.DesiredVersion)
 	default:
@@ -272,6 +291,7 @@ func classify(s upgradeState) string {
 	}
 }
 
+// operandVersion returns the ClusterOperator's "operator" operand version.
 func operandVersion(co configv1.ClusterOperator) string {
 	for _, v := range co.Status.Versions {
 		if v.Name == operatorOperand {
@@ -281,6 +301,7 @@ func operandVersion(co configv1.ClusterOperator) string {
 	return ""
 }
 
+// oneLine collapses whitespace and truncates s for a single-line PD note.
 func oneLine(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	const maxLen = 300
@@ -290,18 +311,22 @@ func oneLine(s string) string {
 	return s
 }
 
+// Name returns the investigation name, which must match the package directory.
 func (i *Investigation) Name() string {
 	return investigationName
 }
 
+// AlertTitle returns the PagerDuty alert title this investigation handles.
 func (i *Investigation) AlertTitle() string {
 	return "UpgradeControlPlaneUpgradeTimeoutSRE"
 }
 
+// Description returns a one-line summary of the investigation.
 func (i *Investigation) Description() string {
 	return "Triages a stalled Classic control-plane upgrade from ClusterVersion, ClusterOperators and MachineConfigPools"
 }
 
+// IsExperimental reports whether the investigation is gated behind CAD_EXPERIMENTAL_ENABLED.
 func (i *Investigation) IsExperimental() bool {
 	return false
 }
