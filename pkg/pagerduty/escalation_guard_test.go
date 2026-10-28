@@ -28,9 +28,12 @@ func (f escalationHTTPClientFunc) Do(r *http.Request) (*http.Response, error) {
 
 // TestEscalationUpdateErrorRedaction keeps failed updates retryable without exposing SDK details.
 func TestEscalationUpdateErrorRedaction(t *testing.T) {
-	logging.InitLogger("fatal", "", "")
 	for _, transportFailure := range []bool{false, true} {
 		t.Run(fmt.Sprintf("transportFailure=%t", transportFailure), func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			originalLogger := logging.RawLogger
+			logging.RawLogger = zap.New(core).Sugar()
+			t.Cleanup(func() { logging.RawLogger = originalLogger })
 			updates := 0
 			sdkClient := sdk.NewClient("fake")
 			sdkClient.HTTPClient = escalationHTTPClientFunc(func(r *http.Request) (*http.Response, error) {
@@ -73,6 +76,18 @@ func TestEscalationUpdateErrorRedaction(t *testing.T) {
 			}
 			if updates != 2 {
 				t.Fatalf("updates=%d, want 2 failed attempts", updates)
+			}
+			if logs.Len() != updates {
+				t.Fatalf("logs=%d, want one diagnostic per failed update", logs.Len())
+			}
+			wantMessage := "PagerDuty escalation update failed"
+			if !transportFailure {
+				wantMessage += fmt.Sprintf(" (HTTP status %d)", http.StatusServiceUnavailable)
+			}
+			for _, entry := range logs.All() {
+				if entry.Level != zap.ErrorLevel || entry.Message != wantMessage || len(entry.Context) != 0 {
+					t.Errorf("expected fixed error diagnostic %q without SDK details, got %+v", wantMessage, entry)
+				}
 			}
 		})
 	}
