@@ -30,9 +30,11 @@ const (
 
 func testScheme() *runtime.Scheme {
 	s := runtime.NewScheme()
-	_ = corev1.AddToScheme(s)
-	_ = configv1.Install(s)
-	_ = mcfgv1.Install(s)
+	for _, add := range []func(*runtime.Scheme) error{corev1.AddToScheme, configv1.Install, mcfgv1.Install} {
+		if err := add(s); err != nil {
+			panic(err)
+		}
+	}
 	return s
 }
 
@@ -203,8 +205,8 @@ func TestRun_CompletedUpgrade(t *testing.T) {
 // A failed MCP list must not be reported as "no blocker found".
 func TestRun_MCPReadErrorIsInconclusive(t *testing.T) {
 	noMCPScheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(noMCPScheme)
-	_ = configv1.Install(noMCPScheme)
+	require.NoError(t, corev1.AddToScheme(noMCPScheme))
+	require.NoError(t, configv1.Install(noMCPScheme))
 	k8s := fake.NewClientBuilder().WithScheme(noMCPScheme).WithObjects(
 		clusterVersion(toVersion, false),
 		clusterOperator("kube-apiserver", toVersion),
@@ -259,6 +261,28 @@ func TestCheckMachineConfigPools_DegradedMaster(t *testing.T) {
 	assert.Contains(t, notes.String(), "master: 2/3 updated, DEGRADED (1 machine(s))")
 }
 
+func TestCheckMachineConfigPools_PausedAndNotUpdated(t *testing.T) {
+	paused := pool(masterPool, 3, 1, 0, false, false, "")
+	paused.Spec.Paused = true
+	paused.Status.Conditions = append(paused.Status.Conditions,
+		mcfgv1.MachineConfigPoolCondition{Type: mcfgv1.MachineConfigPoolUpdated, Status: corev1.ConditionFalse})
+	notUpdated := pool("worker", 3, 2, 0, false, false, "")
+	notUpdated.Status.Conditions = append(notUpdated.Status.Conditions,
+		mcfgv1.MachineConfigPoolCondition{Type: mcfgv1.MachineConfigPoolUpdated, Status: corev1.ConditionFalse})
+
+	state := upgradeState{}
+	notes := newNotes()
+	(&Investigation{}).checkMachineConfigPools(context.Background(), newFakeClient(paused, notUpdated), &state, notes)
+
+	require.NotNil(t, state.MasterPool)
+	assert.True(t, state.MasterPool.IsPaused)
+	assert.True(t, state.OtherPools[0].stuck())
+	assert.Contains(t, notes.String(), "rollout not finished")
+	assert.Contains(t, notes.String(), "master: 1/3 updated, PAUSED")
+	assert.Contains(t, notes.String(), "worker: 2/3 updated, not progressing")
+	assert.NotContains(t, notes.String(), "all 2 pools updated")
+}
+
 // --- classify ---
 
 func TestClassify(t *testing.T) {
@@ -277,6 +301,8 @@ func TestClassify(t *testing.T) {
 		{"unavailable before degraded", upgradeState{DesiredVersion: toVersion, UnavailableOperators: []string{"a"}, DegradedOperators: []string{"b"}}, "unavailable operator(s): a"},
 		{"degraded", upgradeState{DesiredVersion: toVersion, DegradedOperators: []string{"b"}, MasterPool: master(true, true)}, "degraded operator(s): b"},
 		{"master degraded", upgradeState{DesiredVersion: toVersion, MasterPool: master(true, true)}, "master MachineConfigPool degraded: bad disk"},
+		{"master paused", upgradeState{DesiredVersion: toVersion, MasterPool: &poolState{Name: masterPool, Machines: 3, Updated: 1, IsPaused: true, NotUpdated: true}}, "master MachineConfigPool is paused at 1/3"},
+		{"master not updated, not progressing", upgradeState{DesiredVersion: toVersion, MasterPool: &poolState{Name: masterPool, Machines: 3, Updated: 2, NotUpdated: true}}, "master MachineConfigPool not updated (Updated=False) and not progressing at 2/3"},
 		{"master updating", upgradeState{DesiredVersion: toVersion, MasterPool: master(true, false)}, "master MachineConfigPool rollout stalled at 1/3"},
 		{"read error beats lagging", upgradeState{DesiredVersion: toVersion, ReadErrors: []string{"MachineConfigPools"}, LaggingOperators: []string{"a"}}, "inconclusive: could not read MachineConfigPools"},
 		{"slow", upgradeState{DesiredVersion: toVersion, LaggingOperators: []string{"a", "b"}}, "2 operator(s) not yet at 4.20.2"},

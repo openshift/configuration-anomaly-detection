@@ -66,7 +66,14 @@ type poolState struct {
 	Degraded       int32
 	IsUpdating     bool
 	IsDegraded     bool
+	NotUpdated     bool // Updated=False: the pool has not reached its target config
+	IsPaused       bool // spec.paused: MCO will not roll out pending changes
 	DegradedReason string
+}
+
+// stuck reports a pool that has not finished its rollout and is not progressing.
+func (p poolState) stuck() bool {
+	return (p.NotUpdated || p.IsPaused) && !p.IsUpdating
 }
 
 // Investigation implements the UpgradeControlPlaneUpgradeTimeoutSRE investigation.
@@ -226,17 +233,17 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 			Machines: mcp.Status.MachineCount,
 			Updated:  mcp.Status.UpdatedMachineCount,
 			Degraded: mcp.Status.DegradedMachineCount,
+			IsPaused: mcp.Spec.Paused,
 		}
 		for _, cond := range mcp.Status.Conditions {
-			if cond.Status != corev1.ConditionTrue {
-				continue
-			}
-			switch cond.Type {
-			case mcfgv1.MachineConfigPoolUpdating:
+			switch {
+			case cond.Type == mcfgv1.MachineConfigPoolUpdating && cond.Status == corev1.ConditionTrue:
 				ps.IsUpdating = true
-			case mcfgv1.MachineConfigPoolDegraded:
+			case cond.Type == mcfgv1.MachineConfigPoolDegraded && cond.Status == corev1.ConditionTrue:
 				ps.IsDegraded = true
 				ps.DegradedReason = oneLine(cond.Message)
+			case cond.Type == mcfgv1.MachineConfigPoolUpdated && cond.Status == corev1.ConditionFalse:
+				ps.NotUpdated = true
 			}
 		}
 
@@ -247,9 +254,15 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 			state.OtherPools = append(state.OtherPools, ps)
 		}
 
-		if ps.IsUpdating || ps.IsDegraded {
+		if ps.IsUpdating || ps.IsDegraded || ps.NotUpdated || ps.IsPaused {
 			healthy = false
 			line := fmt.Sprintf("%s: %d/%d updated", ps.Name, ps.Updated, ps.Machines)
+			if ps.IsPaused {
+				line += ", PAUSED"
+			}
+			if ps.stuck() && !ps.IsDegraded {
+				line += ", not progressing"
+			}
 			if ps.IsDegraded {
 				line += fmt.Sprintf(", DEGRADED (%d machine(s)): %s", ps.Degraded, ps.DegradedReason)
 			}
@@ -279,6 +292,12 @@ func classify(s upgradeState) string {
 		return "degraded operator(s): " + strings.Join(s.DegradedOperators, "; ")
 	case s.MasterPool != nil && s.MasterPool.IsDegraded:
 		return "master MachineConfigPool degraded: " + s.MasterPool.DegradedReason
+	case s.MasterPool != nil && s.MasterPool.IsPaused:
+		return fmt.Sprintf("master MachineConfigPool is paused at %d/%d nodes; pending changes will not roll out until it is unpaused",
+			s.MasterPool.Updated, s.MasterPool.Machines)
+	case s.MasterPool != nil && s.MasterPool.stuck():
+		return fmt.Sprintf("master MachineConfigPool not updated (Updated=False) and not progressing at %d/%d nodes; check machine-config-controller logs",
+			s.MasterPool.Updated, s.MasterPool.Machines)
 	case s.MasterPool != nil && s.MasterPool.IsUpdating:
 		return fmt.Sprintf("master MachineConfigPool rollout stalled at %d/%d nodes; check for drain blockers (see pdbblockingnodedrain note)",
 			s.MasterPool.Updated, s.MasterPool.Machines)
