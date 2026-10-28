@@ -9,6 +9,9 @@ func TestNodeFromAlert(t *testing.T) {
 	if got := nodeFromAlert("no node here"); got != "" {
 		t.Fatalf("got %q", got)
 	}
+	if got := nodeFromAlert("instance=10.0.0.1:9100 node=master-0"); got != "master-0" {
+		t.Fatalf("got %q", got)
+	}
 }
 
 func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
@@ -16,7 +19,7 @@ func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
 		{namespace: "openshift-kube-apiserver", name: "idle", cpuMilli: 10, memBytes: 20 * 1024 * 1024},
 		{namespace: "my-app", name: "heavy", cpuMilli: 50, memBytes: 800 * 1024 * 1024},
 	}
-	got := formatRanking("master-0", 70, 80, usages)
+	got := formatRanking("master-0", 70, 80, true, usages)
 	heavy := indexOf(got, "1. my-app/heavy")
 	idle := indexOf(got, "2. openshift-kube-apiserver/idle")
 	if heavy < 0 || idle < 0 || heavy > idle {

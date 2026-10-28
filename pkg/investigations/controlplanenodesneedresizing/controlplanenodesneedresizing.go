@@ -28,7 +28,10 @@ const (
 	sopUsageThreshold = 66
 )
 
-var nodeInAlert = regexp.MustCompile(`(?:^|[\s,])(?:node|instance)=([A-Za-z0-9_.-]+)`)
+var (
+	nodeLabel     = regexp.MustCompile(`(?:^|[\s,])node=([A-Za-z0-9_.-]+)`)
+	instanceLabel = regexp.MustCompile(`(?:^|[\s,])instance=([A-Za-z0-9_.-]+)`)
+)
 
 // Investigation writes a PagerDuty note for ControlPlaneNodesNeedResizingSRE.
 type Investigation struct{}
@@ -137,12 +140,15 @@ func listMasterNodes(ctx context.Context, k8sClient k8sclient.Client) (map[strin
 	return out, nil
 }
 
+// node= is preferred. instance= is often ip:port and must not hide a real node name.
 func nodeFromAlert(text string) string {
-	m := nodeInAlert.FindStringSubmatch(text)
-	if len(m) < 2 {
-		return ""
+	if m := nodeLabel.FindStringSubmatch(text); len(m) >= 2 {
+		return m[1]
 	}
-	return m[1]
+	if m := instanceLabel.FindStringSubmatch(text); len(m) >= 2 {
+		return m[1]
+	}
+	return ""
 }
 
 func hotMasterNodes(ctx context.Context, k8sClient k8sclient.Client, nodes map[string]corev1.Node) ([]string, error) {
@@ -208,17 +214,20 @@ func rankNode(ctx context.Context, k8sClient k8sclient.Client, nodeName string, 
 			memBytes:  mem.Value(),
 		})
 	}
-	cpuPct, memPct := 0, 0
-	if body, err := metricsBody(ctx, k8sClient, "/apis/metrics.k8s.io/v1beta1/nodes/"+nodeName); err == nil {
-		var nm nodeMetrics
-		if json.Unmarshal(body, &nm) == nil {
-			cpuPct, memPct = usagePercents(nm.Usage, node.Status.Allocatable)
-		}
+	// A failed lookup must not be reported as 0%.
+	nodeBody, err := metricsBody(ctx, k8sClient, "/apis/metrics.k8s.io/v1beta1/nodes/"+nodeName)
+	if err != nil {
+		return formatRanking(nodeName, 0, 0, false, usages), nil
 	}
-	return formatRanking(nodeName, cpuPct, memPct, usages), nil
+	var nm nodeMetrics
+	if err := json.Unmarshal(nodeBody, &nm); err != nil {
+		return formatRanking(nodeName, 0, 0, false, usages), nil
+	}
+	cpuPct, memPct := usagePercents(nm.Usage, node.Status.Allocatable)
+	return formatRanking(nodeName, cpuPct, memPct, true, usages), nil
 }
 
-func formatRanking(nodeName string, cpuPct, memPct int, usages []podUsage) string {
+func formatRanking(nodeName string, cpuPct, memPct int, haveNodeUsage bool, usages []podUsage) string {
 	sort.Slice(usages, func(i, j int) bool {
 		if usages[i].memBytes == usages[j].memBytes {
 			return usages[i].cpuMilli > usages[j].cpuMilli
@@ -226,7 +235,11 @@ func formatRanking(nodeName string, cpuPct, memPct int, usages []podUsage) strin
 		return usages[i].memBytes > usages[j].memBytes
 	})
 	var b strings.Builder
-	fmt.Fprintf(&b, "Node %s: CPU %d%%, memory %d%%\n", nodeName, cpuPct, memPct)
+	if haveNodeUsage {
+		fmt.Fprintf(&b, "Node %s: CPU %d%%, memory %d%%\n", nodeName, cpuPct, memPct)
+	} else {
+		fmt.Fprintf(&b, "Node %s: CPU and memory percentages unavailable\n", nodeName)
+	}
 	if len(usages) == 0 {
 		b.WriteString("No pod metrics were found on this node.\n")
 		return b.String()
@@ -242,8 +255,9 @@ func formatRanking(nodeName string, cpuPct, memPct int, usages []podUsage) strin
 	return b.String()
 }
 
+// openshift, openshift-*, and kube-* are platform namespaces.
 func isPlatformNamespace(ns string) bool {
-	return strings.HasPrefix(ns, "openshift-") || strings.HasPrefix(ns, "kube-")
+	return ns == "openshift" || strings.HasPrefix(ns, "openshift-") || strings.HasPrefix(ns, "kube-")
 }
 
 func usagePercents(usage map[string]string, allocatable corev1.ResourceList) (int, int) {
