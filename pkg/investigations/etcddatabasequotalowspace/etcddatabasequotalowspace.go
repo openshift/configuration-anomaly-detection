@@ -361,7 +361,7 @@ func etcdFollowUp(warning bool, customersLargest bool, customers []NamespaceSize
 				names = append(names, fmt.Sprintf("%s (%.2f MB)", ns.Namespace, ns.SizeMB))
 			}
 			actions = append(actions, executor.ServiceLog(
-				servicelogsv1.SeverityWarning,
+				servicelogsv1.SeverityModerate,
 				"etcd quota was reduced by defragmentation; customer data remains large",
 				"CAD defragmented etcd and silenced the alert. The largest customer namespaces are still: "+strings.Join(names, ", ")+". Remove unneeded objects if the database keeps growing.",
 			))
