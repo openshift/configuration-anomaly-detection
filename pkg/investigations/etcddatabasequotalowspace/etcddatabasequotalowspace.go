@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
@@ -179,7 +180,6 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	formattedResults := formatAnalysisResults(analysisResult)
-	formattedResults += "\nCAD does not defragment etcd. Defragmentation stays a manual SOP step. Compare etcd_mvcc_db_total_size_in_bytes with etcd_mvcc_db_total_size_in_use_in_bytes before defragmenting.\n"
 
 	customers := customerNamespaces(analysisResult)
 	if len(customers) > 0 {
@@ -188,6 +188,9 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 			formattedResults += fmt.Sprintf("%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB)
 		}
 	}
+
+	decision, defragErr := runDefrag(ctx, r.K8sClient, etcdNamespace, false)
+	formattedResults += defragNote(decision, defragErr)
 
 	logging.Info("etcd snapshot analysis completed successfully")
 
@@ -204,11 +207,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("etcd critical alert - analysis complete, see report for details"))
-	}
+	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), customersAreLargest(analysisResult.TopNamespaces), customers, decision)...)
 
 	return result, nil
 }
@@ -323,17 +322,59 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
-	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("HCP etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("HCP etcd critical alert - analysis complete, see dynatrace logs for details"))
+	decision, defragErr := runDefrag(ctx, r.ManagementK8sClient, r.HCPNamespace, false)
+	if defragErr != nil {
+		r.Notes.AppendWarning("etcd defrag: %v", defragErr)
 	}
+	r.Notes.AppendAutomation("%s", defragNote(decision, defragErr))
+
+	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
+	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), false, nil, decision)...)
 	return result, nil
 }
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
+}
+
+func defragNote(decision defragDecision, defragErr error) string {
+	switch decision.kind {
+	case defragSucceeded:
+		return "\nDefrag completed and the database size dropped. The alert is silenced.\n"
+	case defragFailed:
+		if defragErr != nil {
+			return fmt.Sprintf("\nDefrag did not complete: %v\n", defragErr)
+		}
+		return "\nDefrag did not reduce the database size.\n"
+	default:
+		return "\nNo meaningful etcd fragmentation to reclaim. Defrag was not run.\n"
+	}
+}
+
+func etcdFollowUp(warning bool, customersLargest bool, customers []NamespaceSize, decision defragDecision) []types.Action {
+	switch decision.kind {
+	case defragSucceeded:
+		actions := []types.Action{executor.Silence("etcd defrag reduced database size")}
+		if customersLargest {
+			var names []string
+			for _, ns := range customers {
+				names = append(names, fmt.Sprintf("%s (%.2f MB)", ns.Namespace, ns.SizeMB))
+			}
+			actions = append(actions, executor.ServiceLog(
+				servicelogsv1.SeverityWarning,
+				"etcd quota was reduced by defragmentation; customer data remains large",
+				"CAD defragmented etcd and silenced the alert. The largest customer namespaces are still: "+strings.Join(names, ", ")+". Remove unneeded objects if the database keeps growing.",
+			))
+		}
+		return actions
+	case defragFailed:
+		return []types.Action{executor.Escalate("etcd defrag failed or did not reduce database size")}
+	default:
+		if warning {
+			return []types.Action{executor.Silence("etcd warning alert - no defrag was required")}
+		}
+		return []types.Action{executor.Escalate("etcd critical alert - no fragmentation to reclaim")}
+	}
 }
 
 // isWarningAlert checks if the PagerDuty incident title indicates a warning-severity alert.
