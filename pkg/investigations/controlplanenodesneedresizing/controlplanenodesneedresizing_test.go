@@ -30,6 +30,16 @@ func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
 	}
 }
 
+func TestTopWorkloadPicksHeaviest(t *testing.T) {
+	got := topWorkload("master-0", []podUsage{
+		{namespace: "openshift-kube-apiserver", name: "idle", cpuMilli: 10, memBytes: 20 * 1024 * 1024},
+		{namespace: "my-app", name: "heavy", cpuMilli: 50, memBytes: 800 * 1024 * 1024},
+	})
+	if !got.Found || got.Namespace != "my-app" || got.Name != "heavy" || got.Kind != "customer" || got.Node != "master-0" {
+		t.Fatalf("%+v", got)
+	}
+}
+
 func indexOf(s, sub string) int {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
