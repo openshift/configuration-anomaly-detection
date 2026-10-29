@@ -20,6 +20,12 @@ Investigations that have **no `when` entry** in the config always run for a give
 
 The `aiassisted` investigation can run in two ways: explicitly listed in an alert's investigation chain, or as an automatic fallback when no alert title matches (or when the alert-level filter rejects). The fallback path triggers whenever the `ai_agent` section is configured, even without an explicit `aiassisted` entry in `alerts`.
 
+CAD waits for Cora and attempts its report and PagerDuty note before guarded escalation, including on AI failure/timeout. Cora's recommendation does not control this attempt. Reporting failures do not prevent the guarded attempt. PagerDuty's automatic timer is unchanged and may escalate while Cora runs.
+
+For Cora-first ordering, use `aiassisted` alone or `precheck` → `aiassisted`, as in the fallback and examples. Precheck escalates only when it also stops the chain, so Cora will not run in those cases. Other earlier investigations must not escalate and then continue into Cora; arbitrary mixed chains are not covered by this ordering change. No chain-wide escalation deferral is introduced.
+
+All SDK escalation callers (including non-AI investigations) now check complete paginated incident history and fresh status immediately before escalation. Prior handling, unknown history/status, and failed lookups leave escalation to PagerDuty's timer. This retains the existing deployment assumption that CAD starts at level 1 and escalates to level 2; policy layout and assignee identity are not validated. Verify timer backstops for **all** affected policies before rollout. This is best-effort protection: PagerDuty exposes no applicable documented atomic conditional escalation, so an external escalation or acknowledgment can race the final GET/PUT. The [PagerDuty API schema](https://github.com/PagerDuty/api-schema/blob/main/reference/REST/openapiv3.json) documents escalation-history events and incident-update inputs; neither update endpoint specifies an applicable atomic precondition.
+
 ## Filter tree structure
 
 A filter is a recursive tree of nodes. Each node is either:
