@@ -278,6 +278,25 @@ Grafana dashboard configmaps are stored in the [Dashboards](./dashboards/) direc
 
 * [Boilerplate](./boilerplate/openshift/osd-container-image/README.md) -- Conventions for OSD containers.
 
+### Dependency Management
+
+Dependency updates are automated and gated through Prow + Tide; there is no manual bumping in the normal flow. Three separate automations open PRs here:
+
+* **MintMaker / Renovate** — gomod, Tekton, and the `build/Dockerfile` runner image (see below).
+* **Konflux references** — `chore(deps): update konflux references` PRs for the `quay.io/konflux-ci/tekton-catalog` refs in `.tekton/`. These are driven by MintMaker's own global config (branch `konflux/references/...`) and are gated by Konflux, not Prow — so they need no CAD-side config. General Tekton labelling/scheduling comes from boilerplate's shared config; CAD adds no Tekton rules.
+* **Boilerplate conventions** — the upstream boilerplate subscriber bot (`redhat-chai-bot`) opens `Boilerplate: Update to <sha>` PRs that refresh the `boilerplate/` directory and `_data/last-boilerplate-commit` (the automated equivalent of `make boilerplate-update`). This is configured upstream in `openshift/boilerplate`, not in this repo, and does **not** touch the `build/Dockerfile` builder line.
+
+MintMaker/Renovate details:
+
+* **Who raises PRs:** Konflux [MintMaker](https://github.com/konflux-ci/mintmaker) runs Renovate and opens the `fix(deps)` / `chore(deps)` PRs.
+* **Config:** [`.github/renovate.json`](./.github/renovate.json) extends [boilerplate's shared Renovate config](https://github.com/openshift/boilerplate/blob/master/.github/renovate.json), which owns the manager list, grouping, scheduling, and `lgtm`/`approved` pre-labelling. We only add the few things boilerplate does not:
+  * `dockerfile.includePaths` is re-scoped to `build/Dockerfile` — boilerplate scans `config/Dockerfile`, but CAD's image lives in `build/`.
+  * `area/dependency` + `ok-to-test` labels on gomod and `build/Dockerfile` PRs, so the bot PRs trigger Prow presubmits (boilerplate only auto-applies `ok-to-test` to major updates — see the `TODO(upstream)` notes in the config).
+  * `platformAutomerge: false`, so merges always go through Tide rather than GitHub native auto-merge.
+* **Container images in `build/Dockerfile`:**
+  * The **builder** uses the rolling `boilerplate:latest` tag (not digest-pinned, and ignored by Renovate). The tag is never pinned, so every image build fetches the current `:latest`, and CVE/Go-toolchain bumps flow in automatically — nothing bumps this line.
+  * The **runner** (`ubi9-minimal`) is digest-pinned and updated by Renovate.
+
 ### Tekton Pipeline Pruning
 
 Depending on usage, tekton's default resource pruning configuration may need to be adjusted.
