@@ -36,6 +36,10 @@ For testing against clusters:
 
 **Note**: Tests that require a cluster ID (like manual tests using shell scripts) need you to create a cluster first and provide its ID. Only then can you trigger the PagerDuty alert for that cluster to have local CAD run an investigation on it.
 
+## Dependency Management
+
+Dependency bumps (gomod, Tekton, the `build/Dockerfile` base image) are automated via Konflux MintMaker/Renovate and merged through Prow + Tide — do not manually bump them unless asked. Config lives in `.github/renovate.json`, which extends `openshift/boilerplate`'s shared config and only overrides CAD-specific needs. The `build/Dockerfile` builder uses the rolling `boilerplate:latest` tag (not digest-pinned), so every image build pulls the current builder automatically — nothing bumps that line; the `ubi9-minimal` runner is digest-pinned and Renovate-managed. Two other automations open PRs but need no CAD config: `chore(deps): update konflux references` (MintMaker-global, `.tekton/` refs, gated by Konflux) and `Boilerplate: Update to <sha>` (the upstream `redhat-chai-bot` subscriber, refreshes the `boilerplate/` dir; equivalent to `make boilerplate-update`). See the README "Dependency Management" section for details. See the README "Dependency Management" section for details.
+
 ## Architecture
 
 ### Core Components

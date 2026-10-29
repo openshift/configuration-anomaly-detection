@@ -4,106 +4,39 @@
     "github>openshift/boilerplate//.github/renovate.json"
   ],
   "platformAutomerge": false,
-  "enabledManagers": [
-    "tekton",
-    "gomod",
-    "dockerfile"
-  ],
-  "gomod": {
-    "packageRules": [
-      {
-        "description": "Disable major updates for indirect Go dependencies - they update when their parent dependency updates",
-        "matchUpdateTypes": [
-          "major"
-        ],
-        "matchDepTypes": [
-          "indirect"
-        ],
-        "enabled": false
-      }
-    ]
-  },
   "dockerfile": {
-    "pinDigests": true
+    "includePaths": [
+      "build/Dockerfile"
+    ]
   },
   "packageRules": [
     {
-      "description": "Docker updates for /build directory - twice weekly (Monday and Thursday mornings)",
+      "description": "CAD's container image lives at build/Dockerfile, not boilerplate's config/Dockerfile, so we re-scope the dockerfile manager (above) to build/Dockerfile. Boilerplate ignores its own builder image because it only scans config/; re-add that ignore here now that build/ is in scope. The boilerplate builder uses the rolling :latest tag (not digest-pinned), so every image build fetches the current image on its own - there is nothing for Renovate to bump, and pinning it would defeat the automatic CVE/Go-toolchain refresh.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "matchPackageNames": [
+        "quay.io/redhat-services-prod/openshift/boilerplate"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "build/Dockerfile base image (ubi) updates. Add area/dependency + ok-to-test so MintMaker PRs get Prow presubmits; boilerplate adds lgtm/approved for dockerfile minor/patch/pin/digest. Update cadence is left to MintMaker's global minimumReleaseAge, matching other boilerplate consumers. TODO(upstream): boilerplate only auto-applies ok-to-test to major updates; once we have confirmed this reliably triggers presubmits on MintMaker minor/patch PRs, propose moving ok-to-test into boilerplate's dockerfile rule so every consumer benefits and this override can be dropped.",
       "matchManagers": [
         "dockerfile"
       ],
       "matchFileNames": [
         "build/**"
       ],
-      "schedule": [
-        "before 4am on monday",
-        "before 4am on thursday"
-      ],
       "addLabels": [
         "area/dependency",
         "ok-to-test"
       ]
     },
     {
-      "description": "Ignore boilerplate docker updates",
-      "matchManagers": [
-        "dockerfile"
-      ],
-      "matchPackageNames": [
-        "quay.io/redhat-services-prod/openshift/boilerplate",
-        "openshift4/ose-operator-registry"
-      ],
-      "enabled": false
-    },
-    {
-      "description": "Go module non-major updates — pre-label lgtm/approved; Tide merges after Prow + Konflux",
+      "description": "Add area/dependency + ok-to-test so MintMaker gomod PRs get Prow presubmits; boilerplate handles grouping, scheduling, and lgtm/approved. TODO(upstream): boilerplate only auto-applies ok-to-test to major updates; once we have confirmed this reliably triggers presubmits on MintMaker minor/patch PRs, propose moving ok-to-test into boilerplate's gomod rule so every consumer benefits and this override can be dropped.",
       "matchManagers": [
         "gomod"
-      ],
-      "schedule": [
-        "before 4am"
-      ],
-      "groupName": "golang-dependencies",
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
-      ],
-      "automerge": false,
-      "platformAutomerge": false,
-      "addLabels": [
-        "lgtm",
-        "approved",
-        "area/dependency",
-        "ok-to-test"
-      ]
-    },
-    {
-      "description": "Tekton patch/minor — pre-label lgtm/approved; Tide merges after Prow + Konflux",
-      "matchManagers": [
-        "tekton"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "pin",
-        "digest"
-      ],
-      "automerge": false,
-      "platformAutomerge": false,
-      "addLabels": [
-        "lgtm",
-        "approved"
-      ]
-    },
-    {
-      "description": "Go module major updates - require manual review",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchUpdateTypes": [
-        "major"
       ],
       "addLabels": [
         "area/dependency",
