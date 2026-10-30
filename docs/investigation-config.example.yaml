@@ -161,6 +161,17 @@ alerts:
       - precheck
       - etcddatabasequotalowspace
 
+  # Classic ROSA only. Notes which pods sit on control plane nodes. Does not resize.
+  - alert_title: "ControlPlaneNodesNeedResizingSRE"
+    name: controlplanenodesneedresizing
+    when:
+      field: HCP
+      operator: in
+      values: ["false"]
+    investigations:
+      - precheck
+      - controlplanenodesneedresizing
+
   # Cluster Monitoring Error Budget Burn
   # Example: sample redhat.com emails at 10%, always run for others.
   # - alert_title: "ClusterMonitoringErrorBudgetBurnSRE"
