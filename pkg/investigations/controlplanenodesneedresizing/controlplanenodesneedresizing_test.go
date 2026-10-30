@@ -33,7 +33,7 @@ func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
 	if heavy < 0 || idle < 0 || heavy > idle {
 		t.Fatalf("ranking:\n%s", got)
 	}
-	if indexOf(got, "(customer)") < 0 || indexOf(got, "(platform)") < 0 {
+	if indexOf(got, "("+kindCustomer+")") < 0 || indexOf(got, "("+kindPlatform+")") < 0 {
 		t.Fatalf("missing kind:\n%s", got)
 	}
 }
@@ -60,7 +60,7 @@ func TestIdentifyCauseFromAlertTitleWithoutNode(t *testing.T) {
 			pods: []podUsage{{namespace: "customer-ns", name: "lighter", node: "master-2", memBytes: 200 * 1024 * 1024, cpuMilli: 10}},
 		},
 	})
-	if !got.Found || got.Node != testMaster1 || got.Namespace != testCustomerNS || got.Name != testHeavy || got.Kind != "customer" {
+	if !got.Found || got.Node != testMaster1 || got.Namespace != testCustomerNS || got.Name != testHeavy || got.Kind != kindCustomer {
 		t.Fatalf("%+v", got)
 	}
 }

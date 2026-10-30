@@ -22,7 +22,11 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
-const masterRoleLabel = "node-role.kubernetes.io/master"
+const (
+	masterRoleLabel = "node-role.kubernetes.io/master"
+	kindCustomer    = "customer"
+	kindPlatform    = "platform"
+)
 
 // alertThresholdPercent is (n-1)/n for three control-plane nodes, which is the
 // comparison in the recording rule. It is applied per node because the alert
@@ -231,9 +235,9 @@ func topWorkload(usages []podUsage) WorkloadCause {
 		return sorted[i].memBytes > sorted[j].memBytes
 	})
 	top := sorted[0]
-	kind := "customer"
+	kind := kindCustomer
 	if isPlatformNamespace(top.namespace) {
-		kind = "platform"
+		kind = kindPlatform
 	}
 	return WorkloadCause{
 		Found:     true,
@@ -265,9 +269,9 @@ func formatRanking(nodeName string, cpuPct, memPct int, haveNodeUsage bool, usag
 	}
 	b.WriteString("Workloads by memory, then CPU:\n")
 	for i, u := range usages {
-		kind := "customer"
+		kind := kindCustomer
 		if isPlatformNamespace(u.namespace) {
-			kind = "platform"
+			kind = kindPlatform
 		}
 		fmt.Fprintf(&b, "%d. %s/%s memory %dMi CPU %dm (%s)\n", i+1, u.namespace, u.name, u.memBytes/(1024*1024), u.cpuMilli, kind)
 	}
