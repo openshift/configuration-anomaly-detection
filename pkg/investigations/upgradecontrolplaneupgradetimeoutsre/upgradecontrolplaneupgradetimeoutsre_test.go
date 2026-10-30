@@ -237,7 +237,7 @@ func TestCheckClusterOperators_LaggingAndUnavailable(t *testing.T) {
 	state := upgradeState{DesiredVersion: toVersion}
 	notes := newNotes()
 
-	(&Investigation{}).checkClusterOperators(context.Background(), k8s, &state, notes)
+	(&Investigation{}).checkClusterOperators(context.Background(), k8s, toVersion, &state, notes)
 
 	assert.ElementsMatch(t, []string{"network (at 4.19.10)", "ingress (at 4.19.10)"}, state.LaggingOperators)
 	require.Len(t, state.UnavailableOperators, 1)
@@ -320,4 +320,35 @@ func TestOneLine(t *testing.T) {
 	assert.Equal(t, "a b c", oneLine("a\n  b\tc "))
 	long := strings.Repeat("x", 400)
 	assert.Len(t, oneLine(long), 303)
+}
+
+func TestCheckClusterVersion_ProgressingMessageOnlyWhenTrue(t *testing.T) {
+	tests := []struct {
+		name string
+		cond configv1.ClusterOperatorStatusCondition
+		want string
+	}{
+		{"progressing true", cvCondition("Progressing", configv1.ConditionTrue, "Working towards 4.20.2"), "in progress: Working towards 4.20.2"},
+		{"progressing false", cvCondition("Progressing", configv1.ConditionFalse, "Cluster version is 4.19.10"), "not completed and CVO is not reporting Progressing"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := upgradeState{}
+			notes := newNotes()
+			(&Investigation{}).checkClusterVersion(context.Background(), newFakeClient(clusterVersion(toVersion, false, tt.cond)), &state, notes)
+
+			assert.Contains(t, notes.String(), tt.want)
+			if tt.cond.Status != configv1.ConditionTrue {
+				assert.Empty(t, state.CVOProgressing, "Progressing=False message must not be recorded")
+			}
+		})
+	}
+}
+
+func TestCheckClusterOperators_NoDesiredVersionSkipsLag(t *testing.T) {
+	state := upgradeState{}
+	notes := newNotes()
+	(&Investigation{}).checkClusterOperators(context.Background(), newFakeClient(clusterOperator("network", fromVersion)), "", &state, notes)
+
+	assert.Empty(t, state.LaggingOperators)
 }
