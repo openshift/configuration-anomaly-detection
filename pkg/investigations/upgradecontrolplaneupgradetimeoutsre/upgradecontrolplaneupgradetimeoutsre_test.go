@@ -257,7 +257,7 @@ func TestCheckMachineConfigPools_DegradedMaster(t *testing.T) {
 
 	require.NotNil(t, state.MasterPool)
 	assert.True(t, state.MasterPool.IsDegraded)
-	assert.Len(t, state.OtherPools, 1)
+	assert.NotContains(t, notes.String(), "worker:", "healthy non-master pools are not listed")
 	assert.Contains(t, notes.String(), "master: 2/3 updated, DEGRADED (1 machine(s))")
 }
 
@@ -276,7 +276,6 @@ func TestCheckMachineConfigPools_PausedAndNotUpdated(t *testing.T) {
 
 	require.NotNil(t, state.MasterPool)
 	assert.True(t, state.MasterPool.IsPaused)
-	assert.True(t, state.OtherPools[0].stuck())
 	assert.Contains(t, notes.String(), "rollout not finished")
 	assert.Contains(t, notes.String(), "master: 1/3 updated, PAUSED")
 	assert.Contains(t, notes.String(), "worker: 2/3 updated, not progressing")
