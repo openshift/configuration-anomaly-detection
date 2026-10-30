@@ -50,8 +50,9 @@ type upgradeState struct {
 	UnavailableOperators []string // "name (reason)"
 	LaggingOperators     []string // operators whose operand version != desired
 
+	// MasterPool gates control-plane completion; other pools are reported in
+	// the note but do not drive the verdict.
 	MasterPool *poolState
-	OtherPools []poolState
 
 	// ReadErrors names the resources that could not be read, so the verdict
 	// is reported as inconclusive rather than "no blocker found".
@@ -253,8 +254,6 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 
 		if mcp.Name == masterPool {
 			state.MasterPool = &ps
-		} else {
-			state.OtherPools = append(state.OtherPools, ps)
 		}
 
 		if ps.IsUpdating || ps.IsDegraded || ps.NotUpdated || ps.IsPaused {
