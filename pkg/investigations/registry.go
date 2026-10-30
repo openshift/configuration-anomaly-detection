@@ -22,6 +22,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/precheck"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/restartcontrolplane"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradeconfigsyncfailureover4hr"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/upgradecontrolplaneupgradetimeoutsre"
 )
 
 // availableInvestigations holds all Investigation implementations.
@@ -46,6 +47,7 @@ var availableInvestigations = []investigation.Investigation{
 	&consoleerrorbudgetburn.Investigation{},
 	&expiredcertificates.Investigation{},
 	&pdbblockingnodedrain.Investigation{},
+	&upgradecontrolplaneupgradetimeoutsre.Investigation{},
 }
 
 // GetInvestigationByName returns the Investigation with the given name, or nil if not found.
