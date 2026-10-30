@@ -189,8 +189,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 
-	decision, defragErr := runDefrag(ctx, r.K8sClient, etcdNamespace, false)
-	formattedResults += defragNote(decision, defragErr)
+	cause := identifyEtcdCause(analysisResult)
+	formattedResults += causeNote(cause)
 
 	logging.Info("etcd snapshot analysis completed successfully")
 
@@ -207,7 +207,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), customersAreLargest(analysisResult.TopNamespaces), customers, decision)...)
+	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), cause)...)
 
 	return result, nil
 }
@@ -322,59 +322,77 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
-	decision, defragErr := runDefrag(ctx, r.ManagementK8sClient, r.HCPNamespace, false)
-	if defragErr != nil {
-		r.Notes.AppendWarning("etcd defrag: %v", defragErr)
-	}
-	r.Notes.AppendAutomation("%s", defragNote(decision, defragErr))
+	r.Notes.AppendAutomation("HyperShift defragments this etcd. CAD does not. Debug handlers are not used. The analysis job above is the identification.")
 
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
-	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), false, nil, decision)...)
+	result.Actions = append(result.Actions, executor.Escalate("HCP etcd quota - HyperShift owns defrag. Review the analysis job."))
 	return result, nil
+}
+
+// EtcdCause is the namespace CAD would hand to a later case or service log.
+type EtcdCause struct {
+	Found        bool
+	Namespace    string
+	SizeMB       float64
+	Customer     bool
+	Resource     string
+	ResourceType string
+}
+
+func identifyEtcdCause(result *AnalysisResult) EtcdCause {
+	if result == nil || len(result.TopNamespaces) == 0 {
+		return EtcdCause{}
+	}
+	top := result.TopNamespaces[0]
+	cause := EtcdCause{
+		Found:     true,
+		Namespace: top.Namespace,
+		SizeMB:    top.SizeMB,
+		Customer:  !strings.HasPrefix(top.Namespace, "openshift-") && !strings.HasPrefix(top.Namespace, "kube-"),
+	}
+	if len(result.LargestResources) > 0 {
+		res := result.LargestResources[0]
+		cause.Resource = res.Namespace + "/" + res.Name
+		cause.ResourceType = res.ResourceType
+	}
+	return cause
+}
+
+func causeNote(cause EtcdCause) string {
+	if !cause.Found {
+		return "\nNo namespace was large enough to identify. Defrag is left to cluster-etcd-operator.\n"
+	}
+	kind := "platform"
+	if cause.Customer {
+		kind = "customer"
+	}
+	note := fmt.Sprintf("\nIdentified namespace: %s (%.2f MB, %s).", cause.Namespace, cause.SizeMB, kind)
+	if cause.Resource != "" {
+		note += fmt.Sprintf(" Largest object: %s (%s).", cause.Resource, cause.ResourceType)
+	}
+	return note + " Defrag is left to cluster-etcd-operator.\n"
 }
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
 }
 
-func defragNote(decision defragDecision, defragErr error) string {
-	switch decision.kind {
-	case defragSucceeded:
-		return "\nDefrag completed and the database size dropped. The alert is silenced.\n"
-	case defragFailed:
-		if defragErr != nil {
-			return fmt.Sprintf("\nDefrag did not complete: %v\n", defragErr)
-		}
-		return "\nDefrag did not reduce the database size.\n"
-	default:
-		return "\nNo meaningful etcd fragmentation to reclaim. Defrag was not run.\n"
+func etcdFollowUp(warning bool, cause EtcdCause) []types.Action {
+	if !cause.Found {
+		return []types.Action{executor.Escalate("etcd quota - no namespace identified")}
 	}
-}
-
-func etcdFollowUp(warning bool, customersLargest bool, customers []NamespaceSize, decision defragDecision) []types.Action {
-	switch decision.kind {
-	case defragSucceeded:
-		actions := []types.Action{executor.Silence("etcd defrag reduced database size")}
-		if customersLargest {
-			var names []string
-			for _, ns := range customers {
-				names = append(names, fmt.Sprintf("%s (%.2f MB)", ns.Namespace, ns.SizeMB))
-			}
-			actions = append(actions, executor.ServiceLog(
-				servicelogsv1.SeverityModerate,
-				"etcd quota was reduced by defragmentation; customer data remains large",
-				"CAD defragmented etcd and silenced the alert. The largest customer namespaces are still: "+strings.Join(names, ", ")+". Remove unneeded objects if the database keeps growing.",
-			))
-		}
-		return actions
-	case defragFailed:
-		return []types.Action{executor.Escalate("etcd defrag failed or did not reduce database size")}
-	default:
-		if warning {
-			return []types.Action{executor.Silence("etcd warning alert - no defrag was required")}
-		}
-		return []types.Action{executor.Escalate("etcd critical alert - no fragmentation to reclaim")}
+	if !cause.Customer {
+		return []types.Action{executor.Escalate("etcd quota - largest namespace is platform: " + cause.Namespace)}
 	}
+	log := executor.ServiceLog(
+		servicelogsv1.SeverityModerate,
+		"etcd database is largely customer data",
+		fmt.Sprintf("The largest etcd namespace is %s (%.2f MB). Remove unneeded objects in that namespace. Cluster etcd operator owns defragmentation.", cause.Namespace, cause.SizeMB),
+	)
+	if warning {
+		return []types.Action{log, executor.Silence("etcd warning - customer namespace identified")}
+	}
+	return []types.Action{log, executor.Escalate("etcd critical - customer namespace " + cause.Namespace)}
 }
 
 // isWarningAlert checks if the PagerDuty incident title indicates a warning-severity alert.
