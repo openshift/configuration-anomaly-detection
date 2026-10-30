@@ -3,8 +3,11 @@ package controlplanenodesneedresizing
 import "testing"
 
 const (
-	testMaster0 = "master-0"
-	testHeavy   = "heavy"
+	testMaster0    = "master-0"
+	testMaster1    = "master-1"
+	testHeavy      = "heavy"
+	testPlatformNS = "openshift-kube-apiserver"
+	testCustomerNS = "my-app"
 )
 
 func TestNodeFromAlert(t *testing.T) {
@@ -21,12 +24,12 @@ func TestNodeFromAlert(t *testing.T) {
 
 func TestFormatRankingPutsHeavyPodFirst(t *testing.T) {
 	usages := []podUsage{
-		{namespace: "openshift-kube-apiserver", name: "idle", cpuMilli: 10, memBytes: 20 * 1024 * 1024},
-		{namespace: "my-app", name: testHeavy, cpuMilli: 50, memBytes: 800 * 1024 * 1024},
+		{namespace: testPlatformNS, name: "idle", cpuMilli: 10, memBytes: 20 * 1024 * 1024},
+		{namespace: testCustomerNS, name: testHeavy, cpuMilli: 50, memBytes: 800 * 1024 * 1024},
 	}
 	got := formatRanking(testMaster0, 70, 80, true, usages)
-	heavy := indexOf(got, "1. my-app/"+testHeavy)
-	idle := indexOf(got, "2. openshift-kube-apiserver/idle")
+	heavy := indexOf(got, "1. "+testCustomerNS+"/"+testHeavy)
+	idle := indexOf(got, "2. "+testPlatformNS+"/idle")
 	if heavy < 0 || idle < 0 || heavy > idle {
 		t.Fatalf("ranking:\n%s", got)
 	}
@@ -43,13 +46,13 @@ func TestIdentifyCauseFromAlertTitleWithoutNode(t *testing.T) {
 	got := identifyCause(title, []masterSample{
 		{
 			name: testMaster0, cpuPercent: 10, memPercent: 12,
-			pods: []podUsage{{namespace: "openshift-kube-apiserver", name: "quiet", node: testMaster0, memBytes: 50 * 1024 * 1024, cpuMilli: 5}},
+			pods: []podUsage{{namespace: testPlatformNS, name: "quiet", node: testMaster0, memBytes: 50 * 1024 * 1024, cpuMilli: 5}},
 		},
 		{
-			name: "master-1", cpuPercent: 80, memPercent: 40,
+			name: testMaster1, cpuPercent: 80, memPercent: 40,
 			pods: []podUsage{
-				{namespace: "openshift-kube-apiserver", name: "kas", node: "master-1", memBytes: 100 * 1024 * 1024, cpuMilli: 20},
-				{namespace: "my-app", name: testHeavy, node: "master-1", memBytes: 900 * 1024 * 1024, cpuMilli: 50},
+				{namespace: testPlatformNS, name: "kas", node: testMaster1, memBytes: 100 * 1024 * 1024, cpuMilli: 20},
+				{namespace: testCustomerNS, name: testHeavy, node: testMaster1, memBytes: 900 * 1024 * 1024, cpuMilli: 50},
 			},
 		},
 		{
@@ -57,7 +60,7 @@ func TestIdentifyCauseFromAlertTitleWithoutNode(t *testing.T) {
 			pods: []podUsage{{namespace: "customer-ns", name: "lighter", node: "master-2", memBytes: 200 * 1024 * 1024, cpuMilli: 10}},
 		},
 	})
-	if !got.Found || got.Node != "master-1" || got.Namespace != "my-app" || got.Name != testHeavy || got.Kind != "customer" {
+	if !got.Found || got.Node != testMaster1 || got.Namespace != testCustomerNS || got.Name != testHeavy || got.Kind != "customer" {
 		t.Fatalf("%+v", got)
 	}
 }
