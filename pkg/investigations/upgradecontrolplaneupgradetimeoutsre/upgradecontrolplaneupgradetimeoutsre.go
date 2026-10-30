@@ -122,7 +122,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	state := upgradeState{}
 
 	i.checkClusterVersion(ctx, r.K8sClient, &state, r.Notes)
-	i.checkClusterOperators(ctx, r.K8sClient, &state, r.Notes)
+	i.checkClusterOperators(ctx, r.K8sClient, state.DesiredVersion, &state, r.Notes)
 	i.checkMachineConfigPools(ctx, r.K8sClient, &state, r.Notes)
 
 	verdict := classify(state)
@@ -155,7 +155,7 @@ func (i *Investigation) checkClusterVersion(ctx context.Context, k8sClient k8scl
 		switch {
 		case cond.Type == "Failing" && cond.Status == configv1.ConditionTrue:
 			state.CVOFailing = oneLine(cond.Message)
-		case cond.Type == configv1.OperatorProgressing:
+		case cond.Type == configv1.OperatorProgressing && cond.Status == configv1.ConditionTrue:
 			state.CVOProgressing = oneLine(cond.Message)
 		}
 	}
@@ -165,13 +165,17 @@ func (i *Investigation) checkClusterVersion(ctx context.Context, k8sClient k8scl
 		notes.AppendWarning("ClusterVersion: upgrade to %s is Failing: %s", state.DesiredVersion, state.CVOFailing)
 	case state.Completed:
 		notes.AppendSuccess("ClusterVersion: upgrade to %s is Completed", state.DesiredVersion)
-	default:
+	case state.CVOProgressing != "":
 		notes.AppendWarning("ClusterVersion: upgrade to %s in progress: %s", state.DesiredVersion, state.CVOProgressing)
+	default:
+		notes.AppendWarning("ClusterVersion: upgrade to %s not completed and CVO is not reporting Progressing", state.DesiredVersion)
 	}
 }
 
 // checkClusterOperators reports degraded, unavailable and not-yet-upgraded operators.
-func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8sclient.Client, state *upgradeState, notes *notewriter.NoteWriter) {
+// desiredVersion is passed explicitly so the check does not depend on call order;
+// when it is empty, version lag is not evaluated.
+func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8sclient.Client, desiredVersion string, state *upgradeState, notes *notewriter.NoteWriter) {
 	coList := &configv1.ClusterOperatorList{}
 	if err := k8sClient.List(ctx, coList); err != nil {
 		notes.AppendWarning("ClusterOperators: failed to list: %v", err)
@@ -191,8 +195,8 @@ func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8s
 			}
 		}
 
-		if state.DesiredVersion != "" {
-			if v := operandVersion(co); v != state.DesiredVersion {
+		if desiredVersion != "" {
+			if v := operandVersion(co); v != desiredVersion {
 				if v == "" {
 					v = "unknown"
 				}
@@ -208,7 +212,7 @@ func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8s
 		notes.AppendWarning("ClusterOperators: %d degraded:\n  %s", len(state.DegradedOperators), strings.Join(state.DegradedOperators, "\n  "))
 	}
 	if len(state.LaggingOperators) > 0 {
-		notes.AppendWarning("ClusterOperators: %d/%d not yet at %s:\n  %s", len(state.LaggingOperators), len(coList.Items), state.DesiredVersion, strings.Join(state.LaggingOperators, "\n  "))
+		notes.AppendWarning("ClusterOperators: %d/%d not yet at %s:\n  %s", len(state.LaggingOperators), len(coList.Items), desiredVersion, strings.Join(state.LaggingOperators, "\n  "))
 	}
 	if len(state.UnavailableOperators) == 0 && len(state.DegradedOperators) == 0 && len(state.LaggingOperators) == 0 {
 		notes.AppendSuccess("ClusterOperators: all %d available, not degraded, and at the desired version", len(coList.Items))
@@ -248,8 +252,7 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 		}
 
 		if mcp.Name == masterPool {
-			p := ps
-			state.MasterPool = &p
+			state.MasterPool = &ps
 		} else {
 			state.OtherPools = append(state.OtherPools, ps)
 		}
