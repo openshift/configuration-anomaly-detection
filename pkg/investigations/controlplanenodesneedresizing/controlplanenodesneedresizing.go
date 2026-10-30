@@ -172,7 +172,7 @@ func masterSamples(ctx context.Context, k8sClient k8sclient.Client) ([]masterSam
 	if err := json.Unmarshal(podBody, &podList); err != nil {
 		return nil, fmt.Errorf("parsing pod metrics: %w", err)
 	}
-	var samples []masterSample
+	samples := make([]masterSample, 0, len(nodes.Items))
 	for _, node := range nodes.Items {
 		var pods corev1.PodList
 		if err := k8sClient.List(ctx, &pods, client.MatchingFields{"spec.nodeName": node.Name}); err != nil {
