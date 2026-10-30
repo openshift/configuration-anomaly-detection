@@ -351,3 +351,31 @@ func TestCheckClusterOperators_NoDesiredVersionSkipsLag(t *testing.T) {
 
 	assert.Empty(t, state.LaggingOperators)
 }
+
+func TestRun_StaleClusterVersionIsInconclusive(t *testing.T) {
+	cv := clusterVersion(fromVersion, true) // status still describes the previous completed release
+	cv.Generation = 3
+	cv.Status.ObservedGeneration = 2
+	k8s := newFakeClient(cv, clusterOperator("kube-apiserver", fromVersion), pool(masterPool, 3, 3, 0, false, false, ""))
+
+	_, notes := runWith(t, &investigation.Resources{K8sClient: k8s})
+
+	assert.Contains(t, notes, "status not yet updated for the latest spec")
+	assert.Contains(t, notes, "Likely blocker: inconclusive: ClusterVersion status is stale (observedGeneration 2, generation 3)")
+	assert.NotContains(t, notes, "has completed")
+}
+
+func TestCheckMachineConfigPools_PausedButUpdatedIsHealthy(t *testing.T) {
+	paused := pool(masterPool, 3, 3, 0, false, false, "")
+	paused.Spec.Paused = true
+	paused.Status.Conditions = append(paused.Status.Conditions,
+		mcfgv1.MachineConfigPoolCondition{Type: mcfgv1.MachineConfigPoolUpdated, Status: corev1.ConditionTrue})
+
+	state := upgradeState{DesiredVersion: toVersion}
+	notes := newNotes()
+	(&Investigation{}).checkMachineConfigPools(context.Background(), newFakeClient(paused), &state, notes)
+
+	require.NotNil(t, state.MasterPool)
+	assert.Contains(t, notes.String(), "all 1 pools updated and not degraded")
+	assert.NotContains(t, classify(state), "paused")
+}

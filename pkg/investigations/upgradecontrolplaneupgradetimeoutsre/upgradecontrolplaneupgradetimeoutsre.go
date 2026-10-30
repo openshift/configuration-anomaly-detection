@@ -46,6 +46,13 @@ type upgradeState struct {
 	CVOFailing     string // ClusterVersion Failing=True message, if any
 	CVOProgressing string // ClusterVersion Progressing message, if any
 
+	// StaleStatus is set when ClusterVersion status has not yet observed the
+	// latest spec (observedGeneration != generation), e.g. MUO has just set
+	// desiredUpdate. Status-derived fields are then not trusted.
+	StaleStatus bool
+	Generation  int64
+	ObservedGen int64
+
 	DegradedOperators    []string // "name (reason)"
 	UnavailableOperators []string // "name (reason)"
 	LaggingOperators     []string // operators whose operand version != desired
@@ -68,13 +75,13 @@ type poolState struct {
 	IsUpdating     bool
 	IsDegraded     bool
 	NotUpdated     bool // Updated=False: the pool has not reached its target config
-	IsPaused       bool // spec.paused: MCO will not roll out pending changes
+	IsPaused       bool // spec.paused: MCO will not roll out pending changes (a blocker only when NotUpdated)
 	DegradedReason string
 }
 
 // stuck reports a pool that has not finished its rollout and is not progressing.
 func (p poolState) stuck() bool {
-	return (p.NotUpdated || p.IsPaused) && !p.IsUpdating
+	return p.NotUpdated && !p.IsUpdating
 }
 
 // Investigation implements the UpgradeControlPlaneUpgradeTimeoutSRE investigation.
@@ -123,7 +130,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	state := upgradeState{}
 
 	i.checkClusterVersion(ctx, r.K8sClient, &state, r.Notes)
-	i.checkClusterOperators(ctx, r.K8sClient, state.DesiredVersion, &state, r.Notes)
+	desiredVersion := state.DesiredVersion
+	if state.StaleStatus {
+		desiredVersion = "" // do not measure operator lag against a stale target
+	}
+	i.checkClusterOperators(ctx, r.K8sClient, desiredVersion, &state, r.Notes)
 	i.checkMachineConfigPools(ctx, r.K8sClient, &state, r.Notes)
 
 	verdict := classify(state)
@@ -147,6 +158,14 @@ func (i *Investigation) checkClusterVersion(ctx context.Context, k8sClient k8scl
 	}
 
 	state.DesiredVersion = cv.Status.Desired.Version
+	if cv.Status.ObservedGeneration != cv.Generation {
+		state.StaleStatus = true
+		state.Generation = cv.Generation
+		state.ObservedGen = cv.Status.ObservedGeneration
+		notes.AppendWarning("ClusterVersion: status not yet updated for the latest spec (observedGeneration %d, generation %d); completion is not evaluated",
+			cv.Status.ObservedGeneration, cv.Generation)
+		return
+	}
 	if len(cv.Status.History) > 0 {
 		latest := cv.Status.History[0]
 		state.Completed = latest.State == configv1.CompletedUpdate && latest.Version == state.DesiredVersion
@@ -256,7 +275,7 @@ func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k
 			state.MasterPool = &ps
 		}
 
-		if ps.IsUpdating || ps.IsDegraded || ps.NotUpdated || ps.IsPaused {
+		if ps.IsUpdating || ps.IsDegraded || ps.NotUpdated {
 			healthy = false
 			line := fmt.Sprintf("%s: %d/%d updated", ps.Name, ps.Updated, ps.Machines)
 			if ps.IsPaused {
@@ -284,6 +303,9 @@ func classify(s upgradeState) string {
 	switch {
 	case s.DesiredVersion == "":
 		return "could not read ClusterVersion; investigate manually"
+	case s.StaleStatus:
+		return fmt.Sprintf("inconclusive: ClusterVersion status is stale (observedGeneration %d, generation %d); CVO has not yet picked up the requested update, recheck shortly",
+			s.ObservedGen, s.Generation)
 	case s.Completed:
 		return fmt.Sprintf("none: upgrade to %s has completed, MUO should resolve the alert on its next reconcile", s.DesiredVersion)
 	case s.CVOFailing != "":
@@ -294,7 +316,7 @@ func classify(s upgradeState) string {
 		return "degraded operator(s): " + strings.Join(s.DegradedOperators, "; ")
 	case s.MasterPool != nil && s.MasterPool.IsDegraded:
 		return "master MachineConfigPool degraded: " + s.MasterPool.DegradedReason
-	case s.MasterPool != nil && s.MasterPool.IsPaused:
+	case s.MasterPool != nil && s.MasterPool.IsPaused && s.MasterPool.NotUpdated:
 		return fmt.Sprintf("master MachineConfigPool is paused at %d/%d nodes; pending changes will not roll out until it is unpaused",
 			s.MasterPool.Updated, s.MasterPool.Machines)
 	case s.MasterPool != nil && s.MasterPool.stuck():
