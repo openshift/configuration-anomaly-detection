@@ -3,9 +3,12 @@ rbac:
   roles: []
   clusterRoleRules:
     - apiGroups: ['config.openshift.io']
-      resources: ['clusterversions', 'clusteroperators']
+      resources: ['clusterversions']
       verbs: ['get', 'list']
-    - apiGroups: ['machineconfiguration.openshift.io']
-      resources: ['machineconfigpools']
+    - apiGroups: ['']
+      resources: ['nodes', 'pods']
+      verbs: ['get', 'list']
+    - apiGroups: ['policy']
+      resources: ['poddisruptionbudgets']
       verbs: ['get', 'list']
 customerDataAccess: false

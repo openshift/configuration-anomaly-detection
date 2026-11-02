@@ -6,4 +6,3 @@ alerts:
     investigations:
       - precheck
       - upgradecontrolplaneupgradetimeoutsre
-      - pdbblockingnodedrain

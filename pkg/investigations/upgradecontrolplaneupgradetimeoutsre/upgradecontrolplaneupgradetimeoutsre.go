@@ -2,92 +2,67 @@
 // UpgradeControlPlaneUpgradeTimeoutSRE alert.
 //
 // The alert is raised by the managed-upgrade-operator (MUO) when the control-plane
-// portion of a Classic cluster upgrade exceeds its timeout. This investigation is
-// read-only (informing stage): it inspects ClusterVersion, ClusterOperators and
-// MachineConfigPools, names the most likely blocker in the PagerDuty note, and
-// escalates. PDB-blocked drains are covered by chaining the pdbblockingnodedrain
-// investigation after this one in the investigation config.
+// portion of a Classic cluster upgrade exceeds its timeout. The investigation only
+// acts where CAD can take a concrete action:
+//
+//   - the upgrade has already completed: silence, MUO resolves the alert
+//   - a node drain is blocked only by customer-managed PodDisruptionBudgets:
+//     send the customer_pdb_preventing_drain_automated service log and silence
+//
+// Every other case is escalated to on-call without further classification.
 package upgradecontrolplaneupgradetimeoutsre
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	configv1 "github.com/openshift/api/config/v1"
-	mcfgv1 "github.com/openshift/api/machineconfiguration/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
-	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 const (
 	investigationName = "upgradecontrolplaneupgradetimeoutsre"
-	masterPool        = "master"
-	operatorOperand   = "operator"
 
 	// checksTimeout bounds all cluster reads so a hung API call cannot block
 	// the PD note and escalation.
 	checksTimeout = 2 * time.Minute
+
+	// drainStallThreshold is how long a node must have been cordoned before a
+	// PDB with zero allowed disruptions is treated as blocking its drain.
+	drainStallThreshold = 10 * time.Minute
 )
 
-// upgradeState is the read-only snapshot used to pick a verdict.
-type upgradeState struct {
-	DesiredVersion string
-	Completed      bool   // history[0] is Completed for the desired version
-	CVOFailing     string // ClusterVersion Failing=True message, if any
-	CVOProgressing string // ClusterVersion Progressing message, if any
-
-	// StaleStatus is set when ClusterVersion status has not yet observed the
-	// latest spec (observedGeneration != generation), e.g. MUO has just set
-	// desiredUpdate. Status-derived fields are then not trusted.
-	StaleStatus bool
-	Generation  int64
-	ObservedGen int64
-
-	DegradedOperators    []string // "name (reason)"
-	UnavailableOperators []string // "name (reason)"
-	LaggingOperators     []string // operators whose operand version != desired
-
-	// MasterPool gates control-plane completion; other pools are reported in
-	// the note but do not drive the verdict.
-	MasterPool *poolState
-
-	// ReadErrors names the resources that could not be read, so the verdict
-	// is reported as inconclusive rather than "no blocker found".
-	ReadErrors []string
-}
-
-// poolState summarises one MachineConfigPool's rollout.
-type poolState struct {
-	Name           string
-	Machines       int32
-	Updated        int32
-	Degraded       int32
-	IsUpdating     bool
-	IsDegraded     bool
-	NotUpdated     bool // Updated=False: the pool has not reached its target config
-	IsPaused       bool // spec.paused: MCO will not roll out pending changes (a blocker only when NotUpdated)
-	DegradedReason string
-}
-
-// stuck reports a pool that has not finished its rollout and is not progressing.
-func (p poolState) stuck() bool {
-	return p.NotUpdated && !p.IsUpdating
+// blockingPDB is a PodDisruptionBudget with zero allowed disruptions that
+// selects at least one pod on a stalled draining node.
+type blockingPDB struct {
+	Namespace string
+	Name      string
+	Pods      []string // "namespace/pod" on stalled nodes
+	Nodes     []string // stalled nodes those pods run on
+	Customer  bool
 }
 
 // Investigation implements the UpgradeControlPlaneUpgradeTimeoutSRE investigation.
 type Investigation struct{}
 
-// Run gates on cluster type, reads upgrade state and escalates with a verdict.
+// Run gates on cluster type, then silences completed upgrades and sends a
+// service log for customer-PDB-blocked drains. Everything else is escalated.
 func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
 
@@ -104,254 +79,209 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return result, investigation.WrapInfrastructure(err, "failed to build resources for "+i.Name())
 	}
 
-	// Management / service clusters: a stuck upgrade here is an incident with its own SOP.
-	if r.IsInfrastructureCluster {
-		r.Notes.AppendWarning("Cluster is a management/service cluster: treat as an incident and follow the infrastructure-cluster upgrade SOP. No further automated checks run.")
+	escalate := func(reason string) (investigation.InvestigationResult, error) {
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("Control-plane upgrade timeout on an infrastructure cluster"),
+			executor.Escalate(reason),
 		)
-		result.StopInvestigations = errors.New("infrastructure cluster: manual incident handling")
 		return result, nil
+	}
+
+	// Management / service clusters: a stuck upgrade here is an incident with its own SOP.
+	if r.IsInfrastructureCluster {
+		r.Notes.AppendWarning("Cluster is a management/service cluster: treat as an incident and follow the infrastructure-cluster upgrade SOP.")
+		result.StopInvestigations = errors.New("infrastructure cluster: manual incident handling")
+		return escalate("Control-plane upgrade timeout on an infrastructure cluster")
 	}
 
 	// The alert comes from MUO, which only manages Classic upgrades.
 	if r.IsHCP {
-		r.Notes.AppendWarning("Cluster is HCP: UpgradeControlPlaneUpgradeTimeoutSRE is a Classic (MUO) alert, manual review required.")
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("Unexpected HCP cluster for UpgradeControlPlaneUpgradeTimeoutSRE"),
-		)
-		return result, nil
+		r.Notes.AppendWarning("Cluster is HCP: UpgradeControlPlaneUpgradeTimeoutSRE is a Classic (MUO) alert.")
+		return escalate("Unexpected HCP cluster for UpgradeControlPlaneUpgradeTimeoutSRE")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), checksTimeout)
 	defer cancel()
-	state := upgradeState{}
 
-	i.checkClusterVersion(ctx, r.K8sClient, &state, r.Notes)
-	desiredVersion := state.DesiredVersion
-	if state.StaleStatus {
-		desiredVersion = "" // do not measure operator lag against a stale target
+	cv := &configv1.ClusterVersion{}
+	if err := r.K8sClient.Get(ctx, client.ObjectKey{Name: "version"}, cv); err != nil {
+		r.Notes.AppendWarning("ClusterVersion: failed to get: %v", err)
+		return escalate("Could not read ClusterVersion")
 	}
-	i.checkClusterOperators(ctx, r.K8sClient, desiredVersion, &state, r.Notes)
-	i.checkMachineConfigPools(ctx, r.K8sClient, &state, r.Notes)
 
-	verdict := classify(state)
-	r.Notes.AppendWarning("Likely blocker: %s", verdict)
+	if upgradeCompleted(cv) {
+		r.Notes.AppendSuccess("ClusterVersion: upgrade to %s has completed; MUO will resolve the alert", cv.Status.Desired.Version)
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Silence("Control-plane upgrade already completed"),
+		)
+		return result, nil
+	}
 
+	pdbs, err := findBlockingPDBs(ctx, r.K8sClient, time.Now())
+	if err != nil {
+		r.Notes.AppendWarning("Blocking PDBs: %v", err)
+		return escalate("Could not check for PDBs blocking node drain")
+	}
+
+	var customer, platform []blockingPDB
+	for _, p := range pdbs {
+		if p.Customer {
+			customer = append(customer, p)
+		} else {
+			platform = append(platform, p)
+		}
+	}
+
+	switch {
+	case len(pdbs) == 0:
+		r.Notes.AppendWarning("No automated action: no node drain is blocked by a PodDisruptionBudget")
+		return escalate("UpgradeControlPlaneUpgradeTimeoutSRE: no automated action available")
+	case len(platform) > 0:
+		r.Notes.AppendWarning("Platform-managed PDB(s) blocking node drain: %s", pdbNames(platform))
+		return escalate("Platform-managed PDB blocking node drain")
+	}
+
+	sl := newCustomerPDBPreventingDrainSL(customer)
+	r.Notes.AppendWarning("Customer-managed PDB(s) blocking node drain: %s", pdbNames(customer))
+	r.Notes.AppendAutomation("Sending service log: %s", sl.Summary)
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-		executor.Escalate("UpgradeControlPlaneUpgradeTimeoutSRE investigation complete: manual review required"),
+		executor.NewServiceLogAction(sl.Severity, sl.Summary).
+			WithDescription(sl.Description).
+			WithServiceName(sl.ServiceName).
+			Build(),
+		executor.Silence("Customer PDB blocking node drain: service log sent"),
 	)
 	return result, nil
 }
 
-// checkClusterVersion records the desired version, whether it completed, and the
-// CVO Failing / Progressing messages.
-func (i *Investigation) checkClusterVersion(ctx context.Context, k8sClient k8sclient.Client, state *upgradeState, notes *notewriter.NoteWriter) {
-	cv := &configv1.ClusterVersion{}
-	if err := k8sClient.Get(ctx, client.ObjectKey{Name: "version"}, cv); err != nil {
-		notes.AppendWarning("ClusterVersion: failed to get: %v", err)
-		state.ReadErrors = append(state.ReadErrors, "ClusterVersion")
-		return
+// upgradeCompleted reports whether ClusterVersion has completed the desired
+// release. A status that has not yet observed the latest spec is not trusted.
+func upgradeCompleted(cv *configv1.ClusterVersion) bool {
+	if cv.Status.ObservedGeneration != cv.Generation || len(cv.Status.History) == 0 {
+		return false
 	}
-
-	state.DesiredVersion = cv.Status.Desired.Version
-	if cv.Status.ObservedGeneration != cv.Generation {
-		state.StaleStatus = true
-		state.Generation = cv.Generation
-		state.ObservedGen = cv.Status.ObservedGeneration
-		notes.AppendWarning("ClusterVersion: status not yet updated for the latest spec (observedGeneration %d, generation %d); completion is not evaluated",
-			cv.Status.ObservedGeneration, cv.Generation)
-		return
-	}
-	if len(cv.Status.History) > 0 {
-		latest := cv.Status.History[0]
-		state.Completed = latest.State == configv1.CompletedUpdate && latest.Version == state.DesiredVersion
-	}
-
-	for _, cond := range cv.Status.Conditions {
-		switch {
-		case cond.Type == "Failing" && cond.Status == configv1.ConditionTrue:
-			state.CVOFailing = oneLine(cond.Message)
-		case cond.Type == configv1.OperatorProgressing && cond.Status == configv1.ConditionTrue:
-			state.CVOProgressing = oneLine(cond.Message)
-		}
-	}
-
-	switch {
-	case state.CVOFailing != "":
-		notes.AppendWarning("ClusterVersion: upgrade to %s is Failing: %s", state.DesiredVersion, state.CVOFailing)
-	case state.Completed:
-		notes.AppendSuccess("ClusterVersion: upgrade to %s is Completed", state.DesiredVersion)
-	case state.CVOProgressing != "":
-		notes.AppendWarning("ClusterVersion: upgrade to %s in progress: %s", state.DesiredVersion, state.CVOProgressing)
-	default:
-		notes.AppendWarning("ClusterVersion: upgrade to %s not completed and CVO is not reporting Progressing", state.DesiredVersion)
-	}
+	latest := cv.Status.History[0]
+	return latest.State == configv1.CompletedUpdate && latest.Version == cv.Status.Desired.Version
 }
 
-// checkClusterOperators reports degraded, unavailable and not-yet-upgraded operators.
-// desiredVersion is passed explicitly so the check does not depend on call order;
-// when it is empty, version lag is not evaluated.
-func (i *Investigation) checkClusterOperators(ctx context.Context, k8sClient k8sclient.Client, desiredVersion string, state *upgradeState, notes *notewriter.NoteWriter) {
-	coList := &configv1.ClusterOperatorList{}
-	if err := k8sClient.List(ctx, coList); err != nil {
-		notes.AppendWarning("ClusterOperators: failed to list: %v", err)
-		state.ReadErrors = append(state.ReadErrors, "ClusterOperators")
-		return
+// findBlockingPDBs returns PDBs with zero allowed disruptions that select pods
+// on nodes which have been cordoned for longer than drainStallThreshold.
+func findBlockingPDBs(ctx context.Context, k8sClient k8sclient.Client, now time.Time) ([]blockingPDB, error) {
+	nodes := &corev1.NodeList{}
+	if err := k8sClient.List(ctx, nodes); err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
-
-	for _, co := range coList.Items {
-		for _, cond := range co.Status.Conditions {
-			// Reason only: condition messages can carry hostnames and endpoints.
-			detail := fmt.Sprintf("%s (%s)", co.Name, cond.Reason)
-			switch {
-			case cond.Type == configv1.OperatorDegraded && cond.Status == configv1.ConditionTrue:
-				state.DegradedOperators = append(state.DegradedOperators, detail)
-			case cond.Type == configv1.OperatorAvailable && cond.Status == configv1.ConditionFalse:
-				state.UnavailableOperators = append(state.UnavailableOperators, detail)
-			}
-		}
-
-		if desiredVersion != "" {
-			if v := operandVersion(co); v != desiredVersion {
-				if v == "" {
-					v = "unknown"
-				}
-				state.LaggingOperators = append(state.LaggingOperators, fmt.Sprintf("%s (at %s)", co.Name, v))
-			}
+	stalled := map[string]bool{}
+	for _, n := range nodes.Items {
+		if isStalledDrain(n, now) {
+			stalled[n.Name] = true
 		}
 	}
+	if len(stalled) == 0 {
+		return nil, nil
+	}
 
-	if len(state.UnavailableOperators) > 0 {
-		notes.AppendWarning("ClusterOperators: %d unavailable:\n  %s", len(state.UnavailableOperators), strings.Join(state.UnavailableOperators, "\n  "))
+	pdbList := &policyv1.PodDisruptionBudgetList{}
+	if err := k8sClient.List(ctx, pdbList); err != nil {
+		return nil, fmt.Errorf("failed to list PodDisruptionBudgets: %w", err)
 	}
-	if len(state.DegradedOperators) > 0 {
-		notes.AppendWarning("ClusterOperators: %d degraded:\n  %s", len(state.DegradedOperators), strings.Join(state.DegradedOperators, "\n  "))
+	podList := &corev1.PodList{}
+	if err := k8sClient.List(ctx, podList); err != nil {
+		return nil, fmt.Errorf("failed to list pods: %w", err)
 	}
-	if len(state.LaggingOperators) > 0 {
-		notes.AppendWarning("ClusterOperators: %d/%d not yet at %s:\n  %s", len(state.LaggingOperators), len(coList.Items), desiredVersion, strings.Join(state.LaggingOperators, "\n  "))
+	podsByNamespace := map[string][]corev1.Pod{}
+	for _, p := range podList.Items {
+		podsByNamespace[p.Namespace] = append(podsByNamespace[p.Namespace], p)
 	}
-	if len(state.UnavailableOperators) == 0 && len(state.DegradedOperators) == 0 && len(state.LaggingOperators) == 0 {
-		notes.AppendSuccess("ClusterOperators: all %d available, not degraded, and at the desired version", len(coList.Items))
+
+	blocking := make([]blockingPDB, 0, len(pdbList.Items))
+	for _, pdb := range pdbList.Items {
+		if pdb.Status.DisruptionsAllowed != 0 {
+			continue
+		}
+		selector, err := metav1.LabelSelectorAsSelector(pdb.Spec.Selector)
+		if err != nil {
+			continue
+		}
+		bp := blockingPDB{Namespace: pdb.Namespace, Name: pdb.Name, Customer: !isPlatformNamespace(pdb.Namespace)}
+		nodeSet := map[string]bool{}
+		for _, pod := range podsByNamespace[pdb.Namespace] {
+			if stalled[pod.Spec.NodeName] && selector.Matches(labels.Set(pod.Labels)) {
+				bp.Pods = append(bp.Pods, pod.Namespace+"/"+pod.Name)
+				nodeSet[pod.Spec.NodeName] = true
+			}
+		}
+		if len(bp.Pods) == 0 {
+			continue
+		}
+		for n := range nodeSet {
+			bp.Nodes = append(bp.Nodes, n)
+		}
+		sort.Strings(bp.Nodes)
+		blocking = append(blocking, bp)
 	}
+	return blocking, nil
 }
 
-// checkMachineConfigPools reports rollout progress, highlighting the master pool,
-// which must finish before the control-plane upgrade completes.
-func (i *Investigation) checkMachineConfigPools(ctx context.Context, k8sClient k8sclient.Client, state *upgradeState, notes *notewriter.NoteWriter) {
-	mcpList := &mcfgv1.MachineConfigPoolList{}
-	if err := k8sClient.List(ctx, mcpList); err != nil {
-		notes.AppendWarning("MachineConfigPools: failed to list: %v", err)
-		state.ReadErrors = append(state.ReadErrors, "MachineConfigPools")
-		return
-	}
-
-	var lines []string
-	healthy := true
-	for _, mcp := range mcpList.Items {
-		ps := poolState{
-			Name:     mcp.Name,
-			Machines: mcp.Status.MachineCount,
-			Updated:  mcp.Status.UpdatedMachineCount,
-			Degraded: mcp.Status.DegradedMachineCount,
-			IsPaused: mcp.Spec.Paused,
-		}
-		for _, cond := range mcp.Status.Conditions {
-			switch {
-			case cond.Type == mcfgv1.MachineConfigPoolUpdating && cond.Status == corev1.ConditionTrue:
-				ps.IsUpdating = true
-			case cond.Type == mcfgv1.MachineConfigPoolDegraded && cond.Status == corev1.ConditionTrue:
-				ps.IsDegraded = true
-				ps.DegradedReason = oneLine(cond.Message)
-			case cond.Type == mcfgv1.MachineConfigPoolUpdated && cond.Status == corev1.ConditionFalse:
-				ps.NotUpdated = true
-			}
-		}
-
-		if mcp.Name == masterPool {
-			state.MasterPool = &ps
-		}
-
-		if ps.IsUpdating || ps.IsDegraded || ps.NotUpdated {
-			healthy = false
-			line := fmt.Sprintf("%s: %d/%d updated", ps.Name, ps.Updated, ps.Machines)
-			if ps.IsPaused {
-				line += ", PAUSED"
-			}
-			if ps.stuck() && !ps.IsDegraded {
-				line += ", not progressing"
-			}
-			if ps.IsDegraded {
-				line += fmt.Sprintf(", DEGRADED (%d machine(s)): %s", ps.Degraded, ps.DegradedReason)
-			}
-			lines = append(lines, line)
+// isStalledDrain reports whether a node is cordoned and has been for at least
+// drainStallThreshold. A cordon without a recorded time is treated as stalled,
+// since the alert itself only fires after the upgrade timeout.
+func isStalledDrain(n corev1.Node, now time.Time) bool {
+	for _, t := range n.Spec.Taints {
+		if t.Key == corev1.TaintNodeUnschedulable && t.Effect == corev1.TaintEffectNoSchedule {
+			return t.TimeAdded == nil || now.Sub(t.TimeAdded.Time) >= drainStallThreshold
 		}
 	}
-
-	if healthy {
-		notes.AppendSuccess("MachineConfigPools: all %d pools updated and not degraded", len(mcpList.Items))
-		return
-	}
-	notes.AppendWarning("MachineConfigPools: rollout not finished:\n  %s", strings.Join(lines, "\n  "))
+	return n.Spec.Unschedulable
 }
 
-// classify picks the single most likely blocker, most specific signal first.
-func classify(s upgradeState) string {
-	switch {
-	case s.DesiredVersion == "":
-		return "could not read ClusterVersion; investigate manually"
-	case s.StaleStatus:
-		return fmt.Sprintf("inconclusive: ClusterVersion status is stale (observedGeneration %d, generation %d); CVO has not yet picked up the requested update, recheck shortly",
-			s.ObservedGen, s.Generation)
-	case s.Completed:
-		return fmt.Sprintf("none: upgrade to %s has completed, MUO should resolve the alert on its next reconcile", s.DesiredVersion)
-	case s.CVOFailing != "":
-		return "CVO reports Failing: " + s.CVOFailing
-	case len(s.UnavailableOperators) > 0:
-		return "unavailable operator(s): " + strings.Join(s.UnavailableOperators, "; ")
-	case len(s.DegradedOperators) > 0:
-		return "degraded operator(s): " + strings.Join(s.DegradedOperators, "; ")
-	case s.MasterPool != nil && s.MasterPool.IsDegraded:
-		return "master MachineConfigPool degraded: " + s.MasterPool.DegradedReason
-	case s.MasterPool != nil && s.MasterPool.IsPaused && s.MasterPool.NotUpdated:
-		return fmt.Sprintf("master MachineConfigPool is paused at %d/%d nodes; pending changes will not roll out until it is unpaused",
-			s.MasterPool.Updated, s.MasterPool.Machines)
-	case s.MasterPool != nil && s.MasterPool.stuck():
-		return fmt.Sprintf("master MachineConfigPool not updated (Updated=False) and not progressing at %d/%d nodes; check machine-config-controller logs",
-			s.MasterPool.Updated, s.MasterPool.Machines)
-	case s.MasterPool != nil && s.MasterPool.IsUpdating:
-		return fmt.Sprintf("master MachineConfigPool rollout stalled at %d/%d nodes; check for drain blockers (see pdbblockingnodedrain note)",
-			s.MasterPool.Updated, s.MasterPool.Machines)
-	case len(s.ReadErrors) > 0:
-		return "inconclusive: could not read " + strings.Join(s.ReadErrors, ", ") + "; investigate manually"
-	case len(s.LaggingOperators) > 0:
-		return fmt.Sprintf("%d operator(s) not yet at %s and none degraded: upgrade may be slow rather than stuck", len(s.LaggingOperators), s.DesiredVersion)
-	default:
-		return "no blocker found in ClusterVersion, ClusterOperators or MachineConfigPools; check MUO logs and the UpgradeConfig"
-	}
+// isPlatformNamespace reports whether a namespace is owned by the platform.
+func isPlatformNamespace(namespace string) bool {
+	return strings.HasPrefix(namespace, "openshift-") ||
+		strings.HasPrefix(namespace, "kube-") ||
+		namespace == "openshift"
 }
 
-// operandVersion returns the ClusterOperator's "operator" operand version.
-func operandVersion(co configv1.ClusterOperator) string {
-	for _, v := range co.Status.Versions {
-		if v.Name == operatorOperand {
-			return v.Version
+// pdbNames formats PDBs as "namespace/name" for the PD note.
+func pdbNames(pdbs []blockingPDB) string {
+	names := make([]string, 0, len(pdbs))
+	for _, p := range pdbs {
+		names = append(names, p.Namespace+"/"+p.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+// newCustomerPDBPreventingDrainSL mirrors the managed-notifications template
+// osd/customer_pdb_preventing_drain_automated.json.
+func newCustomerPDBPreventingDrainSL(pdbs []blockingPDB) *ocm.ServiceLog {
+	nodeSet := map[string]bool{}
+	var pods []string
+	for _, p := range pdbs {
+		pods = append(pods, p.Pods...)
+		for _, n := range p.Nodes {
+			nodeSet[n] = true
 		}
 	}
-	return ""
-}
-
-// oneLine collapses whitespace and truncates s for a single-line PD note.
-func oneLine(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	const maxLen = 300
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+	nodes := make([]string, 0, len(nodeSet))
+	for n := range nodeSet {
+		nodes = append(nodes, n)
 	}
-	return s
+	sort.Strings(nodes)
+	sort.Strings(pods)
+
+	return &ocm.ServiceLog{
+		Severity:    servicelogsv1.SeverityImportant,
+		ServiceName: "SREManualAction",
+		Summary:     "Action required: Pod Disruption Budget(s) preventing Node Drain",
+		Description: fmt.Sprintf("Your cluster is attempting to drain the node(s): `%s` but there is a pod disruption budget set that is preventing the drain. "+
+			"The Managed OpenShift SRE team has identified the following workload(s) affected in namespace/pod-name format: `%s`. "+
+			"Please re-schedule this pod so that the node can drain. For more information on pod disruption budgets please see "+
+			"https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/nodes/working-with-pods#nodes-pods-pod-disruption-about_nodes-pods-configuring.",
+			strings.Join(nodes, ", "), strings.Join(pods, ", ")),
+		InternalOnly: false,
+	}
 }
 
 // Name returns the investigation name, which must match the package directory.
@@ -366,7 +296,7 @@ func (i *Investigation) AlertTitle() string {
 
 // Description returns a one-line summary of the investigation.
 func (i *Investigation) Description() string {
-	return "Triages a stalled Classic control-plane upgrade from ClusterVersion, ClusterOperators and MachineConfigPools"
+	return "Silences completed control-plane upgrades and notifies customers whose PDBs block node drain"
 }
 
 // IsExperimental reports whether the investigation is gated behind CAD_EXPERIMENTAL_ENABLED.

@@ -204,15 +204,13 @@ alerts:
       - ccam
       - upgradeconfigsyncfailureover4hr
 
-  # Upgrade Control Plane Upgrade Timeout (Classic, MUO). PDB-blocked drains are
-  # reported by chaining pdbblockingnodedrain after the upgrade triage.
+  # Upgrade Control Plane Upgrade Timeout (Classic, MUO)
   - alert_title: "UpgradeControlPlaneUpgradeTimeoutSRE"
     name: upgradecontrolplaneupgradetimeoutsre
     investigations:
       - precheck
       - ccam
       - upgradecontrolplaneupgradetimeoutsre
-      - pdbblockingnodedrain
 
   # Machine Health Check Unterminated Short Circuit SRE
   - alert_title: "MachineHealthCheckUnterminatedShortCircuitSRE"
