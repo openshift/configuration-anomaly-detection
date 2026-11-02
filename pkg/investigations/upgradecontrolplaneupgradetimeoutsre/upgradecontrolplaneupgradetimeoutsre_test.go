@@ -247,7 +247,8 @@ func TestIsStalledDrain(t *testing.T) {
 	now := time.Now()
 	assert.True(t, isStalledDrain(*cordonedNode("a", 15*time.Minute), now))
 	assert.False(t, isStalledDrain(*cordonedNode("b", time.Minute), now))
-	assert.True(t, isStalledDrain(corev1.Node{Spec: corev1.NodeSpec{Unschedulable: true}}, now), "cordon with no recorded time")
+	assert.True(t, isStalledDrain(corev1.Node{Spec: corev1.NodeSpec{Taints: []corev1.Taint{{Key: corev1.TaintNodeUnschedulable, Effect: corev1.TaintEffectNoSchedule}}}}, now), "taint with no recorded time")
+	assert.False(t, isStalledDrain(corev1.Node{Spec: corev1.NodeSpec{Unschedulable: true}}, now), "spec.unschedulable without the taint yet")
 	assert.False(t, isStalledDrain(corev1.Node{}, now))
 }
 

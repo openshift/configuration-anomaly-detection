@@ -231,16 +231,18 @@ func findBlockingPDBs(ctx context.Context, k8sClient k8sclient.Client, now time.
 	return blocking, nil
 }
 
-// isStalledDrain reports whether a node is cordoned and has been for at least
-// drainStallThreshold. A cordon without a recorded time is treated as stalled,
-// since the alert itself only fires after the upgrade timeout.
+// isStalledDrain reports whether a node carries the unschedulable NoSchedule
+// taint and has for at least drainStallThreshold. A taint without a recorded
+// time is treated as stalled, since the alert itself only fires after the
+// upgrade timeout. spec.unschedulable alone is not enough: it is set before the
+// taint is added, so a freshly cordoned node would otherwise count as stalled.
 func isStalledDrain(n corev1.Node, now time.Time) bool {
 	for _, t := range n.Spec.Taints {
 		if t.Key == corev1.TaintNodeUnschedulable && t.Effect == corev1.TaintEffectNoSchedule {
 			return t.TimeAdded == nil || now.Sub(t.TimeAdded.Time) >= drainStallThreshold
 		}
 	}
-	return n.Spec.Unschedulable
+	return false
 }
 
 // isControlPlaneNode reports whether a node carries a control-plane role label.
