@@ -80,7 +80,7 @@ func clusterVersion(desired string, completed bool) *configv1.ClusterVersion {
 func cordonedNode(name string, since time.Duration) *corev1.Node {
 	added := metav1.NewTime(time.Now().Add(-since))
 	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{"node-role.kubernetes.io/master": ""}},
 		Spec: corev1.NodeSpec{
 			Unschedulable: true,
 			Taints: []corev1.Taint{{
@@ -97,6 +97,18 @@ func pod(namespace, name, node string) *corev1.Pod {
 		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name, Labels: map[string]string{"app": name}},
 		Spec:       corev1.PodSpec{NodeName: node},
 	}
+}
+
+func cordonedWorker(name string, since time.Duration) *corev1.Node {
+	n := cordonedNode(name, since)
+	n.Labels = map[string]string{"node-role.kubernetes.io/worker": ""}
+	return n
+}
+
+func completedPod(namespace, name, node string) *corev1.Pod {
+	p := pod(namespace, name, node)
+	p.Status.Phase = corev1.PodSucceeded
+	return p
 }
 
 func pdb(namespace, app string, disruptionsAllowed int32) *policyv1.PodDisruptionBudget {
@@ -215,6 +227,8 @@ func TestRun_NoActionableCauseEscalates(t *testing.T) {
 		{"no cordoned nodes", []client.Object{clusterVersion(toVersion, false), pod("customer-app", "web", "worker-1"), pdb("customer-app", "web", 0)}},
 		{"recently cordoned node", []client.Object{clusterVersion(toVersion, false), cordonedNode("master-1", 2*time.Minute), pod("customer-app", "web", "master-1"), pdb("customer-app", "web", 0)}},
 		{"PDB allows disruptions", []client.Object{clusterVersion(toVersion, false), cordonedNode("master-1", 30*time.Minute), pod("customer-app", "web", "master-1"), pdb("customer-app", "web", 1)}},
+		{"only a completed pod on the stalled node", []client.Object{clusterVersion(toVersion, false), cordonedNode("master-1", 30*time.Minute), completedPod("customer-app", "web", "master-1"), pdb("customer-app", "web", 0)}},
+		{"cordoned worker node", []client.Object{clusterVersion(toVersion, false), cordonedWorker("worker-1", 30*time.Minute), pod("customer-app", "web", "worker-1"), pdb("customer-app", "web", 0)}},
 		{"PDB pod on another node", []client.Object{clusterVersion(toVersion, false), cordonedNode("master-1", 30*time.Minute), pod("customer-app", "web", "worker-1"), pdb("customer-app", "web", 0)}},
 	}
 	for _, tt := range tests {
@@ -235,6 +249,12 @@ func TestIsStalledDrain(t *testing.T) {
 	assert.False(t, isStalledDrain(*cordonedNode("b", time.Minute), now))
 	assert.True(t, isStalledDrain(corev1.Node{Spec: corev1.NodeSpec{Unschedulable: true}}, now), "cordon with no recorded time")
 	assert.False(t, isStalledDrain(corev1.Node{}, now))
+}
+
+func TestIsControlPlaneNode(t *testing.T) {
+	assert.True(t, isControlPlaneNode(corev1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"node-role.kubernetes.io/master": ""}}}))
+	assert.True(t, isControlPlaneNode(corev1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"node-role.kubernetes.io/control-plane": ""}}}))
+	assert.False(t, isControlPlaneNode(corev1.Node{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"node-role.kubernetes.io/worker": ""}}}))
 }
 
 func TestIsPlatformNamespace(t *testing.T) {

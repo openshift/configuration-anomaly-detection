@@ -167,7 +167,7 @@ func upgradeCompleted(cv *configv1.ClusterVersion) bool {
 }
 
 // findBlockingPDBs returns PDBs with zero allowed disruptions that select pods
-// on nodes which have been cordoned for longer than drainStallThreshold.
+// on control-plane nodes which have been cordoned for longer than drainStallThreshold.
 func findBlockingPDBs(ctx context.Context, k8sClient k8sclient.Client, now time.Time) ([]blockingPDB, error) {
 	nodes := &corev1.NodeList{}
 	if err := k8sClient.List(ctx, nodes); err != nil {
@@ -175,7 +175,9 @@ func findBlockingPDBs(ctx context.Context, k8sClient k8sclient.Client, now time.
 	}
 	stalled := map[string]bool{}
 	for _, n := range nodes.Items {
-		if isStalledDrain(n, now) {
+		// The alert covers the control-plane part of the upgrade only; a cordoned
+		// worker is not evidence for it.
+		if isControlPlaneNode(n) && isStalledDrain(n, now) {
 			stalled[n.Name] = true
 		}
 	}
@@ -193,6 +195,10 @@ func findBlockingPDBs(ctx context.Context, k8sClient k8sclient.Client, now time.
 	}
 	podsByNamespace := map[string][]corev1.Pod{}
 	for _, p := range podList.Items {
+		// Completed pods (e.g. finished Jobs) still match PDB selectors but do not block a drain.
+		if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+			continue
+		}
 		podsByNamespace[p.Namespace] = append(podsByNamespace[p.Namespace], p)
 	}
 
@@ -235,6 +241,13 @@ func isStalledDrain(n corev1.Node, now time.Time) bool {
 		}
 	}
 	return n.Spec.Unschedulable
+}
+
+// isControlPlaneNode reports whether a node carries a control-plane role label.
+func isControlPlaneNode(n corev1.Node) bool {
+	_, master := n.Labels["node-role.kubernetes.io/master"]
+	_, controlPlane := n.Labels["node-role.kubernetes.io/control-plane"]
+	return master || controlPlane
 }
 
 // isPlatformNamespace reports whether a namespace is owned by the platform.
