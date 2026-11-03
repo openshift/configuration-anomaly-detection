@@ -159,13 +159,14 @@ func TestRun_MissingClusterVersionEscalates(t *testing.T) {
 	assert.Contains(t, notes, "ClusterVersion: failed to get")
 }
 
-func TestRun_CompletedUpgradeSilences(t *testing.T) {
+func TestRun_CompletedUpgradeInformsAndEscalates(t *testing.T) {
 	result, notes := runWith(t, &investigation.Resources{K8sClient: newFakeClient(t, clusterVersion(toVersion, true))})
 
-	assert.True(t, hasAction(result.Actions, executor.ActionTypeSilenceIncident))
-	assert.False(t, hasAction(result.Actions, executor.ActionTypeEscalateIncident))
+	assert.False(t, hasAction(result.Actions, executor.ActionTypeSilenceIncident), "informing mode must not silence")
+	assert.True(t, hasAction(result.Actions, executor.ActionTypeEscalateIncident))
 	assert.Nil(t, serviceLog(result.Actions))
 	assert.Contains(t, notes, "upgrade to 4.20.2 has completed")
+	assert.Contains(t, notes, "Informing mode: would silence")
 }
 
 // MUO can fire before ClusterVersion status has observed the new desiredUpdate,
@@ -181,7 +182,7 @@ func TestRun_StaleCompletedStatusIsNotSilenced(t *testing.T) {
 	assert.True(t, hasAction(result.Actions, executor.ActionTypeEscalateIncident))
 }
 
-func TestRun_CustomerPDBSendsServiceLogAndSilences(t *testing.T) {
+func TestRun_CustomerPDBInformsAndEscalates(t *testing.T) {
 	k8s := newFakeClient(t,
 		clusterVersion(toVersion, false),
 		cordonedNode("master-1", 30*time.Minute),
@@ -191,14 +192,13 @@ func TestRun_CustomerPDBSendsServiceLogAndSilences(t *testing.T) {
 
 	result, notes := runWith(t, &investigation.Resources{K8sClient: k8s})
 
-	sl := serviceLog(result.Actions)
-	require.NotNil(t, sl, "customer PDB must send a service log")
-	assert.Equal(t, "Action required: Pod Disruption Budget(s) preventing Node Drain", sl.ServiceLog.Summary)
-	assert.Contains(t, sl.ServiceLog.Description, "`master-1`")
-	assert.Contains(t, sl.ServiceLog.Description, "`customer-app/web`")
-	assert.True(t, hasAction(result.Actions, executor.ActionTypeSilenceIncident))
-	assert.False(t, hasAction(result.Actions, executor.ActionTypeEscalateIncident))
+	assert.Nil(t, serviceLog(result.Actions), "informing mode must not send a service log")
+	assert.False(t, hasAction(result.Actions, executor.ActionTypeSilenceIncident), "informing mode must not silence")
+	assert.True(t, hasAction(result.Actions, executor.ActionTypeEscalateIncident))
 	assert.Contains(t, notes, "Customer-managed PDB(s) blocking node drain: customer-app/web-pdb")
+	assert.Contains(t, notes, `Informing mode: would send service log "Action required: Pod Disruption Budget(s) preventing Node Drain"`)
+	assert.Contains(t, notes, "`master-1`")
+	assert.Contains(t, notes, "`customer-app/web`")
 }
 
 func TestRun_PlatformPDBEscalatesWithoutServiceLog(t *testing.T) {

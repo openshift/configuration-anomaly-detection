@@ -2,14 +2,17 @@
 // UpgradeControlPlaneUpgradeTimeoutSRE alert.
 //
 // The alert is raised by the managed-upgrade-operator (MUO) when the control-plane
-// portion of a Classic cluster upgrade exceeds its timeout. The investigation only
-// acts where CAD can take a concrete action:
+// portion of a Classic cluster upgrade exceeds its timeout. It identifies the cases
+// where CAD could take a concrete action:
 //
 //   - the upgrade has already completed: silence, MUO resolves the alert
 //   - a node drain is blocked only by customer-managed PodDisruptionBudgets:
 //     send the customer_pdb_preventing_drain_automated service log and silence
 //
-// Every other case is escalated to on-call without further classification.
+// Informing stage: the investigation does not send service logs or silence. It
+// records the action it would take in the PD note and escalates, so the verdicts
+// can be compared with on-call resolutions before actioning is enabled. Every
+// other case is escalated without further classification.
 package upgradecontrolplaneupgradetimeoutsre
 
 import (
@@ -111,11 +114,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	if upgradeCompleted(cv) {
 		r.Notes.AppendSuccess("ClusterVersion: upgrade to %s has completed; MUO will resolve the alert", cv.Status.Desired.Version)
-		result.Actions = append(
-			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Silence("Control-plane upgrade already completed"),
-		)
-		return result, nil
+		r.Notes.AppendAutomation("Informing mode: would silence (upgrade already completed)")
+		return escalate("Control-plane upgrade already completed (informing mode)")
 	}
 
 	pdbs, err := findBlockingPDBs(ctx, r.K8sClient, time.Now())
@@ -144,16 +144,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	sl := newCustomerPDBPreventingDrainSL(customer)
 	r.Notes.AppendWarning("Customer-managed PDB(s) blocking node drain: %s", pdbNames(customer))
-	r.Notes.AppendAutomation("Sending service log: %s", sl.Summary)
-	result.Actions = append(
-		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-		executor.NewServiceLogAction(sl.Severity, sl.Summary).
-			WithDescription(sl.Description).
-			WithServiceName(sl.ServiceName).
-			Build(),
-		executor.Silence("Customer PDB blocking node drain: service log sent"),
-	)
-	return result, nil
+	r.Notes.AppendAutomation("Informing mode: would send service log %q and silence. Service log description:\n%s", sl.Summary, sl.Description)
+	return escalate("Customer PDB blocking node drain (informing mode)")
 }
 
 // upgradeCompleted reports whether ClusterVersion has completed the desired
@@ -311,7 +303,7 @@ func (i *Investigation) AlertTitle() string {
 
 // Description returns a one-line summary of the investigation.
 func (i *Investigation) Description() string {
-	return "Silences completed control-plane upgrades and notifies customers whose PDBs block node drain"
+	return "Identifies completed control-plane upgrades and customer PDBs blocking node drain (informing)"
 }
 
 // IsExperimental reports whether the investigation is gated behind CAD_EXPERIMENTAL_ENABLED.
