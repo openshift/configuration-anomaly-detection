@@ -230,10 +230,20 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 
 	// No chain and no AI — escalate to SRE
 	logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
-	if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
+	escalateUnsupportedAlert(pdClient)
+	return &triggersv1.InterceptorResponse{Continue: false}
+}
+
+// escalateUnsupportedAlert shares the live-state guard used by investigations.
+// A guarded skip leaves PagerDuty's timer in control; it is not an API failure.
+func escalateUnsupportedAlert(pdClient pagerduty.Client) {
+	err := pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; requesting guarded escalation to SRE. 🤖")
+	var skipped *pagerduty.EscalationSkippedError
+	if errors.As(err, &skipped) {
+		logging.Info("Unsupported-alert escalation skipped; PagerDuty automatic escalation remains in control")
+	} else if err != nil {
 		logging.Errorf("failed to escalate incident '%s': %v", pdClient.GetIncidentID(), err)
 	}
-	return &triggersv1.InterceptorResponse{Continue: false}
 }
 
 // continueWithEncodedPayload returns a Continue response with the webhook payload

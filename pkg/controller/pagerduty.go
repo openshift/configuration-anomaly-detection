@@ -85,11 +85,9 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		}
 	}
 
-	// Nothing above escalated this incident yet (e.g. the AI-fallback chain
-	// was skipped entirely, or precheck/aiassisted didn't escalate on their
-	// own): issue a generic escalation now. If something upstream already
-	// escalated, notifier.Escalate() is a safe no-op (trackingPDClient
-	// de-duplicates at the source) rather than a real second escalation.
+	// Request a generic escalation after fallback reporting. The shared tracker
+	// suppresses it if this run already successfully escalated; otherwise the
+	// central PagerDuty guard decides whether escalation is appropriate.
 	if escErr := c.notifier.Escalate(); escErr != nil {
 		return fmt.Errorf("could not escalate unsupported alert: %w", escErr)
 	}
@@ -104,12 +102,12 @@ func escalateDocumentationMismatch(docErr *ocm.DocumentationMismatchError, resou
 		message = resources.Notes.String()
 	}
 
-	// If this incident was already escalated (e.g. by aiassisted), trackingPDClient
-	// degrades this to a plain note instead of a real second escalation.
+	// If this run already successfully escalated, trackingPDClient preserves
+	// this context as a plain note without requesting another escalation.
 	if err := notifier.EscalateWithNote(message); err != nil {
 		logging.Errorf("Failed to escalate documentation mismatch notes to PagerDuty: %v", err)
 		return
 	}
 
-	logging.Info("Escalated documentation mismatch to PagerDuty")
+	logging.Info("Posted documentation mismatch to PagerDuty; escalation requested (may be skipped or deduplicated)")
 }
