@@ -1,0 +1,59 @@
+# Classic (OSD/ROSA) clusters only: pins a pod to a master node, which does not
+# exist on HCP. A single replica with minAvailable: 1 gives the PDB zero allowed
+# disruptions, so it blocks the master node drain during an upgrade.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cad-test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cad-test-blocker
+  namespace: cad-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cad-test-blocker
+  template:
+    metadata:
+      labels:
+        app: cad-test-blocker
+    spec:
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              cpu: 10m
+              memory: 16Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cad-test-blocking-pdb
+  namespace: cad-test
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cad-test-blocker

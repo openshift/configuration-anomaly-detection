@@ -19,6 +19,7 @@ declare -A alert_mapping=(
     ["ExpiredCertificates"]="expiredcertificates"
     ["FallbackTestAlert"]="FallbackTestAlert"
     ["HCPNodepoolUpgradeDelay"]="HCPNodepoolUpgradeDelay"
+    ["UpgradeControlPlaneUpgradeTimeoutSRE"]="UpgradeControlPlaneUpgradeTimeoutSRE Critical (1)"
 )
 
 # Function to print help message

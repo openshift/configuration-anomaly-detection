@@ -1,0 +1,14 @@
+name: upgradecontrolplaneupgradetimeoutsre
+rbac:
+  roles: []
+  clusterRoleRules:
+    - apiGroups: ['config.openshift.io']
+      resources: ['clusterversions']
+      verbs: ['get', 'list']
+    - apiGroups: ['']
+      resources: ['nodes', 'pods']
+      verbs: ['get', 'list']
+    - apiGroups: ['policy']
+      resources: ['poddisruptionbudgets']
+      verbs: ['get', 'list']
+customerDataAccess: false
