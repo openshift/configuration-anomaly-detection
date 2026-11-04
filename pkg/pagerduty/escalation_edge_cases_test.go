@@ -35,11 +35,11 @@ func TestEscalationHistoryPagination(t *testing.T) {
 		{
 			name: "initial trigger on second page",
 			pages: []string{
-				`{"log_entries":[{"type":"notify_log_entry"},{"type":"annotate_log_entry"}],"more":true}`,
+				`{"log_entries":[{"type":"notify_log_entry"},{"type":"annotate_log_entry"},{"type":"link_log_entry"},{"type":"event_rule_action_log_entry"}],"more":true}`,
 				`{"log_entries":[` + trigger + `],"more":false}`,
 			},
 			wantReads: 2,
-			pageSize:  2,
+			pageSize:  4,
 		},
 		{
 			name:       "empty page with more history",

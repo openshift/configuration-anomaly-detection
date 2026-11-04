@@ -43,7 +43,9 @@ func (c *SdkClient) checkEscalationEligibility(ctx context.Context) error {
 			switch entry.Type {
 			case "trigger_log_entry":
 				foundTrigger = true
-			case "notify_log_entry", "annotate_log_entry":
+			case "notify_log_entry", "annotate_log_entry", "link_log_entry", "event_rule_action_log_entry":
+				// Notification, notes, alert grouping and event-rule actions do not
+				// establish that a responder has handled the incident.
 			default:
 				return skipEscalation("prior handling or ambiguous history event")
 			}
