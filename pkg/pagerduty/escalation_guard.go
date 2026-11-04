@@ -2,6 +2,7 @@ package pagerduty
 
 import (
 	"context"
+	"strings"
 
 	sdk "github.com/PagerDuty/go-pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
@@ -27,8 +28,9 @@ func skipEscalation(reason string) error {
 // conditional update, so external actions can still race this best-effort guard.
 func (c *SdkClient) checkEscalationEligibility(ctx context.Context) error {
 	id := c.GetIncidentID()
-	// Read the complete history, not just the overview or first page. Unknown
-	// events fail closed, including reassignment and escalation-path restarts.
+	// Read complete history, not just the overview or newest page. Deny positive
+	// evidence of responder handling rather than requiring an idealized history.
+	cadUsers := map[string]bool{} // Per attempt only; do not cache identity across runs.
 	foundTrigger := false
 	complete := false
 	for offset := uint(0); offset < 10000; {
@@ -43,11 +45,15 @@ func (c *SdkClient) checkEscalationEligibility(ctx context.Context) error {
 			switch entry.Type {
 			case "trigger_log_entry":
 				foundTrigger = true
-			case "notify_log_entry", "annotate_log_entry", "link_log_entry", "event_rule_action_log_entry":
-				// Notification, notes, alert grouping and event-rule actions do not
-				// establish that a responder has handled the incident.
+			case "escalate_log_entry", "acknowledge_log_entry", "resolve_log_entry", "unacknowledge_log_entry":
+				return skipEscalation("prior responder handling")
+			case "assign_log_entry", "delegate_log_entry":
+				if err := c.checkRoutingEntry(ctx, entry, cadUsers); err != nil {
+					return err
+				}
 			default:
-				return skipEscalation("prior handling or ambiguous history event")
+				// Other events, including grouping, urgency changes, and unknown
+				// future types, are not evidence of handling under this denylist.
 			}
 		}
 		if !page.More {
@@ -72,4 +78,60 @@ func (c *SdkClient) checkEscalationEligibility(ctx context.Context) error {
 		return skipEscalation("incident is not confirmed triggered and unacknowledged")
 	}
 	return nil
+}
+
+// checkRoutingEntry distinguishes CAD policy routing from user intervention.
+// Automatic/non-user assignments are normal at trigger time and after policy
+// delegation. Timer escalation is detected by its separate escalate event.
+// Missing/non-user actors are not positive evidence of manual reassignment;
+// this is deliberately a denylist, not proof of exclusive CAD ownership.
+func (c *SdkClient) checkRoutingEntry(ctx context.Context, entry sdk.LogEntry, cadUsers map[string]bool) error {
+	if !isUserReference(entry.Agent.Type) {
+		return nil
+	}
+	cad, err := c.isCADUser(ctx, entry.Agent.ID, cadUsers)
+	if err != nil {
+		return err
+	}
+	if cad {
+		// updateIncident always uses CADEmailAddress, including silent-policy
+		// moves and organization routing. Their target need not be the CAD user.
+		return nil
+	}
+	if entry.Type == "delegate_log_entry" || len(entry.Assignees) == 0 {
+		return skipEscalation("non-CAD user changed incident routing")
+	}
+	for _, target := range entry.Assignees {
+		if !isUserReference(target.Type) {
+			return skipEscalation("non-CAD user changed incident routing")
+		}
+		cad, err := c.isCADUser(ctx, target.ID, cadUsers)
+		if err != nil {
+			return err
+		}
+		if !cad {
+			return skipEscalation("reassigned to a non-CAD target")
+		}
+	}
+	return nil
+}
+
+func isUserReference(kind string) bool {
+	return kind == "user" || kind == "user_reference"
+}
+
+func (c *SdkClient) isCADUser(ctx context.Context, id string, cache map[string]bool) (bool, error) {
+	if id == "" {
+		return false, skipEscalation("routing user identity missing")
+	}
+	if cad, ok := cache[id]; ok {
+		return cad, nil
+	}
+	user, err := c.sdkClient.GetUserWithContext(ctx, id, sdk.GetUserOptions{})
+	if err != nil || user == nil || user.Email == "" {
+		return false, skipEscalation("routing user lookup failed")
+	}
+	cad := strings.EqualFold(user.Email, CADEmailAddress)
+	cache[id] = cad
+	return cad, nil
 }

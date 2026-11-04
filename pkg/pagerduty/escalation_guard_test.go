@@ -119,9 +119,9 @@ func TestEscalationLiveGuard(t *testing.T) {
 		{name: "incident lookup failed", event: triggerEvent, failPath: escalationTestIncidentPath},
 		{name: "history lookup failed", failPath: escalationTestHistoryPath},
 		{name: "transport failure with incident URL", transportFailure: true},
-		{name: "unknown history", status: triggeredStatus, event: sensitiveDetail},
+		{name: "unknown event alone lacks initial trigger", status: triggeredStatus, event: sensitiveDetail},
 		{name: "empty history", status: triggeredStatus},
-		{name: "reassigned is ambiguous", status: triggeredStatus, event: "assign_log_entry"},
+		{name: "assignment alone lacks initial trigger", status: triggeredStatus, event: "assign_log_entry"},
 		{name: "escalated on next page", status: triggeredStatus, event: triggerEvent, secondPage: true},
 		{name: "acknowledged after history lookup", status: triggeredStatus, event: triggerEvent, changeAfterHistory: true},
 	} {
