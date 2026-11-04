@@ -228,12 +228,17 @@ func (pdi *interceptorHandler) process(ctx context.Context, r *triggersv1.Interc
 		return continueWithEncodedPayload(r.Body)
 	}
 
-	// No chain and no AI — escalate to SRE
-	logging.Infof("Incident %s is not mapped to an investigation, escalating incident and returning InterceptorResponse `Continue: false`.", pdClient.GetIncidentID())
+	// No chain and no AI. Check cluster, escalate, and let the pipeline run for sampled must-gather collection.
+	logging.Infof("No alert match for incident %s — checking cluster existence", pdClient.GetIncidentID())
+	resp := clusterExists(pdClient, ocmClient)
+	if resp != nil {
+		return resp
+	}
+
 	if err = pdClient.EscalateIncidentWithNote("🤖 No automation implemented for this alert; escalated to SRE. 🤖"); err != nil {
 		logging.Errorf("failed to escalate incident '%s': %v", pdClient.GetIncidentID(), err)
 	}
-	return &triggersv1.InterceptorResponse{Continue: false}
+	return continueWithEncodedPayload(r.Body)
 }
 
 // continueWithEncodedPayload returns a Continue response with the webhook payload

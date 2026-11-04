@@ -14,6 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.57.0
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.64.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.1
+	github.com/go-logr/logr v1.4.3
 	github.com/onsi/gomega v1.42.1
 	github.com/openshift-online/ocm-common v0.0.44
 	github.com/openshift-online/ocm-sdk-go v0.1.505
@@ -83,7 +84,6 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/getkin/kin-openapi v0.147.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/jsonpointer v0.23.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.6 // indirect

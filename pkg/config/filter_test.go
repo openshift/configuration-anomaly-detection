@@ -298,6 +298,24 @@ func TestInvestigationEntryShouldRun(t *testing.T) { //nolint:maintidx // table-
 			want: true,
 		},
 		{
+			name: "InfrastructureCluster false passes filter for false",
+			entry: &InvestigationEntry{
+				Name: "test",
+				When: &FilterNode{Field: FieldInfrastructureCluster, Operator: OperatorIn, Values: []string{"false"}},
+			},
+			ctx:  baseCtx,
+			want: true,
+		},
+		{
+			name: "InfrastructureCluster true blocks filter for false",
+			entry: &InvestigationEntry{
+				Name: "test",
+				When: &FilterNode{Field: FieldInfrastructureCluster, Operator: OperatorIn, Values: []string{"false"}},
+			},
+			ctx:  &types.FilterContext{InfrastructureCluster: true},
+			want: false,
+		},
+		{
 			name: "OwnerEmail field",
 			entry: &InvestigationEntry{
 				Name: "test",
@@ -781,31 +799,33 @@ func TestInvestigationEntryKeys(t *testing.T) {
 
 func TestResolveAllFields(t *testing.T) {
 	ctx := &types.FilterContext{
-		ClusterID:      "cid",
-		ClusterName:    "cname",
-		OrganizationID: "oid",
-		OwnerID:        "uid",
-		OwnerEmail:     "e@r.com",
-		CloudProvider:  "aws",
-		HCP:            true,
-		ClusterState:   "ready",
-		AlertName:      "alert",
-		AlertTitle:     "title",
-		ServiceName:    "svc",
+		ClusterID:             "cid",
+		ClusterName:           "cname",
+		OrganizationID:        "oid",
+		OwnerID:               "uid",
+		OwnerEmail:            "e@r.com",
+		CloudProvider:         "aws",
+		HCP:                   true,
+		ClusterState:          "ready",
+		InfrastructureCluster: true,
+		AlertName:             "alert",
+		AlertTitle:            "title",
+		ServiceName:           "svc",
 	}
 
 	expected := map[string]string{
-		FieldClusterID:      "cid",
-		FieldClusterName:    "cname",
-		FieldOrganizationID: "oid",
-		FieldOwnerID:        "uid",
-		FieldOwnerEmail:     "e@r.com",
-		FieldCloudProvider:  "aws",
-		FieldHCP:            "true",
-		FieldClusterState:   "ready",
-		FieldAlertName:      "alert",
-		FieldAlertTitle:     "title",
-		FieldServiceName:    "svc",
+		FieldClusterID:             "cid",
+		FieldClusterName:           "cname",
+		FieldOrganizationID:        "oid",
+		FieldOwnerID:               "uid",
+		FieldOwnerEmail:            "e@r.com",
+		FieldCloudProvider:         "aws",
+		FieldHCP:                   "true",
+		FieldClusterState:          "ready",
+		FieldInfrastructureCluster: "true",
+		FieldAlertName:             "alert",
+		FieldAlertTitle:            "title",
+		FieldServiceName:           "svc",
 	}
 
 	for field, want := range expected {
