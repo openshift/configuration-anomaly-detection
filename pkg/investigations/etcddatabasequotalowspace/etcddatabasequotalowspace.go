@@ -19,7 +19,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -194,12 +193,8 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
+		executor.Silence("etcd alert - investigation and analysis complete, see report for details"),
 	)
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("etcd critical alert - analysis complete, see report for details"))
-	}
 
 	return result, nil
 }
@@ -314,27 +309,15 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
-	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("HCP etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("HCP etcd critical alert - analysis complete, see dynatrace logs for details"))
-	}
+	result.Actions = append(
+		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+		executor.Silence("HCP etcd alert - investigation and analysis complete, see dynatrace logs for details"),
+	)
 	return result, nil
 }
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
-}
-
-// isWarningAlert checks if the PagerDuty incident title indicates a warning-severity alert.
-// PD event severity field. Warning alerts are silenced after investigation; critical alerts
-// are still escalated to SRE.
-func isWarningAlert(pdClient pagerduty.Client) bool {
-	if pdClient == nil {
-		return false
-	}
-	return strings.Contains(strings.ToUpper(pdClient.GetTitle()), "WARNING")
 }
 
 // isHCPCluster checks if the cluster is a Hosted Control Plane (HCP) cluster
