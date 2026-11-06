@@ -58,6 +58,16 @@
        - precheck
        - etcddatabasequotalowspace
 
+   - alert_title: "ControlPlaneNodesNeedResizingSRE"
+     name: "controlplanenodesneedresizing"
+     when:
+       field: HCP
+       operator: in
+       values: ["false"]
+     investigations:
+       - precheck
+       - controlplanenodesneedresizing
+
    - alert_title: "CannotRetrieveUpdatesSRE"
      name: "cannotretrieveupdatessre"
      when:
