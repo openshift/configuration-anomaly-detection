@@ -431,7 +431,23 @@ func parseResourceTypeSizes(csvData string) []ResourceTypeSize {
 	return results
 }
 
-// formatAnalysisResults formats the analysis results into human-readable text
+// customerNamespaces returns top namespaces that are not platform namespaces.
+// openshift-* and kube-* are treated as platform. Everything else, including default, is customer data.
+func customerNamespaces(result *AnalysisResult) []NamespaceSize {
+	if result == nil {
+		return nil
+	}
+	out := make([]NamespaceSize, 0)
+	for _, ns := range result.TopNamespaces {
+		if strings.HasPrefix(ns.Namespace, "openshift-") || strings.HasPrefix(ns.Namespace, "kube-") {
+			continue
+		}
+		out = append(out, ns)
+	}
+	return out
+}
+
+// formatAnalysisResults formats the analysis results into human-readable text.
 func formatAnalysisResults(result *AnalysisResult) string {
 	var builder strings.Builder
 
