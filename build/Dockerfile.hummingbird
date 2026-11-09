@@ -1,0 +1,69 @@
+# Hummingbird (Red Hat Hardened Images) variant of build/Dockerfile.
+#
+# Built by .tekton/configuration-anomaly-detection-hummingbird-push.yaml and
+# pushed to a distinct :<sha>-hummingbird tag; build-only, no release path.
+# Both Hummingbird references below are digest-pinned; Renovate/MintMaker
+# opens digest-bump PRs for them (see the review rule in .github/renovate.json).
+
+ARG OC_VERSION=4.22.21
+ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
+
+# oc has no Hummingbird RPM, so it is fetched from the pinned OpenShift mirror
+# tarball and verified against OC_HASH in a Hummingbird builder stage. tar/gzip
+# are build-only dependencies of that stage; only the finished oc binary is
+# copied into the runner.
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder@sha256:b1915b00a4057a64f05912fc2ea553d9153fa0964ddad3de68307560d49086d3 as oc-fetcher
+ARG OC_VERSION
+ARG OC_HASH
+USER root
+RUN dnf install -y --setopt=install_weak_deps=False tar gzip && \
+    dnf clean all
+RUN curl -f -o /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz && \
+    echo "${OC_HASH} /tmp/oc.tar.gz" | sha256sum --check --status && \
+    tar -zxf /tmp/oc.tar.gz -C /tmp && \
+    mv /tmp/oc /bin/oc && \
+    rm /tmp/kubectl && \
+    rm -f /tmp/oc.tar.gz
+
+FROM quay.io/redhat-services-prod/openshift/boilerplate:latest as builder
+
+ADD . /opt
+WORKDIR /opt
+
+RUN make CGO_ENABLED=0 build-cadctl-release
+RUN make CGO_ENABLED=0 build-interceptor-release
+
+
+# Distinct hardened runtime base; digest-pinned, tag kept as documentation of
+# the version stream. Distroless: no package manager, no shell.
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips@sha256:e8211814e3fb924c62e13aa46a15682ab6b33bdf124439460fa13ad0656f24b7 as runner
+
+COPY --from=builder /opt/bin/cadctl /bin/cadctl
+COPY --from=builder /opt/bin/interceptor /bin/interceptor
+COPY --from=oc-fetcher /bin/oc /bin/oc
+
+ARG BUILD_DATE
+ARG VERSION
+ARG VCS_REF
+ARG DOCKERFILE_PATH
+
+LABEL vendor="Red Hat, Inc." \
+  name="openshift/configuration-anomaly-detection" \
+  description="a CLI tool to detect and mitigate configuration mishaps" \
+  io.k8s.display-name="openshift/configuration-anomaly-detection" \
+  io.k8s.description="a CLI tool to detect and mitigate configuration mishaps" \
+  maintainer="Red Hat, Inc." \
+  version="$VERSION" \
+  org.label-schema.build-date=$BUILD_DATE \
+  org.label-schema.description="a CLI tool to detect and mitigate configuration mishaps" \
+  org.label-schema.docker.cmd="docker run --rm openshift/configuration-anomaly-detection" \
+  org.label-schema.docker.dockerfile=$DOCKERFILE_PATH \
+  org.label-schema.name="openshift/configuration-anomaly-detection" \
+  org.label-schema.schema-version="0.1.0" \
+  org.label-schema.vcs-branch=$VCS_BRANCH \
+  org.label-schema.vcs-ref=$VCS_REF \
+  org.label-schema.vcs-url="https://github.com/openshift/configuration-anomaly-detection" \
+  org.label-schema.vendor="openshift/configuration-anomaly-detection" \
+  org.label-schema.version=$VERSION
+
+ENTRYPOINT ["/bin/cadctl"]

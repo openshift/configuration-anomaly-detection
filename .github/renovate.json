@@ -6,7 +6,8 @@
   "platformAutomerge": false,
   "dockerfile": {
     "includePaths": [
-      "build/Dockerfile"
+      "build/Dockerfile",
+      "build/Dockerfile.hummingbird"
     ],
     "packageRules": [
       {
