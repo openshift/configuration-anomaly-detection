@@ -12,7 +12,7 @@ ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
 # tarball and verified against OC_HASH in a Hummingbird builder stage. tar/gzip
 # are build-only dependencies of that stage; only the finished oc binary is
 # copied into the runner.
-FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder as oc-fetcher
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder@sha256:b1915b00a4057a64f05912fc2ea553d9153fa0964ddad3de68307560d49086d3 as oc-fetcher
 ARG OC_VERSION
 ARG OC_HASH
 USER root
