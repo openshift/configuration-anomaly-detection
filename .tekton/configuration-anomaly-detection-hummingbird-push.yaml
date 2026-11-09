@@ -10,7 +10,7 @@ metadata:
     pipelinesascode.tekton.dev/on-cel-expression: event == "push" && target_branch == "main"
   creationTimestamp:
   labels:
-    appstudio.openshift.io/application: configuration-anomaly-detection-hummingbird
+    appstudio.openshift.io/application: configuration-anomaly-detection
     appstudio.openshift.io/component: configuration-anomaly-detection-hummingbird
     pipelines.appstudio.openshift.io/type: build
   name: configuration-anomaly-detection-hummingbird-on-push
@@ -24,12 +24,9 @@ spec:
   - name: output-image
     value: quay.io/redhat-user-workloads/rosa-tenant/configuration-anomaly-detection:{{revision}}-hummingbird
   - name: dockerfile
-    value: build/Dockerfile
+    value: build/Dockerfile.hummingbird
   - name: path-context
     value: .
-  - name: build-args
-    value:
-    - RUNTIME_BASE=registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips@sha256:e8211814e3fb924c62e13aa46a15682ab6b33bdf124439460fa13ad0656f24b7
   pipelineSpec:
     description: |
       This pipeline is ideal for building container images from a Containerfile while reducing network traffic.
