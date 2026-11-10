@@ -1,0 +1,20 @@
+name: controlplanenodesneedresizing
+rbac:
+  clusterRoleRules:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "nodes"
+        - "pods"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "metrics.k8s.io"
+      resources:
+        - "nodes"
+        - "pods"
+customerDataAccess: false
