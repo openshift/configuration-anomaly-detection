@@ -1,0 +1,8 @@
+# Local cadctl config for this investigation:
+#   export CAD_INVESTIGATION_CONFIG_PATH=./pkg/investigations/infranodesneedresizingsre/testing/local-config.yaml
+alerts:
+  - alert_title: "InfraNodesNeedResizingSRE"
+    name: infranodesneedresizingsre
+    investigations:
+      - precheck
+      - infranodesneedresizingsre

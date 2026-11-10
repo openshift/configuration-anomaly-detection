@@ -212,6 +212,14 @@ alerts:
       - ccam
       - upgradecontrolplaneupgradetimeoutsre
 
+  # Infra Nodes Need Resizing (informing)
+  - alert_title: "InfraNodesNeedResizingSRE"
+    name: infranodesneedresizingsre
+    investigations:
+      - precheck
+      - ccam
+      - infranodesneedresizingsre
+
   # Machine Health Check Unterminated Short Circuit SRE
   - alert_title: "MachineHealthCheckUnterminatedShortCircuitSRE"
     name: machinehealthcheckunterminatedshortcircuitsre
