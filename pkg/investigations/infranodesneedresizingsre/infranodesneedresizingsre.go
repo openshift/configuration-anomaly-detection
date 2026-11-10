@@ -174,7 +174,11 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	r.Notes.AppendSuccess("Found %d infra node(s); summarising scheduled resource requests.", len(pressure))
-	r.Notes.AppendAutomation("%s", strings.Join(lines, "\n"))
+	// Node and namespace names identify the customer cluster, so the detailed
+	// summary is written to the PagerDuty note only. AppendText does not log;
+	// the Append* helpers would mirror the text into the application logs
+	// (No-Sensitive-Data-In-Logs).
+	r.Notes.AppendText("🤖 " + strings.Join(lines, "\n") + "\n")
 
 	if saturated {
 		r.Notes.AppendWarning("At least one infra node is at or above %.0f%% of allocatable on scheduled requests. "+
