@@ -20,7 +20,6 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -207,7 +206,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	result.Actions = append(result.Actions, etcdFollowUp(isWarningAlert(r.PdClient), cause)...)
+	result.Actions = append(result.Actions, etcdFollowUp(cause)...)
 
 	return result, nil
 }
@@ -377,32 +376,21 @@ func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
 }
 
-func etcdFollowUp(warning bool, cause EtcdCause) []types.Action {
+func etcdFollowUp(cause EtcdCause) []types.Action {
 	if !cause.Found {
 		return []types.Action{executor.Escalate("etcd quota - no namespace identified")}
 	}
 	if !cause.Customer {
 		return []types.Action{executor.Escalate("etcd quota - largest namespace is platform: " + cause.Namespace)}
 	}
-	log := executor.ServiceLog(
-		servicelogsv1.SeverityModerate,
-		"etcd database is largely customer data",
-		fmt.Sprintf("The largest etcd namespace is %s (%.2f MB). Remove unneeded objects in that namespace. Cluster etcd operator owns defragmentation.", cause.Namespace, cause.SizeMB),
-	)
-	if warning {
-		return []types.Action{log, executor.Silence("etcd warning - customer namespace identified")}
+	return []types.Action{
+		executor.ServiceLog(
+			servicelogsv1.SeverityModerate,
+			"etcd database is largely customer data",
+			fmt.Sprintf("The largest etcd namespace is %s (%.2f MB). Remove unneeded objects in that namespace. Cluster etcd operator owns defragmentation.", cause.Namespace, cause.SizeMB),
+		),
+		executor.Silence("etcd quota - customer namespace identified"),
 	}
-	return []types.Action{log, executor.Escalate("etcd critical - customer namespace " + cause.Namespace)}
-}
-
-// isWarningAlert checks if the PagerDuty incident title indicates a warning-severity alert.
-// PD event severity field. Warning alerts are silenced after investigation; critical alerts
-// are still escalated to SRE.
-func isWarningAlert(pdClient pagerduty.Client) bool {
-	if pdClient == nil {
-		return false
-	}
-	return strings.Contains(strings.ToUpper(pdClient.GetTitle()), "WARNING")
 }
 
 // isHCPCluster checks if the cluster is a Hosted Control Plane (HCP) cluster

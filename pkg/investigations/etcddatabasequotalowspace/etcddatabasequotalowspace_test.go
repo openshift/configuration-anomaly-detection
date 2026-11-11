@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 func TestIsHCPCluster(t *testing.T) {
@@ -85,32 +86,29 @@ func TestInvestigationMethods(t *testing.T) {
 	})
 }
 
-func TestIsWarningAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
-
-	tests := []struct {
-		name     string
-		title    string
-		expected bool
-	}{
-		{"warning in title", "etcdDatabaseQuotaLowSpace WARNING (1)", true},
-		{"critical in title", "etcdDatabaseQuotaLowSpace CRITICAL (1)", false},
-		{"lowercase warning", "etcdDatabaseQuotaLowSpace warning (1)", true},
-		{"no severity in title", "etcdDatabaseQuotaLowSpace (1)", false},
-		{"empty title", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockPD := pdmock.NewMockClient(ctrl)
-			mockPD.EXPECT().GetTitle().Return(tt.title)
-			assert.Equal(t, tt.expected, isWarningAlert(mockPD))
-		})
-	}
-
-	t.Run("nil pd client", func(t *testing.T) {
-		assert.False(t, isWarningAlert(nil))
+func TestEtcdFollowUp(t *testing.T) {
+	t.Run("no namespace escalates", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
 	})
+
+	t.Run("platform namespace escalates without a service log", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{Found: true, Namespace: "openshift-etcd"})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+
+	t.Run("customer namespace sends a service log and silences", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{Found: true, Customer: true, Namespace: "myapp", SizeMB: 12.5})
+		assert.Equal(t, []string{"service_log", "silence_incident"}, actionTypes(actions))
+	})
+}
+
+func actionTypes(actions []types.Action) []string {
+	got := make([]string, len(actions))
+	for i, action := range actions {
+		got[i] = action.Type()
+	}
+	return got
 }
 
 func TestSnapshotResult(t *testing.T) {
@@ -283,7 +281,6 @@ func setupHCPAnalysisTest(t *testing.T) (*corev1.Pod, client.WithWatch, context.
 func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
-	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace WARNING (1)").AnyTimes()
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
@@ -320,7 +317,6 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 func TestRunHCPEtcdAnalysis_CriticalAlertEscalated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
-	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace CRITICAL (1)").AnyTimes()
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
