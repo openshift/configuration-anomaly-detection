@@ -20,6 +20,7 @@ declare -A alert_mapping=(
     ["FallbackTestAlert"]="FallbackTestAlert"
     ["HCPNodepoolUpgradeDelay"]="HCPNodepoolUpgradeDelay"
     ["UpgradeControlPlaneUpgradeTimeoutSRE"]="UpgradeControlPlaneUpgradeTimeoutSRE Critical (1)"
+    ["InfraNodesNeedResizingSRE"]="InfraNodesNeedResizingSRE Critical (1)"
 )
 
 # Function to print help message

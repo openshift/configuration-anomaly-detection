@@ -143,3 +143,10 @@
        - ccam
        - expiredcertificates
        - upgradecontrolplaneupgradetimeoutsre
+
+   - alert_title: "InfraNodesNeedResizingSRE"
+     name: "infranodesneedresizingsre"
+     investigations:
+       - precheck
+       - ccam
+       - infranodesneedresizingsre
