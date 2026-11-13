@@ -191,6 +191,12 @@ func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput
 			needsEscalation = true
 
 		case string(ActionTypeSilenceIncident):
+			// A failed infrastructure lookup must not drop a silence. Silence does not
+			// change the cluster. Limited support and service logs stay blocked.
+			if e.uncertain {
+				transformedActions = append(transformedActions, action)
+				break
+			}
 			e.logger.Infof("Infrastructure cluster: intercepting Silence action")
 			interceptedDescriptions = append(interceptedDescriptions, "Silence")
 			needsEscalation = true

@@ -494,6 +494,35 @@ func TestInfraClusterExecutor_InterceptsLimitedSupportAndSilence(t *testing.T) {
 	assert.True(t, backplaneExecuted, "Backplane report should pass through")
 }
 
+func TestInfraClusterExecutor_UncertainAllowsSilence(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOCMClient := ocmmock.NewMockClient(ctrl)
+	mockPDClient := pdmock.NewMockClient(ctrl)
+	mockBPClient := &bpmock.MockClient{}
+	logger := zap.NewNop().Sugar()
+
+	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+	exec := NewInfraClusterExecutor(inner, logger, true)
+
+	silenceExecuted := false
+	actions := []Action{
+		&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+	}
+	cluster, _ := cmv1.NewCluster().ID("hosted-cluster").Build()
+	input := &ExecutorInput{
+		InvestigationName: "test-investigation",
+		Actions:           actions,
+		Cluster:           cluster,
+		Options:           ExecutionOptions{ConcurrentActions: false},
+	}
+
+	err := exec.Execute(context.Background(), input)
+	assert.NoError(t, err)
+	assert.True(t, silenceExecuted, "Silence must run when infrastructure status is uncertain")
+}
+
 func TestInfraClusterExecutor_InterceptsServiceLog(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
