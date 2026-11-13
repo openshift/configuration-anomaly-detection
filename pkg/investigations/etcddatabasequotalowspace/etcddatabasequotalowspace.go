@@ -13,13 +13,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
-	"github.com/openshift/configuration-anomaly-detection/pkg/pagerduty"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
@@ -180,6 +180,17 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	formattedResults := formatAnalysisResults(analysisResult)
 
+	customers := customerNamespaces(analysisResult)
+	if len(customers) > 0 {
+		formattedResults += "Largest customer namespaces:\n"
+		for i, ns := range customers {
+			formattedResults += fmt.Sprintf("%d. %s: %.2f MB\n", i+1, ns.Namespace, ns.SizeMB)
+		}
+	}
+
+	cause := identifyEtcdCause(analysisResult)
+	formattedResults += causeNote(cause)
+
 	logging.Info("etcd snapshot analysis completed successfully")
 
 	// Create backplane report action
@@ -195,11 +206,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("etcd critical alert - analysis complete, see report for details"))
-	}
+	result.Actions = append(result.Actions, etcdFollowUp(cause)...)
 
 	return result, nil
 }
@@ -314,27 +321,76 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 
 	metrics.Inc(metrics.EtcdDatabaseAnalysis, i.Name(), "success", "completed")
 
+	r.Notes.AppendAutomation("HyperShift defragments this etcd. CAD does not. Debug handlers are not used. The analysis job above is the identification.")
+
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
-	if isWarningAlert(r.PdClient) {
-		result.Actions = append(result.Actions, executor.Silence("HCP etcd warning alert - investigation and analysis complete, see report for details"))
-	} else {
-		result.Actions = append(result.Actions, executor.Escalate("HCP etcd critical alert - analysis complete, see dynatrace logs for details"))
-	}
+	result.Actions = append(result.Actions, executor.Escalate("HCP etcd quota - HyperShift owns defrag. Review the analysis job."))
 	return result, nil
+}
+
+// EtcdCause is the namespace CAD would hand to a later case or service log.
+type EtcdCause struct {
+	Found        bool
+	Namespace    string
+	SizeMB       float64
+	Customer     bool
+	Resource     string
+	ResourceType string
+}
+
+func identifyEtcdCause(result *AnalysisResult) EtcdCause {
+	if result == nil || len(result.TopNamespaces) == 0 {
+		return EtcdCause{}
+	}
+	top := result.TopNamespaces[0]
+	cause := EtcdCause{
+		Found:     true,
+		Namespace: top.Namespace,
+		SizeMB:    top.SizeMB,
+		Customer:  !strings.HasPrefix(top.Namespace, "openshift-") && !strings.HasPrefix(top.Namespace, "kube-"),
+	}
+	if len(result.LargestResources) > 0 {
+		res := result.LargestResources[0]
+		cause.Resource = res.Namespace + "/" + res.Name
+		cause.ResourceType = res.ResourceType
+	}
+	return cause
+}
+
+func causeNote(cause EtcdCause) string {
+	if !cause.Found {
+		return "\nNo namespace was large enough to identify. Defrag is left to cluster-etcd-operator.\n"
+	}
+	kind := "platform"
+	if cause.Customer {
+		kind = "customer"
+	}
+	note := fmt.Sprintf("\nIdentified namespace: %s (%.2f MB, %s).", cause.Namespace, cause.SizeMB, kind)
+	if cause.Resource != "" {
+		note += fmt.Sprintf(" Largest object: %s (%s).", cause.Resource, cause.ResourceType)
+	}
+	return note + " Defrag is left to cluster-etcd-operator.\n"
 }
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
 }
 
-// isWarningAlert checks if the PagerDuty incident title indicates a warning-severity alert.
-// PD event severity field. Warning alerts are silenced after investigation; critical alerts
-// are still escalated to SRE.
-func isWarningAlert(pdClient pagerduty.Client) bool {
-	if pdClient == nil {
-		return false
+func etcdFollowUp(cause EtcdCause) []types.Action {
+	if !cause.Found {
+		return []types.Action{executor.Escalate("etcd quota - no namespace identified")}
 	}
-	return strings.Contains(strings.ToUpper(pdClient.GetTitle()), "WARNING")
+	if !cause.Customer {
+		return []types.Action{executor.Escalate("etcd quota - largest namespace is platform: " + cause.Namespace)}
+	}
+	return []types.Action{
+		executor.ServiceLog(
+			servicelogsv1.SeverityModerate,
+			"etcd database is largely customer data",
+			fmt.Sprintf("The largest etcd namespace is %s (%.2f MB). Remove unneeded objects in that namespace. Cluster etcd operator owns defragmentation.", cause.Namespace, cause.SizeMB),
+		),
+		executor.Silence("etcd quota - customer namespace identified"),
+	}
 }
 
 // isHCPCluster checks if the cluster is a Hosted Control Plane (HCP) cluster
