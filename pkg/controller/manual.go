@@ -17,18 +17,22 @@ import (
 var shortNameToInvestigation = map[string]string{
 	"ai":                       "aiassisted",
 	"can-not-retrieve-updates": "cannotretrieveupdatessre",
+	"ccam":                     "ccam",
 	"chgm":                     "chgm",
+	"cluster-health-check":     "clusterhealthcheck",
+	"cluster-operator-down":    "clusteroperatordownhcp",
 	"cmbb":                     "clustermonitoringerrorbudgetburn",
+	"console-ebb":              "consoleerrorbudgetburn",
 	"cpd":                      "cpd",
+	"describe-nodes":           "describenodes",
 	"etcd-quota-low":           "etcddatabasequotalowspace",
 	"insightsoperatordown":     "insightsoperatordown",
 	"machine-health-check":     "machinehealthcheckunterminatedshortcircuitsre",
 	"must-gather":              "mustgather",
 	"ocmagentresponsefailure":  "ocmagentresponsefailure",
+	"pdb-blocking-node-drain":  "pdbblockingnodedrain",
 	"restart-controlplane":     "restartcontrolplane",
 	"upgrade-config":           "upgradeconfigsyncfailureover4hr",
-	"describe-nodes":           "describenodes",
-	"cluster-health-check":     "clusterhealthcheck",
 }
 
 type ManualController struct {
