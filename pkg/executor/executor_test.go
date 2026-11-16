@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
@@ -503,6 +504,8 @@ func TestInfraClusterExecutor_UncertainAllowsSilence(t *testing.T) {
 	mockBPClient := &bpmock.MockClient{}
 	logger := zap.NewNop().Sugar()
 
+	mockPDClient.EXPECT().AddNote(gomock.Any()).Return(nil)
+
 	inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
 	exec := NewInfraClusterExecutor(inner, logger, true)
 
@@ -521,6 +524,45 @@ func TestInfraClusterExecutor_UncertainAllowsSilence(t *testing.T) {
 	err := exec.Execute(context.Background(), input)
 	assert.NoError(t, err)
 	assert.True(t, silenceExecuted, "Silence must run when infrastructure status is uncertain")
+}
+
+func TestInfraClusterExecutor_UncertainSilenceWithInterceptedAction(t *testing.T) {
+	cluster, _ := cmv1.NewCluster().ID("test-cluster").Build()
+
+	for _, concurrent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("concurrent=%t", concurrent), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockOCMClient := ocmmock.NewMockClient(ctrl)
+			mockPDClient := pdmock.NewMockClient(ctrl)
+			mockBPClient := &bpmock.MockClient{}
+			logger := zap.NewNop().Sugar()
+
+			mockPDClient.EXPECT().AddNote(gomock.Any()).Return(nil).Times(2)
+			mockPDClient.EXPECT().EscalateIncident().Return(nil)
+
+			inner := NewWebhookExecutor(mockOCMClient, mockPDClient, mockBPClient, logger)
+			exec := NewInfraClusterExecutor(inner, logger, true)
+
+			silenceExecuted := false
+			lsExecuted := false
+			actions := []Action{
+				&mockAction{actionType: ActionTypeSilenceIncident, executed: &silenceExecuted},
+				&mockAction{actionType: ActionTypeLimitedSupport, executed: &lsExecuted},
+			}
+
+			err := exec.Execute(context.Background(), &ExecutorInput{
+				InvestigationName: "test-investigation",
+				Actions:           actions,
+				Cluster:           cluster,
+				Options:           ExecutionOptions{ConcurrentActions: concurrent},
+			})
+			assert.NoError(t, err)
+			assert.False(t, lsExecuted, "LimitedSupport must stay blocked when uncertain")
+			assert.True(t, silenceExecuted, "Silence passes through even when another action escalates")
+		})
+	}
 }
 
 func TestInfraClusterExecutor_InterceptsServiceLog(t *testing.T) {
