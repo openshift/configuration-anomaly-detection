@@ -24,6 +24,7 @@ func Push() {
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
+		promPusher.Collector(ActionTaken)
 		promPusher.Collector(MustGatherPerformed)
 		promPusher.Collector(EtcdDatabaseAnalysis)
 		promPusher.Collector(EtcdSnapshotCleanup)
@@ -57,6 +58,7 @@ const (
 	mustgatherLabel      = "product"
 	dryRunLabel          = "dry_run"
 	statusLabel          = "status"
+	actionTypeLabel      = "action_type"
 )
 
 var (
@@ -88,6 +90,13 @@ var (
 			Name: "servicelog_sent_total",
 			Help: "counts investigations resulting in a sent servicelog",
 		}, []string{alertTypeLabel})
+	// ActionTaken counts every action executed by an investigation, by action type
+	ActionTaken = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "action_taken_total",
+			Help: "counts executed actions, labeled by investigation name and action type",
+		}, []string{alertTypeLabel, actionTypeLabel})
 	AlertsFiltered = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystemInvestigate,
