@@ -10,13 +10,13 @@ endef
 include boilerplate/generated-includes.mk
 
 GOLANGCI_LINT_VERSION=v2.7.2
-# Build and run the pinned linter with this module's Go. The CI image Go can be
-# newer than go.mod, and a binary built with the other one cannot import that
-# standard library.
-MODULE_GOTOOLCHAIN:=go$(shell awk '/^go /{print $$2; exit}' go.mod)
-GOLANGCI_LINT_DIR:=$(shell GOTOOLCHAIN=$(MODULE_GOTOOLCHAIN) go env GOBIN)
+# Build and run the pinned linter with the Go on PATH. In CI that is the
+# boilerplate image Go, which is newer than go.mod and sets GOFIPS140. The
+# linter and GOROOT must be that same Go, or it cannot import the standard
+# library and does not accept the image FIPS setting.
+GOLANGCI_LINT_DIR:=$(shell go env GOBIN)
 ifeq ($(GOLANGCI_LINT_DIR),)
-GOLANGCI_LINT_DIR:=$(firstword $(subst :, ,$(shell GOTOOLCHAIN=$(MODULE_GOTOOLCHAIN) go env GOPATH)))/bin
+GOLANGCI_LINT_DIR:=$(firstword $(subst :, ,$(shell go env GOPATH)))/bin
 endif
 GOLANGCI_LINT_BIN:=$(GOLANGCI_LINT_DIR)/golangci-lint
 MOCKGEN_VERSION=v0.6.0
@@ -67,7 +67,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo "Linting cadctl..."
 	# GOROOT must match the toolchain that built the linter.
 	# See https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=$$(GOTOOLCHAIN=$(MODULE_GOTOOLCHAIN) go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c .golangci.yml
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -85,7 +85,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo "Linting interceptor..."
 	# GOROOT must match the toolchain that built the linter.
 	# See https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=$$(GOTOOLCHAIN=$(MODULE_GOTOOLCHAIN) go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor-release ## Run unit tests for interceptor
@@ -134,8 +134,8 @@ check-go121-install:
 
 .PHONY: install-linter
 install-linter: check-go121-install
-	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) with $(MODULE_GOTOOLCHAIN)..."
-	GOTOOLCHAIN=$(MODULE_GOTOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) with $$(go version)..."
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 .PHONY: install-mockgen
 install-mockgen: check-go121-install
