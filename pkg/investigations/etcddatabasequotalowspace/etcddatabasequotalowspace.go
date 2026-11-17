@@ -501,7 +501,7 @@ func getEtcdPod(ctx context.Context, k8sClient k8sclient.Client, namespace strin
 	if len(podList.Items) == 0 {
 		err = k8sClient.List(ctx, podList,
 			client.InNamespace(namespace),
-			client.MatchingLabels{"app": "etcd"},
+			client.MatchingLabels{labelApp: "etcd"},
 		)
 		if err != nil {
 			return nil, investigation.WrapInfrastructure(

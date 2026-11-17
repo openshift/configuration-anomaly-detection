@@ -315,13 +315,15 @@ func (i *Investigation) checkEtcdStatus(ctx context.Context, r *investigation.Re
 	notes.AppendSuccess("ETCD Status:\n%s", output)
 }
 
+const etcdAppName = "etcd"
+
 type defaultEtcdHealthChecker struct{}
 
 func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, namespace string) (string, error) {
 	podList := &corev1.PodList{}
 	err := k8sClient.List(ctx, podList,
 		client.InNamespace(namespace),
-		client.MatchingLabels{"app": "etcd"},
+		client.MatchingLabels{"app": etcdAppName},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to list etcd pods: %w", err)
@@ -330,7 +332,7 @@ func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClien
 	if len(podList.Items) == 0 {
 		err = k8sClient.List(ctx, podList,
 			client.InNamespace(namespace),
-			client.MatchingLabels{"k8s-app": "etcd"},
+			client.MatchingLabels{"k8s-app": etcdAppName},
 		)
 		if err != nil {
 			return "", fmt.Errorf("failed to list etcd pods: %w", err)
@@ -353,9 +355,9 @@ func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClien
 		return "", fmt.Errorf("no running etcd pods found in namespace %s", namespace)
 	}
 
-	containerName := "etcd"
+	containerName := etcdAppName
 	for _, c := range etcdPod.Spec.Containers {
-		if c.Name == "etcdctl" || c.Name == "etcd" {
+		if c.Name == "etcdctl" || c.Name == etcdAppName {
 			containerName = c.Name
 			break
 		}
@@ -699,16 +701,16 @@ func (i *Investigation) checkFiringAlerts(ctx context.Context, r *investigation.
 	}
 
 	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("%d firing alert(s):\n", len(alerts)))
+	fmt.Fprintf(&summary, "%d firing alert(s):\n", len(alerts))
 	for _, sev := range []string{"critical", "warning", "info", "none"} {
 		alertsForSev, ok := bySeverity[sev]
 		if !ok {
 			continue
 		}
 		for _, a := range alertsForSev {
-			summary.WriteString(fmt.Sprintf("  [%s] %s", sev, a.Name))
+			fmt.Fprintf(&summary, "  [%s] %s", sev, a.Name)
 			if a.Summary != "" {
-				summary.WriteString(fmt.Sprintf(" - %s", a.Summary))
+				fmt.Fprintf(&summary, " - %s", a.Summary)
 			}
 			summary.WriteString("\n")
 		}
@@ -716,9 +718,9 @@ func (i *Investigation) checkFiringAlerts(ctx context.Context, r *investigation.
 	}
 	for sev, alertsForSev := range bySeverity {
 		for _, a := range alertsForSev {
-			summary.WriteString(fmt.Sprintf("  [%s] %s", sev, a.Name))
+			fmt.Fprintf(&summary, "  [%s] %s", sev, a.Name)
 			if a.Summary != "" {
-				summary.WriteString(fmt.Sprintf(" - %s", a.Summary))
+				fmt.Fprintf(&summary, " - %s", a.Summary)
 			}
 			summary.WriteString("\n")
 		}
@@ -1003,7 +1005,7 @@ func (i *Investigation) checkFailingPods(ctx context.Context, k8sClient k8sclien
 	} else {
 		maxDisplay := 50
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("%d pod(s) with issues:\n", len(issues)))
+		fmt.Fprintf(&sb, "%d pod(s) with issues:\n", len(issues))
 
 		sort.Slice(issues, func(a, b int) bool {
 			if issues[a].namespace != issues[b].namespace {
@@ -1015,10 +1017,10 @@ func (i *Investigation) checkFailingPods(ctx context.Context, k8sClient k8sclien
 		displayed := 0
 		for _, issue := range issues {
 			if displayed >= maxDisplay {
-				sb.WriteString(fmt.Sprintf("  ... and %d more\n", len(issues)-maxDisplay))
+				fmt.Fprintf(&sb, "  ... and %d more\n", len(issues)-maxDisplay)
 				break
 			}
-			sb.WriteString(fmt.Sprintf("  %s/%s: %s\n", issue.namespace, issue.name, issue.reason))
+			fmt.Fprintf(&sb, "  %s/%s: %s\n", issue.namespace, issue.name, issue.reason)
 			displayed++
 		}
 
@@ -1113,7 +1115,7 @@ func (i *Investigation) checkNonNormalEvents(ctx context.Context, k8sClient k8sc
 	} else {
 		maxDisplay := 50
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("%d non-normal event(s):\n", len(nonNormal)))
+		fmt.Fprintf(&sb, "%d non-normal event(s):\n", len(nonNormal))
 
 		sort.Slice(nonNormal, func(a, b int) bool {
 			if nonNormal[a].namespace != nonNormal[b].namespace {
@@ -1125,7 +1127,7 @@ func (i *Investigation) checkNonNormalEvents(ctx context.Context, k8sClient k8sc
 		displayed := 0
 		for _, e := range nonNormal {
 			if displayed >= maxDisplay {
-				sb.WriteString(fmt.Sprintf("  ... and %d more\n", len(nonNormal)-maxDisplay))
+				fmt.Fprintf(&sb, "  ... and %d more\n", len(nonNormal)-maxDisplay)
 				break
 			}
 			countStr := ""
@@ -1136,7 +1138,7 @@ func (i *Investigation) checkNonNormalEvents(ctx context.Context, k8sClient k8sc
 			if len(msg) > 120 {
 				msg = msg[:120] + "..."
 			}
-			sb.WriteString(fmt.Sprintf("  %s/%s: %s%s - %s\n", e.namespace, e.object, e.reason, countStr, msg))
+			fmt.Fprintf(&sb, "  %s/%s: %s%s - %s\n", e.namespace, e.object, e.reason, countStr, msg)
 			displayed++
 		}
 

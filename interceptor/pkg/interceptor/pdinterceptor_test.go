@@ -266,7 +266,7 @@ func makeSignedRequest(t *testing.T, innerBody, signingSecret string) *http.Requ
 	if err != nil {
 		t.Fatalf("makeSignedRequest: marshal: %v", err)
 	}
-	return httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(outer))
+	return httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", bytes.NewReader(outer))
 }
 
 // TestSignatureVerification covers the multiple-signature verification loop.

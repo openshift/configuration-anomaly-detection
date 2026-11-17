@@ -129,7 +129,8 @@ func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *htt
 		return nil, pdi.badRequest("failed to parse body", err)
 	}
 
-	extractedRequest, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), bytes.NewReader([]byte(originalReq.Body)))
+	// The URL is this request's own URL, used to rebuild the body for signature checks. It is not fetched.
+	extractedRequest, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), bytes.NewReader([]byte(originalReq.Body))) //nolint:gosec // G704: not an outbound request
 	if err != nil {
 		return nil, pdi.internal("malformed body/header in unwrapped request", err)
 	}

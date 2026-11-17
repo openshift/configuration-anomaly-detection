@@ -54,6 +54,8 @@ linters:
     - wastedassign
     - whitespace
   settings:
+    goconst:
+      ignore-tests: true
     nestif:
       min-complexity: 10
     revive:

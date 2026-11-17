@@ -64,7 +64,7 @@ func createAnalysisJob(ctx context.Context, k8sClient k8sclient.Client, nodeName
 			Name:      jobName,
 			Namespace: analysisJobNamespace,
 			Labels: map[string]string{
-				"app":       "etcd-snapshot-analysis",
+				labelApp:    etcdSnapshotAnalysisApp,
 				"timestamp": timestamp,
 			},
 		},
@@ -89,7 +89,7 @@ func createAnalysisJob(ctx context.Context, k8sClient k8sclient.Client, nodeName
 					RestartPolicy: corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
-							Name:    "analyzer",
+							Name:    analyzerContainer,
 							Image:   octosqlImage,
 							Command: []string{"/bin/bash", "-c"},
 							Args: []string{
@@ -101,7 +101,7 @@ func createAnalysisJob(ctx context.Context, k8sClient k8sclient.Client, nodeName
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      "etcd-data",
-									MountPath: "/snapshot",
+									MountPath: snapshotMountPath,
 								},
 							},
 						},
@@ -211,7 +211,7 @@ func getJobLogs(ctx context.Context, k8sClient k8sclient.Client, jobName string)
 	}
 
 	logOptions := &corev1.PodLogOptions{
-		Container: "analyzer",
+		Container: analyzerContainer,
 	}
 
 	req := clientset.CoreV1().Pods(analysisJobNamespace).GetLogs(pod.Name, logOptions)
@@ -470,7 +470,7 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("Top Space Consumers by Resource Type:\n")
 		builder.WriteString("================================\n")
 		for i, rt := range result.TopResourceTypes {
-			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, rt.ResourceType, rt.SizeMB))
+			fmt.Fprintf(&builder, "%d. %s: %.2f MB\n", i+1, rt.ResourceType, rt.SizeMB)
 		}
 		builder.WriteString("\n")
 	}

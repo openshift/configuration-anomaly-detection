@@ -10,7 +10,13 @@ import (
 )
 
 const (
-	snapshotPath = "/snapshot/etcd.snapshot"
+	snapshotPath            = "/snapshot/etcd.snapshot"
+	labelApp                = "app"
+	etcdSnapshotAnalysisApp = "etcd-snapshot-analysis"
+	analyzerContainer       = "analyzer"
+	snapshotMountPath       = "/snapshot"
+	snapshotVolumeName      = "snapshot-volume"
+	etcdCAVolumeName        = "etcd-ca"
 )
 
 type JobConfig struct {
@@ -51,7 +57,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			Name:      jobName,
 			Namespace: cfg.Namespace,
 			Labels: map[string]string{
-				"app":        "etcd-snapshot-analysis",
+				labelApp:     etcdSnapshotAnalysisApp,
 				"cluster-id": cfg.ClusterID,
 				"job-id":     jobName,
 			},
@@ -63,7 +69,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app":        "etcd-snapshot-analysis",
+						labelApp:     etcdSnapshotAnalysisApp,
 						"cluster-id": cfg.ClusterID,
 						"job-id":     jobName,
 					},
@@ -131,8 +137,8 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "snapshot-volume",
-									MountPath: "/snapshot",
+									Name:      snapshotVolumeName,
+									MountPath: snapshotMountPath,
 								},
 								{
 									Name:      "client-tls",
@@ -140,7 +146,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 									ReadOnly:  true,
 								},
 								{
-									Name:      "etcd-ca",
+									Name:      etcdCAVolumeName,
 									MountPath: "/etc/etcd/tls/etcd-ca",
 									ReadOnly:  true,
 								},
@@ -150,7 +156,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 
 					Containers: []corev1.Container{
 						{
-							Name:            "analyzer",
+							Name:            analyzerContainer,
 							Image:           octosqlImage,
 							ImagePullPolicy: corev1.PullAlways,
 							Command: []string{
@@ -160,8 +166,8 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "snapshot-volume",
-									MountPath: "/snapshot",
+									Name:      snapshotVolumeName,
+									MountPath: snapshotMountPath,
 								},
 							},
 						},
@@ -169,7 +175,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 
 					Volumes: []corev1.Volume{
 						{
-							Name: "snapshot-volume",
+							Name: snapshotVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
@@ -177,17 +183,17 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 						{
 							Name: "client-tls",
 							VolumeSource: corev1.VolumeSource{
-								Secret: &corev1.SecretVolumeSource{
+								Secret: &corev1.SecretVolumeSource{ //nolint:gosec // G101: volume source type, not a credential
 									SecretName: "etcd-client-tls",
 								},
 							},
 						},
 						{
-							Name: "etcd-ca",
+							Name: etcdCAVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
 									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "etcd-ca",
+										Name: etcdCAVolumeName,
 									},
 								},
 							},
