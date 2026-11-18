@@ -65,7 +65,7 @@ func CreateTarball(sourceDir string, tarballFile *os.File) error {
 			return nil
 		}
 
-		fileToArchive, err := os.Open(filepath.Clean(file))
+		fileToArchive, err := os.Open(filepath.Clean(file)) //nolint:gosec // G122: path comes from filepath.Walk of sourceDir
 		if err != nil {
 			return fmt.Errorf("failed to open file %v: %w", file, err)
 		}

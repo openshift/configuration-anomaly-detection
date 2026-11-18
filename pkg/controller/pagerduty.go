@@ -69,7 +69,7 @@ func (c *PagerDutyController) Investigate(ctx context.Context) error {
 		alertConfig = &config.AlertConfig{
 			AlertTitle: "aiassisted-fallback",
 			Investigations: []config.InvestigationEntry{
-				{Name: "precheck"},
+				{Name: precheckInvestigationName},
 				{Name: aiassisted.Name, When: &config.FilterNode{
 					Field: config.FieldHCP, Operator: config.OperatorIn, Values: []string{"false"},
 				}},

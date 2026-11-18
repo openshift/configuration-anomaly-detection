@@ -48,7 +48,7 @@ func createHibernationTimeLine(clusterStateUpdates []*servicelogsv1.LogEntry) []
 			hibernationStartTime = date
 		}
 		if event == hibernationEndEvent {
-			if (time.Time.Equal(hibernationStartTime, time.Time{})) {
+			if time.Time.Equal(hibernationStartTime, time.Time{}) {
 				// Cluster became ready after installation
 				continue
 			}

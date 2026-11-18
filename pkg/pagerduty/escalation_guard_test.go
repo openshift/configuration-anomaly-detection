@@ -127,7 +127,7 @@ func TestEscalationLiveGuard(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			write := func(w http.ResponseWriter, format string, args ...any) {
-				if _, err := fmt.Fprintf(w, format, args...); err != nil {
+				if _, err := fmt.Fprintf(w, format, args...); err != nil { //nolint:gosec // G705: test response writer, format is the test's own template
 					t.Errorf("write mock response: %v", err)
 				}
 			}
