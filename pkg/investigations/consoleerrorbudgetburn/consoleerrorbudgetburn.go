@@ -37,6 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	defaultObjectName = "default"
+	labelApp          = "app"
+)
+
 type consoleServiceChecker interface {
 	checkConsoleEndpoint(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config) (string, error)
 }
@@ -128,7 +133,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Check router pod health in openshift-ingress.
 	// Applies to: Classic + HCP.
-	i.checkPodHealth(ctx, r.K8sClient, "openshift-ingress", "Router", client.MatchingLabels{"ingresscontroller.operator.openshift.io/deployment-ingresscontroller": "default"}, notes)
+	i.checkPodHealth(ctx, r.K8sClient, "openshift-ingress", "Router", client.MatchingLabels{"ingresscontroller.operator.openshift.io/deployment-ingresscontroller": defaultObjectName}, notes)
 
 	// Check console service reachability from within the cluster.
 	// Applies to: Classic + HCP.
@@ -136,7 +141,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	// Check console pod health in openshift-console.
 	// Applies to: Classic + HCP.
-	i.checkPodHealth(ctx, r.K8sClient, "openshift-console", "Console", client.MatchingLabels{"app": "console", "component": "ui"}, notes)
+	i.checkPodHealth(ctx, r.K8sClient, "openshift-console", "Console", client.MatchingLabels{labelApp: "console", "component": "ui"}, notes)
 
 	// Check health of nodes running console pods.
 	// Applies to: Classic + HCP.
@@ -218,7 +223,7 @@ func (i *Investigation) checkAllowedSourceRanges(ctx context.Context, r *investi
 	}
 
 	ic := &operatorv1.IngressController{}
-	if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{Namespace: "openshift-ingress-operator", Name: "default"}, ic); err != nil {
+	if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{Namespace: "openshift-ingress-operator", Name: defaultObjectName}, ic); err != nil {
 		notes.AppendWarning("AllowedSourceRanges: failed to get default IngressController - %v", err)
 		return false
 	}
@@ -476,7 +481,7 @@ func (i *Investigation) checkLoadBalancerHealth(ctx context.Context, r *investig
 	ic := &operatorv1.IngressController{}
 	if err := r.K8sClient.Get(ctx, ktypes.NamespacedName{
 		Namespace: "openshift-ingress-operator",
-		Name:      "default",
+		Name:      defaultObjectName,
 	}, ic); err != nil {
 		notes.AppendWarning("LB Health: failed to get default IngressController — %v", err)
 		return
@@ -727,7 +732,7 @@ func (i *Investigation) checkVPCEgress(r *investigation.Resources, notes *notewr
 // Informational-only check.
 func (i *Investigation) checkUpstreamDNS(ctx context.Context, k8sClient k8sclient.Client, notes *notewriter.NoteWriter) {
 	dns := &operatorv1.DNS{}
-	if err := k8sClient.Get(ctx, ktypes.NamespacedName{Name: "default"}, dns); err != nil {
+	if err := k8sClient.Get(ctx, ktypes.NamespacedName{Name: defaultObjectName}, dns); err != nil {
 		notes.AppendWarning("DNS: failed to get dns.operator.openshift.io/default - %v", err)
 		return
 	}
@@ -965,7 +970,7 @@ func (d *defaultConsoleServiceChecker) checkConsoleEndpoint(ctx context.Context,
 func (i *Investigation) checkNodeHealth(ctx context.Context, r *investigation.Resources, notes *notewriter.NoteWriter) {
 	// find which nodes run console pods
 	podList := &corev1.PodList{}
-	if err := r.K8sClient.List(ctx, podList, client.InNamespace("openshift-console"), client.MatchingLabels{"app": "console", "component": "ui"}); err != nil {
+	if err := r.K8sClient.List(ctx, podList, client.InNamespace("openshift-console"), client.MatchingLabels{labelApp: "console", "component": "ui"}); err != nil {
 		notes.AppendWarning("Node Health: failed to list console pods - %v", err)
 		return
 	}
@@ -1124,7 +1129,7 @@ type defaultBlackboxProber struct{}
 
 func (d *defaultBlackboxProber) runProbe(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, consoleURL string) (string, error) {
 	bbPod, err := findRunningPod(ctx, k8sClient, "openshift-route-monitor-operator",
-		map[string]string{"app": "blackbox-exporter"},
+		map[string]string{labelApp: "blackbox-exporter"},
 		"blackbox-exporter")
 	if err != nil {
 		return "", err

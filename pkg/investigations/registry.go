@@ -14,6 +14,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/describenodes"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/etcddatabasequotalowspace"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/expiredcertificates"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/infranodesneedresizingsre"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/insightsoperatordown"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/machinehealthcheckunterminatedshortcircuitsre"
@@ -50,6 +51,7 @@ var availableInvestigations = []investigation.Investigation{
 	&expiredcertificates.Investigation{},
 	&pdbblockingnodedrain.Investigation{},
 	&upgradecontrolplaneupgradetimeoutsre.Investigation{},
+	&infranodesneedresizingsre.Investigation{},
 }
 
 // GetInvestigationByName returns the Investigation with the given name, or nil if not found.

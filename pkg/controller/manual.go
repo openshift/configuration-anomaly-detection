@@ -12,6 +12,8 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
+const precheckInvestigationName = "precheck"
+
 // shortNameToInvestigation maps short flag names to their corresponding investigation names.
 // This allows users to pass easier-to-type flags when running investigations manually.
 var shortNameToInvestigation = map[string]string{
@@ -75,10 +77,10 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	metrics.Inc(metrics.ManualInvestigationStarted, inv.Name(), dryRun)
 
 	invEntries := []config.InvestigationEntry{}
-	if inv.Name() != "precheck" {
-		invEntries = append(invEntries, config.InvestigationEntry{Name: "precheck"})
+	if inv.Name() != precheckInvestigationName {
+		invEntries = append(invEntries, config.InvestigationEntry{Name: precheckInvestigationName})
 	}
-	if inv.Name() != "ccam" && inv.Name() != "precheck" {
+	if inv.Name() != "ccam" && inv.Name() != precheckInvestigationName {
 		invEntries = append(invEntries, config.InvestigationEntry{Name: "ccam"})
 	}
 	invEntries = append(invEntries, config.InvestigationEntry{Name: inv.Name()})

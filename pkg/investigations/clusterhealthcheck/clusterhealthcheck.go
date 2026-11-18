@@ -315,13 +315,15 @@ func (i *Investigation) checkEtcdStatus(ctx context.Context, r *investigation.Re
 	notes.AppendSuccess("ETCD Status:\n%s", output)
 }
 
+const etcdAppName = "etcd"
+
 type defaultEtcdHealthChecker struct{}
 
 func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClient k8sclient.Client, restConfig *rest.Config, namespace string) (string, error) {
 	podList := &corev1.PodList{}
 	err := k8sClient.List(ctx, podList,
 		client.InNamespace(namespace),
-		client.MatchingLabels{"app": "etcd"},
+		client.MatchingLabels{"app": etcdAppName},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to list etcd pods: %w", err)
@@ -330,7 +332,7 @@ func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClien
 	if len(podList.Items) == 0 {
 		err = k8sClient.List(ctx, podList,
 			client.InNamespace(namespace),
-			client.MatchingLabels{"k8s-app": "etcd"},
+			client.MatchingLabels{"k8s-app": etcdAppName},
 		)
 		if err != nil {
 			return "", fmt.Errorf("failed to list etcd pods: %w", err)
@@ -353,9 +355,9 @@ func (d *defaultEtcdHealthChecker) checkEtcdHealth(ctx context.Context, k8sClien
 		return "", fmt.Errorf("no running etcd pods found in namespace %s", namespace)
 	}
 
-	containerName := "etcd"
+	containerName := etcdAppName
 	for _, c := range etcdPod.Spec.Containers {
-		if c.Name == "etcdctl" || c.Name == "etcd" {
+		if c.Name == "etcdctl" || c.Name == etcdAppName {
 			containerName = c.Name
 			break
 		}

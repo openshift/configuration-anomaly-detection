@@ -9,9 +9,14 @@ endef
 
 include boilerplate/generated-includes.mk
 
-# v2.15.0 can read Go 1.27.3's export data used by the CI image.
+
 GOLANGCI_LINT_VERSION=v2.15.0
-GOLANGCI_LINT_BIN?=$(shell go env GOPATH)/bin/golangci-lint
+# v2.7.2 cannot read a Go 1.27 standard library. Build v2.15.0 with the Go
+# on PATH. In CI that is the boilerplate image Go, which accepts
+# GOFIPS140=certified. GOROOT must be that same Go.
+# Install into the repo bin so a developer's existing golangci-lint is left alone.
+GOLANGCI_LINT_BIN:=$(CURDIR)/bin/golangci-lint
+
 MOCKGEN_VERSION=v0.6.0
 
 # Default build flags
@@ -58,8 +63,9 @@ build-%-release build-%-debug: check-go121-install
 lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo
 	@echo "Linting cadctl..."
-	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c .golangci.yml
+	# GOROOT must match the toolchain that built the linter.
+	# See https://github.com/golangci/golangci-lint/issues/3107
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) "$(GOLANGCI_LINT_BIN)" run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -75,8 +81,9 @@ interceptor: build-interceptor-release test-interceptor test-interceptor-e2e lin
 lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo
 	@echo "Linting interceptor..."
-	# Explicitly set GOROOT, see https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
+	# GOROOT must match the toolchain that built the linter.
+	# See https://github.com/golangci/golangci-lint/issues/3107
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) "$(GOLANGCI_LINT_BIN)" run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor-release ## Run unit tests for interceptor
@@ -126,40 +133,12 @@ check-go121-install:
 # The boilerplate image may contain a linter built with an older Go toolchain.
 # Match the exact archive checksum; the upstream installer also matches its SBOM entry.
 .PHONY: install-linter
-install-linter: check-curl-install check-jq-install check-go121-install
-	@set -eu; linter_matches() { \
-		info=$$("$(GOLANGCI_LINT_BIN)" version --json 2>/dev/null) || return 1; \
-		installed_version=$$(printf '%s' "$$info" | jq -r '.version // empty'); \
-		[ "$$installed_version" = "$(patsubst v%,%,$(GOLANGCI_LINT_VERSION))" ] || return 1; \
-		installed_go=$$(printf '%s' "$$info" | jq -r '.goVersion // empty'); \
-		current_go=$$(go env GOVERSION); \
-		awk -v built="$$installed_go" -v current="$$current_go" 'BEGIN { \
-			sub(/^go/, "", built); sub(/^go/, "", current); \
-			split(built, b, "."); split(current, c, "."); \
-			exit !(b[1]+0 > c[1]+0 || (b[1]+0 == c[1]+0 && b[2]+0 >= c[2]+0)); \
-		}'; \
-	}; \
-	if ! linter_matches; then \
-		echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) for $$(go env GOVERSION)..."; \
-		download_dir=$$(mktemp -d); \
-		trap 'rm -rf "$$download_dir"' EXIT; \
-		version=$(patsubst v%,%,$(GOLANGCI_LINT_VERSION)); \
-		archive=golangci-lint-$$version-$$(go env GOHOSTOS)-$$(go env GOHOSTARCH).tar.gz; \
-		release=https://github.com/golangci/golangci-lint/releases/download/$(GOLANGCI_LINT_VERSION); \
-		curl -fsSL "$$release/$$archive" -o "$$download_dir/$$archive"; \
-		curl -fsSL "$$release/golangci-lint-$$version-checksums.txt" -o "$$download_dir/checksums.txt"; \
-		expected=$$(awk -v archive="$$archive" '$$2 == archive { print $$1 }' "$$download_dir/checksums.txt"); \
-		if command -v sha256sum >/dev/null; then \
-			actual=$$(sha256sum "$$download_dir/$$archive" | awk '{ print $$1 }'); \
-		else \
-			actual=$$(shasum -a 256 "$$download_dir/$$archive" | awk '{ print $$1 }'); \
-		fi; \
-		[ -n "$$expected" ] && [ "$$expected" = "$$actual" ] || { echo "golangci-lint archive checksum mismatch" >&2; exit 1; }; \
-		tar -xzf "$$download_dir/$$archive" -C "$$download_dir"; \
-		mkdir -p "$(dir $(GOLANGCI_LINT_BIN))"; \
-		install -m 755 "$$download_dir/golangci-lint-$$version-$$(go env GOHOSTOS)-$$(go env GOHOSTARCH)/golangci-lint" "$(GOLANGCI_LINT_BIN)"; \
-		linter_matches || { echo "The installed golangci-lint does not support $$(go env GOVERSION)" >&2; exit 1; }; \
-	fi
+
+install-linter: check-go121-install
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) with $$(go version)..."
+	mkdir -p $(CURDIR)/bin
+	GOBIN=$(CURDIR)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
 
 .PHONY: install-mockgen
 install-mockgen: check-go121-install

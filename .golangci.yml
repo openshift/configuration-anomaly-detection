@@ -55,8 +55,6 @@ linters:
     - whitespace
   settings:
     goconst:
-      # Repeated test fixtures and a few Kubernetes labels do not benefit from constants.
-      min-occurrences: 5
       ignore-tests: true
     nestif:
       min-complexity: 10

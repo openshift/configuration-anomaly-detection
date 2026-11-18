@@ -1,0 +1,8 @@
+name: infranodesneedresizingsre
+rbac:
+  roles: []
+  clusterRoleRules:
+    - apiGroups: ['']
+      resources: ['nodes', 'pods']
+      verbs: ['get', 'list']
+customerDataAccess: false
