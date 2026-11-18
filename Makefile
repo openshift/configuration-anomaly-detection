@@ -13,11 +13,8 @@ GOLANGCI_LINT_VERSION=v2.15.0
 # v2.7.2 cannot read a Go 1.27 standard library. Build v2.15.0 with the Go
 # on PATH. In CI that is the boilerplate image Go, which accepts
 # GOFIPS140=certified. GOROOT must be that same Go.
-GOLANGCI_LINT_DIR:=$(shell go env GOBIN)
-ifeq ($(GOLANGCI_LINT_DIR),)
-GOLANGCI_LINT_DIR:=$(firstword $(subst :, ,$(shell go env GOPATH)))/bin
-endif
-GOLANGCI_LINT_BIN:=$(GOLANGCI_LINT_DIR)/golangci-lint
+# Install into the repo bin so a developer's existing golangci-lint is left alone.
+GOLANGCI_LINT_BIN:=$(CURDIR)/bin/golangci-lint
 MOCKGEN_VERSION=v0.6.0
 
 # Default build flags
@@ -66,7 +63,7 @@ lint-cadctl: install-linter ## Lint cadctl subproject
 	@echo "Linting cadctl..."
 	# GOROOT must match the toolchain that built the linter.
 	# See https://github.com/golangci/golangci-lint/issues/3107
-	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c .golangci.yml
+	GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) "$(GOLANGCI_LINT_BIN)" run -c .golangci.yml
 
 .PHONY: test-cadctl
 test-cadctl: check-go121-install ## Run automated tests for cadctl
@@ -84,7 +81,7 @@ lint-interceptor: install-linter ## Lint interceptor subproject
 	@echo "Linting interceptor..."
 	# GOROOT must match the toolchain that built the linter.
 	# See https://github.com/golangci/golangci-lint/issues/3107
-	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) $(GOLANGCI_LINT_BIN) run -c ../.golangci.yml
+	cd interceptor && GOROOT=$$(go env GOROOT) GOLANGCI_LINT_CACHE=$$(mktemp -d) "$(GOLANGCI_LINT_BIN)" run -c ../.golangci.yml
 
 .PHONY: test-interceptor
 test-interceptor: check-go121-install check-jq-install build-interceptor-release ## Run unit tests for interceptor
@@ -134,7 +131,8 @@ check-go121-install:
 .PHONY: install-linter
 install-linter: check-go121-install
 	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) with $$(go version)..."
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	mkdir -p $(CURDIR)/bin
+	GOBIN=$(CURDIR)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 .PHONY: install-mockgen
 install-mockgen: check-go121-install
