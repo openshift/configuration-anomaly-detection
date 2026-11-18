@@ -31,7 +31,25 @@ func CreateTarball(sourceDir string, tarballFile *os.File) error {
 	}()
 
 	// Walk through the directory and add files to the tarball
-	err := filepath.Walk(sourceDir, func(file string, info os.FileInfo, err error) error {
+	info, err := os.Stat(sourceDir)
+	if err != nil {
+		return fmt.Errorf("failed to stat source directory: %w", err)
+	}
+	if !info.IsDir() {
+		return nil // Preserve the existing empty archive for a file source.
+	}
+
+	sourceRoot, err := os.OpenRoot(sourceDir)
+	if err != nil {
+		return fmt.Errorf("failed to open source directory: %w", err)
+	}
+	defer func() {
+		if err := sourceRoot.Close(); err != nil {
+			logging.Errorf("Failed to close source directory: %v", err)
+		}
+	}()
+
+	err = filepath.Walk(sourceDir, func(file string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("error walking the path %v: %w", file, err)
 		}
@@ -65,7 +83,7 @@ func CreateTarball(sourceDir string, tarballFile *os.File) error {
 			return nil
 		}
 
-		fileToArchive, err := os.Open(filepath.Clean(file)) //nolint:gosec // G122: path comes from filepath.Walk of sourceDir
+		fileToArchive, err := sourceRoot.Open(relPath)
 		if err != nil {
 			return fmt.Errorf("failed to open file %v: %w", file, err)
 		}

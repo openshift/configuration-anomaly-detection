@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,6 +44,7 @@ type Client interface {
 	GetTitle() string
 	MoveToEscalationPolicy(escalationPolicyID string) error
 	RetrieveClusterID() (string, error)
+	RetrieveNodePoolIDs() ([]string, error)
 	SilenceIncident() error
 	SilenceIncidentWithNote(notes string) error
 	UpdateIncidentTitle(title string) error
@@ -291,6 +293,70 @@ func (c *SdkClient) RetrieveClusterID() (string, error) {
 	return "", fmt.Errorf("could not find a clusterID in the given alerts")
 }
 
+// RetrieveNodePoolIDs returns every node_pool_id in the incident's firing alerts.
+// One PagerDuty incident can group alerts from several node pools.
+func (c *SdkClient) RetrieveNodePoolIDs() ([]string, error) {
+	alerts, err := c.GetAlertsForIncident(c.GetIncidentID())
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]struct{})
+	for _, alert := range *alerts {
+		if alert.Status != "triggered" {
+			continue
+		}
+		for _, id := range nodePoolIDsFromAlertBody(alert.Body) {
+			seen[id] = struct{}{}
+		}
+	}
+	if len(seen) == 0 {
+		return nil, errors.New("no node_pool_id found in incident alerts")
+	}
+
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids, nil
+}
+
+var nodePoolIDFromFiringRe = regexp.MustCompile(`(?:^|\s)(?:node_pool_id|nodepool)\s*=\s*(\S+)`)
+
+func nodePoolIDsFromAlertBody(body map[string]interface{}) []string {
+	details, ok := body["details"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	var ids []string
+	if id, ok := details["node_pool_id"].(string); ok && id != "" {
+		ids = append(ids, id)
+	}
+	switch firing := details["firing"].(type) {
+	case string:
+		for _, match := range nodePoolIDFromFiringRe.FindAllStringSubmatch(firing, -1) {
+			ids = append(ids, match[1])
+		}
+	case []interface{}:
+		for _, item := range firing {
+			alert, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			labels, ok := alert["labels"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if id, ok := labels["node_pool_id"].(string); ok && id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
+}
+
 // MoveToEscalationPolicy will move the incident's EscalationPolicy to the new EscalationPolicy
 func (c *SdkClient) MoveToEscalationPolicy(escalationPolicyID string) error {
 	logging.Infof("Moving to escalation policy: %s", escalationPolicyID)
@@ -376,25 +442,33 @@ func (c *SdkClient) GetAlertsForIncident(incidentID string) (*[]sdk.IncidentAler
 	ctx, cancel := context.WithTimeout(context.Background(), pagerDutyTimeout)
 	defer cancel()
 
-	o := sdk.ListIncidentAlertsOptions{}
-
-	listIncidentAlertsResponse, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, incidentID, o)
-
-	sdkErr := sdk.APIError{}
-	if errors.As(err, &sdkErr) {
-		commonErr := commonErrorHandling(err, sdkErr)
-		if commonErr != nil {
-			return nil, commonErr
+	o := sdk.ListIncidentAlertsOptions{Limit: 100}
+	var alerts []sdk.IncidentAlert
+	for {
+		response, err := c.sdkClient.ListIncidentAlertsWithContext(ctx, incidentID, o)
+		sdkErr := sdk.APIError{}
+		if errors.As(err, &sdkErr) {
+			commonErr := commonErrorHandling(err, sdkErr)
+			if commonErr != nil {
+				return nil, commonErr
+			}
+			if sdkErr.StatusCode == http.StatusNotFound {
+				// This can happen when the incident ID has leading zeroes.
+				return nil, IncidentNotFoundError{Err: err}
+			}
 		}
-		if sdkErr.StatusCode == http.StatusNotFound {
-			// this case can happen if the incidentID is not a valid incident (like a number prepended with zeroes)
-			return nil, IncidentNotFoundError{Err: err}
+		if err != nil {
+			return nil, err
 		}
+		alerts = append(alerts, response.Alerts...)
+		if !response.More {
+			return &alerts, nil
+		}
+		if len(response.Alerts) == 0 {
+			return nil, fmt.Errorf("PagerDuty returned an empty alert page with more=true for incident %s", incidentID)
+		}
+		o.Offset += o.Limit
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &listIncidentAlertsResponse.Alerts, nil
 }
 
 // GetAlertListDetails will retrieve the required details for a list of alerts and return an array of alertDetails

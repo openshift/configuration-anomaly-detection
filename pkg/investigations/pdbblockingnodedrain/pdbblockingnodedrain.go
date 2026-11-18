@@ -6,11 +6,13 @@ import (
 	"strings"
 	"time"
 
+	servicelogsv1 "github.com/openshift-online/ocm-sdk-go/servicelogs/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	k8sclient "github.com/openshift/configuration-anomaly-detection/pkg/k8s"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
+	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -23,8 +25,9 @@ import (
 )
 
 const (
-	drainStallThreshold = 10 * time.Minute
-	ownerNone           = "none"
+	drainStallThreshold  = 10 * time.Minute
+	stoppedWorkerTimeout = 45 * time.Second
+	ownerNone            = "none"
 )
 
 type stalledNode struct {
@@ -65,14 +68,36 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	ctx := context.Background()
+	stopCtx, cancel := context.WithTimeout(ctx, stoppedWorkerTimeout)
+	stoppedWorkerConfirmed, stoppedWorkerSuspected := i.checkStoppedWorkers(stopCtx, rb, r)
+	cancel()
+	if stoppedWorkerConfirmed {
+		serviceLog := newWorkerNodesStoppedSL()
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.NewServiceLogAction(serviceLog.Severity, serviceLog.Summary).
+				WithDescription(serviceLog.Description).
+				WithServiceName(serviceLog.ServiceName).
+				Build(),
+			executor.Silence("Customer stopped worker instance in alerted HCP nodepool - service log sent"),
+		)
+		return result, nil
+	}
+	if stoppedWorkerSuspected {
+		r.Notes.AppendWarning("Stopped Workers: the stop could not be fully verified; PDB findings below may be downstream symptoms. Confirm the worker state and cause before recommending a PDB change")
+	}
 
 	stalledNodes := i.checkDrainingNodes(ctx, r.K8sClient, r.Notes)
 
 	if len(stalledNodes) == 0 {
 		r.Notes.AppendSuccess("No nodes are stalled in draining state")
+		escalationReason := "No stalled node drains detected, but alert fired: manual review required"
+		if stoppedWorkerSuspected {
+			escalationReason = "Stopped worker suspected, but not attributed; manual review required"
+		}
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("No stalled node drains detected, but alert fired: manual review required"),
+			executor.Escalate(escalationReason),
 		)
 		return result, nil
 	}
@@ -81,9 +106,13 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	unhealthyNodeCount := i.checkNodeHealth(ctx, r.K8sClient, r.Notes)
 	i.checkScalingAssessment(blockingPDBs, unhealthyNodeCount, r.Notes)
 
+	escalationReason := "PDB blocking node drain investigation: manual review required"
+	if stoppedWorkerSuspected {
+		escalationReason = "Stopped worker suspected alongside PDB drain findings: manual review required"
+	}
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-		executor.Escalate("PDB blocking node drain investigation: manual review required"),
+		executor.Escalate(escalationReason),
 	)
 	return result, nil
 }
@@ -444,9 +473,22 @@ func (i *Investigation) AlertTitle() string {
 }
 
 func (i *Investigation) Description() string {
-	return "Investigates PodDisruptionBudgets blocking node drain during cluster upgrades"
+	return "Investigates stopped workers and PodDisruptionBudgets delaying HCP nodepool upgrades"
 }
 
 func (i *Investigation) IsExperimental() bool {
 	return false
+}
+
+// newWorkerNodesStoppedSL mirrors the managed-notifications template
+// hcp/WorkerNodes_Stopped_error.json, whose severity is the legacy "Major" —
+// SeverityImportant is the same level under the current HCC names.
+func newWorkerNodesStoppedSL() *ocm.ServiceLog {
+	return &ocm.ServiceLog{
+		Severity:     servicelogsv1.SeverityImportant,
+		ServiceName:  "SREManualAction",
+		Summary:      "Worker node(s) stopped, action required",
+		Description:  "Your cluster's worker nodes are stopped due to manual action in AWS which is not supported. Please remediate the issue by starting the instances again. If you would like to change the number of worker instances, please refer to the documentation https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws/4/html/cluster_administration/managing-compute-nodes-using-machine-pools#rosa-scaling-worker-nodes_rosa-managing-worker-nodes.",
+		InternalOnly: false,
+	}
 }

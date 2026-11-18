@@ -5,11 +5,12 @@ This document describes how to test the pdbblockingnodedrain investigation end-t
 ## Overview
 
 This investigation is triggered by the `HCPNodepoolUpgradeDelay` alert and:
-1. Identifies nodes stuck in a draining state (>10 minutes)
-2. Enumerates PDBs with `disruptionsAllowed=0` whose pods are on stalled nodes
-3. Classifies blocking PDBs as customer-managed or platform-managed
-4. Checks non-draining node health (NotReady, resource pressure)
-5. Assesses whether scaling the workload would unblock the drain
+1. Checks whether an EC2 worker in an alerted nodepool was stopped before the drain stalled
+2. Identifies nodes stuck in a draining state (>10 minutes) when no earlier stop is confirmed
+3. Enumerates PDBs with `disruptionsAllowed=0` whose pods are on stalled nodes
+4. Classifies blocking PDBs as customer-managed or platform-managed
+5. Checks non-draining node health (NotReady, resource pressure)
+6. Assesses whether scaling the workload would unblock the drain
 
 ## Prerequisites
 
@@ -32,6 +33,12 @@ make build
 ```bash
 make test-cadctl
 ```
+
+The stopped-worker unit cases cover an alerted nodepool, unrelated and
+similarly named nodepools, a stop that occurred after draining began, failed
+Node discovery, CloudTrail starts after an old stop, failed stop requests,
+and PagerDuty alert pagination and status filtering. They use mocked AWS SDK,
+PagerDuty, and Kubernetes clients; no local AWS CLI is needed.
 
 ## Manual Testing
 

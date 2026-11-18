@@ -15,3 +15,12 @@ rbac:
       resources: ['deployments', 'statefulsets', 'replicasets']
       verbs: ['get', 'list']
 customerDataAccess: false
+managementClusterRbac:
+  hcpNamespace:
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "infrastructure.cluster.x-k8s.io"
+      resources:
+        - "awsmachines"
