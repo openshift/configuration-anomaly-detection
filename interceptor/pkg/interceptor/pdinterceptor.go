@@ -129,10 +129,12 @@ func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *htt
 		return nil, pdi.badRequest("failed to parse body", err)
 	}
 
-	extractedRequest, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), bytes.NewReader([]byte(originalReq.Body)))
-	if err != nil {
-		return nil, pdi.internal("malformed body/header in unwrapped request", err)
-	}
+	// Reconstruct the signed request for verification without creating an outbound request.
+	extractedRequest := r.Clone(ctx)
+	extractedRequest.Body = io.NopCloser(bytes.NewReader([]byte(originalReq.Body)))
+	extractedRequest.ContentLength = int64(len(originalReq.Body))
+	extractedRequest.GetBody = nil
+	extractedRequest.Header = make(http.Header)
 
 	for k, v := range originalReq.Header {
 		for _, v := range v {

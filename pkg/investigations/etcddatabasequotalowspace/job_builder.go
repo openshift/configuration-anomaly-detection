@@ -178,7 +178,7 @@ func BuildEtcdAnalysisJob(cfg JobConfig) (*batchv1.Job, error) {
 							Name: "client-tls",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: "etcd-client-tls",
+									SecretName: "etcd-client-tls", // #nosec G101 -- This is a Kubernetes Secret name, not a credential.
 								},
 							},
 						},

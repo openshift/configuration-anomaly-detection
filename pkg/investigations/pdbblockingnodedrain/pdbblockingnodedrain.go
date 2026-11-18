@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	drainStallThreshold = 10 * time.Minute
-	ownerNone           = "none"
+	drainStallThreshold  = 10 * time.Minute
+	stoppedWorkerTimeout = 45 * time.Second
+	ownerNone            = "none"
 )
 
 type stalledNode struct {
@@ -65,14 +66,32 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	ctx := context.Background()
+	stopCtx, cancel := context.WithTimeout(ctx, stoppedWorkerTimeout)
+	stoppedWorkerConfirmed, stoppedWorkerSuspected := i.checkStoppedWorkers(stopCtx, rb, r)
+	cancel()
+	if stoppedWorkerConfirmed {
+		r.Notes.AppendWarning("Recommended follow-up: SRE should verify the CloudTrail principal and existing service logs; if the stop was customer-initiated and no notification was sent, send hcp/WorkerNodes_Stopped_error.json to the customer")
+		result.Actions = append(
+			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
+			executor.Escalate("Stopped worker instance in alerted HCP nodepool - verify actor and customer notification"),
+		)
+		return result, nil
+	}
+	if stoppedWorkerSuspected {
+		r.Notes.AppendWarning("Stopped Workers: the stop could not be fully verified; PDB findings below may be downstream symptoms. Confirm the worker state and cause before recommending a PDB change")
+	}
 
 	stalledNodes := i.checkDrainingNodes(ctx, r.K8sClient, r.Notes)
 
 	if len(stalledNodes) == 0 {
 		r.Notes.AppendSuccess("No nodes are stalled in draining state")
+		escalationReason := "No stalled node drains detected, but alert fired: manual review required"
+		if stoppedWorkerSuspected {
+			escalationReason = "Stopped worker suspected, but not attributed; manual review required"
+		}
 		result.Actions = append(
 			executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-			executor.Escalate("No stalled node drains detected, but alert fired: manual review required"),
+			executor.Escalate(escalationReason),
 		)
 		return result, nil
 	}
@@ -81,9 +100,13 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	unhealthyNodeCount := i.checkNodeHealth(ctx, r.K8sClient, r.Notes)
 	i.checkScalingAssessment(blockingPDBs, unhealthyNodeCount, r.Notes)
 
+	escalationReason := "PDB blocking node drain investigation: manual review required"
+	if stoppedWorkerSuspected {
+		escalationReason = "Stopped worker suspected alongside PDB drain findings: manual review required"
+	}
 	result.Actions = append(
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
-		executor.Escalate("PDB blocking node drain investigation: manual review required"),
+		executor.Escalate(escalationReason),
 	)
 	return result, nil
 }
@@ -444,7 +467,7 @@ func (i *Investigation) AlertTitle() string {
 }
 
 func (i *Investigation) Description() string {
-	return "Investigates PodDisruptionBudgets blocking node drain during cluster upgrades"
+	return "Investigates stopped workers and PodDisruptionBudgets delaying HCP nodepool upgrades"
 }
 
 func (i *Investigation) IsExperimental() bool {

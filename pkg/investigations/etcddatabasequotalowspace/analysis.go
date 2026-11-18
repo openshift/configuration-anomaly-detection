@@ -470,7 +470,7 @@ func formatAnalysisResults(result *AnalysisResult) string {
 		builder.WriteString("Top Space Consumers by Resource Type:\n")
 		builder.WriteString("================================\n")
 		for i, rt := range result.TopResourceTypes {
-			builder.WriteString(fmt.Sprintf("%d. %s: %.2f MB\n", i+1, rt.ResourceType, rt.SizeMB))
+			fmt.Fprintf(&builder, "%d. %s: %.2f MB\n", i+1, rt.ResourceType, rt.SizeMB)
 		}
 		builder.WriteString("\n")
 	}

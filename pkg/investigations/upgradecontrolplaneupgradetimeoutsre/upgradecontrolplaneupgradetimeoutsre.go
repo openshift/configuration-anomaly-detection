@@ -264,7 +264,11 @@ func pdbNames(pdbs []blockingPDB) string {
 // osd/customer_pdb_preventing_drain_automated.json.
 func newCustomerPDBPreventingDrainSL(pdbs []blockingPDB) *ocm.ServiceLog {
 	nodeSet := map[string]bool{}
-	var pods []string
+	podCount := 0
+	for _, p := range pdbs {
+		podCount += len(p.Pods)
+	}
+	pods := make([]string, 0, podCount)
 	for _, p := range pdbs {
 		pods = append(pods, p.Pods...)
 		for _, n := range p.Nodes {

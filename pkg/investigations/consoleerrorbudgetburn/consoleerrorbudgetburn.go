@@ -838,13 +838,13 @@ func (i *Investigation) checkPodHealth(ctx context.Context, k8sClient k8sclient.
 
 	var sb strings.Builder
 	if len(issues) > 0 {
-		sb.WriteString(fmt.Sprintf("%d pod issue(s):\n", len(issues)))
+		fmt.Fprintf(&sb, "%d pod issue(s):\n", len(issues))
 		for _, issue := range issues {
-			sb.WriteString(fmt.Sprintf("  %s: %s\n", issue.name, issue.reason))
+			fmt.Fprintf(&sb, "  %s: %s\n", issue.name, issue.reason)
 		}
 	}
 	if len(warningEvents) > 0 {
-		sb.WriteString(fmt.Sprintf("%d warning event(s):\n", len(warningEvents)))
+		fmt.Fprintf(&sb, "%d warning event(s):\n", len(warningEvents))
 		for _, e := range warningEvents {
 			sb.WriteString(e + "\n")
 		}

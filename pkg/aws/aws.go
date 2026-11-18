@@ -3,6 +3,8 @@ package aws
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -35,6 +37,10 @@ const (
 )
 
 var stopInstanceDateRegex = regexp.MustCompile(`\((\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*)\)`)
+
+// ErrNoCurrentStopEvent means no successful stop was found after the last
+// successful start in the available CloudTrail history.
+var ErrNoCurrentStopEvent = errors.New("no successful stop event in the current running cycle")
 
 //go:generate mockgen -source=aws.go -package=awsmock -destination=mock/aws.go
 
@@ -96,6 +102,7 @@ type Client interface {
 	ListNonRunningInstances(infraID string) ([]ec2v2types.Instance, error)
 	GetInstanceByID(ctx context.Context, instanceID string) (ec2v2types.Instance, error)
 	PollInstanceStopEventsFor(instances []ec2v2types.Instance, retryTimes int) ([]cloudtrailv2types.Event, error)
+	FindInstanceStopEvent(ctx context.Context, instanceID string) (*cloudtrailv2types.Event, error)
 	GetBaseConfig() *awsv2.Config
 	GetSecurityGroupID(infraID string) (string, error)
 	GetSubnetID(infraID string) ([]string, error)
@@ -271,6 +278,55 @@ func (c *SdkClient) ListNonRunningInstances(infraID string) ([]ec2v2types.Instan
 		},
 	}
 	return c.listInstancesWithFilter(filters)
+}
+
+// FindInstanceStopEvent looks up the most recent successful StopInstances event
+// in the instance's current running cycle. The existing bulk poll only searches
+// two hours of EventName matches; nodepool upgrade delays can be reported days
+// after a worker was stopped.
+func (c *SdkClient) FindInstanceStopEvent(ctx context.Context, instanceID string) (*cloudtrailv2types.Event, error) {
+	since := time.Now().UTC().Add(-90 * 24 * time.Hour)
+	paginator := cloudtrailv2.NewLookupEventsPaginator(c.CloudtrailClient, &cloudtrailv2.LookupEventsInput{
+		LookupAttributes: []cloudtrailv2types.LookupAttribute{{
+			AttributeKey:   cloudtrailv2types.LookupAttributeKeyResourceName,
+			AttributeValue: awsv2.String(instanceID),
+		}},
+		StartTime: &since,
+	})
+
+	// CloudTrail returns newest events first. Bound the search to avoid spending
+	// unbounded time on a frequently changed instance.
+	for page := 0; page < 20 && paginator.HasMorePages(); page++ {
+		out, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, event := range out.Events {
+			name := awsv2.ToString(event.EventName)
+			if name != "StopInstances" && name != "StartInstances" {
+				continue
+			}
+			if event.CloudTrailEvent == nil {
+				return nil, fmt.Errorf("CloudTrail %s event for %s has no event details", name, instanceID)
+			}
+			var details struct {
+				ErrorCode string `json:"errorCode"`
+			}
+			if err := json.Unmarshal([]byte(*event.CloudTrailEvent), &details); err != nil {
+				return nil, fmt.Errorf("could not parse CloudTrail %s event for %s: %w", name, instanceID, err)
+			}
+			if details.ErrorCode != "" {
+				continue
+			}
+			// A successful start makes any earlier stop part of a previous
+			// running cycle, so it cannot explain the current stopped state.
+			if name == "StartInstances" {
+				return nil, ErrNoCurrentStopEvent
+			}
+			return &event, nil
+		}
+	}
+	return nil, ErrNoCurrentStopEvent
 }
 
 func (c *SdkClient) PollInstanceStopEventsFor(instances []ec2v2types.Instance, retryTimes int) ([]cloudtrailv2types.Event, error) {

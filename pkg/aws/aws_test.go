@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	cloudtrailv2 "github.com/aws/aws-sdk-go-v2/service/cloudtrail"
+	cloudtrailtypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2v2 "github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2v2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"go.uber.org/mock/gomock"
@@ -13,6 +15,90 @@ import (
 	cadaws "github.com/openshift/configuration-anomaly-detection/pkg/aws"
 	awsmock "github.com/openshift/configuration-anomaly-detection/pkg/aws/mock"
 )
+
+func TestSdkClient_FindInstanceStopEvent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	cloudtrail := awsmock.NewMockCloudTrailAPI(ctrl)
+	cloudtrail.EXPECT().LookupEvents(gomock.Any(), gomock.Cond(func(in *cloudtrailv2.LookupEventsInput) bool {
+		return len(in.LookupAttributes) == 1 &&
+			in.LookupAttributes[0].AttributeKey == cloudtrailtypes.LookupAttributeKeyResourceName &&
+			awsv2.ToString(in.LookupAttributes[0].AttributeValue) == "i-0stopped" &&
+			in.StartTime != nil
+	}), gomock.Any()).Return(&cloudtrailv2.LookupEventsOutput{
+		Events:    []cloudtrailtypes.Event{{EventName: awsv2.String("DescribeInstances")}},
+		NextToken: awsv2.String("page-2"),
+	}, nil)
+	cloudtrail.EXPECT().LookupEvents(gomock.Any(), gomock.Cond(func(in *cloudtrailv2.LookupEventsInput) bool {
+		return awsv2.ToString(in.NextToken) == "page-2"
+	}), gomock.Any()).Return(&cloudtrailv2.LookupEventsOutput{
+		Events: []cloudtrailtypes.Event{{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{}`)}},
+	}, nil)
+
+	client := &cadaws.SdkClient{CloudtrailClient: cloudtrail}
+	event, err := client.FindInstanceStopEvent(context.Background(), "i-0stopped")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if event == nil || awsv2.ToString(event.EventName) != "StopInstances" {
+		t.Fatalf("expected the instance StopInstances event, got %v", event)
+	}
+}
+
+func TestSdkClient_FindInstanceStopEventRejectsOldAndFailedStops(t *testing.T) {
+	tests := []struct {
+		name   string
+		events []cloudtrailtypes.Event
+		want   bool
+	}{
+		{
+			name: "a later successful start invalidates an earlier stop",
+			events: []cloudtrailtypes.Event{
+				{EventName: awsv2.String("StartInstances"), CloudTrailEvent: awsv2.String(`{}`)},
+				{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{}`)},
+			},
+		},
+		{
+			name: "a failed stop is not evidence",
+			events: []cloudtrailtypes.Event{
+				{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{"errorCode":"DryRunOperation"}`)},
+			},
+		},
+		{
+			name: "a failed stop does not hide an earlier successful stop",
+			events: []cloudtrailtypes.Event{
+				{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{"errorCode":"UnauthorizedOperation"}`)},
+				{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{}`)},
+			},
+			want: true,
+		},
+		{
+			name: "a failed start does not invalidate a successful stop",
+			events: []cloudtrailtypes.Event{
+				{EventName: awsv2.String("StartInstances"), CloudTrailEvent: awsv2.String(`{"errorCode":"UnauthorizedOperation"}`)},
+				{EventName: awsv2.String("StopInstances"), CloudTrailEvent: awsv2.String(`{}`)},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			cloudtrail := awsmock.NewMockCloudTrailAPI(ctrl)
+			cloudtrail.EXPECT().LookupEvents(gomock.Any(), gomock.Any(), gomock.Any()).Return(&cloudtrailv2.LookupEventsOutput{Events: tt.events}, nil)
+			client := &cadaws.SdkClient{CloudtrailClient: cloudtrail}
+			event, err := client.FindInstanceStopEvent(context.Background(), "i-0stopped")
+			if tt.want && err != nil {
+				t.Fatal(err)
+			}
+			if !tt.want && !errors.Is(err, cadaws.ErrNoCurrentStopEvent) {
+				t.Fatalf("got error %v, want no-current-stop sentinel", err)
+			}
+			if (event != nil) != tt.want {
+				t.Fatalf("got stop event %v, want event=%t", event, tt.want)
+			}
+		})
+	}
+}
 
 func setupInstanceMock(t *testing.T, describeResp *ec2v2.DescribeInstancesOutput, describeErr error) cadaws.EC2API {
 	t.Helper()
