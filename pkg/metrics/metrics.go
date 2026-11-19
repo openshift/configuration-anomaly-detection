@@ -30,6 +30,7 @@ func Push() {
 		promPusher.Collector(EtcdSnapshotCleanup)
 		promPusher.Collector(ManualInvestigationStarted)
 		promPusher.Collector(ManualInvestigationCompleted)
+		promPusher.Collector(InvestigationDuration)
 		ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
 		defer cancel()
 		err := promPusher.AddContext(ctx)
@@ -137,4 +138,12 @@ var (
 			Name: "manual_completed_total",
 			Help: "counts manually triggered investigation completions by name, status, and dry-run mode",
 		}, []string{alertTypeLabel, statusLabel, dryRunLabel})
+	// InvestigationDuration measures how long each investigation's Run takes, by investigation name
+	InvestigationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name:    "duration_seconds",
+			Help:    "duration of each investigation execution in seconds, by investigation name",
+			Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600},
+		}, []string{alertTypeLabel})
 )
