@@ -71,6 +71,11 @@ linters:
             - ""
   exclusions:
     generated: lax
+    rules:
+      # Test fixtures intentionally contain sample credentials and handlers.
+      - path: _test\.go$
+        linters:
+          - gosec
     paths:
       - third_party$
       - builtin$
