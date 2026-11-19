@@ -40,6 +40,9 @@ type ServiceLogAction struct {
 
 	// AllowDuplicates permits sending even if identical SL exists
 	AllowDuplicates bool
+
+	// posted records whether a service log was actually sent
+	posted bool
 }
 
 func (a *ServiceLogAction) Type() string {
@@ -84,6 +87,7 @@ func (a *ServiceLogAction) Execute(ctx context.Context, execCtx *ExecutionContex
 	if err := execCtx.OCMClient.PostServiceLog(execCtx.Cluster, a.ServiceLog); err != nil {
 		return err
 	}
+	a.posted = true
 
 	// Append to notes after successful send so the PD note
 	// accurately reflects what happened.
