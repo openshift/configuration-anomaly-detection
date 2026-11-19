@@ -206,7 +206,7 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name()),
 		backplaneReportAction,
 	)
-	result.Actions = append(result.Actions, etcdFollowUp(cause)...)
+	result.Actions = append(result.Actions, etcdSuccessActions(warningTitle(r.PdClient), false, cause)...)
 
 	return result, nil
 }
@@ -324,7 +324,7 @@ func (i *Investigation) runHCPEtcdAnalysis(ctx context.Context, rb investigation
 	r.Notes.AppendAutomation("HyperShift defragments this etcd. CAD does not. Debug handlers are not used. The analysis job above is the identification.")
 
 	result.Actions = executor.NoteAndReportFrom(r.Notes, r.Cluster.ID(), i.Name())
-	result.Actions = append(result.Actions, executor.Escalate("HCP etcd quota - HyperShift owns defrag. Review the analysis job."))
+	result.Actions = append(result.Actions, etcdSuccessActions(warningTitle(r.PdClient), true, EtcdCause{})...)
 	return result, nil
 }
 
@@ -374,6 +374,30 @@ func causeNote(cause EtcdCause) string {
 
 func (i *Investigation) Name() string {
 	return "etcddatabasequotalowspace"
+}
+
+// warningTitle reports whether this PagerDuty incident is a warning.
+// A warning never reaches primary. Only a critical title continues to the
+// customer, platform, or HyperShift decision.
+type titleGetter interface {
+	GetTitle() string
+}
+
+func warningTitle(pd titleGetter) bool {
+	if pd == nil {
+		return false
+	}
+	return strings.Contains(strings.ToUpper(pd.GetTitle()), "WARNING")
+}
+
+func etcdSuccessActions(warning bool, hcp bool, cause EtcdCause) []types.Action {
+	if warning {
+		return []types.Action{executor.Silence("etcd quota - warning alert is not paged")}
+	}
+	if hcp {
+		return []types.Action{executor.Escalate("HCP etcd quota - HyperShift owns defrag. Review the analysis job.")}
+	}
+	return etcdFollowUp(cause)
 }
 
 func etcdFollowUp(cause EtcdCause) []types.Action {

@@ -86,6 +86,45 @@ func TestInvestigationMethods(t *testing.T) {
 	})
 }
 
+func TestEtcdSuccessActions(t *testing.T) {
+	customer := EtcdCause{Found: true, Customer: true, Namespace: "myapp", SizeMB: 12.5}
+
+	t.Run("warning classic silences", func(t *testing.T) {
+		actions := etcdSuccessActions(true, false, customer)
+		assert.Equal(t, []string{"silence_incident"}, actionTypes(actions))
+	})
+
+	t.Run("warning hypershift silences", func(t *testing.T) {
+		actions := etcdSuccessActions(true, true, EtcdCause{})
+		assert.Equal(t, []string{"silence_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical customer sends a service log and silences", func(t *testing.T) {
+		actions := etcdSuccessActions(false, false, customer)
+		assert.Equal(t, []string{"service_log", "silence_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical platform escalates", func(t *testing.T) {
+		actions := etcdSuccessActions(false, false, EtcdCause{Found: true, Namespace: "openshift-etcd"})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical hypershift escalates", func(t *testing.T) {
+		actions := etcdSuccessActions(false, true, EtcdCause{})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+}
+
+func TestWarningTitle(t *testing.T) {
+	assert.False(t, warningTitle(nil))
+	assert.True(t, warningTitle(titleClient{"etcdDatabaseQuotaLowSpace WARNING"}))
+	assert.False(t, warningTitle(titleClient{"etcdDatabaseQuotaLowSpace CRITICAL"}))
+}
+
+type titleClient struct{ title string }
+
+func (c titleClient) GetTitle() string { return c.title }
+
 func TestEtcdFollowUp(t *testing.T) {
 	t.Run("no namespace escalates", func(t *testing.T) {
 		actions := etcdFollowUp(EtcdCause{})
