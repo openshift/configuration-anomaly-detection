@@ -18,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	pdmock "github.com/openshift/configuration-anomaly-detection/pkg/pagerduty/mock"
+	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
 func TestIsHCPCluster(t *testing.T) {
@@ -85,32 +86,68 @@ func TestInvestigationMethods(t *testing.T) {
 	})
 }
 
-func TestIsWarningAlert(t *testing.T) {
-	ctrl := gomock.NewController(t)
+func TestEtcdSuccessActions(t *testing.T) {
+	customer := EtcdCause{Found: true, Customer: true, Namespace: "myapp", SizeMB: 12.5}
 
-	tests := []struct {
-		name     string
-		title    string
-		expected bool
-	}{
-		{"warning in title", "etcdDatabaseQuotaLowSpace WARNING (1)", true},
-		{"critical in title", "etcdDatabaseQuotaLowSpace CRITICAL (1)", false},
-		{"lowercase warning", "etcdDatabaseQuotaLowSpace warning (1)", true},
-		{"no severity in title", "etcdDatabaseQuotaLowSpace (1)", false},
-		{"empty title", "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockPD := pdmock.NewMockClient(ctrl)
-			mockPD.EXPECT().GetTitle().Return(tt.title)
-			assert.Equal(t, tt.expected, isWarningAlert(mockPD))
-		})
-	}
-
-	t.Run("nil pd client", func(t *testing.T) {
-		assert.False(t, isWarningAlert(nil))
+	t.Run("warning classic silences", func(t *testing.T) {
+		actions := etcdSuccessActions(true, false, customer)
+		assert.Equal(t, []string{"silence_incident"}, actionTypes(actions))
 	})
+
+	t.Run("warning hypershift silences", func(t *testing.T) {
+		actions := etcdSuccessActions(true, true, EtcdCause{})
+		assert.Equal(t, []string{"silence_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical customer sends a service log and silences", func(t *testing.T) {
+		actions := etcdSuccessActions(false, false, customer)
+		assert.Equal(t, []string{"service_log", "silence_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical platform escalates", func(t *testing.T) {
+		actions := etcdSuccessActions(false, false, EtcdCause{Found: true, Namespace: "openshift-etcd"})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+
+	t.Run("critical hypershift escalates", func(t *testing.T) {
+		actions := etcdSuccessActions(false, true, EtcdCause{})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+}
+
+func TestWarningTitle(t *testing.T) {
+	assert.False(t, warningTitle(nil))
+	assert.True(t, warningTitle(titleClient{"etcdDatabaseQuotaLowSpace WARNING"}))
+	assert.False(t, warningTitle(titleClient{"etcdDatabaseQuotaLowSpace CRITICAL"}))
+}
+
+type titleClient struct{ title string }
+
+func (c titleClient) GetTitle() string { return c.title }
+
+func TestEtcdFollowUp(t *testing.T) {
+	t.Run("no namespace escalates", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+
+	t.Run("platform namespace escalates without a service log", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{Found: true, Namespace: "openshift-etcd"})
+		assert.Equal(t, []string{"escalate_incident"}, actionTypes(actions))
+	})
+
+	t.Run("customer namespace sends a service log and silences", func(t *testing.T) {
+		actions := etcdFollowUp(EtcdCause{Found: true, Customer: true, Namespace: "myapp", SizeMB: 12.5})
+		assert.Equal(t, []string{"service_log", "silence_incident"}, actionTypes(actions))
+	})
+}
+
+func actionTypes(actions []types.Action) []string {
+	got := make([]string, len(actions))
+	for i, action := range actions {
+		got[i] = action.Type()
+	}
+	return got
 }
 
 func TestSnapshotResult(t *testing.T) {
@@ -283,7 +320,7 @@ func setupHCPAnalysisTest(t *testing.T) (*corev1.Pod, client.WithWatch, context.
 func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
-	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace WARNING (1)").AnyTimes()
+	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace WARNING")
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
@@ -309,7 +346,7 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Silence (1 action)
+	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Silence
 	assert.Equal(t, "silence_incident", result.Actions[2].Type())
 
 	notesContent := rb.Resources.Notes.String()
@@ -320,7 +357,7 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 func TestRunHCPEtcdAnalysis_CriticalAlertEscalated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
-	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace CRITICAL (1)").AnyTimes()
+	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace CRITICAL")
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
