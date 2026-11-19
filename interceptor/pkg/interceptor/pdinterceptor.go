@@ -135,7 +135,6 @@ func (pdi *interceptorHandler) executeInterceptor(r *http.Request) ([]byte, *htt
 		return nil, pdi.internal("malformed body/header in unwrapped request", err)
 	}
 
-
 	for k, v := range originalReq.Header {
 		for _, v := range v {
 			extractedRequest.Header.Add(k, v)

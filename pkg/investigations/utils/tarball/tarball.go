@@ -83,8 +83,17 @@ func CreateTarball(sourceDir string, tarballFile *os.File) error {
 			return nil
 		}
 
-		fileToArchive, err := os.Open(filepath.Clean(file)) //nolint:gosec // G122: path comes from filepath.Walk of sourceDir
+		root, err := os.OpenRoot(sourceDir)
+		if err != nil {
+			return fmt.Errorf("failed to open root directory %v: %w", sourceDir, err)
+		}
+		defer func() {
+			if err := root.Close(); err != nil {
+				logging.Errorf("Failed to close root directory: %v", err)
+			}
+		}()
 
+		fileToArchive, err := root.Open(relPath)
 		if err != nil {
 			return fmt.Errorf("failed to open file %v: %w", file, err)
 		}

@@ -1,4 +1,3 @@
-//nolint:gosec // G101: fixture credentials for parser tests.
 package pullsecret
 
 import (
@@ -32,21 +31,21 @@ func TestGetAuthEmail(t *testing.T) {
 		expectedEmail string
 		expectedError error
 	}{
-		{ //nolint:gosec // G101: fixture auth material for the parser test
+		{
 			name:          "happy path - email extracted successfully",
 			secretData:    `{"auths":{"cloud.openshift.com":{"auth":"TestAuthValue","email":"test_user@redhat.com"}}}`,
 			authKey:       CloudOpenShiftComAuthKey,
 			expectedEmail: "test_user@redhat.com",
 			expectedError: nil,
 		},
-		{ //nolint:gosec // G101: fixture auth material for the parser test
+		{
 			name:          "missing auth entry",
 			secretData:    `{"auths":{"registry.redhat.io":{"auth":"TestToken","email":"test@example.com"}}}`,
 			authKey:       CloudOpenShiftComAuthKey,
 			expectedEmail: "",
 			expectedError: &SecretAuthNotFoundError{Auth: CloudOpenShiftComAuthKey},
 		},
-		{ //nolint:gosec // G101: fixture auth material for the parser test
+		{
 			name:          "empty email",
 			secretData:    `{"auths":{"cloud.openshift.com":{"auth":"TestAuthValue","email":""}}}`,
 			authKey:       CloudOpenShiftComAuthKey,
