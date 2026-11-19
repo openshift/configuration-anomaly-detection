@@ -41,7 +41,7 @@ debug: build-interceptor-debug build-cadctl-debug ## Build all subprojects in th
 lint: lint-cadctl lint-interceptor ## Lint all subprojects
 
 .PHONY: test
-test: test-cadctl test-interceptor
+test: test-cadctl test-interceptor test-e2e-utils
 
 ##@ cadctl:
 .PHONY: cadctl
@@ -70,6 +70,12 @@ test-cadctl: check-go121-install ## Run automated tests for cadctl
 	@echo
 	@echo "Running unit tests for cadctl..."
 	go test $(TESTOPTS) -race -p 2 -mod=readonly ./cadctl/... ./pkg/...
+
+.PHONY: test-e2e-utils
+test-e2e-utils: check-go121-install ## Run unit tests for e2e test utilities
+	@echo
+	@echo "Running unit tests for e2e utilities..."
+	go test $(TESTOPTS) -race -p 2 -mod=readonly ./test/e2e/...
 
 ##@ Interceptor:
 .PHONY: interceptor
