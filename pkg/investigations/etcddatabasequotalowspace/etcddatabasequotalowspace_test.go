@@ -320,6 +320,7 @@ func setupHCPAnalysisTest(t *testing.T) (*corev1.Pod, client.WithWatch, context.
 func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
+	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace WARNING")
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
@@ -345,8 +346,8 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 	result, err := inv.runHCPEtcdAnalysis(ctx, rb)
 
 	assert.NoError(t, err)
-	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Escalate because defrag cannot be measured on the fake client
-	assert.Equal(t, "escalate_incident", result.Actions[2].Type())
+	assert.Len(t, result.Actions, 3) // NoteAndReportFrom (2 actions) + Silence
+	assert.Equal(t, "silence_incident", result.Actions[2].Type())
 
 	notesContent := rb.Resources.Notes.String()
 	assert.Contains(t, notesContent, "Dynatrace Logs:")
@@ -356,6 +357,7 @@ func TestRunHCPEtcdAnalysis_WarningAlertSilenced(t *testing.T) {
 func TestRunHCPEtcdAnalysis_CriticalAlertEscalated(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockPD := pdmock.NewMockClient(ctrl)
+	mockPD.EXPECT().GetTitle().Return("etcdDatabaseQuotaLowSpace CRITICAL")
 
 	cluster, _ := cmv1.NewCluster().
 		ID("test-cluster-id").
