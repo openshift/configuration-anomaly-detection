@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	cloudtrailtypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
 	corev1 "k8s.io/api/core/v1"
@@ -97,24 +98,41 @@ func (i *Investigation) checkStoppedWorkers(ctx context.Context, rb investigatio
 			r.Notes.AppendWarning("Stopped Workers: AWSMachine %s reports stopped, but EC2 instance %s is currently %s; continuing drain and PDB checks", machine.GetName(), instanceID, instance.State.Name)
 			continue
 		}
-		event, err := awsResources.AwsClient.FindInstanceStopEvent(ctx, instanceID)
-		if err != nil || event == nil || event.EventTime == nil || event.EventName == nil || *event.EventName != "StopInstances" {
+		events, err := awsResources.AwsClient.PollInstanceStopEventsFor([]ec2types.Instance{instance}, 5)
+		if err != nil {
 			suspected = true
-			r.Notes.AppendWarning("Stopped Workers: EC2 instance %s in nodepool %s is stopped, but a CloudTrail StopInstances event was not found (%v); manual review required", instanceID, poolID, err)
+			r.Notes.AppendWarning("Stopped Workers: EC2 instance %s in nodepool %s is stopped, but CloudTrail lookup failed: %v; manual review required", instanceID, poolID, err)
+			continue
+		}
+		var stopEvent *cloudtrailtypes.Event
+		for _, e := range events {
+			if e.EventName != nil && *e.EventName == "StopInstances" {
+				eventCopy := e
+				stopEvent = &eventCopy
+				break
+			}
+		}
+		if stopEvent == nil || stopEvent.EventTime == nil {
+			suspected = true
+			r.Notes.AppendWarning("Stopped Workers: EC2 instance %s in nodepool %s is stopped, but a CloudTrail StopInstances event was not found; manual review required", instanceID, poolID)
 			continue
 		}
 		if node != nil {
-			if taint, found := findUnschedulableTaint(*node); found && taint.TimeAdded != nil && event.EventTime.After(taint.TimeAdded.Time) {
-				r.Notes.AppendWarning("Stopped Workers: instance %s was stopped at %s after node %s began draining at %s; the stop does not explain the initial drain stall", instanceID, event.EventTime.UTC(), node.Name, taint.TimeAdded.UTC())
+			if taint, found := findUnschedulableTaint(*node); found && taint.TimeAdded != nil && stopEvent.EventTime.After(taint.TimeAdded.Time) {
+				r.Notes.AppendWarning("Stopped Workers: instance %s was stopped at %s after node %s began draining at %s; the stop does not explain the initial drain stall", instanceID, stopEvent.EventTime.UTC(), node.Name, taint.TimeAdded.UTC())
 				continue
 			}
 		}
 
-		principal := "principal not identified"
-		if event.AccessKeyId != nil {
-			principal = "access key " + *event.AccessKeyId
+		stoppedBy := "an unknown principal"
+		if stopEvent.AccessKeyId != nil {
+			stoppedBy = fmt.Sprintf("access key %s", *stopEvent.AccessKeyId)
 		}
-		r.Notes.AppendWarning("Stopped Workers: EC2 instance %s for AWSMachine %s in alerted nodepool %s is stopped; CloudTrail StopInstances at %s (%s). Investigate this stop before treating any PDB drain failure as the primary cause", instanceID, machine.GetName(), poolID, event.EventTime.UTC(), principal)
+		stoppedAt := "unknown time"
+		if stopEvent.EventTime != nil {
+			stoppedAt = stopEvent.EventTime.UTC().String()
+		}
+		r.Notes.AppendWarning("Stopped Workers: EC2 instance %s for AWSMachine %s in alerted nodepool %s is stopped. Stopped by %s at %s (per CloudTrail).", instanceID, machine.GetName(), poolID, stoppedBy, stoppedAt)
 		return true, true
 	}
 	return false, suspected

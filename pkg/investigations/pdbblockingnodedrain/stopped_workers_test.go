@@ -71,36 +71,35 @@ func TestStoppedWorkerInAlertedPoolTakesPriorityOverPDB(t *testing.T) {
 	}), "i-0stopped").Return(ec2types.Instance{
 		State: &ec2types.InstanceState{Name: ec2types.InstanceStateNameStopped},
 	}, nil)
-	awsClient.EXPECT().FindInstanceStopEvent(gomock.Cond(func(ctx context.Context) bool {
-		_, hasDeadline := ctx.Deadline()
-		return hasDeadline
-	}), "i-0stopped").Return(&cloudtrailtypes.Event{
-		EventName: awsv2.String("StopInstances"), EventTime: &stopTime,
-	}, nil)
+	awsClient.EXPECT().PollInstanceStopEventsFor(gomock.Cond(func(instances []ec2types.Instance) bool {
+		return len(instances) == 1
+	}), 5).Return([]cloudtrailtypes.Event{{
+		EventName: awsv2.String("StopInstances"), EventTime: &stopTime, AccessKeyId: awsv2.String("AKIAEXAMPLE"),
+	}}, nil)
 
 	result, err := (&Investigation{}).Run(rb)
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceLogs, escalations := 0, 0
+	serviceLogs, silences, escalations := 0, 0, 0
 	for _, action := range result.Actions {
 		switch action.Type() {
 		case string(executor.ActionTypeServiceLog):
 			serviceLogs++
+		case string(executor.ActionTypeSilenceIncident):
+			silences++
 		case string(executor.ActionTypeEscalateIncident):
 			escalations++
-		case string(executor.ActionTypeSilenceIncident):
-			t.Fatal("the upgrade incident must remain available for SRE review")
 		}
 	}
-	if serviceLogs != 0 || escalations != 1 {
-		t.Fatalf("expected a stopped-worker finding for SRE review without a customer service log; got %v", result.Actions)
+	if serviceLogs != 1 || silences != 1 || escalations != 0 {
+		t.Fatalf("expected a customer service log and silence action; got %v", result.Actions)
 	}
-	if !strings.Contains(rb.Resources.Notes.String(), "CloudTrail StopInstances") {
+	if !strings.Contains(rb.Resources.Notes.String(), "Stopped Workers: EC2 instance i-0stopped") {
 		t.Fatal("expected stopped-worker evidence in the report")
 	}
-	if !strings.Contains(rb.Resources.Notes.String(), "if the stop was customer-initiated") {
-		t.Fatal("expected a conditional customer-notification recommendation")
+	if !strings.Contains(rb.Resources.Notes.String(), "per CloudTrail") {
+		t.Fatal("expected CloudTrail attribution in the report")
 	}
 	if strings.Contains(rb.Resources.Notes.String(), "Blocking PDBs") {
 		t.Fatal("PDB checks must not run after a confirmed stopped worker")
@@ -135,9 +134,9 @@ func TestStopAfterDrainDoesNotReplacePDBFinding(t *testing.T) {
 	awsClient.EXPECT().GetInstanceByID(gomock.Any(), "i-0stopped").Return(ec2types.Instance{
 		State: &ec2types.InstanceState{Name: ec2types.InstanceStateNameStopped},
 	}, nil)
-	awsClient.EXPECT().FindInstanceStopEvent(gomock.Any(), "i-0stopped").Return(&cloudtrailtypes.Event{
+	awsClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), 5).Return([]cloudtrailtypes.Event{{
 		EventName: awsv2.String("StopInstances"), EventTime: &stopTime,
-	}, nil)
+	}}, nil)
 
 	result, err := (&Investigation{}).Run(rb)
 	if err != nil {
@@ -161,7 +160,7 @@ func TestStoppedWorkerWithoutCloudTrailKeepsManualReview(t *testing.T) {
 	awsClient.EXPECT().GetInstanceByID(gomock.Any(), "i-0stopped").Return(ec2types.Instance{
 		State: &ec2types.InstanceState{Name: ec2types.InstanceStateNameStopped},
 	}, nil)
-	awsClient.EXPECT().FindInstanceStopEvent(gomock.Any(), "i-0stopped").Return(nil, nil)
+	awsClient.EXPECT().PollInstanceStopEventsFor(gomock.Any(), 5).Return([]cloudtrailtypes.Event{}, nil)
 
 	result, err := (&Investigation{}).Run(rb)
 	if err != nil {

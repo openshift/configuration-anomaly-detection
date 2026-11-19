@@ -1,0 +1,5 @@
+alerts:
+  - alert_title: "HCPNodepoolUpgradeDelay"
+    name: "pdbblockingnodedrain"
+    investigations:
+      - pdbblockingnodedrain
