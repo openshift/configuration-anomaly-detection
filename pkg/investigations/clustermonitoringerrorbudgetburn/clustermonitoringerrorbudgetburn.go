@@ -14,8 +14,16 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/notewriter"
 	"github.com/openshift/configuration-anomaly-detection/pkg/ocm"
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	monitoringNamespace          = "openshift-monitoring"
+	userWorkloadNamespace        = "openshift-user-workload-monitoring"
+	secondStackServiceLogSummary = "Action required: remove second monitoring stack"
 )
 
 const (
@@ -156,6 +164,25 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		return result, nil
 	}
 
+	secondStackNamespace, err := secondMonitoringStackNamespace(context.TODO(), r.K8sClient)
+	if err != nil {
+		return result, investigation.WrapInfrastructure(
+			fmt.Errorf("unable to list Prometheus resources: %w", err),
+			"K8s API failure listing Prometheus")
+	}
+	if secondStackNamespace != "" {
+		notes.AppendWarning("Customer Prometheus found in namespace %s", secondStackNamespace)
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+			executor.NewServiceLogAction(servicelogsv1.SeverityCritical, secondStackServiceLogSummary).
+				WithDescription(secondMonitoringStackDescription(secondStackNamespace)).
+				WithServiceName("SREManualAction").
+				Build(),
+			executor.Silence("Customer installed a second monitoring stack in "+secondStackNamespace),
+		)
+		return result, nil
+	}
+
 	// The UWM configmap is valid, an SRE will need to manually investigate this alert.
 	// Escalate the alert with our findings.
 	notes.AppendSuccess("Monitoring CO not degraded due to UWM misconfiguration")
@@ -164,6 +191,30 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 		executor.Escalate("Monitoring CO not degraded due to UWM misconfiguration - manual investigation required"),
 	)
 	return result, nil
+}
+
+func secondMonitoringStackNamespace(ctx context.Context, k8sClient client.Client) (string, error) {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "PrometheusList",
+	})
+	if err := k8sClient.List(ctx, list); err != nil {
+		return "", err
+	}
+	for _, item := range list.Items {
+		namespace := item.GetNamespace()
+		if namespace == monitoringNamespace || namespace == userWorkloadNamespace || namespace == "" {
+			continue
+		}
+		return namespace, nil
+	}
+	return "", nil
+}
+
+func secondMonitoringStackDescription(namespace string) string {
+	return fmt.Sprintf("Red Hat SRE have noticed a second monitoring stack installed in the '%s' namespace. This is interfering with cluster operations and preventing Red Hat from monitoring the cluster. Please remove the adhoc monitoring stack and use User Workload Monitoring instead. See the documentation for more information: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws_classic_architecture/4/html/monitoring/about-monitoring#understanding-the-monitoring-stack_monitoring-stack-architecture.", namespace)
 }
 
 func (c *Investigation) Name() string {
