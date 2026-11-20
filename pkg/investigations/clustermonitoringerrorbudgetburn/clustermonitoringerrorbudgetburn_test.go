@@ -98,6 +98,10 @@ func TestNewUwmServiceLogs(t *testing.T) {
 			assert.Assert(t, !sl.InternalOnly)
 			assert.Assert(t, strings.Contains(sl.Description, tt.wantDesc))
 			assert.Assert(t, strings.Contains(sl.Description, docLink))
+			assert.Assert(t, !strings.Contains(sl.Description, "opennshift"))
+			if strings.Contains(sl.Description, "namespace") {
+				assert.Assert(t, strings.Contains(sl.Description, "openshift-user-workload-monitoring"))
+			}
 		})
 	}
 }
@@ -145,6 +149,44 @@ func TestRun_SupportedPrometheusStillEscalates(t *testing.T) {
 	assert.Assert(t, !hasAction(result.Actions, "silence_incident"))
 }
 
+func TestRun_UWMMisconfigurationSilences(t *testing.T) {
+	cases := []configv1.ClusterOperatorStatusCondition{
+		statusConditionUnavailableConfigMapSymptomsMatch,
+		statusConditionUnavailableAMSymptomsMatch,
+		statusConditionUnavailablePMSymptomsMatch,
+	}
+	for _, condition := range cases {
+		t.Run(condition.Message[:40], func(t *testing.T) {
+			result, err := runMonitoring(t, condition)
+			assert.NilError(t, err)
+			assert.Assert(t, hasAction(result.Actions, "service_log"))
+			assert.Assert(t, hasAction(result.Actions, "silence_incident"))
+			assert.Assert(t, !hasAction(result.Actions, "escalate_incident"))
+			for _, action := range result.Actions {
+				sl, ok := action.(*executor.ServiceLogAction)
+				if !ok || sl.ServiceLog == nil {
+					continue
+				}
+				assert.Assert(t, !strings.Contains(sl.ServiceLog.Description, "opennshift"))
+				assert.Assert(t, strings.Contains(sl.ServiceLog.Description, "openshift-user-workload-monitoring"))
+			}
+		})
+	}
+}
+
+func TestRun_OtherMonitoringStateEscalates(t *testing.T) {
+	result, err := runMonitoring(t, statusConditionAvailable)
+	assert.NilError(t, err)
+	assert.Assert(t, hasAction(result.Actions, "escalate_incident"))
+	assert.Assert(t, !hasAction(result.Actions, "silence_incident"))
+}
+
+func TestRun_UnexpectedOperatorCountEscalates(t *testing.T) {
+	result, err := (&Investigation{}).Run(monitoringBuilder(t))
+	assert.NilError(t, err)
+	assert.Assert(t, hasAction(result.Actions, "escalate_incident"))
+}
+
 func prometheus(namespace, name string) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{Group: "monitoring.coreos.com", Version: "v1", Kind: "Prometheus"})
@@ -153,18 +195,13 @@ func prometheus(namespace, name string) *unstructured.Unstructured {
 	return obj
 }
 
-func runMonitoring(t *testing.T, available configv1.ClusterOperatorStatusCondition, extra ...client.Object) (investigation.InvestigationResult, error) {
+func monitoringBuilder(t *testing.T, objects ...client.Object) *investigation.ResourceBuilderMock {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	assert.NilError(t, configv1.AddToScheme(scheme))
 	cluster, err := cmv1.NewCluster().ID("cluster-id").Build()
 	assert.NilError(t, err)
-	co := &configv1.ClusterOperator{
-		ObjectMeta: v1.ObjectMeta{Name: "monitoring"},
-		Status:     configv1.ClusterOperatorStatus{Conditions: []configv1.ClusterOperatorStatusCondition{available}},
-	}
-	objects := append([]client.Object{co}, extra...)
-	return (&Investigation{}).Run(&investigation.ResourceBuilderMock{
+	return &investigation.ResourceBuilderMock{
 		Resources: &investigation.Resources{
 			Name:    "clustermonitoringerrorbudgetburn",
 			Cluster: cluster,
@@ -172,7 +209,17 @@ func runMonitoring(t *testing.T, available configv1.ClusterOperatorStatusConditi
 				return []string{obj.GetName()}
 			}).WithObjects(objects...).Build(),
 		},
-	})
+	}
+}
+
+func runMonitoring(t *testing.T, available configv1.ClusterOperatorStatusCondition, extra ...client.Object) (investigation.InvestigationResult, error) {
+	t.Helper()
+	co := &configv1.ClusterOperator{
+		ObjectMeta: v1.ObjectMeta{Name: "monitoring"},
+		Status:     configv1.ClusterOperatorStatus{Conditions: []configv1.ClusterOperatorStatusCondition{available}},
+	}
+	objects := append([]client.Object{co}, extra...)
+	return (&Investigation{}).Run(monitoringBuilder(t, objects...))
 }
 
 func hasAction(actions []types.Action, actionType string) bool {
