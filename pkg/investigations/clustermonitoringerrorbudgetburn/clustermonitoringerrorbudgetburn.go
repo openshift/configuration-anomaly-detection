@@ -46,7 +46,7 @@ func newUwmAMMisconfiguredSL(docLink string) *ocm.ServiceLog {
 		Severity:     servicelogsv1.SeverityImportant,
 		Summary:      uwmMisconfiguredSummary,
 		ServiceName:  uwmManualActionService,
-		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
+		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the Alert Manager configuration in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
 		InternalOnly: false,
 	}
 }
@@ -60,7 +60,7 @@ func newUwmGenericMisconfiguredSL(docLink string) *ocm.ServiceLog {
 		Severity:     servicelogsv1.SeverityImportant,
 		Summary:      uwmMisconfiguredSummary,
 		ServiceName:  uwmManualActionService,
-		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the opennshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
+		Description:  fmt.Sprintf("Your cluster's user workload monitoring is misconfigured: please review the cluster operator status and correct the configuration in the openshift-user-workload-monitoring namespace. For more information, please refer to the product documentation: %s.", docLink),
 		InternalOnly: false,
 	}
 }
