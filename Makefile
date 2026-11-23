@@ -131,12 +131,6 @@ check-go121-install:
 # The boilerplate image may contain a linter built with an older Go toolchain.
 # Match the exact archive checksum; the upstream installer also matches its SBOM entry.
 .PHONY: install-linter
-<<<<<<< HEAD
-install-linter: check-go121-install
-	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION) with $$(go version)..."
-	mkdir -p $(CURDIR)/bin
-	GOBIN=$(CURDIR)/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-=======
 install-linter: check-curl-install check-jq-install check-go121-install
 	@set -eu; linter_matches() { \
 		info=$$("$(GOLANGCI_LINT_BIN)" version --json 2>/dev/null) || return 1; \
@@ -171,7 +165,6 @@ install-linter: check-curl-install check-jq-install check-go121-install
 		install -m 755 "$$download_dir/golangci-lint-$$version-$$(go env GOHOSTOS)-$$(go env GOHOSTARCH)/golangci-lint" "$(GOLANGCI_LINT_BIN)"; \
 		linter_matches || { echo "The installed golangci-lint does not support $$(go env GOVERSION)" >&2; exit 1; }; \
 	fi
->>>>>>> 8845590 (MCS-100: investigate stopped HCP workers before PDBs)
 
 .PHONY: install-mockgen
 install-mockgen: check-go121-install
