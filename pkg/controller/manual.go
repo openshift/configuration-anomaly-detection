@@ -12,25 +12,32 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/types"
 )
 
-const precheckInvestigationName = "precheck"
+const (
+	precheckInvestigationName = "precheck"
+	ccamInvestigationName     = "ccam"
+)
 
 // shortNameToInvestigation maps short flag names to their corresponding investigation names.
 // This allows users to pass easier-to-type flags when running investigations manually.
 var shortNameToInvestigation = map[string]string{
 	"ai":                       "aiassisted",
 	"can-not-retrieve-updates": "cannotretrieveupdatessre",
+	"ccam":                     ccamInvestigationName,
 	"chgm":                     "chgm",
+	"cluster-health-check":     "clusterhealthcheck",
+	"cluster-operator-down":    "clusteroperatordownhcp",
 	"cmbb":                     "clustermonitoringerrorbudgetburn",
+	"console-ebb":              "consoleerrorbudgetburn",
 	"cpd":                      "cpd",
+	"describe-nodes":           "describenodes",
 	"etcd-quota-low":           "etcddatabasequotalowspace",
 	"insightsoperatordown":     "insightsoperatordown",
 	"machine-health-check":     "machinehealthcheckunterminatedshortcircuitsre",
 	"must-gather":              "mustgather",
 	"ocmagentresponsefailure":  "ocmagentresponsefailure",
+	"pdb-blocking-node-drain":  "pdbblockingnodedrain",
 	"restart-controlplane":     "restartcontrolplane",
 	"upgrade-config":           "upgradeconfigsyncfailureover4hr",
-	"describe-nodes":           "describenodes",
-	"cluster-health-check":     "clusterhealthcheck",
 }
 
 type ManualController struct {
@@ -80,8 +87,8 @@ func (c *ManualController) Investigate(ctx context.Context) error {
 	if inv.Name() != precheckInvestigationName {
 		invEntries = append(invEntries, config.InvestigationEntry{Name: precheckInvestigationName})
 	}
-	if inv.Name() != "ccam" && inv.Name() != precheckInvestigationName {
-		invEntries = append(invEntries, config.InvestigationEntry{Name: "ccam"})
+	if inv.Name() != ccamInvestigationName && inv.Name() != precheckInvestigationName {
+		invEntries = append(invEntries, config.InvestigationEntry{Name: ccamInvestigationName})
 	}
 	invEntries = append(invEntries, config.InvestigationEntry{Name: inv.Name()})
 
