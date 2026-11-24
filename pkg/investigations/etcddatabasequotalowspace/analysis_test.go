@@ -104,6 +104,33 @@ secrets,8.22`
 	assert.Equal(t, 8.22, result.TopResourceTypes[1].SizeMB)
 }
 
+func TestIdentifyEtcdCausePicksLargestCustomerObject(t *testing.T) {
+	got := identifyEtcdCause(&AnalysisResult{
+		TopNamespaces: []NamespaceSize{{Namespace: "my-app", SizeMB: 80}},
+		LargestResources: []ResourceSize{{
+			Namespace: "my-app", Name: "big-cm", SizeMB: 40, ResourceType: "configmap",
+		}},
+	})
+	assert.True(t, got.Found)
+	assert.True(t, got.Customer)
+	assert.Equal(t, "my-app", got.Namespace)
+	assert.Equal(t, "my-app/big-cm", got.Resource)
+	assert.Equal(t, "configmap", got.ResourceType)
+}
+
+func TestCustomerNamespacesSkipsPlatform(t *testing.T) {
+	result := &AnalysisResult{
+		TopNamespaces: []NamespaceSize{
+			{Namespace: "openshift-monitoring", SizeMB: 45},
+			{Namespace: "kube-system", SizeMB: 32},
+			{Namespace: "my-app", SizeMB: 10},
+		},
+	}
+	got := customerNamespaces(result)
+	assert.Len(t, got, 1)
+	assert.Equal(t, "my-app", got[0].Namespace)
+}
+
 func TestFormatAnalysisResults(t *testing.T) {
 	result := &AnalysisResult{
 		TopNamespaces: []NamespaceSize{
