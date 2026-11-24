@@ -7,7 +7,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -50,6 +52,17 @@ type Investigation struct {
 	recommendations investigationRecommendations
 	// scpMisconfigured is true when a misconfigured SCP prevents AWS access (e.g. runInstances)
 	scpMisconfigured bool
+	// stalledDrains maps the name of each healthcheck-managed node whose drain has stalled to how
+	// long it has been draining
+	stalledDrains map[string]time.Duration
+	// drainBlockers maps a stalled node's name to the PodDisruptionBudget(s) holding its drain open
+	drainBlockers map[string][]drainBlocker
+	// pdbServiceLogs holds the servicelogs CAD would send for customer-managed PDBs blocking a drain.
+	// They are only dispatched once the informing phase concludes - see Run()
+	pdbServiceLogs []ocm.ServiceLog
+	// notReadyNodesFound is true when at least one healthcheck-managed node is not Ready, which is
+	// what makes a pull secret check worth running
+	notReadyNodesFound bool
 }
 
 // Run investigates the MachineHealthCheckUnterminatedShortCircuitSRE alert
@@ -77,6 +90,10 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	i.notes = r.Notes
 	i.recommendations = investigationRecommendations{}
 	i.scpMisconfigured = false
+	i.stalledDrains = map[string]time.Duration{}
+	i.drainBlockers = map[string][]drainBlocker{}
+	i.pdbServiceLogs = nil
+	i.notReadyNodesFound = false
 
 	targetMachines, err := i.getMachinesFromFailingMHC(ctx)
 	if err != nil {
@@ -90,6 +107,12 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		)
 		return result, nil
 	}
+
+	// Evaluate the drain state of every node managed by the short-circuited healthcheck(s) up front.
+	// A node can sit stalled mid-drain without its machine ever carrying a DeletionTimestamp -
+	// cluster-autoscaler scale-down and `oc scale machineset --replicas=0` both produce that shape -
+	// so this cannot be driven off the deleting-machine path alone.
+	i.investigateDrainBlockers(ctx, targetMachines)
 
 	problemMachines, err := i.InvestigateMachines(ctx, targetMachines)
 	if err != nil {
@@ -121,6 +144,13 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		}
 	}
 
+	// A pull secret that no longer matches OCM stops the kubelet pulling images, which is one of the
+	// ways a group of nodes goes NotReady at once and short-circuits the healthcheck. Only worth the
+	// extra API calls once we know some node is actually NotReady.
+	if i.notReadyNodesFound {
+		i.validatePullSecret(r)
+	}
+
 	if i.scpMisconfigured {
 		i.notes.AppendWarning("a misconfigured SCP is denying ec2:RunInstances; a service log has been sent to the customer to review the AWS permissions required to manage cluster instances")
 		result.Actions = append(
@@ -137,6 +167,32 @@ func (i *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		i.notes.AppendWarning("%s", i.recommendations.summarize())
 	} else {
 		i.notes.AppendSuccess("no recommended actions to take against cluster")
+	}
+
+	// Per the Pod Disruption Budget section of the MCDDrainError SOP, a customer-managed PDB blocking
+	// a drain is remediated by servicelog rather than by SRE touching the workload. CAD is still in
+	// the informing phase for this detection: it states the servicelog it would send so the
+	// condition can be validated against real incidents before CAD is allowed to message customers.
+	//
+	// Remove this gate, and send unconditionally, once the informing phase concludes.
+	if len(i.pdbServiceLogs) > 0 {
+		experimentalEnabled, _ := strconv.ParseBool(os.Getenv("CAD_EXPERIMENTAL_ENABLED"))
+		for _, sl := range i.pdbServiceLogs {
+			if !experimentalEnabled {
+				i.notes.AppendWarning(
+					"INFORMING PHASE: CAD did NOT send the following service log. Please confirm it is correct before sending it manually.\nSummary: %s\nDescription: %s",
+					sl.Summary, sl.Description,
+				)
+				continue
+			}
+			result.Actions = append(
+				result.Actions,
+				executor.NewServiceLogAction(sl.Severity, sl.Summary).
+					WithDescription(sl.Description).
+					WithServiceName(sl.ServiceName).
+					Build(),
+			)
+		}
 	}
 
 	result.Actions = append(
@@ -291,10 +347,7 @@ func (i *Investigation) investigateDeletingMachine(ctx context.Context, machine 
 		return fmt.Errorf("failed to retrieve node for machine %q: %w", machine.Name, err)
 	}
 
-	stuck, duration := checkForStuckDrain(node)
-	if stuck {
-		notes := fmt.Sprintf("node %q found to be stuck draining for %s", node.Name, duration.Truncate(time.Second).String())
-		i.recommendations.addRecommendation(recommendationInvestigateNode, node.Name, notes)
+	if i.recommendStuckDrain(node.Name) {
 		return nil
 	}
 
@@ -303,26 +356,69 @@ func (i *Investigation) investigateDeletingMachine(ctx context.Context, machine 
 	return nil
 }
 
-// checkForStuckDrain makes a best-effort approximation at whether a node is stuck draining a specific pod
-func checkForStuckDrain(node corev1.Node) (bool, *time.Duration) {
-	if len(node.Spec.Taints) == 0 {
-		return false, nil
+// investigateDrainBlockers determines which of the healthcheck's nodes are stalled mid-drain, and
+// which PodDisruptionBudget - if any - is holding each one open.
+//
+// Results are cached on the Investigation so the per-machine and per-node passes can report them
+// without re-querying the API, and so a node is never reported twice.
+func (i *Investigation) investigateDrainBlockers(ctx context.Context, machines []machinev1beta1.Machine) {
+	nodes, err := machineutil.GetNodesForMachines(ctx, i.k8scli, machines)
+	if err != nil {
+		i.notes.AppendWarning("failed to retrieve nodes while checking for stalled drains: %v", err)
+		return
 	}
 
-	// FIXME: What happens if we have multiple NoSchedule taints?
-	taints := nodeutil.FindNoScheduleTaints(node)
-	for _, taint := range taints {
-		// TODO - Once CAD can access on-cluster metrics, we can query the `pods_preventing_node_drain` metric from prometheus
-		// to more accurately gauge if a node is truly stuck deleting, and what pod is causing it
-		if taint.TimeAdded == nil {
-			continue
-		}
-		drainDuration := time.Since(taint.TimeAdded.Time)
-		if drainDuration > 10*time.Minute {
-			return true, &drainDuration
+	stalled := []corev1.Node{}
+	for _, node := range nodes {
+		if duration, isStalled := stalledDrainDuration(node); isStalled {
+			i.stalledDrains[node.Name] = duration
+			stalled = append(stalled, node)
 		}
 	}
-	return false, nil
+	if len(stalled) == 0 {
+		return
+	}
+
+	// A partial result is still worth reporting, so the blockers found before the error are kept.
+	blockers, err := findDrainBlockingPDBs(ctx, i.k8scli, stalled)
+	if err != nil {
+		i.notes.AppendWarning("failed to determine whether a PodDisruptionBudget is blocking the stalled drain(s): %v", err)
+	}
+	for _, blocker := range blockers {
+		i.drainBlockers[blocker.Node] = append(i.drainBlockers[blocker.Node], blocker)
+	}
+}
+
+// recommendStuckDrain records a recommendation for a node whose drain has stalled, naming the
+// blocking PodDisruptionBudget where one was found.
+//
+// It reports whether the node was stalled at all, so callers can fall through to their own
+// diagnosis when it was not.
+func (i *Investigation) recommendStuckDrain(nodeName string) bool {
+	duration, stalled := i.stalledDrains[nodeName]
+	if !stalled {
+		return false
+	}
+
+	blockers := i.drainBlockers[nodeName]
+	if len(blockers) == 0 {
+		notes := fmt.Sprintf(
+			"drain stalled for %s, but no PodDisruptionBudget with disruptionsAllowed=0 selects a pod on this node. Something else is holding the drain open: check for pods stuck Terminating, a volume that will not detach, or an unresponsive kubelet",
+			duration.Truncate(time.Second),
+		)
+		i.recommendations.addRecommendation(recommendationInvestigateNode, nodeName, notes)
+		return true
+	}
+
+	for _, blocker := range blockers {
+		if blocker.IsPlatformManaged {
+			i.recommendations.addRecommendation(recommendationPlatformPDBBlockingDrain, nodeName, blocker.summarize(duration))
+			continue
+		}
+		i.recommendations.addRecommendation(recommendationCustomerPDBBlockingDrain, nodeName, blocker.summarize(duration))
+		i.pdbServiceLogs = append(i.pdbServiceLogs, customerPDBServiceLog(blocker))
+	}
+	return true
 }
 
 // InvestigateNodes examines the provided nodes and returns recommended actions, if any are needed
@@ -345,6 +441,12 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 		return
 	}
 
+	// A node stalled mid-drain is usually still Ready, and the drain is the more specific and more
+	// actionable finding, so it takes precedence over the Ready condition below.
+	if i.recommendStuckDrain(node.Name) {
+		return
+	}
+
 	ready, found := nodeutil.FindReadyCondition(node)
 	if !found {
 		notes := "found no 'Ready' .Status.Condition for the node"
@@ -353,6 +455,7 @@ func (i *Investigation) InvestigateNode(node corev1.Node) {
 	}
 
 	if ready.Status != corev1.ConditionTrue {
+		i.notReadyNodesFound = true
 		lastCheckinElapsed := time.Since(ready.LastHeartbeatTime.Time).Truncate(time.Second)
 		statusDesc := "Unknown"
 		if ready.Status == corev1.ConditionFalse {

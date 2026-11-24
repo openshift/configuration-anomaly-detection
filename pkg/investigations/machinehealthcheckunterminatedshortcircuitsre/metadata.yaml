@@ -11,6 +11,18 @@ rbac:
           resources:
             - "machines"
             - "machinehealthchecks"
+    # Read the pull secret to check it still matches OCM when nodes are NotReady: stale registry
+    # credentials stop the kubelet pulling images, which can take a fleet of nodes down at once.
+    - namespace: "openshift-config"
+      rules:
+        - verbs:
+            - "get"
+          apiGroups:
+            - ""
+          resources:
+            - "secrets"
+          resourceNames:
+            - "pull-secret"
   clusterRoleRules:
     - verbs:
         - "get"
@@ -19,4 +31,29 @@ rbac:
         - ""
       resources:
         - "nodes"
+    # Correlate PodDisruptionBudgets that allow no disruptions with the pods sitting on a node whose
+    # drain has stalled, and resolve those pods back to the workload that owns them.
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - ""
+      resources:
+        - "pods"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "policy"
+      resources:
+        - "poddisruptionbudgets"
+    - verbs:
+        - "get"
+        - "list"
+      apiGroups:
+        - "apps"
+      resources:
+        - "deployments"
+        - "statefulsets"
+        - "replicasets"
 customerDataAccess: false
