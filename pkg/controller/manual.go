@@ -31,6 +31,7 @@ var shortNameToInvestigation = map[string]string{
 	"upgrade-config":           "upgradeconfigsyncfailureover4hr",
 	"describe-nodes":           "describenodes",
 	"cluster-health-check":     "clusterhealthcheck",
+	"upgrade-cp-timeout":       "upgradecontrolplaneupgradetimeoutsre",
 }
 
 type ManualController struct {
