@@ -23,7 +23,7 @@ The checks run in this order:
 | 6 | **Console pod health** -- checks pod status, restarts, readiness, and warning events in openshift-console | All clusters | Informational |
 | 7 | **Node health** -- checks node conditions (NotReady, DiskPressure, MemoryPressure) for nodes running console pods | All clusters | Informational |
 | 8 | **Route53 DNS** -- verifies *.apps records exist in private and public hosted zones | AWS only (classic + HCP) | Actioning -- sends service log + silences |
-| 9 | **DHCP option set** -- verifies the VPC's DHCP option set includes AmazonProvidedDNS | AWS classic only | Informational |
+| 9 | **DHCP option set** -- verifies the VPC's DHCP option set includes AmazonProvidedDNS (VPC resolved via OCM subnet IDs for BYOVPC, else via `kubernetes.io/cluster/<infraID>` tag) | AWS classic only | Informational |
 | 10 | **Load balancer health** -- identifies CLB/NLB type, checks target health | AWS classic only | Informational |
 | 11 | **VPC egress** -- runs the osd-network-verifier to test outbound connectivity | AWS classic, public only | Informational |
 

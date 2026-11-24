@@ -418,14 +418,22 @@ func (i *Investigation) checkDHCPOptions(ctx context.Context, r *investigation.R
 		return
 	}
 
-	servers, err := r.AwsClient.GetVpcDhcpConfiguration(ctx, infraID)
+	// BYOVPC clusters carry the customer-provided subnet IDs in OCM; their VPC is not
+	// tagged by the installer and has to be resolved via the subnets instead.
+	subnetIDs := r.Cluster.AWS().SubnetIDs()
+	prefix := "DHCP:"
+	if len(subnetIDs) > 0 {
+		prefix = "DHCP (BYOVPC):"
+	}
+
+	servers, err := r.AwsClient.GetVpcDhcpConfiguration(ctx, infraID, subnetIDs)
 	if err != nil {
-		notes.AppendWarning("DHCP: unable to check VPC DHCP options — %v", err)
+		notes.AppendWarning("%s unable to check VPC DHCP options — %v", prefix, err)
 		return
 	}
 
 	if len(servers) == 0 {
-		notes.AppendSuccess("DHCP: VPC DHCP option set uses AWS default DNS (AmazonProvidedDNS)")
+		notes.AppendSuccess("%s VPC DHCP option set uses AWS default DNS (AmazonProvidedDNS)", prefix)
 		return
 	}
 
@@ -438,16 +446,16 @@ func (i *Investigation) checkDHCPOptions(ctx context.Context, r *investigation.R
 	}
 
 	if !hasAmazonDNS {
-		notes.AppendWarning("DHCP: VPC DHCP option set uses custom DNS servers %v instead of AmazonProvidedDNS — this may prevent in-VPC DNS resolution", servers)
+		notes.AppendWarning("%s VPC DHCP option set uses custom DNS servers %v instead of AmazonProvidedDNS — this may prevent in-VPC DNS resolution", prefix, servers)
 		return
 	}
 
 	if len(servers) > 1 {
-		notes.AppendSuccess("DHCP: VPC DHCP option set includes AmazonProvidedDNS alongside custom servers %v", servers)
+		notes.AppendSuccess("%s VPC DHCP option set includes AmazonProvidedDNS alongside custom servers %v", prefix, servers)
 		return
 	}
 
-	notes.AppendSuccess("DHCP: VPC DHCP option set uses AmazonProvidedDNS")
+	notes.AppendSuccess("%s VPC DHCP option set uses AmazonProvidedDNS", prefix)
 }
 
 // determineLBType extracts the AWS load balancer type from the IngressController.

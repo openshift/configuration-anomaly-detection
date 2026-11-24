@@ -1414,7 +1414,7 @@ func TestRun_AWSCluster_AWSChecksRun(t *testing.T) {
 	mockAws.EXPECT().HasResourceRecordSet(gomock.Any(), "Z5678PUBLIC", "\\052.apps.msaary-test.4t01.s1.devshift.org.", "A").Return(true, nil)
 
 	// DHCP check expects: GetVpcDhcpConfiguration (classic cluster, not HCP)
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{"AmazonProvidedDNS"}, nil)
 
 	// LB health check expects: FindCLBByDNSName (IC has no ProviderParameters → defaults to Classic)
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", []string{"sg-clb"}, nil)
@@ -1861,7 +1861,7 @@ func TestCheckDHCPOptions_AmazonDNSOnly(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{"AmazonProvidedDNS"}, nil)
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -1884,7 +1884,7 @@ func TestCheckDHCPOptions_CustomDNSOnly(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"10.0.0.2", "10.0.0.3"}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{"10.0.0.2", "10.0.0.3"}, nil)
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -1907,7 +1907,7 @@ func TestCheckDHCPOptions_MixedDNS(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS", "10.0.0.2"}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{"AmazonProvidedDNS", "10.0.0.2"}, nil)
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -1930,7 +1930,7 @@ func TestCheckDHCPOptions_DefaultDHCPNoServersEntry(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{}, nil)
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -1964,7 +1964,7 @@ func TestCheckDHCPOptions_APIError(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return(nil, fmt.Errorf("access denied"))
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return(nil, fmt.Errorf("access denied"))
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -1987,7 +1987,7 @@ func TestCheckDHCPOptions_NoVPCFound(t *testing.T) {
 	defer ctrl.Finish()
 	mockAws := awsmock.NewMockClient(ctrl)
 
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return(nil, fmt.Errorf("no VPC found with kubernetes.io/cluster/test-cluster-infra tag"))
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return(nil, fmt.Errorf("no VPC found with kubernetes.io/cluster/test-cluster-infra tag"))
 
 	cluster := newAWSTestClusterWithDNS("test-cluster", "10.0.0.0/16", "", "myprefix", "example.com", false)
 	notes := newTestNotes()
@@ -2002,6 +2002,34 @@ func TestCheckDHCPOptions_NoVPCFound(t *testing.T) {
 	}
 	if !strings.Contains(output, "no VPC found") {
 		t.Errorf("expected error message about no VPC, got: %s", output)
+	}
+}
+
+func TestCheckDHCPOptions_BYOVPC(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockAws := awsmock.NewMockClient(ctrl)
+
+	subnetIDs := []string{"subnet-1", "subnet-2"}
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", subnetIDs).Return([]string{"AmazonProvidedDNS"}, nil)
+
+	cluster, err := cmv1.NewCluster().
+		ID("test-cluster").
+		InfraID("test-cluster-infra").
+		AWS(cmv1.NewAWS().SubnetIDs(subnetIDs...)).
+		Build()
+	if err != nil {
+		t.Fatalf("failed to build cluster: %v", err)
+	}
+	notes := newTestNotes()
+	inv := &Investigation{}
+
+	r := &investigation.Resources{Cluster: cluster, AwsClient: mockAws}
+	inv.checkDHCPOptions(context.Background(), r, notes)
+
+	output := notes.String()
+	if !strings.Contains(output, "DHCP (BYOVPC): VPC DHCP option set uses AmazonProvidedDNS") {
+		t.Errorf("expected BYOVPC success message, got: %s", output)
 	}
 }
 
@@ -2879,7 +2907,7 @@ func TestRun_PrivateLink_SkipsEgress(t *testing.T) {
 	// No public zone call for PrivateLink clusters.
 
 	// DHCP check expects: GetVpcDhcpConfiguration (classic cluster, not HCP)
-	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra").Return([]string{"AmazonProvidedDNS"}, nil)
+	mockAws.EXPECT().GetVpcDhcpConfiguration(gomock.Any(), "test-cluster-infra", gomock.Nil()).Return([]string{"AmazonProvidedDNS"}, nil)
 
 	// LB health check expects: FindCLBByDNSName (IC defaults to Classic)
 	mockAws.EXPECT().FindCLBByDNSName(gomock.Any(), "test-elb-123456.us-east-1.elb.amazonaws.com").Return("test-elb", []string{"sg-clb"}, nil)

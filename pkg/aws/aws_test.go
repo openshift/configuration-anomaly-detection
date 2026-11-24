@@ -231,3 +231,95 @@ func TestSdkClient_IsSubnetPrivate(t *testing.T) {
 		})
 	}
 }
+
+func TestSdkClient_GetVpcDhcpConfiguration(t *testing.T) {
+	dhcpOut := &ec2v2.DescribeDhcpOptionsOutput{
+		DhcpOptions: []ec2v2types.DhcpOptions{{
+			DhcpConfigurations: []ec2v2types.DhcpConfiguration{{
+				Key:    awsv2.String("domain-name-servers"),
+				Values: []ec2v2types.AttributeValue{{Value: awsv2.String("AmazonProvidedDNS")}},
+			}},
+		}},
+	}
+	vpc := ec2v2types.Vpc{VpcId: awsv2.String("vpc-1"), DhcpOptionsId: awsv2.String("dopt-1")}
+
+	tests := []struct {
+		name      string
+		subnetIDs []string
+		setup     func(m *awsmock.MockEC2API)
+		want      []string
+		wantErr   bool
+	}{
+		{
+			name: "Installer-provisioned VPC is resolved via infra ID tag",
+			setup: func(m *awsmock.MockEC2API) {
+				m.EXPECT().DescribeVpcs(gomock.Any(), &ec2v2.DescribeVpcsInput{
+					Filters: []ec2v2types.Filter{{
+						Name:   awsv2.String("tag-key"),
+						Values: []string{"kubernetes.io/cluster/infra-1"},
+					}},
+				}).Return(&ec2v2.DescribeVpcsOutput{Vpcs: []ec2v2types.Vpc{vpc}}, nil)
+				m.EXPECT().DescribeDhcpOptions(gomock.Any(), gomock.Any()).Return(dhcpOut, nil)
+			},
+			want: []string{"AmazonProvidedDNS"},
+		},
+		{
+			name:      "BYOVPC is resolved via subnets",
+			subnetIDs: []string{"subnet-1", "subnet-2"},
+			setup: func(m *awsmock.MockEC2API) {
+				m.EXPECT().DescribeSubnets(gomock.Any(), &ec2v2.DescribeSubnetsInput{
+					Filters: []ec2v2types.Filter{{
+						Name:   awsv2.String("subnet-id"),
+						Values: []string{"subnet-1", "subnet-2"},
+					}},
+				}).Return(&ec2v2.DescribeSubnetsOutput{
+					Subnets: []ec2v2types.Subnet{{SubnetId: awsv2.String("subnet-1"), VpcId: awsv2.String("vpc-1")}},
+				}, nil)
+				m.EXPECT().DescribeVpcs(gomock.Any(), &ec2v2.DescribeVpcsInput{
+					VpcIds: []string{"vpc-1"},
+				}).Return(&ec2v2.DescribeVpcsOutput{Vpcs: []ec2v2types.Vpc{vpc}}, nil)
+				m.EXPECT().DescribeDhcpOptions(gomock.Any(), gomock.Any()).Return(dhcpOut, nil)
+			},
+			want: []string{"AmazonProvidedDNS"},
+		},
+		{
+			name:      "BYOVPC subnet lookup error is returned",
+			subnetIDs: []string{"subnet-1"},
+			setup: func(m *awsmock.MockEC2API) {
+				m.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(nil, errors.New("access denied"))
+			},
+			wantErr: true,
+		},
+		{
+			name:      "BYOVPC with no subnets found returns error",
+			subnetIDs: []string{"subnet-1"},
+			setup: func(m *awsmock.MockEC2API) {
+				m.EXPECT().DescribeSubnets(gomock.Any(), gomock.Any()).Return(&ec2v2.DescribeSubnetsOutput{}, nil)
+			},
+			wantErr: true,
+		},
+		{
+			name: "No tagged VPC returns error",
+			setup: func(m *awsmock.MockEC2API) {
+				m.EXPECT().DescribeVpcs(gomock.Any(), gomock.Any()).Return(&ec2v2.DescribeVpcsOutput{}, nil)
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ec2api := awsmock.NewMockEC2API(ctrl)
+			tt.setup(ec2api)
+
+			c := &cadaws.SdkClient{Ec2Client: ec2api}
+			got, err := c.GetVpcDhcpConfiguration(context.Background(), "infra-1", tt.subnetIDs)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("SdkClient.GetVpcDhcpConfiguration() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if len(got) != len(tt.want) || (len(got) > 0 && got[0] != tt.want[0]) {
+				t.Errorf("SdkClient.GetVpcDhcpConfiguration() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

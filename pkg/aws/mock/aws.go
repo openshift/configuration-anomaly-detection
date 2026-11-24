@@ -722,18 +722,18 @@ func (mr *MockClientMockRecorder) GetSubnetID(infraID any) *gomock.Call {
 }
 
 // GetVpcDhcpConfiguration mocks base method.
-func (m *MockClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
+func (m *MockClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string, subnetIDs []string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVpcDhcpConfiguration", ctx, infraID)
+	ret := m.ctrl.Call(m, "GetVpcDhcpConfiguration", ctx, infraID, subnetIDs)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetVpcDhcpConfiguration indicates an expected call of GetVpcDhcpConfiguration.
-func (mr *MockClientMockRecorder) GetVpcDhcpConfiguration(ctx, infraID any) *gomock.Call {
+func (mr *MockClientMockRecorder) GetVpcDhcpConfiguration(ctx, infraID, subnetIDs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVpcDhcpConfiguration", reflect.TypeOf((*MockClient)(nil).GetVpcDhcpConfiguration), ctx, infraID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVpcDhcpConfiguration", reflect.TypeOf((*MockClient)(nil).GetVpcDhcpConfiguration), ctx, infraID, subnetIDs)
 }
 
 // HasResourceRecordSet mocks base method.

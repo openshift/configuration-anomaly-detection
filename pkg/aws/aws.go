@@ -103,7 +103,7 @@ type Client interface {
 	GetRouteTableForSubnet(subnetID string) (ec2v2types.RouteTable, error)
 	FindHostedZone(ctx context.Context, dnsName string, private bool) (string, error)
 	HasResourceRecordSet(ctx context.Context, hostedZoneID, recordName, recordType string) (bool, error)
-	GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error)
+	GetVpcDhcpConfiguration(ctx context.Context, infraID string, subnetIDs []string) ([]string, error)
 	FindNLBByDNSName(ctx context.Context, dnsName string) (arn string, name string, securityGroups []string, err error)
 	FindCLBByDNSName(ctx context.Context, dnsName string) (name string, securityGroups []string, err error)
 	GetNLBTargetHealth(ctx context.Context, lbARN string) ([]NLBTargetHealth, error)
@@ -708,26 +708,19 @@ func (c *SdkClient) HasResourceRecordSet(ctx context.Context, hostedZoneID, reco
 
 // GetVpcDhcpConfiguration returns the domain-name-servers values from the DHCP option set
 // associated with the cluster's VPC.
-func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string) ([]string, error) {
-	// Find VPC by infra ID tag
-	vpcOut, err := c.Ec2Client.DescribeVpcs(ctx, &ec2v2.DescribeVpcsInput{
-		Filters: []ec2v2types.Filter{
-			{
-				Name:   awsv2.String("tag-key"),
-				Values: []string{fmt.Sprintf("kubernetes.io/cluster/%s", infraID)},
-			},
-		},
-	})
+//
+// For BYOVPC clusters (subnetIDs non-empty) the VPC is resolved via the customer-provided
+// subnets, as the installer does not tag customer VPCs. Otherwise the VPC is looked up via
+// the kubernetes.io/cluster/<infraID> tag the installer sets on VPCs it creates.
+func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string, subnetIDs []string) ([]string, error) {
+	vpc, err := c.findClusterVpc(ctx, infraID, subnetIDs)
 	if err != nil {
-		return nil, fmt.Errorf("failed to describe VPCs for infra ID %s: %w", infraID, err)
-	}
-	if len(vpcOut.Vpcs) == 0 {
-		return nil, fmt.Errorf("no VPC found with kubernetes.io/cluster/%s tag", infraID)
+		return nil, err
 	}
 
-	dhcpOptionsID := awsv2.ToString(vpcOut.Vpcs[0].DhcpOptionsId)
+	dhcpOptionsID := awsv2.ToString(vpc.DhcpOptionsId)
 	if dhcpOptionsID == "" {
-		return nil, fmt.Errorf("VPC %s has no DHCP options set", awsv2.ToString(vpcOut.Vpcs[0].VpcId))
+		return nil, fmt.Errorf("VPC %s has no DHCP options set", awsv2.ToString(vpc.VpcId))
 	}
 
 	dhcpOut, err := c.Ec2Client.DescribeDhcpOptions(ctx, &ec2v2.DescribeDhcpOptionsInput{
@@ -751,6 +744,58 @@ func (c *SdkClient) GetVpcDhcpConfiguration(ctx context.Context, infraID string)
 	}
 
 	return servers, nil
+}
+
+// findClusterVpc resolves the cluster's VPC, via the subnets for BYOVPC clusters or via the
+// infra ID tag otherwise.
+func (c *SdkClient) findClusterVpc(ctx context.Context, infraID string, subnetIDs []string) (ec2v2types.Vpc, error) {
+	if len(subnetIDs) > 0 {
+		subnetOut, err := c.Ec2Client.DescribeSubnets(ctx, &ec2v2.DescribeSubnetsInput{
+			Filters: []ec2v2types.Filter{
+				{
+					Name:   awsv2.String("subnet-id"),
+					Values: subnetIDs,
+				},
+			},
+		})
+		if err != nil {
+			return ec2v2types.Vpc{}, fmt.Errorf("failed to describe subnets %v: %w", subnetIDs, err)
+		}
+		if len(subnetOut.Subnets) == 0 {
+			return ec2v2types.Vpc{}, fmt.Errorf("none of the cluster subnets %v exist", subnetIDs)
+		}
+		if awsv2.ToString(subnetOut.Subnets[0].VpcId) == "" {
+			return ec2v2types.Vpc{}, fmt.Errorf("unable to determine VPC from subnets %v", subnetIDs)
+		}
+		vpcID := awsv2.ToString(subnetOut.Subnets[0].VpcId)
+
+		vpcOut, err := c.Ec2Client.DescribeVpcs(ctx, &ec2v2.DescribeVpcsInput{
+			VpcIds: []string{vpcID},
+		})
+		if err != nil {
+			return ec2v2types.Vpc{}, fmt.Errorf("failed to describe VPC %s: %w", vpcID, err)
+		}
+		if len(vpcOut.Vpcs) == 0 {
+			return ec2v2types.Vpc{}, fmt.Errorf("VPC %s not found", vpcID)
+		}
+		return vpcOut.Vpcs[0], nil
+	}
+
+	vpcOut, err := c.Ec2Client.DescribeVpcs(ctx, &ec2v2.DescribeVpcsInput{
+		Filters: []ec2v2types.Filter{
+			{
+				Name:   awsv2.String("tag-key"),
+				Values: []string{fmt.Sprintf("kubernetes.io/cluster/%s", infraID)},
+			},
+		},
+	})
+	if err != nil {
+		return ec2v2types.Vpc{}, fmt.Errorf("failed to describe VPCs for infra ID %s: %w", infraID, err)
+	}
+	if len(vpcOut.Vpcs) == 0 {
+		return ec2v2types.Vpc{}, fmt.Errorf("no VPC found with kubernetes.io/cluster/%s tag", infraID)
+	}
+	return vpcOut.Vpcs[0], nil
 }
 
 func (c *SdkClient) FindNLBByDNSName(ctx context.Context, dnsName string) (string, string, []string, error) {
