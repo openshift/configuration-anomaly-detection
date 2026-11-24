@@ -420,7 +420,17 @@ func assessScaling(bp blockingPDB) (string, bool) {
 		unhealthy, bp.ExpectedPods, bp.MinAvailable), true
 }
 
+// customerOpenshiftNamespaces are openshift-* namespaces of optional operators that customers
+// install and own themselves, so their PDBs are customer-managed despite the prefix.
+var customerOpenshiftNamespaces = map[string]bool{
+	"openshift-logging":   true,
+	"openshift-pipelines": true,
+}
+
 func isPlatformNamespace(namespace string) bool {
+	if customerOpenshiftNamespaces[namespace] {
+		return false
+	}
 	return strings.HasPrefix(namespace, "openshift-") ||
 		strings.HasPrefix(namespace, "kube-") ||
 		namespace == "openshift"

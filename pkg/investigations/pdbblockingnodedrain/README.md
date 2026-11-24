@@ -41,6 +41,8 @@ All checks run against the service cluster K8s API using controller-runtime's cl
 
 A PDB is classified as platform-managed if its namespace starts with `openshift-` or `kube-`,
 or is exactly `openshift`. All other namespaces are treated as customer-managed.
+Exception: namespaces of customer-installed optional operators (currently `openshift-logging`,
+`openshift-pipelines`) are treated as customer-managed despite their `openshift-` prefix.
 This determines the remediation guidance (customer should fix vs. platform issue to escalate).
 
 ## Testing
