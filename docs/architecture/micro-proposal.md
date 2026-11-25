@@ -5,7 +5,7 @@
 
 ## Why
 
-CAD currently has 18+ alert investigations, many of which copy-paste the same patterns — ClusterAccessError, BannedUser, ClusterCreator, PullSecret checks — duplicating 100-150 lines per investigation. `pkg/micro` extracts these into a shared library with a typed `Result{Done, Actions}` / `DataResult[T]` API and an `Outcome` helper that replaces ad-hoc early-exit boilerplate.
+CAD currently has 18+ alert investigations, many of which copy-paste the same patterns — ClusterAccessError, BannedUser, ClusterCreator, PullSecret checks — duplicating 100-150 lines per investigation. `pkg/micro` extracts these into a shared library with a typed `Result{Done, Actions}` / `DataResult[T]` API.
 
 Four problems drive this work:
 
@@ -28,15 +28,13 @@ Duplicated logic drifts. Different investigations handle the same scenario in su
 `pkg/micro` establishes canonical implementations with well-defined contracts:
 - Pure functions (`Check*` prefix) make no external calls and are deterministic.
 - Fetching functions (noun phrases) call a single external system and return structured results.
-- `Outcome` provides a consistent Stop/Collect/Finalize pattern for result assembly.
-
 When the shared function is correct and tested, every investigation that uses it inherits that correctness.
 
 ### 4. Unblock automation of additional alert handling to reduce on-call load
 
 CAD's value proposition is reducing manual SRE effort. Each alert we automate is one fewer page that requires human investigation. But the current cost of writing a new investigation is high: authors must re-implement all the common patterns (access checks, ban detection, pull secret verification, OHSS case creation, result finalization) from scratch, correctly, and get each copy reviewed.
 
-This cost is the bottleneck. `pkg/micro` lowers it to the alert-specific logic: consume the shared patterns as function calls, focus the new code on what's actually unique to the alert. The `Outcome` helper further reduces ceremony — `Stop()` for early exits, `Collect()` for accumulated actions, `Finalize()` for the terminal path.
+This cost is the bottleneck. `pkg/micro` lowers it to the alert-specific logic: consume the shared patterns as function calls, focus the new code on what's actually unique to the alert.
 
 By making investigations cheaper to write and review, we can automate more alerts faster and reduce on-call load.
 
@@ -68,23 +66,6 @@ type DataResult[T any] struct {
 | `ClusterCreator` | Fetching | Fetches cluster creator account |
 | `PullSecret` | Fetching | Validates pull secret via K8s, returns diagnostic actions |
 
-### Outcome helper (`pkg/micro/outcome.go`)
-
-```go
-outcome := micro.NewOutcome(notes, clusterID, investigationName)
-
-// Early exit on finding
-if accessErr := micro.ClusterAccessError(err, notes); accessErr.Done {
-    return outcome.Stop(accessErr.Actions...), nil
-}
-
-// Accumulate non-terminal actions
-outcome.Collect(ohssAction)
-
-// Final result
-return outcome.Finalize(additionalActions...), nil
-```
-
 ### Naming convention
 
 - **`Check*`** prefix: pure functions, no external calls, deterministic
@@ -100,6 +81,6 @@ Stacked branches, each independently reviewable:
 4. **phase-5**: PullSecret tests
 5. **phase-6**: CheckBan pure function + migration
 6. **phase-7**: Thread `context.Context` through `Investigation.Run`
-7. **phase-8**: Outcome helper, replacing the checks framework
+7. **phase-8**: Replace the checks framework
 
 Each phase builds on the previous. Investigations are migrated incrementally — no big-bang rewrite.

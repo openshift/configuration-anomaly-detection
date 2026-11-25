@@ -44,28 +44,32 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return investigation.InvestigationResult{}, err
 	}
 	notes := notewriter.New(c.Name(), logging.RawLogger)
-	o := micro.NewOutcome(notes, r.Cluster.ID(), c.Name())
+	result := func(actions ...executor.Action) investigation.InvestigationResult {
+		return investigation.InvestigationResult{
+			Actions: executor.FinalizeResult(notes, r.Cluster.ID(), c.Name(), actions...),
+		}
+	}
 
 	banResult, err := micro.BannedUser(r.OcmClient, r.Cluster, notes)
 	if err != nil {
 		logging.Errorf("Failed to check if user is banned: %v", err)
-		return o.Stop(executor.Escalate("Failed to check if user is banned")), nil //nolint:nilerr // failure is reported through the escalation action
+		return result(executor.Escalate("Failed to check if user is banned")), nil //nolint:nilerr // failure is reported through the escalation action
 	}
 	if banResult.Done {
-		return o.Stop(banResult.Actions...), nil
+		return result(banResult.Actions...), nil
 	}
 
 	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, notes)
 	if err != nil {
 		logging.Errorf("Failed to get cluster creator from OCM: %v", err)
-		return o.Stop(executor.Escalate("Failed to get cluster creator from OCM")), nil //nolint:nilerr // failure is reported through the escalation action
+		return result(executor.Escalate("Failed to get cluster creator from OCM")), nil //nolint:nilerr // failure is reported through the escalation action
 	}
 	user := creatorResult.Value
 
 	r, err = rb.WithK8sClient().Build()
 	if err != nil {
 		if cr := micro.ClusterAccessError(err, notes); cr.Done {
-			return o.Stop(cr.Actions...), nil
+			return result(cr.Actions...), nil
 		}
 		return investigation.InvestigationResult{}, investigation.WrapInfrastructure(err, "Resource build error")
 	}
@@ -89,10 +93,10 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	if muoFinding {
-		return o.Stop(executor.Escalate("MUO diagnostics found an issue - review notes for details")), nil
+		return result(executor.Escalate("MUO diagnostics found an issue - review notes for details")), nil
 	}
 
-	return o.Finalize(psResult.Actions...), nil
+	return result(psResult.Actions...), nil
 }
 
 func (c *Investigation) Name() string {
