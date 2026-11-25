@@ -1,10 +1,15 @@
 package upgradeconfigsyncfailureover4hr
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	sdk "github.com/openshift-online/ocm-sdk-go"
+	amv1 "github.com/openshift-online/ocm-sdk-go/accountsmgmt/v1"
 	cmv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/configuration-anomaly-detection/pkg/executor"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
@@ -312,4 +317,151 @@ var _ = Describe("Run", func() {
 			Expect(err.Error()).To(ContainSubstring("infrastructure error"))
 		})
 	})
+
+	When("user is not banned and cluster is accessible", func() {
+		var (
+			ocmServer *httptest.Server
+			ocmConn   *sdk.Connection
+		)
+
+		BeforeEach(func() {
+			ocmServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprint(w, `{"kind":"RegistryCredentialList","items":[],"page":1,"size":0,"total":0}`)
+			}))
+			var err error
+			ocmConn, err = sdk.NewConnectionBuilder().
+				URL(ocmServer.URL).
+				Tokens("fake-token").
+				Insecure(true).
+				Build()
+			Expect(err).NotTo(HaveOccurred())
+
+			account, _ := amv1.NewAccount().ID("user-1").Email("test@example.com").Build()
+			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
+				CheckIfUserBanned(gomock.Any()).Return(nil)
+			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
+				GetCreatorFromCluster(gomock.Any()).Return(account, nil)
+			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
+				GetConnection().Return(ocmConn)
+		})
+
+		AfterEach(func() {
+			ocmConn.Close()
+			ocmServer.Close()
+		})
+
+		It("should escalate when MUO config has wrong ocmBaseUrl", func() {
+			pullSecret := createTestPullSecret("test@example.com")
+			muoCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      muoConfigMapName,
+					Namespace: muoNamespace,
+				},
+				Data: map[string]string{
+					muoConfigKey: `configManager:
+  source: OCM
+  ocmBaseUrl: https://wrong.example.com`,
+				},
+			}
+			r.Resources.K8sClient = fake.NewClientBuilder().
+				WithScheme(testScheme()).
+				WithObjects(muoCM, pullSecret).
+				Build()
+
+			result, err := inv.Run(r)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+		})
+
+		It("should escalate with valid pull secret and correct MUO config", func() {
+			pullSecret := createTestPullSecret("test@example.com")
+			muoCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      muoConfigMapName,
+					Namespace: muoNamespace,
+				},
+				Data: map[string]string{
+					muoConfigKey: `configManager:
+  source: OCM
+  ocmBaseUrl: https://api.openshift.com`,
+				},
+			}
+			r.Resources.K8sClient = fake.NewClientBuilder().
+				WithScheme(testScheme()).
+				WithObjects(muoCM, pullSecret).
+				Build()
+
+			result, err := inv.Run(r)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+		})
+
+		It("should escalate when pull secret email mismatches", func() {
+			pullSecret := createTestPullSecret("wrong@example.com")
+			muoCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      muoConfigMapName,
+					Namespace: muoNamespace,
+				},
+				Data: map[string]string{
+					muoConfigKey: `configManager:
+  source: OCM
+  ocmBaseUrl: https://api.openshift.com`,
+				},
+			}
+			r.Resources.K8sClient = fake.NewClientBuilder().
+				WithScheme(testScheme()).
+				WithObjects(muoCM, pullSecret).
+				Build()
+
+			result, err := inv.Run(r)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+		})
+
+		It("should handle missing pull secret with infrastructure error", func() {
+			muoCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      muoConfigMapName,
+					Namespace: muoNamespace,
+				},
+				Data: map[string]string{
+					muoConfigKey: `configManager:
+  source: OCM
+  ocmBaseUrl: https://api.openshift.com`,
+				},
+			}
+			r.Resources.K8sClient = fake.NewClientBuilder().
+				WithScheme(testScheme()).
+				WithObjects(muoCM).
+				Build()
+
+			_, err := inv.Run(r)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("Pull secret"))
+		})
+	})
 })
+
+func createTestPullSecret(email string) *corev1.Secret {
+	dockerConfig := map[string]interface{}{
+		"auths": map[string]interface{}{
+			"cloud.openshift.com": map[string]interface{}{
+				"auth":  "dGVzdDp0ZXN0",
+				"email": email,
+			},
+		},
+	}
+	data, _ := json.Marshal(dockerConfig)
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pull-secret",
+			Namespace: "openshift-config",
+		},
+		Type: corev1.SecretTypeDockerConfigJson,
+		Data: map[string][]byte{
+			".dockerconfigjson": data,
+		},
+	}
+}
