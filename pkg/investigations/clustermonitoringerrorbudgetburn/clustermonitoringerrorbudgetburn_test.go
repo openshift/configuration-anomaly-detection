@@ -129,8 +129,8 @@ func TestRun_SecondMonitoringStackSendsServiceLog(t *testing.T) {
 	result, err := runMonitoring(t, statusConditionAvailable, prometheus("team-a", "app"))
 	assert.NilError(t, err)
 	assert.Assert(t, hasAction(result.Actions, "service_log"))
-	assert.Assert(t, hasAction(result.Actions, "silence_incident"))
-	assert.Assert(t, !hasAction(result.Actions, "escalate_incident"))
+	assert.Assert(t, hasAction(result.Actions, "escalate_incident"))
+	assert.Assert(t, !hasAction(result.Actions, "silence_incident"))
 	for _, action := range result.Actions {
 		sl, ok := action.(*executor.ServiceLogAction)
 		if !ok || sl.ServiceLog == nil {

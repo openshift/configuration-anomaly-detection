@@ -59,6 +59,18 @@ func newUwmAMMisconfiguredSL(docLink string) *ocm.ServiceLog {
 	}
 }
 
+// newSecondMonitoringStackSL matches osd/rosa_second_monitoring_stack_installed.json:
+// https://github.com/openshift/managed-notifications/blob/master/osd/rosa_second_monitoring_stack_installed.json
+func newSecondMonitoringStackSL(namespace string) *ocm.ServiceLog {
+	return &ocm.ServiceLog{
+		Severity:     servicelogsv1.SeverityCritical,
+		Summary:      secondStackServiceLogSummary,
+		ServiceName:  uwmManualActionService,
+		Description:  fmt.Sprintf("Red Hat SRE have noticed a second monitoring stack installed in the '%s' namespace. This is interfering with cluster operations and preventing Red Hat from monitoring the cluster. Please remove the adhoc monitoring stack and use User Workload Monitoring instead. See the documentation for more information: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws_classic_architecture/4/html/monitoring/about-monitoring#understanding-the-monitoring-stack_monitoring-stack-architecture.", namespace),
+		InternalOnly: false,
+	}
+}
+
 func newUwmGenericMisconfiguredSL(docLink string) *ocm.ServiceLog {
 	if docLink == "" {
 		docLink = ocm.DocumentationLink(ocm.ProductROSA, ocm.DocumentationTopicMonitoringStack)
@@ -166,19 +178,23 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (result investigat
 
 	secondStackNamespace, err := secondMonitoringStackNamespace(context.TODO(), r.K8sClient)
 	if err != nil {
-		return result, investigation.WrapInfrastructure(
-			fmt.Errorf("unable to list Prometheus resources: %w", err),
-			"K8s API failure listing Prometheus")
+		notes.AppendWarning("Unable to list Prometheus resources: %v", err)
+		result.Actions = append(
+			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
+			executor.Escalate("Unable to list Prometheus resources - manual investigation required"),
+		)
+		return result, nil
 	}
 	if secondStackNamespace != "" {
 		notes.AppendWarning("Customer Prometheus found in namespace %s", secondStackNamespace)
+		secondStackSL := newSecondMonitoringStackSL(secondStackNamespace)
 		result.Actions = append(
 			executor.NoteAndReportFrom(notes, r.Cluster.ID(), c.Name()),
-			executor.NewServiceLogAction(servicelogsv1.SeverityCritical, secondStackServiceLogSummary).
-				WithDescription(secondMonitoringStackDescription(secondStackNamespace)).
-				WithServiceName("SREManualAction").
+			executor.NewServiceLogAction(secondStackSL.Severity, secondStackSL.Summary).
+				WithDescription(secondStackSL.Description).
+				WithServiceName(secondStackSL.ServiceName).
 				Build(),
-			executor.Silence("Customer installed a second monitoring stack in "+secondStackNamespace),
+			executor.Escalate("Customer Prometheus found outside supported namespaces in "+secondStackNamespace),
 		)
 		return result, nil
 	}
@@ -211,10 +227,6 @@ func secondMonitoringStackNamespace(ctx context.Context, k8sClient client.Client
 		return namespace, nil
 	}
 	return "", nil
-}
-
-func secondMonitoringStackDescription(namespace string) string {
-	return fmt.Sprintf("Red Hat SRE have noticed a second monitoring stack installed in the '%s' namespace. This is interfering with cluster operations and preventing Red Hat from monitoring the cluster. Please remove the adhoc monitoring stack and use User Workload Monitoring instead. See the documentation for more information: https://docs.redhat.com/en/documentation/red_hat_openshift_service_on_aws_classic_architecture/4/html/monitoring/about-monitoring#understanding-the-monitoring-stack_monitoring-stack-architecture.", namespace)
 }
 
 func (c *Investigation) Name() string {
