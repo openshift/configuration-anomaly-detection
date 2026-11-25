@@ -6,7 +6,21 @@
   "platformAutomerge": false,
   "dockerfile": {
     "includePaths": [
-      "build/Dockerfile"
+      "build/Dockerfile",
+      "build/Dockerfile.hummingbird"
+    ],
+    "packageRules": [
+      {
+        "description": "Hummingbird hardened base images are referenced by floating tag (e.g. :2.43-openssl-fips); digest updates rebuild the image under the same tag. Require manual review before merging: digest movement in a hardened image can change the runtime package set, and the image has no shell, so a failed runtime stage only shows up at container start. Keep the production ubi digest bumps automerging per boilerplate defaults.",
+        "matchPackageNames": [
+          "registry.access.redhat.com/hi/core-runtime"
+        ],
+        "matchUpdateTypes": [
+          "digest"
+        ],
+        "automerge": false,
+        "platformAutomerge": false
+      }
     ]
   },
   "packageRules": [
