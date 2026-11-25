@@ -15,7 +15,9 @@ ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
 USER root
 RUN dnf install -y --setopt=install_weak_deps=False tar gzip && \
     dnf clean all
+RUN echo "curl -f -o /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz"
 RUN curl -f -o /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz
+RUN echo "${OC_HASH} /tmp/oc.tar.gz"
 RUN echo "${OC_HASH} /tmp/oc.tar.gz" | sha256sum --check --status
 RUN tar -zxf /tmp/oc.tar.gz -C /tmp
 RUN mv /tmp/oc /bin/oc
