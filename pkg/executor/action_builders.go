@@ -299,3 +299,9 @@ func Silence(reason string) Action {
 func Escalate(reason string) Action {
 	return NewEscalateIncidentAction(reason).Build()
 }
+
+// FinalizeResult combines NoteAndReportFrom with additional actions into a single slice,
+// ready to assign to InvestigationResult.Actions.
+func FinalizeResult(nw *notewriter.NoteWriter, clusterID, summary string, actions ...Action) []Action {
+	return append(NoteAndReportFrom(nw, clusterID, summary), actions...)
+}
