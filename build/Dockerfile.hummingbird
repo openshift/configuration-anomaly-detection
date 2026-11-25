@@ -5,16 +5,13 @@
 # Both Hummingbird references below are digest-pinned; Renovate/MintMaker
 # opens digest-bump PRs for them (see the review rule in .github/renovate.json).
 
-ARG OC_VERSION=4.22.21
-ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
-
 # oc has no Hummingbird RPM, so it is fetched from the pinned OpenShift mirror
 # tarball and verified against OC_HASH in a Hummingbird builder stage. tar/gzip
 # are build-only dependencies of that stage; only the finished oc binary is
 # copied into the runner.
 FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder@sha256:b1915b00a4057a64f05912fc2ea553d9153fa0964ddad3de68307560d49086d3 as oc-fetcher
-ARG OC_VERSION
-ARG OC_HASH
+ARG OC_VERSION=4.22.21
+ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
 USER root
 RUN dnf install -y --setopt=install_weak_deps=False tar gzip && \
     dnf clean all
