@@ -59,7 +59,8 @@ var _ = Describe("parseMUOLogs", func() {
 		logs := `2026-10-19T10:00:00Z INFO starting operator
 2026-10-19T10:01:00Z ERROR Leader pod has been deleted, waiting for garbage collection
 2026-10-19T10:02:00Z INFO retrying`
-		parseMUOLogs(logs, notes)
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeTrue())
 		Expect(notes.String()).To(ContainSubstring("MUO deadlock detected"))
 	})
 
@@ -67,20 +68,30 @@ var _ = Describe("parseMUOLogs", func() {
 		logs := `2026-10-19T10:00:00Z INFO starting sync
 2026-10-19T10:01:00Z ERROR net/http: TLS handshake timeout
 2026-10-19T10:02:00Z INFO retrying`
-		parseMUOLogs(logs, notes)
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeTrue())
 		Expect(notes.String()).To(ContainSubstring("TLS handshake timeout"))
 	})
 
-	It("should detect ocm-config-getter errors", func() {
+	It("should detect ocm-config-getter errors at ERROR level", func() {
 		logs := `2026-10-19T10:00:00Z ERROR ocm-config-getter failed to retrieve config from OCM`
-		parseMUOLogs(logs, notes)
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeTrue())
 		Expect(notes.String()).To(ContainSubstring("ocm-config-getter"))
+	})
+
+	It("should not match ocm-config-getter at INFO level", func() {
+		logs := `2026-10-19T10:00:00Z INFO ocm-config-getter: configuration loaded`
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeFalse())
+		Expect(notes.String()).To(ContainSubstring("No known error patterns"))
 	})
 
 	It("should detect multiple patterns", func() {
 		logs := `Leader pod has been deleted, waiting for garbage collection
 net/http: TLS handshake timeout`
-		parseMUOLogs(logs, notes)
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeTrue())
 		output := notes.String()
 		Expect(output).To(ContainSubstring("deadlock"))
 		Expect(output).To(ContainSubstring("TLS handshake"))
@@ -89,12 +100,14 @@ net/http: TLS handshake timeout`
 	It("should report success when no patterns found", func() {
 		logs := `2026-10-19T10:00:00Z INFO everything is fine
 2026-10-19T10:01:00Z INFO sync complete`
-		parseMUOLogs(logs, notes)
+		found := parseMUOLogs(logs, notes)
+		Expect(found).To(BeFalse())
 		Expect(notes.String()).To(ContainSubstring("No known error patterns"))
 	})
 
 	It("should handle empty logs", func() {
-		parseMUOLogs("", notes)
+		found := parseMUOLogs("", notes)
+		Expect(found).To(BeFalse())
 		Expect(notes.String()).To(ContainSubstring("No known error patterns"))
 	})
 })
@@ -107,21 +120,22 @@ var _ = Describe("checkMUOConfig", func() {
 		notes = notewriter.New("test", logging.RawLogger)
 	})
 
-	It("should succeed with correct ocmBaseUrl", func() {
+	It("should succeed with correct ocmBaseUrl and OCM source", func() {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      muoConfigMapName,
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `configManager:
+				muoConfigKey: `configManager:
   source: OCM
   ocmBaseUrl: https://api.openshift.com`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		found, err := checkMUOConfig(k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeFalse())
 		Expect(notes.String()).To(ContainSubstring("ocmBaseUrl is correct"))
 	})
 
@@ -132,26 +146,56 @@ var _ = Describe("checkMUOConfig", func() {
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `configManager:
+				muoConfigKey: `configManager:
   source: OCM
   ocmBaseUrl: https://wrong.example.com`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		found, err := checkMUOConfig(k8sClient, notes)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
 		Expect(notes.String()).To(ContainSubstring("wrong.example.com"))
 		Expect(notes.String()).To(ContainSubstring(expectedOCMBase))
 	})
 
-	It("should error when configmap not found", func() {
-		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).Build()
-		err := checkMUOConfig(k8sClient, notes)
-		Expect(err).To(HaveOccurred())
-		Expect(notes.String()).To(ContainSubstring("Failed to read MUO configmap"))
+	It("should succeed with LOCAL source", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      muoConfigMapName,
+				Namespace: muoNamespace,
+			},
+			Data: map[string]string{
+				muoConfigKey: `configManager:
+  source: LOCAL`,
+			},
+		}
+		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
+		found, err := checkMUOConfig(k8sClient, notes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeFalse())
+		Expect(notes.String()).To(ContainSubstring("LOCAL"))
 	})
 
-	It("should error when config.yaml key missing", func() {
+	It("should warn with unknown source", func() {
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      muoConfigMapName,
+				Namespace: muoNamespace,
+			},
+			Data: map[string]string{
+				muoConfigKey: `configManager:
+  source: UNKNOWN`,
+			},
+		}
+		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
+		found, err := checkMUOConfig(k8sClient, notes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(notes.String()).To(ContainSubstring("UNKNOWN"))
+	})
+
+	It("should report finding when configmap key missing", func() {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      muoConfigMapName,
@@ -162,9 +206,17 @@ var _ = Describe("checkMUOConfig", func() {
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		found, err := checkMUOConfig(k8sClient, notes)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(found).To(BeTrue())
+		Expect(notes.String()).To(ContainSubstring("missing"))
+	})
+
+	It("should error when configmap not found", func() {
+		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).Build()
+		_, err := checkMUOConfig(k8sClient, notes)
 		Expect(err).To(HaveOccurred())
-		Expect(notes.String()).To(ContainSubstring("missing 'config.yaml' key"))
+		Expect(notes.String()).To(ContainSubstring("Failed to read MUO configmap"))
 	})
 
 	It("should error on invalid YAML", func() {
@@ -174,11 +226,11 @@ var _ = Describe("checkMUOConfig", func() {
 				Namespace: muoNamespace,
 			},
 			Data: map[string]string{
-				"config.yaml": `: invalid yaml [[[`,
+				muoConfigKey: `: invalid yaml [[[`,
 			},
 		}
 		k8sClient := fake.NewClientBuilder().WithScheme(testScheme()).WithObjects(cm).Build()
-		err := checkMUOConfig(k8sClient, notes)
+		_, err := checkMUOConfig(k8sClient, notes)
 		Expect(err).To(HaveOccurred())
 		Expect(notes.String()).To(ContainSubstring("Failed to parse MUO config"))
 	})
@@ -225,7 +277,7 @@ var _ = Describe("Run", func() {
 	})
 
 	When("user is banned for other reasons", func() {
-		It("should send service log and silence", func() {
+		It("should send service log and escalate", func() {
 			r.Resources.OcmClient.(*ocmmock.MockClient).EXPECT().
 				CheckIfUserBanned(gomock.Any()).
 				Return(ocm.UserBannedError{Code: "terms_and_conditions"})
@@ -233,8 +285,8 @@ var _ = Describe("Run", func() {
 			result, err := inv.Run(r)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(hasServiceLogAction(result.Actions)).To(BeTrue())
-			Expect(hasSilenceAction(result.Actions)).To(BeTrue())
-			Expect(hasEscalateAction(result.Actions)).To(BeFalse())
+			Expect(hasEscalateAction(result.Actions)).To(BeTrue())
+			Expect(hasSilenceAction(result.Actions)).To(BeFalse())
 		})
 	})
 

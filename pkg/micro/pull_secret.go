@@ -48,7 +48,7 @@ func PullSecret(k8sClient k8sclient.Client, ocmConn *sdk.Connection, userID, ocm
 		return Result{
 			Done: true,
 			Actions: []types.Action{
-				executor.Silence("Pull secret is valid - no customer-side issue detected"),
+				executor.Escalate("Pull secret is valid - investigation complete"),
 			},
 		}, nil
 	}

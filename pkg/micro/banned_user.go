@@ -11,8 +11,6 @@ import (
 )
 
 // BannedUser checks whether the cluster owner is banned via the OCM ban API.
-// For callers that need the ban code to branch on (e.g., export control),
-// use ClusterCreator + CheckBan instead.
 func BannedUser(ocmClient ocm.Client, cluster *cmv1.Cluster, notes *notewriter.NoteWriter) (Result, error) {
 	userBannedErr := ocm.UserBannedError{}
 	err := ocmClient.CheckIfUserBanned(cluster)
@@ -38,7 +36,7 @@ func BannedUser(ocmClient ocm.Client, cluster *cmv1.Cluster, notes *notewriter.N
 					WithDescription(sl.Description).
 					WithServiceName(sl.ServiceName).
 					Build(),
-				executor.Silence("Banned OCM user - service log sent to customer"),
+				executor.Escalate("Banned OCM user, please open a proactive ticket."),
 			},
 		}, nil
 

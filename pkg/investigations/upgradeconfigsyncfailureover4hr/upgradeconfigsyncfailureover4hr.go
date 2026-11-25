@@ -24,6 +24,7 @@ import (
 const (
 	muoNamespace      = "openshift-managed-upgrade-operator"
 	muoConfigMapName  = "managed-upgrade-operator-config"
+	muoConfigKey      = "config.yaml"
 	muoDeploymentName = "managed-upgrade-operator"
 	expectedOCMBase   = "https://api.openshift.com"
 )
@@ -48,7 +49,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	banResult, err := micro.BannedUser(r.OcmClient, r.Cluster, notes)
 	if err != nil {
 		logging.Errorf("Failed to check if user is banned: %v", err)
-		return o.Stop(executor.Escalate("Failed to check if user is banned")), nil
+		return o.Stop(executor.Escalate("Failed to check if user is banned")), nil //nolint:nilerr // failure is reported through the escalation action
 	}
 	if banResult.Done {
 		return o.Stop(banResult.Actions...), nil
@@ -57,7 +58,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	creatorResult, err := micro.ClusterCreator(r.OcmClient, r.Cluster, notes)
 	if err != nil {
 		logging.Errorf("Failed to get cluster creator from OCM: %v", err)
-		return o.Stop(executor.Escalate("Failed to get cluster creator from OCM")), nil
+		return o.Stop(executor.Escalate("Failed to get cluster creator from OCM")), nil //nolint:nilerr // failure is reported through the escalation action
 	}
 	user := creatorResult.Value
 
@@ -69,18 +70,26 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return investigation.InvestigationResult{}, investigation.WrapInfrastructure(err, "Resource build error")
 	}
 
-	if err := checkMUOConfig(r.K8sClient, notes); err != nil {
+	muoFinding := false
+	if found, err := checkMUOConfig(r.K8sClient, notes); err != nil {
 		logging.Warnf("Failed to validate MUO config: %v", err)
+	} else if found {
+		muoFinding = true
 	}
 
-	if err := checkMUOLogs(r.K8sClient, notes); err != nil {
+	if found, err := checkMUOLogs(r.K8sClient, notes); err != nil {
 		logging.Warnf("Failed to read MUO logs: %v", err)
-		notes.AppendWarning("MUO log analysis skipped: %v", err)
+	} else if found {
+		muoFinding = true
 	}
 
 	psResult, err := micro.PullSecret(r.K8sClient, r.OcmClient.GetConnection(), user.ID(), user.Email(), notes)
 	if err != nil {
 		return investigation.InvestigationResult{}, investigation.WrapInfrastructure(err, "Pull secret validation failure")
+	}
+
+	if muoFinding {
+		return o.Stop(executor.Escalate("MUO diagnostics found an issue - review notes for details")), nil
 	}
 
 	return o.Finalize(psResult.Actions...), nil
@@ -90,7 +99,7 @@ func (c *Investigation) Name() string {
 	return "upgradeconfigsyncfailureover4hr"
 }
 
-func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
+func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) (bool, error) {
 	cm := &corev1.ConfigMap{}
 	err := k8sClient.Get(context.TODO(), k8stypes.NamespacedName{
 		Namespace: muoNamespace,
@@ -98,31 +107,51 @@ func checkMUOConfig(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) er
 	}, cm)
 	if err != nil {
 		notes.AppendWarning("Failed to read MUO configmap: %v", err)
-		return err
+		return false, err
 	}
 
-	rawConfig, ok := cm.Data["config.yaml"]
+	rawConfig, ok := cm.Data[muoConfigKey]
 	if !ok {
-		notes.AppendWarning("MUO configmap missing 'config.yaml' key")
-		return fmt.Errorf("configmap missing config.yaml key")
+		notes.AppendWarning("MUO configmap missing '%s' key", muoConfigKey)
+		return true, nil
 	}
 
 	var cfg muoConfig
 	if err := yaml.Unmarshal([]byte(rawConfig), &cfg); err != nil {
 		notes.AppendWarning("Failed to parse MUO config: %v", err)
-		return err
+		return false, err
 	}
 
-	if cfg.ConfigManager.OcmBaseUrl != expectedOCMBase {
-		notes.AppendWarning("MUO ocmBaseUrl is '%s', expected '%s'", cfg.ConfigManager.OcmBaseUrl, expectedOCMBase)
-		return nil
+	finding := false
+	source := strings.ToUpper(cfg.ConfigManager.Source)
+	switch source {
+	case "OCM":
+		if cfg.ConfigManager.OcmBaseUrl != expectedOCMBase {
+			notes.AppendWarning("MUO ocmBaseUrl is '%s', expected '%s'", cfg.ConfigManager.OcmBaseUrl, expectedOCMBase)
+			finding = true
+		} else {
+			notes.AppendSuccess("MUO ocmBaseUrl is correct (%s)", expectedOCMBase)
+		}
+	case "LOCAL":
+		notes.AppendSuccess("MUO configManager source is LOCAL (ocmBaseUrl check not applicable)")
+	default:
+		notes.AppendWarning("MUO configManager source is '%s', expected 'OCM' or 'LOCAL'", cfg.ConfigManager.Source)
+		finding = true
 	}
 
-	notes.AppendSuccess("MUO ocmBaseUrl is correct (%s)", expectedOCMBase)
+	return finding, nil
+}
+
+func selectRunningPod(pods []corev1.Pod) *corev1.Pod {
+	for i := range pods {
+		if pods[i].Status.Phase == corev1.PodRunning {
+			return &pods[i]
+		}
+	}
 	return nil
 }
 
-func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) error {
+func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) (bool, error) {
 	ctx := context.TODO()
 
 	podList := &corev1.PodList{}
@@ -131,27 +160,27 @@ func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) erro
 		client.MatchingLabels{"name": muoDeploymentName},
 	); err != nil {
 		notes.AppendWarning("Failed to list MUO pods: %v", err)
-		return err
+		return false, err
 	}
 
-	if len(podList.Items) == 0 {
-		notes.AppendWarning("No MUO pods found in %s", muoNamespace)
-		return fmt.Errorf("no MUO pods found")
+	pod := selectRunningPod(podList.Items)
+	if pod == nil {
+		notes.AppendWarning("No running MUO pods found in %s", muoNamespace)
+		return false, fmt.Errorf("no running MUO pods found")
 	}
 
 	restConfig, err := k8sclient.GetRestConfig(k8sClient)
 	if err != nil {
 		notes.AppendWarning("Failed to get REST config for MUO log analysis")
-		return fmt.Errorf("failed to get REST config: %w", err)
+		return false, fmt.Errorf("failed to get REST config: %w", err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		notes.AppendWarning("Failed to create kubernetes clientset for MUO log analysis")
-		return fmt.Errorf("failed to create kubernetes clientset: %w", err)
+		return false, fmt.Errorf("failed to create kubernetes clientset: %w", err)
 	}
 
-	pod := &podList.Items[0]
 	tailLines := int64(200)
 	logOptions := &corev1.PodLogOptions{
 		TailLines: &tailLines,
@@ -161,7 +190,7 @@ func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) erro
 	logStream, err := req.Stream(ctx)
 	if err != nil {
 		notes.AppendWarning("Failed to read MUO pod logs: %v", err)
-		return err
+		return false, err
 	}
 	defer func() {
 		if cerr := logStream.Close(); cerr != nil {
@@ -172,22 +201,20 @@ func checkMUOLogs(k8sClient k8sclient.Client, notes *notewriter.NoteWriter) erro
 	buf := new(strings.Builder)
 	if _, err := io.Copy(buf, logStream); err != nil {
 		notes.AppendWarning("Failed to read MUO log stream")
-		return fmt.Errorf("failed to read log stream: %w", err)
+		return false, fmt.Errorf("failed to read log stream: %w", err)
 	}
 
 	logs := buf.String()
-	parseMUOLogs(logs, notes)
-	return nil
+	return parseMUOLogs(logs, notes), nil
 }
 
-func parseMUOLogs(logs string, notes *notewriter.NoteWriter) {
+func parseMUOLogs(logs string, notes *notewriter.NoteWriter) bool {
 	knownPatterns := []struct {
 		pattern string
 		message string
 	}{
 		{"Leader pod has been deleted, waiting for garbage collection", "MUO deadlock detected (leader election): scale down/up MUO deployment to recover"},
 		{"net/http: TLS handshake timeout", "TLS handshake timeout detected (possible ML-KEM incompatibility): check SOP for OHSS escalation"},
-		{"ocm-config-getter", "MUO ocm-config-getter errors found: check OCM connectivity and MUO config"},
 	}
 
 	found := false
@@ -198,7 +225,17 @@ func parseMUOLogs(logs string, notes *notewriter.NoteWriter) {
 		}
 	}
 
+	for _, line := range strings.Split(logs, "\n") {
+		if strings.Contains(line, "ERROR") && strings.Contains(line, "ocm-config-getter") {
+			notes.AppendWarning("MUO logs: ocm-config-getter errors found: check OCM connectivity and MUO config")
+			found = true
+			break
+		}
+	}
+
 	if !found {
 		notes.AppendSuccess("No known error patterns found in MUO logs")
 	}
+
+	return found
 }

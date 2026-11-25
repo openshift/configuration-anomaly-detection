@@ -61,7 +61,7 @@ var _ = Describe("BannedUser", func() {
 	})
 
 	When("user is banned for other reasons", func() {
-		It("should return Done with ServiceLog and Silence", func() {
+		It("should return Done with ServiceLog and Escalate", func() {
 			ocmClient.EXPECT().CheckIfUserBanned(gomock.Any()).
 				Return(ocm.UserBannedError{Code: "terms_and_conditions"})
 
@@ -69,7 +69,7 @@ var _ = Describe("BannedUser", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.Done).To(BeTrue())
 			Expect(hasActionType(result.Actions, string(executor.ActionTypeServiceLog))).To(BeTrue())
-			Expect(hasActionType(result.Actions, string(executor.ActionTypeSilenceIncident))).To(BeTrue())
+			Expect(hasActionType(result.Actions, string(executor.ActionTypeEscalateIncident))).To(BeTrue())
 		})
 	})
 
