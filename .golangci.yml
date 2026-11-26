@@ -55,6 +55,8 @@ linters:
     - whitespace
   settings:
     goconst:
+      # Repeated test fixtures and a few Kubernetes labels do not benefit from constants.
+      min-occurrences: 5
       ignore-tests: true
     nestif:
       min-complexity: 10
@@ -71,6 +73,11 @@ linters:
             - ""
   exclusions:
     generated: lax
+    rules:
+      # Test fixtures intentionally contain sample credentials and handlers.
+      - path: _test\.go$
+        linters:
+          - gosec
     paths:
       - third_party$
       - builtin$

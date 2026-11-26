@@ -37,7 +37,7 @@ print_help() {
     echo
 }
 # Check if the correct number of arguments is provided
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
     print_help
     exit 1
 fi
@@ -45,6 +45,7 @@ fi
 alert_name=$1
 cluster_id=$2
 id_format=${3:-cluster_id}
+node_pool_id=${4:-${NODE_POOL_ID:-workers}}
 time_current=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Check if the alert name is in the mapping
@@ -59,16 +60,16 @@ alert_title="${alert_mapping[$alert_name]}"
 # Build the custom details carrying the cluster ID in the requested format
 case "$id_format" in
     cluster_id)
-        custom_details=$(jq -n --arg alertname "$alert_name" --arg cluster_id "$cluster_id" \
-            '{alertname: $alertname, cluster_id: $cluster_id}')
+        custom_details=$(jq -n --arg alertname "$alert_name" --arg cluster_id "$cluster_id" --arg np "$node_pool_id" \
+            '{alertname: $alertname, cluster_id: $cluster_id, node_pool_id: $np}')
         ;;
     firing)
         # Alertmanager renders 'firing' as a JSON array of alerts, so the cluster ID is only
         # reachable as a label and no dedicated 'cluster_id' detail is sent.
-        firing=$(jq -n -c --arg alertname "$alert_name" --arg cluster_id "$cluster_id" --arg ts "$time_current" \
+        firing=$(jq -n -c --arg alertname "$alert_name" --arg cluster_id "$cluster_id" --arg ts "$time_current" --arg np "$node_pool_id" \
             '[{status: "firing",
-               labels: {alertname: $alertname, cluster_id: $cluster_id, node_pool_id: "cad-integration-testing", service: "srep", severity: "critical"},
-               annotations: {message: ("HCP Cluster " + $cluster_id + " nodepool upgrade delay for nodepool id : cad-integration-testing")},
+               labels: {alertname: $alertname, cluster_id: $cluster_id, node_pool_id: $np, service: "srep", severity: "critical"},
+               annotations: {message: ("HCP Cluster " + $cluster_id + " nodepool upgrade delay for nodepool id : " + $np)},
                startsAt: $ts}]')
         custom_details=$(jq -n --arg alertname "$alert_name" --arg firing "$firing" \
             '{alertname: $alertname, firing: $firing, num_firing: "1", num_resolved: "0"}')
