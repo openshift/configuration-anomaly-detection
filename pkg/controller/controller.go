@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openshift/configuration-anomaly-detection/pkg/backplane"
@@ -17,6 +18,7 @@ import (
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/aiassisted"
 	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/investigation"
+	"github.com/openshift/configuration-anomaly-detection/pkg/investigations/mustgather"
 	"github.com/openshift/configuration-anomaly-detection/pkg/logging"
 	"github.com/openshift/configuration-anomaly-detection/pkg/managedcloud"
 	"github.com/openshift/configuration-anomaly-detection/pkg/metrics"
@@ -305,7 +307,8 @@ func (c *investigationRunner) runChain(
 	if len(alertConfig.Investigations) > 0 {
 		metrics.Inc(metrics.Alerts, alertConfig.GetName())
 		// Push early so the alert count is recorded even if the pod is OOM-killed
-		// before the investigation completes.
+		// before the investigation completes. A successful Push resets the pushed
+		// counters, so the final push at exit does not send this alert again.
 		metrics.Push()
 	}
 
@@ -354,6 +357,13 @@ func (c *investigationRunner) runChain(
 		// Create a fresh aiassisted instance with the runtime config to avoid mutating the registry singleton.
 		if _, ok := inv.(*aiassisted.Investigation); ok && c.dependencies.Cfg != nil {
 			inv = &aiassisted.Investigation{AIConfig: c.dependencies.Cfg.GetAIAgentConfig()}
+		}
+		// Same as above. Must-gather labels its attempt metrics with the originating alert.
+		if _, ok := inv.(*mustgather.Investigation); ok {
+			inv = &mustgather.Investigation{
+				Source:    c.mustGatherSource(alertConfig),
+				AlertType: alertConfig.GetName(),
+			}
 		}
 
 		builder, bErr := investigation.NewResourceBuilder(
@@ -511,6 +521,22 @@ func calculateBackoff(attempt int) time.Duration {
 		backoff = maxRetryBackoff
 	}
 	return backoff
+}
+
+// mustGatherSource returns the source label for a must-gather run within the given alert chain.
+// legacy denotes triggers via the CreateMustGather alert, which we plan on phasing out.
+// The alert is matched by name or, since name is optional, by title (e.g. "MustGather", "CreateMustGather").
+func (c *investigationRunner) mustGatherSource(alertConfig *config.AlertConfig) string {
+	mustGatherName := (&mustgather.Investigation{}).Name()
+	switch {
+	case !c.notifier.HasPagerDuty():
+		return metrics.MustGatherSourceManual
+	case alertConfig.Name == mustGatherName,
+		strings.Contains(strings.ToLower(alertConfig.AlertTitle), mustGatherName):
+		return metrics.MustGatherSourceLegacy
+	default:
+		return metrics.MustGatherSourceSampled
+	}
 }
 
 // recordManualCompletion records manual investigation completion metric.

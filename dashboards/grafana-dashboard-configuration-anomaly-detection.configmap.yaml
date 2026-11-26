@@ -740,7 +740,7 @@ data:
             "type": "prometheus",
             "uid": "${cad_ds}"
           },
-          "description": "Percentage of CreateMustGather investigations that successfully performed a must-gather",
+          "description": "Ratio of successful must-gather outcomes to started attempts (all sources) within the selected range: outcome{status=\"success\"} / started, capped at 100%. Attempts that never reported an outcome (OOM-killed, timed out, still running) count against the rate. Successes and starts are counted independently, not per attempt, so attempts spanning the range boundaries skew the value: an attempt started before the range but succeeding within it adds to the numerator only. An attempt can take up to ~7h, so use ranges much longer than that.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -752,7 +752,7 @@ data:
                   "options": {
                     "match": "null",
                     "result": {
-                      "text": "No alerts",
+                      "text": "No attempts",
                       "index": 0
                     }
                   }
@@ -806,14 +806,15 @@ data:
                 "uid": "${cad_ds}"
               },
               "editorMode": "code",
-              "expr": "sum(increase(cad_investigate_must_gather_performed_total{alert_type=\"mustgather\"}[$__range])) / (sum(increase(cad_investigate_alerts_total{alert_type=\"mustgather\"}[$__range])) - (sum(increase(cad_investigate_alerts_filtered_total{alert_type=\"mustgather\"}[$__range])) OR on() vector(0))) * 100",
+              "expr": "clamp_max((sum(increase(cad_investigate_must_gather_outcome_total{status=\"success\"}[$__range])) OR on() vector(0)) / (sum(increase(cad_investigate_must_gather_started_total[$__range])) > 0) * 100, 100)",
               "hide": false,
+              "instant": true,
               "legendFormat": "__auto",
-              "range": true,
+              "range": false,
               "refId": "A"
             }
           ],
-          "title": "Must-Gather Success Rate",
+          "title": "Must-Gather Success Rate (successes / starts)",
           "type": "gauge"
         },
        {
@@ -911,7 +912,135 @@ data:
         ],
         "title": "Manual CAD runs",
         "type": "timeseries"
-      }
+      },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "description": "Must-gather attempts that did not succeed, by status (failed/skipped) and reason",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 49
+          },
+          "id": 25,
+          "options": {
+            "displayMode": "basic",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "sum by (status, reason) (increase(cad_investigate_must_gather_outcome_total{status!=\"success\"}[$__range]))",
+              "instant": true,
+              "legendFormat": "{{status}}: {{reason}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Must-Gather Unsuccessful Attempts by Reason",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${cad_ds}"
+          },
+          "description": "Approximate number of must-gather attempts started within the selected range that never reported an outcome, e.g. OOM-killed or timed-out pods. Computed as starts in range - outcomes in range (clamped at 0), so attempts spanning the range boundaries skew the value: attempts still running at range end are counted, and outcomes of attempts started before the range offset it. An attempt can take up to ~7h, so use ranges much longer than that.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 49
+          },
+          "id": 26,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${cad_ds}"
+              },
+              "editorMode": "code",
+              "expr": "clamp_min(sum by (source) (increase(cad_investigate_must_gather_started_total[$__range])) - (sum by (source) (increase(cad_investigate_must_gather_outcome_total[$__range])) OR sum by (source) (increase(cad_investigate_must_gather_started_total[$__range])) * 0), 0)",
+              "instant": true,
+              "legendFormat": "{{source}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Must-Gather Attempts Without Outcome",
+          "type": "stat"
+        }
       ],
       "refresh": false,
       "schemaVersion": 37,

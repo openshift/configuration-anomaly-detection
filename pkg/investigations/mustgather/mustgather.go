@@ -6,6 +6,7 @@ package mustgather
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -64,7 +65,26 @@ func getAcmHcpMustGatherImage() string {
 	return defaultAcmHcpMustGatherImage
 }
 
-type Investigation struct{}
+// errMustGatherInProgress is returned when a previous must-gather on the management
+// cluster did not finish within mustGatherWaitTimeout.
+var errMustGatherInProgress = errors.New("timeout waiting for must-gather namespace to be deleted")
+
+const (
+	outcomeReasonCompleted            = "completed"
+	outcomeReasonUnknown              = "unknown"
+	outcomeReasonTempDir              = "temp_dir"
+	outcomeReasonMustGatherInProgress = "must_gather_in_progress"
+	outcomeReasonNamespaceCheck       = "namespace_check"
+	outcomeReasonCollection           = "collection"
+	outcomeReasonTarball              = "tarball"
+	outcomeReasonSftpCredentials      = "sftp_credentials"
+	outcomeReasonSftpUpload           = "sftp_upload"
+)
+
+type Investigation struct {
+	Source    string
+	AlertType string
+}
 
 func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.InvestigationResult, error) {
 	result := investigation.InvestigationResult{}
@@ -75,9 +95,21 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	}
 
 	productName := productNameClassic
+	if r.IsHCP {
+		productName = productNameHCP
+	}
+
+	attempt := metrics.StartMustGatherAttempt(c.Source, c.AlertType, productName)
+	outcomeStatus, outcomeReason := metrics.MustGatherStatusFailed, outcomeReasonUnknown
+	defer func() { attempt.Finish(outcomeStatus, outcomeReason) }()
+	// The controller's early push in runChain happens before this point, so push
+	// again to deliver the started counter before collection to record it even if
+	// the must-gather collection doesn't succeed.
+	metrics.Push()
 
 	mustGatherResultDir, err := os.MkdirTemp("", mustGatherDirectoryPattern)
 	if err != nil {
+		outcomeReason = outcomeReasonTempDir
 		result.Actions = []types.Action{
 			executor.Note(fmt.Sprintf("CAD was unable to create a temporary directory for the must-gather results. Error: %v", err)),
 			executor.Escalate("Failed to create temporary directory"),
@@ -94,9 +126,13 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	mustGatherCommandFlags := []string{fmt.Sprintf("--dest-dir=%v", mustGatherResultDir), "--since=12h"}
 
 	if r.IsHCP {
-		productName = productNameHCP
 		err = waitForMustGatherNamespaceDeletion(context.Background(), r.ManagementK8sClient, mustGatherWaitTimeout, mustGatherPollInterval)
 		if err != nil {
+			if errors.Is(err, errMustGatherInProgress) {
+				outcomeStatus, outcomeReason = metrics.MustGatherStatusSkipped, outcomeReasonMustGatherInProgress
+			} else {
+				outcomeReason = outcomeReasonNamespaceCheck
+			}
 			logging.Errorf("CAD was unable to proceed with must-gather. Error: %v", err)
 			result.Actions = []types.Action{
 				executor.Note(fmt.Sprintf("CAD was unable to proceed with must-gather. Error: %v", err)),
@@ -114,6 +150,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		err = r.OCClient.CreateMustGather(mustGatherCommandFlags)
 	}
 	if err != nil {
+		outcomeReason = outcomeReasonCollection
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("failed to create must-gather: %w", err),
 			"K8s must-gather execution failed")
@@ -123,6 +160,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 	tarballPath := filepath.Join(os.TempDir(), mustGatherTarballName)
 	tarfile, err := os.Create(tarballPath) // #nosec G304 -- tarballPath is constructed from temp dir and timestamp/cluster ID
 	if err != nil {
+		outcomeReason = outcomeReasonTarball
 		result.Actions = []types.Action{
 			executor.Note(fmt.Sprintf("CAD was unable to create a temporary file for the must gather results tar file: %v", err)),
 			executor.Escalate("Failed to create tarball file"),
@@ -139,6 +177,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	err = tarball.CreateTarball(mustGatherResultDir, tarfile)
 	if err != nil {
+		outcomeReason = outcomeReasonTarball
 		result.Actions = []types.Action{
 			executor.Note(fmt.Sprintf("CAD was unable to create a tar file for the must gather results: %v", err)),
 			executor.Escalate("Failed to create tarball"),
@@ -164,6 +203,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return credErr
 	})
 	if err != nil {
+		outcomeReason = outcomeReasonSftpCredentials
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("CAD was unable to get the Red Hat sftp server credentials: %w", err),
 			"failure retrieving sftp credentials")
@@ -180,6 +220,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 		return sftpUpload(uploadCtx, tarfile.Name(), username, token)
 	})
 	if err != nil {
+		outcomeReason = outcomeReasonSftpUpload
 		return result, investigation.WrapInfrastructure(
 			fmt.Errorf("CAD was unable to upload to the Red Hat sftp server: %w", err),
 			"sftp upload failed")
@@ -187,6 +228,7 @@ func (c *Investigation) Run(rb investigation.ResourceBuilder) (investigation.Inv
 
 	r.Notes.AppendAutomation("CAD collected a must-gather and uploaded it to the Red Hat SFTP server under /anonymous/users/%s/%s", username, path.Base(tarfile.Name()))
 	metrics.Inc(metrics.MustGatherPerformed, c.Name(), productName)
+	outcomeStatus, outcomeReason = metrics.MustGatherStatusSuccess, outcomeReasonCompleted
 
 	appendFiringAlerts(r)
 
@@ -305,7 +347,7 @@ func waitForMustGatherNamespaceDeletion(ctx context.Context, k8sClient client.Cl
 	for {
 		select {
 		case <-timeoutCtx.Done():
-			return fmt.Errorf("timeout waiting for must-gather namespace to be deleted after %v", timeout)
+			return fmt.Errorf("%w after %v", errMustGatherInProgress, timeout)
 		case <-ticker.C:
 			namespaceList := &corev1.NamespaceList{}
 			err := k8sClient.List(ctx, namespaceList, &client.ListOptions{})
