@@ -154,8 +154,9 @@ func isPagerDutyAction(action Action) bool {
 
 // InfraClusterExecutor wraps another executor and transforms actions that should not
 // be performed on infrastructure clusters (hive, management, or service clusters).
-// Limited Support, Silence, and SL actions are replaced with an escalation and
-// a PagerDuty note explaining the substitution.
+// Limited Support and SL actions are replaced with an escalation and a PagerDuty note
+// explaining the substitution. Silence is also replaced, unless infra status is
+// uncertain (OCM lookup failed), in which case Silence passes through.
 type InfraClusterExecutor struct {
 	inner     Executor
 	logger    *zap.SugaredLogger
@@ -164,7 +165,8 @@ type InfraClusterExecutor struct {
 
 // NewInfraClusterExecutor creates an executor that intercepts unsuitable actions
 // for infrastructure clusters. When uncertain is true, the infra status could not
-// be confirmed (e.g. OCM API error) and the note will reflect this.
+// be confirmed (e.g. OCM API error): Silence is allowed through, and the note for
+// any intercepted actions reflects the uncertainty.
 func NewInfraClusterExecutor(inner Executor, logger *zap.SugaredLogger, uncertain bool) Executor {
 	return &InfraClusterExecutor{inner: inner, logger: logger, uncertain: uncertain}
 }
@@ -181,6 +183,7 @@ func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput
 	transformedActions := make([]Action, 0, len(input.Actions))
 	needsEscalation := false
 	hasEscalation := false
+	silenceAllowed := false
 	var interceptedDescriptions []string
 
 	for _, action := range input.Actions {
@@ -191,9 +194,17 @@ func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput
 			needsEscalation = true
 
 		case string(ActionTypeSilenceIncident):
-			e.logger.Infof("Infrastructure cluster: intercepting Silence action")
-			interceptedDescriptions = append(interceptedDescriptions, "Silence")
-			needsEscalation = true
+			if e.uncertain {
+				// Infra status unknown (OCM lookup failed). Silence only changes PD routing,
+				// not the cluster, so let it through. LS and SL stay blocked.
+				e.logger.Infof("Infrastructure status uncertain: allowing Silence action")
+				silenceAllowed = true
+				transformedActions = append(transformedActions, action)
+			} else {
+				e.logger.Infof("Infrastructure cluster: intercepting Silence action")
+				interceptedDescriptions = append(interceptedDescriptions, "Silence")
+				needsEscalation = true
+			}
 
 		case string(ActionTypeServiceLog):
 			e.logger.Infof("Infrastructure cluster: intercepting ServiceLog action")
@@ -206,6 +217,13 @@ func (e *InfraClusterExecutor) Execute(ctx context.Context, input *ExecutorInput
 			}
 			transformedActions = append(transformedActions, action)
 		}
+	}
+
+	if silenceAllowed {
+		transformedActions = append(transformedActions, &PagerDutyNoteAction{
+			Content: "Infrastructure status could not be confirmed (OCM lookup failed). " +
+				"Silence was allowed because it does not change the cluster.",
+		})
 	}
 
 	if needsEscalation {
