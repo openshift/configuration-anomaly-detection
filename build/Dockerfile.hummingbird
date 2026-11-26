@@ -16,7 +16,7 @@ USER root
 RUN dnf install -y --setopt=install_weak_deps=False tar gzip && \
     dnf clean all
 RUN env | sort; echo "---proxy env---"; env | grep -i -E 'proxy|no_proxy' || echo "(no proxy env)"; echo "---anchors---"; ls -l /etc/pki/ca-trust/source/anchors/ 2>&1; echo "---id/resolv---"; id; cat /etc/resolv.conf 2>&1 | head -20
-RUN curl -v -fS --show-error -w '\nHTTP %{http_code} %{size_download} bytes content-type:%{content_type} url:%{url_effective}\n' -o /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz && ls -lh /tmp/oc.tar.gz && head -c 500 /tmp/oc.tar.gz | od -c | head -20
+RUN curl -v -L -fS --show-error -w '\nHTTP %{http_code} %{size_download} bytes content-type:%{content_type} url:%{url_effective}\n' -o /tmp/oc.tar.gz https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${OC_VERSION}/openshift-client-linux-${OC_VERSION}.tar.gz && ls -lh /tmp/oc.tar.gz && head -c 500 /tmp/oc.tar.gz | od -c | head -20
 RUN echo "${OC_HASH} /tmp/oc.tar.gz"
 RUN echo "${OC_HASH} /tmp/oc.tar.gz" | sha256sum --check --status
 RUN tar -zxf /tmp/oc.tar.gz -C /tmp
