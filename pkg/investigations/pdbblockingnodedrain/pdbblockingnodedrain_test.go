@@ -656,6 +656,8 @@ func TestIsPlatformNamespace(t *testing.T) {
 		{"production", false},
 		{"openshift-like-app", true},
 		{"not-openshift", false},
+		{"openshift-logging", false},
+		{"openshift-pipelines", false},
 	}
 
 	for _, tt := range tests {
