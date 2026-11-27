@@ -63,6 +63,26 @@ MACHINESET=$(oc get machines -A -o json | jq --arg NODE "${NODE}" -r '.items[] |
 oc scale machineset/${MACHINESET} --replicas=0 -n openshift-machine-api
 ```
 
+Once the node has carried the `node.kubernetes.io/unschedulable` taint for more than 10 minutes, CAD
+identifies the PDB holding the drain open and reports it under the *"send a service log: a
+customer-managed PodDisruptionBudget is blocking the drain of the following nodes"* heading, naming
+the PDB (`default/test-cad`), its constraint (`maxUnavailable: 0`), the pod held on the node, and the
+owning workload (`Deployment/test-cad`).
+
+Note that this works regardless of whether the machine carries a `.metadata.deletionTimestamp`: the
+`oc scale machineset` path above leaves the node stalled mid-drain without the machine ever being
+marked for deletion.
+
+CAD is in the **informing phase** for this detection. It does not send the
+[`customer_pdb_preventing_drain`](https://github.com/openshift/managed-notifications/blob/master/osd/customer_pdb_preventing_drain.json)
+service log; it only prints what it *would* send, prefixed with `INFORMING PHASE`, so the condition
+can be validated against real incidents first. To exercise the actioning path locally, set
+`CAD_EXPERIMENTAL_ENABLED=true` before running the investigation.
+
+To verify the precision fix, confirm that a node carrying an *unrelated* `NoSchedule` taint (for
+example a `dedicated` taint set by the customer) is **not** reported as draining — only the cordon
+taint counts.
+
 ### Machines in `Failed` phase
 
 Having several machines in a `Failed` state still violates a `MachineHealthCheck`'s `.status.maxUnhealthy`, despite the machines not having any corresponding nodes to check against.

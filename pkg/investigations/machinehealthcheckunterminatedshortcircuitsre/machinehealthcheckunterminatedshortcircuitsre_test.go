@@ -357,7 +357,7 @@ func TestInvestigation_investigateDeletingMachine(t *testing.T) {
 	}
 }
 
-func Test_checkForStuckDrain(t *testing.T) {
+func Test_stalledDrainDuration(t *testing.T) {
 	tests := []struct {
 		name  string
 		node  func() corev1.Node
@@ -378,9 +378,11 @@ func Test_checkForStuckDrain(t *testing.T) {
 				node := newWorkerNode("scheduleable")
 				node.Spec.Taints = []corev1.Taint{
 					{
+						Key:    corev1.TaintNodeUnschedulable,
 						Effect: corev1.TaintEffectNoExecute,
 					},
 					{
+						Key:    corev1.TaintNodeUnschedulable,
 						Effect: corev1.TaintEffectPreferNoSchedule,
 					},
 				}
@@ -389,14 +391,17 @@ func Test_checkForStuckDrain(t *testing.T) {
 			stuck: false,
 		},
 		{
-			name: "not stuck when short-lived NoSchedule taint",
+			// A node can carry unrelated NoSchedule taints (dedicated workloads, customer-set taints)
+			// without being drained at all. Only the cordon taint means a drain is underway.
+			name: "not stuck when NoSchedule taint is unrelated to draining",
 			node: func() corev1.Node {
-				node := newWorkerNode("recently-unscheduleable")
+				node := newWorkerNode("dedicated")
 				node.Spec.Taints = []corev1.Taint{
 					{
+						Key:    "customer.example.com/dedicated",
 						Effect: corev1.TaintEffectNoSchedule,
 						TimeAdded: &metav1.Time{
-							Time: time.Now(),
+							Time: time.Now().Add(-100 * time.Hour),
 						},
 					},
 				}
@@ -405,27 +410,26 @@ func Test_checkForStuckDrain(t *testing.T) {
 			stuck: false,
 		},
 		{
-			name: "stuck when long-lived NoSchedule taint",
+			name: "not stuck when short-lived unschedulable taint",
 			node: func() corev1.Node {
-				node := newWorkerNode("actually-stuck")
-				node.Spec.Taints = []corev1.Taint{
-					{
-						Effect: corev1.TaintEffectNoSchedule,
-						TimeAdded: &metav1.Time{
-							Time: time.Now().Add(-1 * time.Hour),
-						},
-					},
-				}
-				return *node
+				return *newDrainingNode("recently-unscheduleable", time.Minute)
+			},
+			stuck: false,
+		},
+		{
+			name: "stuck when long-lived unschedulable taint",
+			node: func() corev1.Node {
+				return *newDrainingNode("actually-stuck", time.Hour)
 			},
 			stuck: true,
 		},
 		{
 			name: "handles missing TimeAdded field (SREP-1975)",
 			node: func() corev1.Node {
-				node := newWorkerNode("actually-stuck")
+				node := newWorkerNode("no-time-added")
 				node.Spec.Taints = []corev1.Taint{
 					{
+						Key:    corev1.TaintNodeUnschedulable,
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				}
@@ -436,12 +440,12 @@ func Test_checkForStuckDrain(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, duration := checkForStuckDrain(tt.node())
+			duration, got := stalledDrainDuration(tt.node())
 			if got != tt.stuck {
 				t.Errorf("unexpected result: expected stuck = %t, got %t", tt.stuck, got)
 			}
-			if got && duration == nil {
-				t.Errorf("unexpected result: got stuck = %t, but duration = %v", got, duration)
+			if got && duration <= drainStallThreshold {
+				t.Errorf("expected a duration beyond %s for a stalled drain, got %v", drainStallThreshold, duration)
 			}
 		})
 	}
@@ -733,6 +737,20 @@ func newWorkerNode(name string) *corev1.Node {
 	return n
 }
 
+// newDrainingNode returns a worker node that has been cordoned (and so is draining) for the given
+// duration
+func newDrainingNode(name string, drainingFor time.Duration) *corev1.Node {
+	node := newWorkerNode(name)
+	node.Spec.Taints = []corev1.Taint{
+		{
+			Key:       corev1.TaintNodeUnschedulable,
+			Effect:    corev1.TaintEffectNoSchedule,
+			TimeAdded: &metav1.Time{Time: time.Now().Add(-drainingFor)},
+		},
+	}
+	return node
+}
+
 func newFakeClient(objs ...client.Object) (client.Client, error) {
 	s := scheme.Scheme
 	err := machinev1beta1.AddToScheme(s)
@@ -773,6 +791,8 @@ func newTestInvestigation(testObjects ...client.Object) (Investigation, error) {
 		k8scli:          clientImpl{fakeClient},
 		notes:           notewriter.New("testing", logging.RawLogger),
 		recommendations: investigationRecommendations{},
+		stalledDrains:   map[string]time.Duration{},
+		drainBlockers:   map[string][]drainBlocker{},
 	}
 	return i, nil
 }

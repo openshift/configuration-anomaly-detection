@@ -70,4 +70,11 @@ const (
 	recommendationQuotaServiceLog recommendedAction = "send a service log regarding quota issues for the following machines"
 	// recommendationInvestigateNode indicates that the machine's node object is reporting problems which require human intervention to resolve
 	recommendationInvestigateNode recommendedAction = "investigate the following nodes"
+	// recommendationCustomerPDBBlockingDrain indicates that a customer-managed PodDisruptionBudget is holding a node's drain open.
+	// SRE does not delete customer workloads, so the remediation is a servicelog asking the customer to reschedule the pod.
+	// See the Pod Disruption Budget section of https://github.com/openshift/ops-sop/blob/master/v4/alerts/MCDDrainError.md
+	recommendationCustomerPDBBlockingDrain recommendedAction = "send a service log: a customer-managed PodDisruptionBudget is blocking the drain of the following nodes"
+	// recommendationPlatformPDBBlockingDrain indicates that a Red Hat-managed PodDisruptionBudget is holding a node's drain open.
+	// This is SRE's to resolve: check the workload's health, or escalate to engineering if the PDB itself looks wrong
+	recommendationPlatformPDBBlockingDrain recommendedAction = "investigate the Red Hat-managed PodDisruptionBudget blocking the drain of the following nodes"
 )
