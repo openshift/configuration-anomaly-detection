@@ -14,29 +14,52 @@ import (
 
 const pushTimeout = 10 * time.Second
 
-// Push collects and pushes metrics to the configured pushgateway
+// pushedCollectors are the counters sent to the pushgateway on every Push.
+func pushedCollectors() []*prometheus.CounterVec {
+	return []*prometheus.CounterVec{
+		Alerts,
+		AlertsFiltered,
+		LimitedSupportSet,
+		ServicelogPrepared,
+		ServicelogSent,
+		MustGatherPerformed,
+		MustGatherStarted,
+		MustGatherOutcome,
+		EtcdDatabaseAnalysis,
+		EtcdSnapshotCleanup,
+		ManualInvestigationStarted,
+		ManualInvestigationCompleted,
+	}
+}
+
+// Push collects and pushes metrics to the configured pushgateway.
+//
+// The aggregation gateway sums every pushed sample into its running total, so
+// pushing the same in-process counter twice would count it twice. To make
+// repeated Push calls safe (e.g. an early push to survive OOM kills followed by
+// the final push at process exit), the counters are reset after each successful
+// push, so every push only carries the increments since the previous one.
+// On failure the counters are kept so the next push can deliver them.
 func Push() {
-	var promPusher *push.Pusher
-	if pushgateway := os.Getenv("CAD_PROMETHEUS_PUSHGATEWAY"); pushgateway != "" {
-		promPusher = push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
-		promPusher.Collector(Alerts)
-		promPusher.Collector(AlertsFiltered)
-		promPusher.Collector(LimitedSupportSet)
-		promPusher.Collector(ServicelogPrepared)
-		promPusher.Collector(ServicelogSent)
-		promPusher.Collector(MustGatherPerformed)
-		promPusher.Collector(EtcdDatabaseAnalysis)
-		promPusher.Collector(EtcdSnapshotCleanup)
-		promPusher.Collector(ManualInvestigationStarted)
-		promPusher.Collector(ManualInvestigationCompleted)
-		ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
-		defer cancel()
-		err := promPusher.AddContext(ctx)
-		if err != nil {
-			logging.Errorf("failed to push metrics: %w", err)
-		}
-	} else {
+	pushgateway := os.Getenv("CAD_PROMETHEUS_PUSHGATEWAY")
+	if pushgateway == "" {
 		logging.Warn("metrics disabled, set env 'CAD_PROMETHEUS_PUSHGATEWAY' to push metrics")
+		return
+	}
+
+	collectors := pushedCollectors()
+	promPusher := push.New(pushgateway, "cad").Format(expfmt.NewFormat(expfmt.TypeTextPlain))
+	for _, c := range collectors {
+		promPusher.Collector(c)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
+	defer cancel()
+	if err := promPusher.AddContext(ctx); err != nil {
+		logging.Errorf("failed to push metrics: %w", err)
+		return
+	}
+	for _, c := range collectors {
+		c.Reset()
 	}
 }
 
@@ -57,6 +80,27 @@ const (
 	mustgatherLabel      = "product"
 	dryRunLabel          = "dry_run"
 	statusLabel          = "status"
+	reasonLabel          = "reason"
+	sourceLabel          = "source"
+)
+
+// Values for the source label of the must-gather attempt metrics.
+const (
+	// MustGatherSourceLegacy is a run triggered by the dedicated CreateMustGather alert.
+	MustGatherSourceLegacy = "legacy"
+	// MustGatherSourceSampled is a run sampled as a side-effect of another alert's chain.
+	MustGatherSourceSampled = "sampled"
+	// MustGatherSourceManual is a run triggered via `cadctl investigate manual`.
+	MustGatherSourceManual = "manual"
+	// MustGatherSourceUnknown is used when the caller did not provide a source.
+	MustGatherSourceUnknown = "unknown"
+)
+
+// Values for the status label of MustGatherOutcome.
+const (
+	MustGatherStatusSuccess = "success"
+	MustGatherStatusFailed  = "failed"
+	MustGatherStatusSkipped = "skipped"
 )
 
 var (
@@ -100,6 +144,22 @@ var (
 			Name: "must_gather_performed_total",
 			Help: "counts the total number of must-gathers performed",
 		}, []string{alertTypeLabel, mustgatherLabel})
+	// MustGatherStarted counts must-gather attempts entering the collection phase.
+	// Use together with MustGatherOutcome: started - outcomes are attempts that
+	// never finished (e.g. OOM-killed or timed out pods).
+	MustGatherStarted = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "must_gather_started_total",
+			Help: "counts must-gather attempts that entered the collection phase",
+		}, []string{sourceLabel, alertTypeLabel, mustgatherLabel})
+	// MustGatherOutcome counts the final outcome of must-gather attempts.
+	MustGatherOutcome = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "must_gather_outcome_total",
+			Help: "counts must-gather attempt outcomes by status and reason",
+		}, []string{statusLabel, reasonLabel, sourceLabel, alertTypeLabel, mustgatherLabel})
 	// EtcdDatabaseAnalysis tracks etcddatabasequotalowspace investigation outcomes
 	EtcdDatabaseAnalysis = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
