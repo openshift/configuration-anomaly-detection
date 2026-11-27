@@ -24,11 +24,13 @@ func Push() {
 		promPusher.Collector(LimitedSupportSet)
 		promPusher.Collector(ServicelogPrepared)
 		promPusher.Collector(ServicelogSent)
+		promPusher.Collector(ActionTaken)
 		promPusher.Collector(MustGatherPerformed)
 		promPusher.Collector(EtcdDatabaseAnalysis)
 		promPusher.Collector(EtcdSnapshotCleanup)
 		promPusher.Collector(ManualInvestigationStarted)
 		promPusher.Collector(ManualInvestigationCompleted)
+		promPusher.Collector(InvestigationDuration)
 		ctx, cancel := context.WithTimeout(context.Background(), pushTimeout)
 		defer cancel()
 		err := promPusher.AddContext(ctx)
@@ -57,6 +59,7 @@ const (
 	mustgatherLabel      = "product"
 	dryRunLabel          = "dry_run"
 	statusLabel          = "status"
+	actionTypeLabel      = "action_type"
 )
 
 var (
@@ -88,6 +91,13 @@ var (
 			Name: "servicelog_sent_total",
 			Help: "counts investigations resulting in a sent servicelog",
 		}, []string{alertTypeLabel})
+	// ActionTaken counts every action executed by an investigation, by action type
+	ActionTaken = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name: "action_taken_total",
+			Help: "counts executed actions, labeled by investigation name and action type",
+		}, []string{alertTypeLabel, actionTypeLabel})
 	AlertsFiltered = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace, Subsystem: subsystemInvestigate,
@@ -128,4 +138,12 @@ var (
 			Name: "manual_completed_total",
 			Help: "counts manually triggered investigation completions by name, status, and dry-run mode",
 		}, []string{alertTypeLabel, statusLabel, dryRunLabel})
+	// InvestigationDuration measures how long each investigation's Run takes, by investigation name
+	InvestigationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace, Subsystem: subsystemInvestigate,
+			Name:    "duration_seconds",
+			Help:    "duration of each investigation execution in seconds, by investigation name",
+			Buckets: []float64{0.5, 1, 2, 5, 10, 20, 30, 60, 120, 300, 600},
+		}, []string{alertTypeLabel})
 )

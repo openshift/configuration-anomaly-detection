@@ -389,7 +389,9 @@ func (c *investigationRunner) runChain(
 		}
 
 		logging.Infof("Running investigation %q", inv.Name())
+		invStart := time.Now()
 		result, attempts, runErr := runInvestigationWithRetry(inv, builder)
+		metrics.InvestigationDuration.WithLabelValues(inv.Name()).Observe(time.Since(invStart).Seconds())
 		if runErr != nil {
 			cleanupBuilder(builder)
 			return fmt.Errorf("investigation %q failed after %d attempt(s): %w", inv.Name(), attempts, runErr)

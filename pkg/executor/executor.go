@@ -262,6 +262,14 @@ func isRetryable(err error) bool {
 func emitMetricsForAction(action Action, execCtx *ExecutionContext) {
 	investigationName := execCtx.InvestigationName
 
+	// A skipped duplicate service log is not an action taken, so don't count it.
+	if sl, ok := action.(*ServiceLogAction); ok && !sl.posted {
+		return
+	}
+
+	// Generic action-taken counter for every action type.
+	metrics.Inc(metrics.ActionTaken, investigationName, action.Type())
+
 	switch a := action.(type) {
 	case *ServiceLogAction:
 		// Emit ServicelogSent metric
