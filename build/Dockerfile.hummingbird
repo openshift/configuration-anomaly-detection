@@ -9,7 +9,7 @@
 # tarball and verified against OC_HASH in a Hummingbird builder stage. tar/gzip
 # are build-only dependencies of that stage; only the finished oc binary is
 # copied into the runner.
-FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder@sha256:b1915b00a4057a64f05912fc2ea553d9153fa0964ddad3de68307560d49086d3 as oc-fetcher
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips-builder@sha256:911260b160863131b32f4d091e93ac2b37ff93255c6db1450d514c01b0e039a4 as oc-fetcher
 ARG OC_VERSION=4.22.21
 ARG OC_HASH=daa18c99d81ff3e8e2e2f5f27289d9ed46ca7fa03b04734a63cbdb3f33af022f
 USER root
@@ -33,7 +33,7 @@ RUN make CGO_ENABLED=0 build-interceptor-release
 
 # Distinct hardened runtime base; digest-pinned, tag kept as documentation of
 # the version stream. Distroless: no package manager, no shell.
-FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips@sha256:e8211814e3fb924c62e13aa46a15682ab6b33bdf124439460fa13ad0656f24b7 as runner
+FROM registry.access.redhat.com/hi/core-runtime:2.43-openssl-fips@sha256:4058eedf65909d3878ea07fea0c0f545cdbe169092b53099bfc8296e3e251803 as runner
 
 COPY --from=builder /opt/bin/cadctl /bin/cadctl
 COPY --from=builder /opt/bin/interceptor /bin/interceptor
